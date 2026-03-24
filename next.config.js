@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: false,
+  // Disable Next.js Dev Tools indicator (bottom-left "N" / Turbopack menu) in development.
+  devIndicators: false,
   productionBrowserSourceMaps: true,
   images: {
     formats: ['image/webp'],
