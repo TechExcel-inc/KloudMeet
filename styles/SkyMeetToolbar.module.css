@@ -71,7 +71,7 @@
 .leftControls {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   flex-shrink: 0;
   margin-left: 4px;
 }
@@ -79,25 +79,25 @@
 .controlGroup {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .controlBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08); /* Or follow standard user UI */
-  color: #4ade80;
+  background: #22c55e;
+  color: #ffffff;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .controlBtn:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: #16a34a;
 }
 
 .controlBtn svg {
@@ -106,37 +106,44 @@
 }
 
 .controlBtnOff {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.15);
+  color: #ffffff;
+  background: #565666; /* Solid grey matching user image */
 }
 
 .controlBtnOff:hover {
-  background: rgba(248, 113, 113, 0.25);
+  background: #6b6b7a;
 }
 
 .controlBtnSpeaker {
-  color: rgba(255, 255, 255, 0.85);
+  color: #ffffff;
+  background: #565666;
+}
+
+.controlBtnSpeaker:hover {
+  background: #6b6b7a;
 }
 
 .chevron {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
+  color: #ffffff;
   cursor: pointer;
-  padding: 4px;
-  border-radius: 4px;
+  background: transparent;
+  border: none;
+  padding: 4px 2px;
   transition: all 0.2s ease;
 }
 
 .chevron:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.9);
+  color: #cbd5e1;
+  background: transparent;
 }
 
 .chevron svg {
   width: 14px;
   height: 14px;
+  stroke-width: 2.5 !important;
 }
 
 /* Center section: tab buttons */

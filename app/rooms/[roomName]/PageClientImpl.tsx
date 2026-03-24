@@ -234,6 +234,15 @@ function VideoConferenceComponent(props: {
   const router = useRouter();
   const handleOnLeave = React.useCallback(() => router.push('/'), [router]);
   const handleError = React.useCallback((error: Error) => {
+    // Ignore user cancellation errors (like declining screen share)
+    if (
+      error.name === 'NotAllowedError' || 
+      error.message?.toLowerCase().includes('permission') ||
+      error.message?.toLowerCase().includes('notallowed')
+    ) {
+      console.warn('User cancelled or denied media request:', error);
+      return;
+    }
     console.error(error);
     alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
   }, []);
@@ -249,6 +258,21 @@ function VideoConferenceComponent(props: {
       console.warn('Low power mode enabled');
     }
   }, [lowPowerMode]);
+
+  // Force disable native Picture-in-Picture overlays (e.g. Firefox) on all videos
+  React.useEffect(() => {
+    const disablePiP = () => {
+      document.querySelectorAll('video').forEach(video => {
+        if (!video.hasAttribute('disablePictureInPicture')) {
+          video.setAttribute('disablePictureInPicture', 'true');
+        }
+      });
+    };
+    disablePiP();
+    const observer = new MutationObserver(disablePiP);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   const handleToggleMic = React.useCallback(() => {
     const next = !micEnabled;
@@ -419,15 +443,19 @@ function VideoConferenceComponent(props: {
               .sky-meet-video-wrapper .lk-carousel { 
                 display: flex !important;
                 flex-direction: column !important;
+                justify-content: flex-start !important; /* Align webcams from top down */
+                align-items: center !important;
                 width: 160px !important; 
                 min-width: 160px !important; 
                 max-width: 160px !important;
+                height: 100% !important;
+                margin: 0 !important;
                 flex-shrink: 0 !important; 
                 background: #111 !important;
                 gap: 12px !important;
                 overflow-y: auto !important;
                 border-right: 1px solid rgba(255,255,255,0.1) !important;
-                padding: 8px !important;
+                padding: 12px 8px !important;
               }
               
               /* This pure CSS toggle prevents the catastrophic Layout Thrashing bug */
@@ -437,15 +465,28 @@ function VideoConferenceComponent(props: {
 
               .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile {
                 pointer-events: none !important; /* Absolutely prevents accidental clicks which would swap the webcam into the FocusLayout! */
+                flex: 0 0 auto !important; /* CRITICAL: Prevent flexbox from vertically stretching the tile to fill the 100vh sidebar */
                 width: 100% !important;
+                height: auto !important; /* Allow aspect-ratio to dictate height */
+                min-height: 0 !important;
                 aspect-ratio: 16 / 9 !important;
                 border-radius: 8px !important;
                 box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
               }
 
               /* 4. Hide all redundant LiveKit controls (Maximize, PiP, etc.) from the screenshare tile entirely */
-              .sky-meet-video-wrapper .lk-focus-layout button {
+              .sky-meet-video-wrapper .lk-focus-layout button,
+              .sky-meet-video-wrapper .lk-focus-layout .lk-button,
+              .sky-meet-video-wrapper .lk-focus-layout .lk-focus-toggle-button,
+              .sky-meet-video-wrapper .lk-focus-layout [class*="button"],
+              .sky-meet-video-wrapper .lk-focus-layout [class*="action"],
+              .sky-meet-video-wrapper .lk-focus-layout [class*="lk-pip"],
+              .sky-meet-video-wrapper .lk-focus-layout [class*="focus-toggle"],
+              .sky-meet-video-wrapper .lk-focus-layout [class*="lk-participant-metadata"] {
                 display: none !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+                pointer-events: none !important;
               }
             ` : ''}
           `}</style>
