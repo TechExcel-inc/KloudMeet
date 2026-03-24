@@ -110,6 +110,7 @@ function VideoConferenceComponent(props: {
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
   const [screenShareActive, setScreenShareActive] = React.useState(false);
+  const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
 
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
@@ -310,11 +311,55 @@ function VideoConferenceComponent(props: {
           )}
 
           {/* Right panel: Webcam grids and screen shares */}
-          <div style={{ flex: 1, position: 'relative', display: showLiveDoc ? 'none' : 'block' }}>
+          <div className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''}`} style={{ flex: 1, position: 'relative', display: showLiveDoc ? 'none' : 'block' }}>
              <VideoConference
                chatMessageFormatter={formatChatMessageLinks}
                SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
              />
+
+             {/* Webcam collapse/expand button during screenshare */}
+             {hasScreenShare && (
+               <button
+                 className="webcam-collapse-toggle"
+                 onClick={(e) => {
+                   e.preventDefault();
+                   e.stopPropagation();
+                   setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
+                 }}
+                 style={{
+                   position: 'absolute',
+                   top: '50%',
+                   left: isWebcamSidebarCollapsed ? 0 : 160,
+                   right: 'auto',
+                   transform: 'translateY(-50%)',
+                   zIndex: 2000,
+                   background: 'rgba(30, 41, 59, 0.95)',
+                   color: 'rgba(255,255,255,0.8)',
+                   border: '1px solid rgba(255,255,255,0.1)',
+                   borderLeft: 'none',
+                   borderRadius: '0 8px 8px 0',
+                   width: '28px',
+                   height: '64px',
+                   cursor: 'pointer',
+                   display: 'flex',
+                   alignItems: 'center',
+                   justifyContent: 'center',
+                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                   boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
+                 }}
+                 title={isWebcamSidebarCollapsed ? "Expand Webcams" : "Collapse Webcams"}
+                 onMouseOver={(e) => e.currentTarget.style.color = '#fff'}
+                 onMouseOut={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.8)'}
+               >
+                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 16, height: 16 }}>
+                   {isWebcamSidebarCollapsed ? (
+                     <polyline points="9 18 15 12 9 6" />
+                   ) : (
+                     <polyline points="15 18 9 12 15 6" />
+                   )}
+                 </svg>
+               </button>
+             )}
           </div>
 
           {/* If the presenter is screen sharing, hide their own redundant screencast focus view so webcams can cleanly populate the 50% right layout! */}
@@ -324,6 +369,86 @@ function VideoConferenceComponent(props: {
               .lk-carousel { width: 100% !important; max-width: 100% !important; flex: 1 !important; }
             `}</style>
           )}
+
+          {/* Dynamic layout injections */}
+          <style>{`
+            ${hasScreenShare ? `
+              /* Clean, Native-Friendly Screenshare Layout Overrides */
+              
+              /* 1. Reset base containment so we can fill the window safely */
+              .sky-meet-video-wrapper .lk-video-conference, 
+              .sky-meet-video-wrapper .lk-room-container { padding: 0 !important; }
+              .sky-meet-video-wrapper .lk-video-conference-inner { 
+                padding: 0 !important; 
+                margin: 0 !important; 
+                display: flex !important; 
+                flex-direction: row-reverse !important; /* Forces Carousel cleanly to the LEFT side natively */
+                width: 100% !important;
+                height: 100vh !important;
+              }
+              
+              /* 2. Screenshare Wrapper cleanly gets all remaining width */
+              .sky-meet-video-wrapper .lk-focus-layout-wrapper,
+              .sky-meet-video-wrapper .lk-focus-layout {
+                flex: 1 !important; 
+                display: flex !important;
+                width: 100% !important;
+                height: 100% !important;
+                min-width: 0 !important; 
+                background: #000 !important;
+                align-items: center !important;
+                justify-content: center !important;
+              }
+              .sky-meet-video-wrapper .lk-focus-layout .lk-participant-tile {
+                width: 100% !important;
+                height: 100% !important;
+                display: flex !important;
+              }
+              .sky-meet-video-wrapper .lk-focus-layout .lk-participant-tile .lk-video-container {
+                width: 100% !important;
+                height: 100% !important;
+              }
+              .sky-meet-video-wrapper .lk-focus-layout .lk-participant-tile video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: contain !important;
+                pointer-events: none !important; /* CRITICAL: Blocks Firefox/Chrome from spawning native Picture-in-Picture hover overlays! */
+              }
+
+              /* 3. The Webcam Panel relies entirely on a CSS parent class for instant toggling without destroying the entire <style> block via React */
+              .sky-meet-video-wrapper .lk-carousel { 
+                display: flex !important;
+                flex-direction: column !important;
+                width: 160px !important; 
+                min-width: 160px !important; 
+                max-width: 160px !important;
+                flex-shrink: 0 !important; 
+                background: #111 !important;
+                gap: 12px !important;
+                overflow-y: auto !important;
+                border-right: 1px solid rgba(255,255,255,0.1) !important;
+                padding: 8px !important;
+              }
+              
+              /* This pure CSS toggle prevents the catastrophic Layout Thrashing bug */
+              .sky-meet-video-wrapper.sidebar-collapsed .lk-carousel {
+                display: none !important;
+              }
+
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile {
+                pointer-events: none !important; /* Absolutely prevents accidental clicks which would swap the webcam into the FocusLayout! */
+                width: 100% !important;
+                aspect-ratio: 16 / 9 !important;
+                border-radius: 8px !important;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+              }
+
+              /* 4. Hide all redundant LiveKit controls (Maximize, PiP, etc.) from the screenshare tile entirely */
+              .sky-meet-video-wrapper .lk-focus-layout button {
+                display: none !important;
+              }
+            ` : ''}
+          `}</style>
         </div>
 
         {/* Custom toolbar overlay */}
