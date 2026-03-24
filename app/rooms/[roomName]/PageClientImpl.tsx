@@ -243,6 +243,7 @@ function VideoConferenceComponent(props: {
       console.warn('User cancelled or denied media request:', error);
       return;
     }
+    
     console.error(error);
     alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
   }, []);
@@ -487,6 +488,32 @@ function VideoConferenceComponent(props: {
                 visibility: hidden !important;
                 opacity: 0 !important;
                 pointer-events: none !important;
+              }
+
+              /* 5. Mobile Responsiveness */
+              @media (max-width: 768px) {
+                .sky-meet-video-wrapper .lk-video-conference-inner {
+                  flex-direction: column !important; /* Stack webcams nicely */
+                }
+                .sky-meet-video-wrapper .lk-carousel {
+                  width: 100% !important;
+                  max-width: 100% !important;
+                  min-width: 0 !important;
+                  height: 120px !important;
+                  min-height: 120px !important;
+                  flex-direction: row !important; /* Horizontal scrolling on phones */
+                  overflow-x: auto !important;
+                  overflow-y: hidden !important;
+                  border-right: none !important;
+                  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+                  padding: 8px !important;
+                  gap: 8px !important;
+                }
+                .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile {
+                  height: 100% !important;
+                  width: auto !important;
+                  aspect-ratio: 16 / 9 !important;
+                }
               }
             ` : ''}
           `}</style>

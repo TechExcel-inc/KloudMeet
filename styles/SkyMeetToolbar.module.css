@@ -300,3 +300,56 @@
   white-space: nowrap;
   backdrop-filter: blur(8px);
 }
+
+/* ============================================
+   Mobile Responsiveness
+   ============================================ */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: 8px 6px;
+  }
+  
+  .leftControls {
+    gap: 4px;
+    margin-left: 2px;
+  }
+  
+  .centerTabs {
+    max-width: 45vw;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 4px 2px;
+    gap: 0;
+  }
+  
+  .centerTabs::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .tabBtn {
+    font-size: 0; /* Hide text to save space */
+    padding: 6px 10px;
+    min-width: 42px;
+  }
+  
+  .tabBtn svg {
+    margin-bottom: 0;
+  }
+  
+  .rightControls {
+    gap: 6px;
+  }
+  
+  .exitBtn {
+    font-size: 0; /* Hide Exit text */
+    padding: 8px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    justify-content: center;
+  }
+  
+  .exitBtn svg {
+    margin: 0;
+  }
+}
