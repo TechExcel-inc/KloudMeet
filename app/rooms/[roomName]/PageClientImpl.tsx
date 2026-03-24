@@ -6,6 +6,8 @@ import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
+import { SkyMeetToolbar, ViewMode } from '@/lib/SkyMeetToolbar';
+import { LiveDocView } from '@/lib/LiveDocView';
 import { ConnectionDetails } from '@/lib/types';
 import {
   formatChatMessageLinks,
@@ -13,6 +15,7 @@ import {
   PreJoin,
   RoomContext,
   VideoConference,
+  useTracks,
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -25,6 +28,7 @@ import {
   RoomEvent,
   TrackPublishDefaults,
   VideoCaptureOptions,
+  Track,
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
@@ -102,6 +106,10 @@ function VideoConferenceComponent(props: {
   const e2eeEnabled = !!(e2eePassphrase && worker);
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
+  const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
+  const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
+  const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
+  const [screenShareActive, setScreenShareActive] = React.useState(false);
 
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
@@ -134,6 +142,30 @@ function VideoConferenceComponent(props: {
   }, [props.userChoices, props.options.hq, props.options.codec]);
 
   const room = React.useMemo(() => new Room(roomOptions), []);
+
+  // Check for any active screen share tracks in the room
+  const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
+  const hasScreenShare = screenShareTracks.length > 0;
+
+  // React to screen share status logic automatically
+  React.useEffect(() => {
+    if (hasScreenShare) {
+      // Force everybody to highlight the Screen Share tab (presenter will natively see the LiveDoc layout under the hood)
+      setActiveView('shareScreen');
+    } else {
+      // Screen share ended, revert to webcam if we were watching a share
+      setActiveView((prev) => (prev === 'shareScreen' ? 'webcam' : prev));
+    }
+  }, [hasScreenShare]);
+
+  const handleViewChange = React.useCallback((view: ViewMode) => {
+    // If we navigate away from the shared screen view, auto-disable our local screen share
+    if (view !== 'shareScreen' && screenShareActive) {
+      setScreenShareActive(false);
+      room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+    }
+    setActiveView(view);
+  }, [screenShareActive, room]);
 
   React.useEffect(() => {
     if (e2eeEnabled) {
@@ -217,14 +249,97 @@ function VideoConferenceComponent(props: {
     }
   }, [lowPowerMode]);
 
+  const handleToggleMic = React.useCallback(() => {
+    const next = !micEnabled;
+    setMicEnabled(next);
+    room.localParticipant.setMicrophoneEnabled(next).catch(handleError);
+  }, [micEnabled, room]);
+
+  const handleToggleCam = React.useCallback(() => {
+    const next = !camEnabled;
+    setCamEnabled(next);
+    room.localParticipant.setCameraEnabled(next).catch(handleError);
+  }, [camEnabled, room]);
+
+  const handleShareScreen = React.useCallback(() => {
+    // If someone else is actively sharing, we cannot share
+    if (hasScreenShare && !screenShareActive) {
+      alert('Only one person can share their screen at a time.');
+      return;
+    }
+
+    const next = !screenShareActive;
+    setScreenShareActive(next);
+
+    room.localParticipant.setScreenShareEnabled(next).catch((e) => {
+      setScreenShareActive(false);
+      console.error(e);
+    });
+  }, [screenShareActive, room, hasScreenShare]);
+
+  const handleExit = React.useCallback(() => {
+    room.disconnect();
+    router.push('/');
+  }, [room, router]);
+
+  // Extract room name from connection URL for display
+  const displayRoomName = props.connectionDetails.serverUrl
+    ? props.connectionDetails.serverUrl.split('/').pop() || 'Room'
+    : 'Room';
+
+  const isPresenterScreencast = screenShareActive;
+  const isPureLiveDoc = activeView === 'liveDoc';
+  const showLiveDoc = isPureLiveDoc || isPresenterScreencast;
+
   return (
-    <div className="lk-room-container">
+    <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
-        <VideoConference
-          chatMessageFormatter={formatChatMessageLinks}
-          SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+
+        {/* View content area */}
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', display: 'flex' }}>
+          
+          {/* Left panel: LiveDoc content */}
+          {showLiveDoc && (
+             <div style={{ width: '100%', flexShrink: 0, position: 'relative' }}>
+               <LiveDocView
+                 roomName={displayRoomName}
+                 participantName={props.userChoices.username}
+               />
+             </div>
+          )}
+
+          {/* Right panel: Webcam grids and screen shares */}
+          <div style={{ flex: 1, position: 'relative', display: showLiveDoc ? 'none' : 'block' }}>
+             <VideoConference
+               chatMessageFormatter={formatChatMessageLinks}
+               SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+             />
+          </div>
+
+          {/* If the presenter is screen sharing, hide their own redundant screencast focus view so webcams can cleanly populate the 50% right layout! */}
+          {isPresenterScreencast && (
+            <style>{`
+              .lk-focus-layout { display: none !important; }
+              .lk-carousel { width: 100% !important; max-width: 100% !important; flex: 1 !important; }
+            `}</style>
+          )}
+        </div>
+
+        {/* Custom toolbar overlay */}
+        <SkyMeetToolbar
+          activeView={activeView}
+          onViewChange={handleViewChange}
+          onExit={handleExit}
+          micEnabled={micEnabled}
+          camEnabled={camEnabled}
+          onToggleMic={handleToggleMic}
+          onToggleCam={handleToggleCam}
+          onShareScreen={handleShareScreen}
+          screenShareActive={screenShareActive}
+          canShareScreen={!hasScreenShare || screenShareActive}
         />
+
         <DebugMode />
         <RecordingIndicator />
       </RoomContext.Provider>

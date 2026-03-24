@@ -65,3 +65,15 @@ h2 a {
 h2 a {
   text-decoration: none;
 }
+
+/* Prevent LiveKit Chat from extending too far down and being blocked by custom SkyMeet toolbar */
+.lk-chat {
+  margin-bottom: 74px !important;
+  border-radius: 8px; /* Optional for making the floating effect look a bit nicer */
+  overflow: hidden;
+}
+
+/* Hide default LiveKit control bar to prevent redundant UI */
+.lk-control-bar {
+  display: none !important;
+}
