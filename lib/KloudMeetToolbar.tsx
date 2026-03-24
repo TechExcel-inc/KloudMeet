@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MediaDeviceMenu } from '@livekit/components-react';
-import styles from '../styles/SkyMeetToolbar.module.css';
+import styles from '../styles/KloudMeetToolbar.module.css';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
 
-interface SkyMeetToolbarProps {
+interface KloudMeetToolbarProps {
   activeView: ViewMode;
   onViewChange: (view: ViewMode) => void;
   onExit: () => void;
@@ -19,7 +19,7 @@ interface SkyMeetToolbarProps {
   canShareScreen: boolean;
 }
 
-export function SkyMeetToolbar({
+export function KloudMeetToolbar({
   activeView,
   onViewChange,
   onExit,
@@ -30,7 +30,7 @@ export function SkyMeetToolbar({
   onShareScreen,
   screenShareActive,
   canShareScreen,
-}: SkyMeetToolbarProps) {
+}: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

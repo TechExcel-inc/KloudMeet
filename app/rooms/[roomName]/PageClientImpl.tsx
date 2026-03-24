@@ -6,7 +6,7 @@ import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
-import { SkyMeetToolbar, ViewMode } from '@/lib/SkyMeetToolbar';
+import { KloudMeetToolbar, ViewMode } from '@/lib/KloudMeetToolbar';
 import { LiveDocView } from '@/lib/LiveDocView';
 import { ConnectionDetails } from '@/lib/types';
 import {
@@ -520,7 +520,7 @@ function VideoConferenceComponent(props: {
         </div>
 
         {/* Custom toolbar overlay */}
-        <SkyMeetToolbar
+        <KloudMeetToolbar
           activeView={activeView}
           onViewChange={handleViewChange}
           onExit={handleExit}

@@ -66,7 +66,7 @@ h2 a {
   text-decoration: none;
 }
 
-/* Prevent LiveKit Chat from extending too far down and being blocked by custom SkyMeet toolbar */
+/* Prevent LiveKit Chat from extending too far down and being blocked by custom KloudMeet toolbar */
 .lk-chat {
   margin-bottom: 74px !important;
   border-radius: 8px; /* Optional for making the floating effect look a bit nicer */

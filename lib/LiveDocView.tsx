@@ -15,7 +15,7 @@ export function LiveDocView({ roomName, participantName }: LiveDocViewProps) {
     <div className={styles.container}>
       <div className={styles.roomInfo}>
         <h2 className={styles.roomTitle}>Meetings room ID: {roomName}</h2>
-        <p className={styles.roomSubtitle}>SkyMeet</p>
+        <p className={styles.roomSubtitle}>KloudMeet</p>
       </div>
 
       <div className={styles.participant}>
