@@ -1,16 +1,59 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog } = require('electron');
 const path = require('path');
-const { mouse, Point, Button } = require('@nut-tree-fork/nut-js');
+const http = require('http');
+const { spawn } = require('child_process');
+const fs = require('fs');
 
-// Fast movement without delay to avoid massive queuing of mouse events
-mouse.config.autoDelayMs = 0;
-mouse.config.mouseSpeed = 3000;
+const APP_PORT = 3201;
+const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
+
+let nextServerProcess;
+
+/** Lazy-load native stack so a failure does not kill the app before any window (packaged builds). */
+let nutApi;
+function getNutTree() {
+  if (!nutApi) {
+    const { mouse, Point, Button } = require('@nut-tree-fork/nut-js');
+    mouse.config.autoDelayMs = 0;
+    mouse.config.mouseSpeed = 3000;
+    nutApi = { mouse, Point, Button };
+  }
+  return nutApi;
+}
+
+function startupLogPath() {
+  try {
+    return path.join(app.getPath('userData'), 'startup.log');
+  } catch {
+    return path.join(require('os').tmpdir(), 'kloud-meet-startup.log');
+  }
+}
+
+function appendStartupLog(line) {
+  try {
+    fs.appendFileSync(startupLogPath(), `[${new Date().toISOString()}] ${line}\n`);
+  } catch {
+    /* ignore */
+  }
+}
+
+function showFatal(title, detail) {
+  appendStartupLog(`${title}: ${detail}`);
+  console.error(title, detail);
+  try {
+    dialog.showErrorBox(
+      title,
+      `${detail}\n\n日志: ${startupLogPath()}`,
+    );
+  } catch {
+    /* ignore */
+  }
+}
 
 let mainWindow;
 let overlayWindow;
 
 function createWindows() {
-  // Allow getDisplayMedia() to work in Electron with a source picker
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
       let handled = false;
@@ -19,7 +62,7 @@ function createWindows() {
         click: () => {
           handled = true;
           callback({ video: source, audio: 'loopback' });
-        }
+        },
       }));
 
       template.push({ type: 'separator' });
@@ -27,8 +70,8 @@ function createWindows() {
         label: 'Cancel',
         click: () => {
           handled = true;
-          callback(); // Resolves getting display media with failure/cancellation
-        }
+          callback();
+        },
       });
 
       const menu = Menu.buildFromTemplate(template);
@@ -42,7 +85,7 @@ function createWindows() {
           }
         }, 100);
       });
-    }).catch(err => {
+    }).catch((err) => {
       console.error(err);
       callback();
     });
@@ -70,7 +113,7 @@ function createWindows() {
     alwaysOnTop: true,
     hasShadow: false,
     enableLargerThanScreen: true,
-    focusable: false, // Prevents stealing the app's focus, which breaks Cmd+Tab on Mac
+    focusable: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -78,34 +121,30 @@ function createWindows() {
     },
   });
 
-  // 'pop-up-menu' floats over full screen apps without breaking the macOS application switcher
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
-  // Enable click-through so user can interact with their actual desktop
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  // Load the Next.js app in the main window
-  mainWindow.loadURL('http://localhost:3201');
+  mainWindow.loadURL(APP_ORIGIN);
+  overlayWindow.loadURL(`${APP_ORIGIN}/overlay.html`);
 
-  // Load the transparent canvas HTML in the overlay window
-  // The public folder in Next.js serves static files directly!
-  overlayWindow.loadURL('http://localhost:3201/overlay.html');
+  mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
+    showFatal('页面加载失败', `${code} ${desc}\n${url}`);
+  });
 
-  // IPC Bridge: When Main Window sends a draw command, forward it to Overlay
   ipcMain.on('draw-message', (event, data) => {
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.send('draw-message', data);
     }
   });
 
-  // IPC Bridge: Remote Control Simulation
   ipcMain.on('remote-control-message', async (event, data) => {
     try {
-      const { width, height } = require('electron').screen.getPrimaryDisplay().bounds;
-      const targetX = Math.round(data.x * width);
-      const targetY = Math.round(data.y * height);
-      
+      const { mouse, Point, Button } = getNutTree();
+      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+      const targetX = Math.round(data.x * w);
+      const targetY = Math.round(data.y * h);
+
       if (data.type === 'mousemove') {
         await mouse.setPosition(new Point(targetX, targetY));
       } else if (data.type === 'mousedown') {
@@ -123,12 +162,126 @@ function createWindows() {
   });
 }
 
-app.whenReady().then(() => {
-  createWindows();
+function waitForHttpReady(port, timeoutMs = 90000) {
+  const started = Date.now();
+  return new Promise((resolve, reject) => {
+    function ping() {
+      const req = http.get(`http://127.0.0.1:${port}/`, (res) => {
+        res.resume();
+        resolve();
+      });
+      req.on('error', () => {
+        if (Date.now() - started > timeoutMs) {
+          reject(new Error(`Next server did not respond on port ${port} within ${timeoutMs}ms`));
+        } else {
+          setTimeout(ping, 400);
+        }
+      });
+    }
+    ping();
+  });
+}
+
+async function startPackagedNextServer() {
+  const standaloneDir = path.join(process.resourcesPath, 'standalone');
+  const serverJs = path.join(standaloneDir, 'server.js');
+  appendStartupLog(`standaloneDir=${standaloneDir}`);
+  if (!fs.existsSync(serverJs)) {
+    throw new Error(`找不到内置服务: ${serverJs}`);
+  }
+
+  let stderrBuf = '';
+  nextServerProcess = spawn(process.execPath, [serverJs], {
+    cwd: standaloneDir,
+    env: {
+      ...process.env,
+      ELECTRON_RUN_AS_NODE: '1',
+      PORT: String(APP_PORT),
+      HOSTNAME: '127.0.0.1',
+      NODE_ENV: 'production',
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+
+  nextServerProcess.stdout.on('data', (d) => {
+    const s = d.toString();
+    appendStartupLog(`[stdout] ${s.trim()}`);
+  });
+  nextServerProcess.stderr.on('data', (d) => {
+    const s = d.toString();
+    stderrBuf += s;
+    appendStartupLog(`[stderr] ${s.trim()}`);
+  });
+
+  nextServerProcess.on('error', (err) => {
+    appendStartupLog(`spawn error: ${err.message}`);
+  });
+
+  let earlyExitHandler;
+  const earlyExit = new Promise((_, reject) => {
+    earlyExitHandler = (code) => {
+      if (code !== 0 && code !== null) {
+        reject(
+          new Error(
+            `Next 进程已退出（代码 ${code}）。常见原因：3201 端口被占用、或 standalone 目录不完整。\n${stderrBuf.slice(-4000)}`,
+          ),
+        );
+      }
+    };
+    nextServerProcess.once('exit', earlyExitHandler);
+  });
+
+  try {
+    await Promise.race([waitForHttpReady(APP_PORT), earlyExit]);
+  } catch (e) {
+    throw new Error(`${e.message}\n--- stderr ---\n${stderrBuf.slice(-4000)}`);
+  } finally {
+    if (earlyExitHandler) {
+      nextServerProcess.removeListener('exit', earlyExitHandler);
+    }
+  }
+
+  nextServerProcess.on('exit', (code) => {
+    appendStartupLog(`Next process exit code=${code}`);
+    if (code != null && code !== 0) {
+      showFatal('内置网页服务已退出', `退出码 ${code}\n${stderrBuf.slice(-2000)}`);
+    }
+  });
+}
+
+app.whenReady().then(async () => {
+  try {
+    if (app.isPackaged) {
+      await startPackagedNextServer();
+    }
+  } catch (e) {
+    showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
+    app.quit();
+    return;
+  }
+
+  try {
+    createWindows();
+  } catch (e) {
+    showFatal('创建窗口失败', e instanceof Error ? e.message : String(e));
+    app.quit();
+    return;
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindows();
   });
+});
+
+process.on('uncaughtException', (err) => {
+  showFatal('未捕获异常', err.stack || err.message);
+});
+
+app.on('before-quit', () => {
+  if (nextServerProcess && !nextServerProcess.killed) {
+    nextServerProcess.kill();
+    nextServerProcess = null;
+  }
 });
 
 app.on('window-all-closed', () => {

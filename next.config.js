@@ -3,6 +3,8 @@ const nextConfig = {
   reactStrictMode: false,
   // Disable Next.js Dev Tools indicator (bottom-left "N" / Turbopack menu) in development.
   devIndicators: false,
+  /** Ship a minimal Node server for Electron / self-host (see scripts/prepare-standalone.js). */
+  output: 'standalone',
   productionBrowserSourceMaps: true,
   images: {
     formats: ['image/webp'],

@@ -15,6 +15,9 @@
 # production
 /build
 
+# electron-builder
+/dist
+
 # misc
 .DS_Store
 *.pem
