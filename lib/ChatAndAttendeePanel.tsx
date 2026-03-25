@@ -1,43 +1,55 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useChat, useRoomContext, useParticipants } from '@livekit/components-react';
+import { useRoomContext, useParticipants } from '@livekit/components-react';
+import { RoomEvent } from 'livekit-client';
 
 // ════════════════════════════════════
-// Custom Chat Panel (replaces LiveKit <Chat>)
+// Custom Chat Panel (uses publishData directly)
 // ════════════════════════════════════
-export function ChatPanel() {
-  const { chatMessages, send, isSending } = useChat();
+export interface ChatMsg {
+  senderIdentity: string;
+  senderName: string;
+  message: string;
+  timestamp: number;
+  isLocal: boolean;
+}
+
+export interface ChatPanelProps {
+  messages: ChatMsg[];
+  onSend: (message: string) => void;
+}
+
+export function ChatPanel({ messages, onSend }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages]);
+  }, [messages]);
+
 
   const handleSend = useCallback((e: React.FormEvent) => {
     e.preventDefault();
-    if (!draft.trim() || isSending) return;
-    send(draft.trim()).catch(console.error);
+    if (!draft.trim()) return;
+    
+    onSend(draft.trim());
     setDraft('');
-  }, [draft, isSending, send]);
+  }, [draft, onSend]);
 
   return (
     <div className="kloud-chat-panel">
       <div className="kloud-chat-messages">
-        {chatMessages.length === 0 && (
+        {messages.length === 0 && (
           <div className="kloud-chat-empty">No messages yet. Say hello! 👋</div>
         )}
-        {chatMessages.map((msg, i) => {
-          const isLocal = msg.from?.isLocal;
-          return (
-            <div key={i} className={`kloud-chat-entry ${isLocal ? 'local' : 'remote'}`}>
-              <div className="kloud-chat-meta">
-                <span className="kloud-chat-sender">{msg.from?.name || msg.from?.identity || 'Unknown'}</span>
-                <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-              <div className="kloud-chat-text">{msg.message}</div>
+        {messages.map((msg, i) => (
+          <div key={i} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
+            <div className="kloud-chat-meta">
+              <span className="kloud-chat-sender">{msg.isLocal ? 'You' : msg.senderName}</span>
+              <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-          );
-        })}
+            <div className="kloud-chat-text">{msg.message}</div>
+          </div>
+        ))}
         <div ref={messagesEndRef} />
       </div>
       <form className="kloud-chat-form" onSubmit={handleSend}>
@@ -47,9 +59,9 @@ export function ChatPanel() {
           onChange={(e) => setDraft(e.target.value)}
           placeholder="Type a message..."
           className="kloud-chat-input"
-          disabled={isSending}
+          disabled={false}
         />
-        <button type="submit" className="kloud-chat-send" disabled={isSending || !draft.trim()}>
+        <button type="submit" className="kloud-chat-send" disabled={!draft.trim()}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
             <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
           </svg>
@@ -62,11 +74,6 @@ export function ChatPanel() {
 // ════════════════════════════════════
 // Attendee Panel (participant list with roles)
 // ════════════════════════════════════
-interface AttendeeRole {
-  identity: string;
-  role: 'host' | 'cohost' | 'presenter' | 'attendee';
-}
-
 interface AttendeePanelProps {
   hostIdentity: string | null;
   presenterIdentity: string | null;
@@ -231,6 +238,9 @@ export const chatAndAttendeeStyles = `
     align-items: center;
     gap: 6px;
     padding: 0 4px;
+  }
+  .kloud-chat-entry.local .kloud-chat-meta {
+    justify-content: flex-end;
   }
   .kloud-chat-sender {
     color: rgba(255,255,255,0.6);

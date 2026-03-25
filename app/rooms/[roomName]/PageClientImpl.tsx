@@ -564,6 +564,61 @@ function VideoConferenceComponent(props: {
   const [chatOpen, setChatOpen] = React.useState(false);
   const [attendeeOpen, setAttendeeOpen] = React.useState(false);
 
+  // Chat messages — always listening (even when panel is closed)
+  const CHAT_TOPIC = 'kloud-chat';
+  const chatEncoder = React.useMemo(() => new TextEncoder(), []);
+  const chatDecoder = React.useMemo(() => new TextDecoder(), []);
+  const [chatMessages, setChatMessages] = React.useState<Array<{
+    senderIdentity: string;
+    senderName: string;
+    message: string;
+    timestamp: number;
+    isLocal: boolean;
+  }>>([]);
+
+  React.useEffect(() => {
+    const handleChatData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
+      if (topic !== CHAT_TOPIC) return;
+      try {
+        const data = JSON.parse(chatDecoder.decode(payload));
+        if (data.type === 'chat') {
+          setChatMessages(prev => [...prev, {
+            senderIdentity: data.senderIdentity,
+            senderName: data.senderName,
+            message: data.message,
+            timestamp: data.timestamp,
+            isLocal: false,
+          }]);
+        }
+      } catch (e) {
+        console.error('Chat message parse error:', e);
+      }
+    };
+    room.on(RoomEvent.DataReceived, handleChatData);
+    return () => { room.off(RoomEvent.DataReceived, handleChatData); };
+  }, [room, chatDecoder]);
+
+  const sendChatMessage = React.useCallback((text: string) => {
+    const now = Date.now();
+    setChatMessages(prev => [...prev, {
+      senderIdentity: room.localParticipant.identity,
+      senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
+      message: text,
+      timestamp: now,
+      isLocal: true,
+    }]);
+    const payload = chatEncoder.encode(JSON.stringify({
+      type: 'chat',
+      senderIdentity: room.localParticipant.identity,
+      senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
+      message: text,
+      timestamp: now,
+    }));
+    room.localParticipant.publishData(payload, { reliable: true, topic: CHAT_TOPIC }).catch(() => {
+      room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
+    });
+  }, [room, chatEncoder]);
+
   return (
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
@@ -779,7 +834,7 @@ function VideoConferenceComponent(props: {
                 <button className="chat-overlay-close" onClick={() => setChatOpen(false)}>✕</button>
               </div>
               <div className="chat-overlay-body">
-                <ChatPanel />
+                <ChatPanel messages={chatMessages} onSend={sendChatMessage} />
               </div>
             </div>
           )}
