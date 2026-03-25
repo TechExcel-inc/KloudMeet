@@ -19,7 +19,7 @@ import {
   RoomContext,
   VideoConference,
   VideoTrack,
-  Chat,
+
   useTracks,
 } from '@livekit/components-react';
 import {
@@ -39,6 +39,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
+import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -412,7 +413,9 @@ function VideoConferenceComponent(props: {
   }, [room.localParticipant, room.remoteParticipants]);
   const [presenterIdentity, setPresenterIdentity] = React.useState<string | null>(null);
   const isPresenter = presenterIdentity === room.localParticipant.identity;
-  const canSwitchViews = isHost || isPresenter || screenShareActive;
+  const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
+  const isCohost = cohostIdentities.includes(room.localParticipant.identity);
+  const canSwitchViews = isHost || isCohost || isPresenter || screenShareActive;
 
   // ═══ Meeting Control Sync via DataChannel ═══
   const TOPIC = 'meeting-control';
@@ -476,6 +479,10 @@ function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'SET_PRESENTER') {
           setPresenterIdentity(msg.identity);
+        } else if (msg.type === 'SET_COHOST') {
+          setCohostIdentities(prev => prev.includes(msg.identity) ? prev : [...prev, msg.identity]);
+        } else if (msg.type === 'REMOVE_COHOST') {
+          setCohostIdentities(prev => prev.filter(id => id !== msg.identity));
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
@@ -553,8 +560,9 @@ function VideoConferenceComponent(props: {
     };
   }, []);
 
-  // Chat overlay state
+  // Chat + Attendee overlay state
   const [chatOpen, setChatOpen] = React.useState(false);
+  const [attendeeOpen, setAttendeeOpen] = React.useState(false);
 
   return (
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
@@ -771,7 +779,47 @@ function VideoConferenceComponent(props: {
                 <button className="chat-overlay-close" onClick={() => setChatOpen(false)}>✕</button>
               </div>
               <div className="chat-overlay-body">
-                <Chat messageFormatter={formatChatMessageLinks} />
+                <ChatPanel />
+              </div>
+            </div>
+          )}
+
+          {/* Attendee overlay panel */}
+          {attendeeOpen && (
+            <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
+              <div className="chat-overlay-header">
+                <span>Participants</span>
+                <button className="chat-overlay-close" onClick={() => setAttendeeOpen(false)}>✕</button>
+              </div>
+              <div className="chat-overlay-body">
+                <AttendeePanel
+                  hostIdentity={(() => {
+                    let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
+                    let hId = room.localParticipant.identity;
+                    for (const [, p] of room.remoteParticipants) {
+                      const t = p.joinedAt?.getTime() || Infinity;
+                      if (t < earliest) { earliest = t; hId = p.identity; }
+                    }
+                    return hId;
+                  })()}
+                  presenterIdentity={presenterIdentity}
+                  cohostIdentities={cohostIdentities}
+                  isHost={isHost}
+                  onSetPresenter={(identity) => {
+                    const id = identity || null;
+                    setPresenterIdentity(id);
+                    if (isHost) { authState.current.presenter = id; }
+                    sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
+                  }}
+                  onSetCohost={(identity) => {
+                    setCohostIdentities(prev => [...prev, identity]);
+                    sendMeetingMsg({ type: 'SET_COHOST', identity });
+                  }}
+                  onRemoveCohost={(identity) => {
+                    setCohostIdentities(prev => prev.filter(id => id !== identity));
+                    sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
+                  }}
+                />
               </div>
             </div>
           )}
@@ -1161,6 +1209,8 @@ function VideoConferenceComponent(props: {
                   height: 50vh;
                }
             }
+
+            ${chatAndAttendeeStyles}
           `}</style>
         </div>
 
@@ -1189,6 +1239,8 @@ function VideoConferenceComponent(props: {
           canSwitchViews={canSwitchViews}
           chatOpen={chatOpen}
           onToggleChat={() => setChatOpen(prev => !prev)}
+          attendeeOpen={attendeeOpen}
+          onToggleAttendee={() => setAttendeeOpen(prev => !prev)}
         />
 
         <DebugMode />

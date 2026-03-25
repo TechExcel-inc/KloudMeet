@@ -26,6 +26,8 @@ interface KloudMeetToolbarProps {
   canSwitchViews: boolean;
   chatOpen: boolean;
   onToggleChat: () => void;
+  attendeeOpen: boolean;
+  onToggleAttendee: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -48,6 +50,8 @@ export function KloudMeetToolbar({
   canSwitchViews,
   chatOpen,
   onToggleChat,
+  attendeeOpen,
+  onToggleAttendee,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -225,7 +229,7 @@ export function KloudMeetToolbar({
           </>
           )}
 
-          <button className={styles.tabBtn} onClick={() => showComingSoon('Attendee')}>
+          <button className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={onToggleAttendee}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
