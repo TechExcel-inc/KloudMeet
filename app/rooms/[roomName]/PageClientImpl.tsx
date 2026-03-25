@@ -8,6 +8,8 @@ import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode } from '@/lib/KloudMeetToolbar';
 import { LiveDocView } from '@/lib/LiveDocView';
+import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
+import { RemoteControlOverlay } from '@/lib/RemoteControlOverlay';
 import { ConnectionDetails } from '@/lib/types';
 import {
   formatChatMessageLinks,
@@ -111,6 +113,8 @@ function VideoConferenceComponent(props: {
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
+  const [isDrawingMode, setIsDrawingMode] = React.useState(false);
+  const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
 
   const roomOptions = React.useMemo((): RoomOptions => {
     let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
@@ -154,6 +158,7 @@ function VideoConferenceComponent(props: {
       // Force everybody to highlight the Screen Share tab (presenter will natively see the LiveDoc layout under the hood)
       setActiveView('shareScreen');
     } else {
+      setIsDrawingMode(false);
       // Screen share ended, revert to webcam if we were watching a share
       setActiveView((prev) => (prev === 'shareScreen' ? 'webcam' : prev));
     }
@@ -161,9 +166,13 @@ function VideoConferenceComponent(props: {
 
   const handleViewChange = React.useCallback((view: ViewMode) => {
     // If we navigate away from the shared screen view, auto-disable our local screen share
-    if (view !== 'shareScreen' && screenShareActive) {
-      setScreenShareActive(false);
-      room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+    if (view !== 'shareScreen') {
+      setIsDrawingMode(false);
+      setIsRemoteControlMode(false);
+      if (screenShareActive) {
+        setScreenShareActive(false);
+        room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+      }
     }
     setActiveView(view);
   }, [screenShareActive, room]);
@@ -208,6 +217,14 @@ function VideoConferenceComponent(props: {
           props.connectionDetails.participantToken,
           connectOptions,
         )
+        .then(() => {
+          // Auto-copy the meeting link to clipboard when joining to make it easy to invite others,
+          // especially if the app goes to the background during screen sharing.
+          if (typeof navigator !== 'undefined' && navigator.clipboard) {
+            navigator.clipboard.writeText(window.location.href).catch(console.error);
+            console.log('Meeting URL auto-copied to clipboard!');
+          }
+        })
         .catch((error) => {
           handleError(error);
         });
@@ -315,7 +332,7 @@ function VideoConferenceComponent(props: {
 
   const isPresenterScreencast = screenShareActive;
   const isPureLiveDoc = activeView === 'liveDoc';
-  const showLiveDoc = isPureLiveDoc || isPresenterScreencast;
+  const showLiveDoc = isPureLiveDoc;
 
   return (
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
@@ -341,6 +358,16 @@ function VideoConferenceComponent(props: {
                chatMessageFormatter={formatChatMessageLinks}
                SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
              />
+
+             {hasScreenShare && activeView === 'shareScreen' && (
+               <>
+                 <AnnotationCanvas isDrawingMode={isDrawingMode} />
+                 <RemoteControlOverlay 
+                   isActive={isRemoteControlMode} 
+                   isPresenter={screenShareActive} 
+                 />
+               </>
+             )}
 
              {/* Webcam collapse/expand button during screenshare */}
              {hasScreenShare && (
@@ -387,13 +414,7 @@ function VideoConferenceComponent(props: {
              )}
           </div>
 
-          {/* If the presenter is screen sharing, hide their own redundant screencast focus view so webcams can cleanly populate the 50% right layout! */}
-          {isPresenterScreencast && (
-            <style>{`
-              .lk-focus-layout { display: none !important; }
-              .lk-carousel { width: 100% !important; max-width: 100% !important; flex: 1 !important; }
-            `}</style>
-          )}
+
 
           {/* Dynamic layout injections */}
           <style>{`
@@ -531,6 +552,15 @@ function VideoConferenceComponent(props: {
           onShareScreen={handleShareScreen}
           screenShareActive={screenShareActive}
           canShareScreen={!hasScreenShare || screenShareActive}
+          isDrawingMode={isDrawingMode}
+          onToggleDrawingMode={() => {
+            if (hasScreenShare) setIsDrawingMode(prev => !prev);
+          }}
+          isRemoteControlMode={isRemoteControlMode}
+          onToggleRemoteControlMode={() => {
+            if (hasScreenShare) setIsRemoteControlMode(prev => !prev);
+          }}
+          hasScreenShare={hasScreenShare}
         />
 
         <DebugMode />

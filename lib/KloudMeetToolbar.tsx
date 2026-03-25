@@ -17,6 +17,11 @@ interface KloudMeetToolbarProps {
   onShareScreen: () => void;
   screenShareActive: boolean;
   canShareScreen: boolean;
+  isDrawingMode: boolean;
+  onToggleDrawingMode: () => void;
+  isRemoteControlMode: boolean;
+  onToggleRemoteControlMode: () => void;
+  hasScreenShare: boolean;
 }
 
 export function KloudMeetToolbar({
@@ -30,6 +35,11 @@ export function KloudMeetToolbar({
   onShareScreen,
   screenShareActive,
   canShareScreen,
+  isDrawingMode,
+  onToggleDrawingMode,
+  isRemoteControlMode,
+  onToggleRemoteControlMode,
+  hasScreenShare,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -160,6 +170,30 @@ export function KloudMeetToolbar({
             Share Screen
           </button>
 
+          <button
+            className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnActive : ''}`}
+            onClick={onToggleDrawingMode}
+            style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
+            title={!hasScreenShare ? 'No active screenshare to annotate' : 'Annotate Screenshare'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+            </svg>
+            Annotate
+          </button>
+
+          <button
+            className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnActive : ''}`}
+            onClick={onToggleRemoteControlMode}
+            style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
+            title={!hasScreenShare ? 'No active screenshare to control' : 'Remote Control'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
+            </svg>
+            Control
+          </button>
+
           <button className={styles.tabBtn} onClick={() => showComingSoon('Attendee')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -167,11 +201,16 @@ export function KloudMeetToolbar({
             Attendee
           </button>
 
-          <button className={styles.tabBtn} onClick={() => showComingSoon('Files')}>
+          <button className={styles.tabBtn} onClick={() => {
+            navigator.clipboard.writeText(window.location.href);
+            setToastMsg('Invite Link Copied to Clipboard!');
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+          }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
             </svg>
-            Files
+            Invite
           </button>
 
           <button className={styles.tabBtn} onClick={() => {
