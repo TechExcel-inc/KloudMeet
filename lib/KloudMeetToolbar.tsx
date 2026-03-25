@@ -22,6 +22,10 @@ interface KloudMeetToolbarProps {
   isRemoteControlMode: boolean;
   onToggleRemoteControlMode: () => void;
   hasScreenShare: boolean;
+  isDesktop: boolean;
+  canSwitchViews: boolean;
+  chatOpen: boolean;
+  onToggleChat: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -40,6 +44,10 @@ export function KloudMeetToolbar({
   isRemoteControlMode,
   onToggleRemoteControlMode,
   hasScreenShare,
+  isDesktop,
+  canSwitchViews,
+  chatOpen,
+  onToggleChat,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -136,8 +144,10 @@ export function KloudMeetToolbar({
           </div>
         </div>
 
-        {/* Center: view tabs */}
+        {/* Center: view tabs (only for host/co-host/presenter) */}
         <div className={styles.centerTabs}>
+          {canSwitchViews && (
+          <>
           <button
             className={`${styles.tabBtn} ${activeView === 'liveDoc' ? styles.tabBtnActive : ''}`}
             onClick={() => onViewChange('liveDoc')}
@@ -159,7 +169,7 @@ export function KloudMeetToolbar({
           </button>
 
           <button
-            className={`${styles.tabBtn} ${(activeView === 'shareScreen' || screenShareActive) ? styles.tabBtnActive : ''}`}
+            className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''}`}
             onClick={handleShareScreenClick}
             style={{ opacity: canShareScreen ? 1 : 0.5, cursor: canShareScreen ? 'pointer' : 'not-allowed' }}
             title={!canShareScreen ? 'Someone else is already sharing' : 'Share Screen'}
@@ -170,29 +180,50 @@ export function KloudMeetToolbar({
             Share Screen
           </button>
 
-          <button
-            className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnActive : ''}`}
-            onClick={onToggleDrawingMode}
-            style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
-            title={!hasScreenShare ? 'No active screenshare to annotate' : 'Annotate Screenshare'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
-            </svg>
-            Annotate
-          </button>
+          {isDesktop ? (
+            <>
+              <button
+                className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnActive : ''}`}
+                onClick={onToggleDrawingMode}
+                style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
+                title={!hasScreenShare ? 'No active screenshare to annotate' : 'Annotate Screenshare'}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
+                </svg>
+                Annotate
+              </button>
 
-          <button
-            className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnActive : ''}`}
-            onClick={onToggleRemoteControlMode}
-            style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
-            title={!hasScreenShare ? 'No active screenshare to control' : 'Remote Control'}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
-            </svg>
-            Control
-          </button>
+              <button
+                className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnActive : ''}`}
+                onClick={onToggleRemoteControlMode}
+                style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
+                title={!hasScreenShare ? 'No active screenshare to control' : 'Remote Control'}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
+                </svg>
+                Control
+              </button>
+            </>
+          ) : (
+            <button
+              className={styles.tabBtn}
+              onClick={() => {
+                const currentUrl = new URL(window.location.href);
+                const rn = currentUrl.pathname.split('/').pop() || '';
+                window.location.href = `kloudmeet://join/${rn}`;
+              }}
+              title="Launch Native App for Presentations"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Open App
+            </button>
+          )}
+          </>
+          )}
 
           <button className={styles.tabBtn} onClick={() => showComingSoon('Attendee')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -213,14 +244,7 @@ export function KloudMeetToolbar({
             Invite
           </button>
 
-          <button className={styles.tabBtn} onClick={() => {
-            const chatToggle = document.querySelector<HTMLButtonElement>('.lk-chat-toggle');
-            if (chatToggle) {
-              chatToggle.click();
-            } else {
-              showComingSoon('Chats');
-            }
-          }}>
+          <button className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={onToggleChat}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
