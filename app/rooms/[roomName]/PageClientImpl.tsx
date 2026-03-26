@@ -11,6 +11,7 @@ import { LiveDocView } from '@/lib/LiveDocView';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay } from '@/lib/RemoteControlOverlay';
 import { useIsDesktop } from '@/lib/useIsDesktop';
+import { useToolbarIsMobile } from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
 import {
   formatChatMessageLinks,
@@ -133,6 +134,7 @@ function VideoConferenceComponent(props: {
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   const [screenShareSurface, setScreenShareSurface] = React.useState<'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'>('unknown');
   const isDesktop = useIsDesktop();
+  const isToolbarMobile = useToolbarIsMobile();
 
   React.useEffect(() => {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
@@ -826,8 +828,8 @@ function VideoConferenceComponent(props: {
             );
           })()}
 
-          {/* Chat overlay panel — works on all views */}
-          {chatOpen && (
+          {/* Chat / Attendees：移动端沿用侧栏浮层；桌面端由 KloudMeetToolbar 锚点气泡承载 */}
+          {chatOpen && isToolbarMobile && (
             <div className="chat-overlay-panel">
               <div className="chat-overlay-header">
                 <span>Chat</span>
@@ -839,8 +841,7 @@ function VideoConferenceComponent(props: {
             </div>
           )}
 
-          {/* Attendee overlay panel */}
-          {attendeeOpen && (
+          {attendeeOpen && isToolbarMobile && (
             <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
               <div className="chat-overlay-header">
                 <span>Participants</span>
@@ -1306,6 +1307,43 @@ function VideoConferenceComponent(props: {
             setChatOpen(false);
             setAttendeeOpen(false);
           }}
+          chatPanelSlot={
+            isToolbarMobile ? undefined : (
+              <ChatPanel messages={chatMessages} onSend={sendChatMessage} />
+            )
+          }
+          attendeePanelSlot={
+            isToolbarMobile ? undefined : (
+              <AttendeePanel
+                hostIdentity={(() => {
+                  let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
+                  let hId = room.localParticipant.identity;
+                  for (const [, p] of room.remoteParticipants) {
+                    const t = p.joinedAt?.getTime() || Infinity;
+                    if (t < earliest) { earliest = t; hId = p.identity; }
+                  }
+                  return hId;
+                })()}
+                presenterIdentity={presenterIdentity}
+                cohostIdentities={cohostIdentities}
+                isHost={isHost}
+                onSetPresenter={(identity) => {
+                  const id = identity || null;
+                  setPresenterIdentity(id);
+                  if (isHost) { authState.current.presenter = id; }
+                  sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
+                }}
+                onSetCohost={(identity) => {
+                  setCohostIdentities(prev => [...prev, identity]);
+                  sendMeetingMsg({ type: 'SET_COHOST', identity });
+                }}
+                onRemoveCohost={(identity) => {
+                  setCohostIdentities(prev => prev.filter(id => id !== identity));
+                  sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
+                }}
+              />
+            )
+          }
         />
 
         <DebugMode />

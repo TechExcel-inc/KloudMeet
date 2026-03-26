@@ -1,10 +1,23 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
+import { useToolbarIsMobile } from './useToolbarIsMobile';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
+
+/** Web：完整页面 URL；Electron 桌面：可唤起本机应用的 kloudmeet 深度链接（含当前查询参数）。 */
+export function buildInviteLinkForClipboard(isDesktop: boolean): string {
+  if (!isDesktop) {
+    return typeof window !== 'undefined' ? window.location.href : '';
+  }
+  const u = new URL(window.location.href);
+  const segments = u.pathname.split('/').filter(Boolean);
+  const roomName = segments.pop() || '';
+  return `kloudmeet://join/${encodeURIComponent(roomName)}${u.search}`;
+}
 
 interface KloudMeetToolbarProps {
   activeView: ViewMode;
@@ -29,6 +42,10 @@ interface KloudMeetToolbarProps {
   attendeeOpen: boolean;
   onToggleAttendee: () => void;
   onOpenSheet?: () => void;
+  /** 桌面端：Chat 气泡内容（移动端不传，沿用父级浮层） */
+  chatPanelSlot?: React.ReactNode;
+  /** 桌面端：Attendees 气泡内容 */
+  attendeePanelSlot?: React.ReactNode;
 }
 
 export function KloudMeetToolbar({
@@ -54,13 +71,34 @@ export function KloudMeetToolbar({
   attendeeOpen,
   onToggleAttendee,
   onOpenSheet,
+  chatPanelSlot,
+  attendeePanelSlot,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const exitMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const chatMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const attendeeMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const desktopBubbleRef = useRef<HTMLDivElement | null>(null);
+
+  type BubblePos = {
+    top: number;
+    left: number;
+    width: number;
+    arrowLeft: number;
+    maxHeight: number;
+    /** 桌面端 Chat/Attendees：默认固定高度（空间不足则取可用高度） */
+    height?: number;
+  };
+  const [desktopBubblePos, setDesktopBubblePos] = useState<BubblePos | null>(null);
 
   type ActionSheetType = 'views' | 'more' | 'exit' | null;
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
+  const activeSheetRef = useRef<ActionSheetType>(null);
+  activeSheetRef.current = activeSheet;
   
   // Synchronous wrapper: close Chat/Attendee BEFORE opening a sheet
   const openSheet = (sheet: ActionSheetType) => {
@@ -80,21 +118,21 @@ export function KloudMeetToolbar({
     onToggleAttendee();
   };
 
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useToolbarIsMobile();
 
-  useEffect(() => {
-    const checkIsMobile = () => {
-      const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
-      const isMobileDevice = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(ua.toLowerCase());
-      setIsMobile(isMobileDevice);
-    };
-    checkIsMobile();
-  }, []);
-
-  // DEBUG: show state in browser tab title
-  useEffect(() => {
-    document.title = `[DEBUG] isMobile=${isMobile} sheet=${activeSheet}`;
-  }, [isMobile, activeSheet]);
+  type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee';
+  const desktopAnchorBubbleKind: DesktopAnchorKind | null =
+    !isMobile
+      ? activeSheet === 'more'
+        ? 'more'
+        : activeSheet === 'exit'
+          ? 'exit'
+          : chatOpen && chatPanelSlot
+            ? 'chat'
+            : attendeeOpen && attendeePanelSlot
+              ? 'attendee'
+              : null
+      : null;
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -102,14 +140,110 @@ export function KloudMeetToolbar({
         setVisible(true); // Always visible on mobile
         return;
       }
-      // Show immediately if cursor is within 90px of bottom
+      if (activeSheetRef.current || chatOpen || attendeeOpen) {
+        setVisible(true);
+        return;
+      }
       const threshold = window.innerHeight - 90;
       setVisible(e.clientY >= threshold);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [isMobile]);
+  }, [isMobile, chatOpen, attendeeOpen]);
+
+  useLayoutEffect(() => {
+    if (!desktopAnchorBubbleKind || isMobile) {
+      setDesktopBubblePos(null);
+      return;
+    }
+    const anchorEl =
+      desktopAnchorBubbleKind === 'more'
+        ? moreMenuBtnRef.current
+        : desktopAnchorBubbleKind === 'exit'
+          ? exitMenuBtnRef.current
+          : desktopAnchorBubbleKind === 'chat'
+            ? chatMenuBtnRef.current
+            : attendeeMenuBtnRef.current;
+    if (!anchorEl) {
+      setDesktopBubblePos(null);
+      return;
+    }
+
+    const isPanel = desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee';
+    const width = isPanel
+      ? Math.min(400, Math.max(300, window.innerWidth - 24))
+      : Math.min(300, Math.max(240, window.innerWidth - 24));
+
+    let pass = 0;
+    const layout = () => {
+      const r = anchorEl.getBoundingClientRect();
+      const availableHeight = Math.max(240, r.top - 24);
+      const preferredMaxHeight =
+        desktopAnchorBubbleKind === 'chat'
+          ? 500
+          : desktopAnchorBubbleKind === 'attendee'
+            ? 200
+            : 440;
+      const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
+      const height = isPanel ? maxHeight : undefined;
+      const cx = r.left + r.width / 2;
+      let left = cx - width / 2;
+      left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+      const arrowLeft = Math.round(Math.min(width - 18, Math.max(18, cx - left)));
+      const el = desktopBubbleRef.current;
+      const h = el?.getBoundingClientRect().height || (isPanel ? 400 : 268);
+      // Panel：使用固定高度，永远向上生长（底部贴着按钮）
+      // Non-panel：根据真实内容高度向上定位，并受 maxHeight 限制
+      let top = r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
+      if (top < 10) top = 10;
+      setDesktopBubblePos({ top, left, width, arrowLeft, maxHeight, height });
+      pass++;
+      if (pass < 2) requestAnimationFrame(layout);
+    };
+
+    layout();
+  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen]);
+
+  useEffect(() => {
+    if (!desktopAnchorBubbleKind || isMobile) return;
+    const anchorEl =
+      desktopAnchorBubbleKind === 'more'
+        ? moreMenuBtnRef.current
+        : desktopAnchorBubbleKind === 'exit'
+          ? exitMenuBtnRef.current
+          : desktopAnchorBubbleKind === 'chat'
+            ? chatMenuBtnRef.current
+            : attendeeMenuBtnRef.current;
+    const isPanel = desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee';
+    const width = isPanel
+      ? Math.min(400, Math.max(300, window.innerWidth - 24))
+      : Math.min(300, Math.max(240, window.innerWidth - 24));
+    const onResize = () => {
+      if (!anchorEl) return;
+      const r = anchorEl.getBoundingClientRect();
+      const availableHeight = Math.max(240, r.top - 24);
+      const preferredMaxHeight =
+        desktopAnchorBubbleKind === 'chat'
+          ? 500
+          : desktopAnchorBubbleKind === 'attendee'
+            ? 200
+            : 440;
+      const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
+      const height = isPanel ? maxHeight : undefined;
+      const cx = r.left + r.width / 2;
+      let left = cx - width / 2;
+      left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+      const arrowLeft = Math.round(Math.min(width - 18, Math.max(18, cx - left)));
+      const el = desktopBubbleRef.current;
+      const h = el?.getBoundingClientRect().height || (isPanel ? 400 : 268);
+      let top = r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
+      if (top < 10) top = 10;
+      setDesktopBubblePos({ top, left, width, arrowLeft, maxHeight, height });
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [desktopAnchorBubbleKind, isMobile]);
 
   const showComingSoon = (feature: string) => {
     setToastMsg(`${feature} — Coming soon`);
@@ -137,6 +271,7 @@ export function KloudMeetToolbar({
 
       {/* Main toolbar */}
       <div
+        ref={toolbarRef}
         className={`${styles.toolbar} ${isMobile ? styles.mobileToolbar : ''} ${!visible && !isMobile ? styles.toolbarHidden : ''}`}
       >
         {isMobile ? (
@@ -357,28 +492,37 @@ export function KloudMeetToolbar({
             </>
           )}
           </>
-          )}          <button className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleAttendee}>
+          )}
+          <button ref={attendeeMenuBtnRef} className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleAttendee}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
             Attendees
           </button>
 
-          <button className={`${styles.tabBtn} ${styles.tabBtnGreen}`} onClick={() => showComingSoon('Invite')}>
+          <button
+            className={`${styles.tabBtn} ${styles.tabBtnGreen}`}
+            onClick={() => {
+              navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
+              setToastMsg('Invite Link Copied to Clipboard!');
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+            }}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
             </svg>
             Invite
           </button>
 
-          <button className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleChat}>
+          <button ref={chatMenuBtnRef} className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleChat}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             Chats
           </button>
 
-          <button className={styles.tabBtn} onClick={() => openSheet('more')}>
+          <button ref={moreMenuBtnRef} type="button" className={styles.tabBtn} onClick={() => openSheet('more')}>
             <svg viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
             </svg>
@@ -387,7 +531,7 @@ export function KloudMeetToolbar({
         </div>
 
         <div className={styles.rightControls}>
-          <button className={styles.exitBtn} onClick={() => openSheet('exit')}>
+          <button ref={exitMenuBtnRef} type="button" className={styles.exitBtn} onClick={() => openSheet('exit')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
@@ -396,75 +540,178 @@ export function KloudMeetToolbar({
         </div>
         </>
         )}
-      </div>      {/* Action Sheets / Popups */}
-      {activeSheet && (
+      </div>
+
+      {/* Action Sheets / Popups */}
+      {activeSheet && isMobile && (
         <>
-          {isMobile ? (
-            /* ------------------ MOBILE PULL-UP SHEET ------------------ */
-            <>
-              <div className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`} onClick={() => setActiveSheet(null)} />
-              <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
-                <div className={styles.actionSheetHeader}>
-                  <span className={styles.actionSheetTitle}>
-                    {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
-                  </span>
-                  <button className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
-                </div>
-                <div className={styles.actionSheetList}>
-                  <ActiveSheetContent 
-                    activeSheet={activeSheet} 
-                    activeView={activeView} 
-                    onViewChange={onViewChange}
-                    handleShareScreenClick={handleShareScreenClick}
-                    canShareScreen={canShareScreen}
-                    attendeeOpen={attendeeOpen}
-                    handleToggleAttendee={handleToggleAttendee}
-                    toastMsg={toastMsg}
-                    setToastMsg={setToastMsg}
-                    toastTimerRef={toastTimerRef}
-                    setActiveSheet={setActiveSheet}
-                    onExit={onExit}
-                  />
-                </div>
-              </div>
-            </>
-          ) : (
-            /* ------------------ DESKTOP FLOATING POPUP ------------------ */
-            <div className={styles.desktopPopupMenu}>
-              <div className={styles.desktopPopupMenuHeader}>
-                <span className={styles.desktopPopupMenuTitle}>
-                  {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
-                </span>
-                <button className={styles.desktopPopupMenuClose} onClick={() => setActiveSheet(null)}>✕</button>
-              </div>
-              <div className={styles.desktopPopupMenuList}>
-                  <ActiveSheetContent 
-                    activeSheet={activeSheet} 
-                    activeView={activeView} 
-                    onViewChange={onViewChange}
-                    handleShareScreenClick={handleShareScreenClick}
-                    canShareScreen={canShareScreen}
-                    attendeeOpen={attendeeOpen}
-                    handleToggleAttendee={handleToggleAttendee}
-                    toastMsg={toastMsg}
-                    setToastMsg={setToastMsg}
-                    toastTimerRef={toastTimerRef}
-                    setActiveSheet={setActiveSheet}
-                    onExit={onExit}
-                  />              
-              </div>
+          <div className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`} onClick={() => setActiveSheet(null)} />
+          <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
+            <div className={styles.actionSheetHeader}>
+              <span className={styles.actionSheetTitle}>
+                {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
+              </span>
+              <button type="button" className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
             </div>
-          )}
+            <div className={styles.actionSheetList}>
+              <ActiveSheetContent
+                activeSheet={activeSheet}
+                activeView={activeView}
+                onViewChange={onViewChange}
+                handleShareScreenClick={handleShareScreenClick}
+                canShareScreen={canShareScreen}
+                attendeeOpen={attendeeOpen}
+                handleToggleAttendee={handleToggleAttendee}
+                toastMsg={toastMsg}
+                setToastMsg={setToastMsg}
+                toastTimerRef={toastTimerRef}
+                setActiveSheet={setActiveSheet}
+                onExit={onExit}
+                isDesktop={isDesktop}
+              />
+            </div>
+          </div>
         </>
       )}
+
+      {activeSheet === 'views' && !isMobile && (
+        <div className={styles.desktopPopupMenu}>
+          <div className={styles.desktopPopupMenuHeader}>
+            <span className={styles.desktopPopupMenuTitle}>Select View Layout</span>
+            <button type="button" className={styles.desktopPopupMenuClose} onClick={() => setActiveSheet(null)}>✕</button>
+          </div>
+          <div className={styles.desktopPopupMenuList}>
+            <ActiveSheetContent
+              activeSheet={activeSheet}
+              activeView={activeView}
+              onViewChange={onViewChange}
+              handleShareScreenClick={handleShareScreenClick}
+              canShareScreen={canShareScreen}
+              attendeeOpen={attendeeOpen}
+              handleToggleAttendee={handleToggleAttendee}
+              toastMsg={toastMsg}
+              setToastMsg={setToastMsg}
+              toastTimerRef={toastTimerRef}
+              setActiveSheet={setActiveSheet}
+              onExit={onExit}
+              isDesktop={isDesktop}
+            />
+          </div>
+        </div>
+      )}
+
+      {desktopAnchorBubbleKind &&
+        !isMobile &&
+        (typeof document !== 'undefined'
+          ? createPortal(
+              <>
+                <div
+                  role="presentation"
+                  className={styles.toolbarBubbleDismiss}
+                  onMouseDown={() => {
+                    if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit') {
+                      setActiveSheet(null);
+                    } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
+                      onToggleChat();
+                    } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
+                      onToggleAttendee();
+                    }
+                  }}
+                />
+                <div
+                  ref={desktopBubbleRef}
+                  className={`${styles.toolbarBubble} ${
+                    desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee' ? styles.toolbarBubblePanel : ''
+                  }`}
+                  style={
+                    desktopBubblePos
+                      ? ({
+                          top: desktopBubblePos.top,
+                          left: desktopBubblePos.left,
+                          width: desktopBubblePos.width,
+                          maxHeight: desktopBubblePos.maxHeight,
+                          height: desktopBubblePos.height,
+                          ['--toolbar-bubble-arrow' as string]: `${desktopBubblePos.arrowLeft}px`,
+                          visibility: 'visible',
+                        } as React.CSSProperties)
+                      : ({ visibility: 'hidden', pointerEvents: 'none' } as React.CSSProperties)
+                  }
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className={styles.toolbarBubbleArrow} aria-hidden />
+                  <div className={styles.toolbarBubbleHeader}>
+                    <span className={styles.toolbarBubbleTitle}>
+                      {desktopAnchorBubbleKind === 'exit'
+                        ? 'Leave Meeting?'
+                        : desktopAnchorBubbleKind === 'chat'
+                          ? 'Chats'
+                          : desktopAnchorBubbleKind === 'attendee'
+                            ? 'Participants'
+                            : 'More Options'}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.toolbarBubbleClose}
+                      onClick={() => {
+                        if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit') {
+                          setActiveSheet(null);
+                        } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
+                          onToggleChat();
+                        } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
+                          onToggleAttendee();
+                        }
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {desktopAnchorBubbleKind === 'chat' && chatPanelSlot ? (
+                    <div className={styles.toolbarBubblePanelBody}>{chatPanelSlot}</div>
+                  ) : desktopAnchorBubbleKind === 'attendee' && attendeePanelSlot ? (
+                    <div className={styles.toolbarBubblePanelBody}>{attendeePanelSlot}</div>
+                  ) : (
+                    <div className={styles.toolbarBubbleList}>
+                      <ActiveSheetContent
+                        activeSheet={activeSheet}
+                        activeView={activeView}
+                        onViewChange={onViewChange}
+                        handleShareScreenClick={handleShareScreenClick}
+                        canShareScreen={canShareScreen}
+                        attendeeOpen={attendeeOpen}
+                        handleToggleAttendee={handleToggleAttendee}
+                        toastMsg={toastMsg}
+                        setToastMsg={setToastMsg}
+                        toastTimerRef={toastTimerRef}
+                        setActiveSheet={setActiveSheet}
+                        onExit={onExit}
+                        isDesktop={isDesktop}
+                      />
+                    </div>
+                  )}
+                </div>
+              </>,
+              document.body,
+            )
+          : null)}
     </>
   );
 }
 
 /* Helper Component so we don't duplicate the 100 lines of buttons */
-function ActiveSheetContent({ 
-  activeSheet, activeView, onViewChange, handleShareScreenClick, canShareScreen, 
-  attendeeOpen, handleToggleAttendee, toastMsg, setToastMsg, toastTimerRef, setActiveSheet, onExit 
+function ActiveSheetContent({
+  activeSheet,
+  activeView,
+  onViewChange,
+  handleShareScreenClick,
+  canShareScreen,
+  attendeeOpen,
+  handleToggleAttendee,
+  toastMsg,
+  setToastMsg,
+  toastTimerRef,
+  setActiveSheet,
+  onExit,
+  isDesktop,
 }: any) {
   const showComingSoon = (feature: string) => {
     setToastMsg(`${feature} coming soon!`);
@@ -498,7 +745,7 @@ function ActiveSheetContent({
             People & Attendees
           </button>
           <button className={styles.actionSheetItem} onClick={() => { 
-            navigator.clipboard.writeText(window.location.href);
+            navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
             setToastMsg('Invite Link Copied to Clipboard!');
             if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
             toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
@@ -509,8 +756,8 @@ function ActiveSheetContent({
           </button>
           <button className={styles.actionSheetItem} onClick={() => {
             const currentUrl = new URL(window.location.href);
-            const rn = currentUrl.pathname.split('/').pop() || '';
-            window.location.href = `kloudmeet://join/${rn}`;
+            const rn = currentUrl.pathname.split('/').filter(Boolean).pop() || '';
+            window.location.href = `kloudmeet://join/${encodeURIComponent(rn)}${currentUrl.search}`;
             setActiveSheet(null);
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>

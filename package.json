@@ -13,6 +13,7 @@
     "electron:pack": "npm run build && npm run electron:prepare-standalone",
     "deps:npm": "npm ci --legacy-peer-deps",
     "electron:dist": "npm run electron:pack && electron-builder --win",
+    "electron:dist:skip-rcedit": "npm run electron:pack && electron-builder --win --config.win.signAndEditExecutable=false",
     "start": "next start -p 3201 -H 0.0.0.0",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -58,6 +59,14 @@
   "build": {
     "appId": "com.techexcel.kloudmeet",
     "productName": "Kloud Meet",
+    "protocols": [
+      {
+        "name": "Kloud Meet",
+        "schemes": [
+          "kloudmeet"
+        ]
+      }
+    ],
     "directories": {
       "output": "dist"
     },

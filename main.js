@@ -53,7 +53,77 @@ function showFatal(title, detail) {
 let mainWindow;
 let overlayWindow;
 
-function createWindows() {
+/** @type {string | null} */
+let pendingDeepLink = null;
+
+function parseKloudMeetDeepLink(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== 'kloudmeet:') return null;
+    if (u.hostname !== 'join') return null;
+    const seg = (u.pathname || '').replace(/^\//, '');
+    if (!seg) return null;
+    const room = decodeURIComponent(seg);
+    return { room, search: u.search || '' };
+  } catch {
+    return null;
+  }
+}
+
+function navigateMainToDeepLink(rawUrl) {
+  const parsed = parseKloudMeetDeepLink(rawUrl);
+  if (!parsed) return;
+  const pathRoom = encodeURIComponent(parsed.room);
+  const target = `${APP_ORIGIN}/rooms/${pathRoom}${parsed.search}`;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    mainWindow.loadURL(target);
+  } else {
+    pendingDeepLink = rawUrl;
+  }
+}
+
+function getInitialMainWindowUrl() {
+  if (pendingDeepLink) {
+    const raw = pendingDeepLink;
+    pendingDeepLink = null;
+    const p = parseKloudMeetDeepLink(raw);
+    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+  }
+  const argvDeep = getDeepLinkFromArgv(process.argv);
+  if (argvDeep) {
+    const p = parseKloudMeetDeepLink(argvDeep);
+    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+  }
+  return APP_ORIGIN;
+}
+
+function getDeepLinkFromArgv(argv) {
+  const hit = argv.find((a) => typeof a === 'string' && a.startsWith('kloudmeet:'));
+  return hit || null;
+}
+
+function registerKloudMeetProtocol() {
+  try {
+    if (process.defaultApp) {
+      if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient('kloudmeet', process.execPath, [path.resolve(process.argv[1])]);
+      }
+    } else {
+      app.setAsDefaultProtocolClient('kloudmeet');
+    }
+  } catch (e) {
+    console.warn('setAsDefaultProtocolClient kloudmeet:', e);
+  }
+}
+
+let sessionAndIpcHandlersInstalled = false;
+
+function installSessionAndIpcOnce() {
+  if (sessionAndIpcHandlersInstalled) return;
+  sessionAndIpcHandlersInstalled = true;
+
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
       let handled = false;
@@ -75,7 +145,8 @@ function createWindows() {
       });
 
       const menu = Menu.buildFromTemplate(template);
-      menu.popup({ window: mainWindow });
+      const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+      if (win) menu.popup({ window: win });
 
       menu.once('menu-will-close', () => {
         setTimeout(() => {
@@ -90,6 +161,39 @@ function createWindows() {
       callback();
     });
   });
+
+  ipcMain.on('draw-message', (event, data) => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.webContents.send('draw-message', data);
+    }
+  });
+
+  ipcMain.on('remote-control-message', async (event, data) => {
+    try {
+      const { mouse, Point, Button } = getNutTree();
+      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+      const targetX = Math.round(data.x * w);
+      const targetY = Math.round(data.y * h);
+
+      if (data.type === 'mousemove') {
+        await mouse.setPosition(new Point(targetX, targetY));
+      } else if (data.type === 'mousedown') {
+        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
+        await mouse.setPosition(new Point(targetX, targetY));
+        await mouse.pressButton(btn);
+      } else if (data.type === 'mouseup') {
+        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
+        await mouse.setPosition(new Point(targetX, targetY));
+        await mouse.releaseButton(btn);
+      }
+    } catch (err) {
+      console.error('Remote control error:', err);
+    }
+  });
+}
+
+function createWindows() {
+  installSessionAndIpcOnce();
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -125,40 +229,26 @@ function createWindows() {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  mainWindow.loadURL(APP_ORIGIN);
+  mainWindow.on('close', () => {
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.destroy();
+      overlayWindow = null;
+    }
+  });
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
+
+  overlayWindow.on('closed', () => {
+    overlayWindow = null;
+  });
+
+  mainWindow.loadURL(getInitialMainWindowUrl());
   overlayWindow.loadURL(`${APP_ORIGIN}/overlay.html`);
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
     showFatal('页面加载失败', `${code} ${desc}\n${url}`);
-  });
-
-  ipcMain.on('draw-message', (event, data) => {
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-      overlayWindow.webContents.send('draw-message', data);
-    }
-  });
-
-  ipcMain.on('remote-control-message', async (event, data) => {
-    try {
-      const { mouse, Point, Button } = getNutTree();
-      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
-      const targetX = Math.round(data.x * w);
-      const targetY = Math.round(data.y * h);
-
-      if (data.type === 'mousemove') {
-        await mouse.setPosition(new Point(targetX, targetY));
-      } else if (data.type === 'mousedown') {
-        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
-        await mouse.setPosition(new Point(targetX, targetY));
-        await mouse.pressButton(btn);
-      } else if (data.type === 'mouseup') {
-        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
-        await mouse.setPosition(new Point(targetX, targetY));
-        await mouse.releaseButton(btn);
-      }
-    } catch (err) {
-      console.error('Remote control error:', err);
-    }
   });
 }
 
@@ -249,29 +339,63 @@ async function startPackagedNextServer() {
   });
 }
 
-app.whenReady().then(async () => {
-  try {
-    if (app.isPackaged) {
-      await startPackagedNextServer();
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, commandLine) => {
+    const url = getDeepLinkFromArgv(commandLine);
+    const hasMain = mainWindow && !mainWindow.isDestroyed();
+    if (!hasMain) {
+      try {
+        createWindows();
+      } catch (e) {
+        appendStartupLog(`second-instance createWindows: ${e}`);
+        return;
+      }
     }
-  } catch (e) {
-    showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
-    app.quit();
-    return;
-  }
-
-  try {
-    createWindows();
-  } catch (e) {
-    showFatal('创建窗口失败', e instanceof Error ? e.message : String(e));
-    app.quit();
-    return;
-  }
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindows();
+    if (url) navigateMainToDeepLink(url);
+    else if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
   });
-});
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      navigateMainToDeepLink(url);
+    } else {
+      pendingDeepLink = url;
+    }
+  });
+
+  app.whenReady().then(async () => {
+    try {
+      if (app.isPackaged) {
+        await startPackagedNextServer();
+      }
+    } catch (e) {
+      showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
+      app.quit();
+      return;
+    }
+
+    registerKloudMeetProtocol();
+
+    try {
+      createWindows();
+    } catch (e) {
+      showFatal('创建窗口失败', e instanceof Error ? e.message : String(e));
+      app.quit();
+      return;
+    }
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindows();
+    });
+  });
+}
 
 process.on('uncaughtException', (err) => {
   showFatal('未捕获异常', err.stack || err.message);
