@@ -46,6 +46,8 @@ interface KloudMeetToolbarProps {
   chatPanelSlot?: React.ReactNode;
   /** 桌面端：Attendees 气泡内容 */
   attendeePanelSlot?: React.ReactNode;
+  /** Only host/co-host can end meeting for everyone */
+  canEndForAll?: boolean;
 }
 
 export function KloudMeetToolbar({
@@ -73,6 +75,7 @@ export function KloudMeetToolbar({
   onOpenSheet,
   chatPanelSlot,
   attendeePanelSlot,
+  canEndForAll,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -342,8 +345,7 @@ export function KloudMeetToolbar({
 
             {/* 4. Exit */}
             <button 
-              className={`${styles.mobileBtn} ${styles.danger}`} 
-              style={{ color: '#ef4444' }}
+              className={styles.mobileBtn}
               onClick={() => openSheet('exit')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -568,6 +570,7 @@ export function KloudMeetToolbar({
                 setActiveSheet={setActiveSheet}
                 onExit={onExit}
                 isDesktop={isDesktop}
+                canEndForAll={canEndForAll}
               />
             </div>
           </div>
@@ -595,6 +598,7 @@ export function KloudMeetToolbar({
               setActiveSheet={setActiveSheet}
               onExit={onExit}
               isDesktop={isDesktop}
+              canEndForAll={canEndForAll}
             />
           </div>
         </div>
@@ -685,6 +689,7 @@ export function KloudMeetToolbar({
                         setActiveSheet={setActiveSheet}
                         onExit={onExit}
                         isDesktop={isDesktop}
+                        canEndForAll={canEndForAll}
                       />
                     </div>
                   )}
@@ -712,6 +717,7 @@ function ActiveSheetContent({
   setActiveSheet,
   onExit,
   isDesktop,
+  canEndForAll,
 }: any) {
   const showComingSoon = (feature: string) => {
     setToastMsg(`${feature} coming soon!`);
@@ -772,14 +778,16 @@ function ActiveSheetContent({
 
       {activeSheet === 'exit' && (
         <>
-          <button className={`${styles.actionSheetItem} ${styles.danger}`} style={{ color: '#ef4444' }} onClick={() => { onExit(); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { onExit(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Leave Meeting (You leave, meeting continues)
+            Leave the meeting
           </button>
-          <button className={`${styles.actionSheetItem} ${styles.danger}`} style={{ color: '#ef4444' }} onClick={() => { showComingSoon('End for All'); onExit(); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-            End Meeting for All (Disconnects everyone)
-          </button>
+          {canEndForAll && (
+            <button className={styles.actionSheetItem} onClick={() => { showComingSoon('End for All'); onExit(); setActiveSheet(null); }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+              End meeting for everyone
+            </button>
+          )}
         </>
       )}
     </>

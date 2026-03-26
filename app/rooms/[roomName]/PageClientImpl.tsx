@@ -410,20 +410,56 @@ function VideoConferenceComponent(props: {
   // Mirror-blocked: presenter is sharing but it's NOT a safe "another tab" share
   const isMirrorBlocked = screenShareActive && screenShareSurface !== 'browser';
 
-  // Determine if user can switch views (host = first joiner, or active presenter)
-  const isHost = React.useMemo(() => {
-    const allJoinTimes = [
-      room.localParticipant.joinedAt?.getTime() || Infinity,
-      ...Array.from(room.remoteParticipants.values()).map((p) => p.joinedAt?.getTime() || Infinity),
-    ];
-    const earliest = Math.min(...allJoinTimes);
-    return (room.localParticipant.joinedAt?.getTime() || Infinity) === earliest;
-  }, [room.localParticipant, room.remoteParticipants]);
-  const [presenterIdentity, setPresenterIdentity] = React.useState<string | null>(null);
-  const isPresenter = presenterIdentity === room.localParticipant.identity;
+  // Determine host: override (from transfer) takes precedence over join-time computation
+  const [hostIdentityOverride, setHostIdentityOverride] = React.useState<string | null>(null);
+  const [hostIdentityFromJoin, setHostIdentityFromJoin] = React.useState<string>(
+    room.localParticipant.identity,
+  );
+
+  // Recompute host from join times whenever participants change
+  React.useEffect(() => {
+    const recompute = () => {
+      // Only one person in the meeting? They're the host, period.
+      if (room.remoteParticipants.size === 0) {
+        setHostIdentityFromJoin(room.localParticipant.identity);
+        return;
+      }
+      // Multiple participants: earliest joiner is host
+      let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
+      let hId = room.localParticipant.identity;
+      for (const [, p] of room.remoteParticipants) {
+        const t = p.joinedAt?.getTime() || Infinity;
+        if (t < earliest) {
+          earliest = t;
+          hId = p.identity;
+        }
+      }
+      setHostIdentityFromJoin(hId);
+    };
+    // Compute immediately
+    recompute();
+    // Safety: recompute after a short delay (joinedAt may not be populated yet)
+    const timer = setTimeout(recompute, 1000);
+    // Re-compute on key room events
+    room.on(RoomEvent.Connected, recompute);
+    room.on(RoomEvent.ParticipantConnected, recompute);
+    room.on(RoomEvent.ParticipantDisconnected, recompute);
+    return () => {
+      clearTimeout(timer);
+      room.off(RoomEvent.Connected, recompute);
+      room.off(RoomEvent.ParticipantConnected, recompute);
+      room.off(RoomEvent.ParticipantDisconnected, recompute);
+    };
+  }, [room]);
+
+  const hostIdentity = hostIdentityOverride || hostIdentityFromJoin;
+  const isHost = hostIdentity === room.localParticipant.identity;
+  const [presenterIdentities, setPresenterIdentities] = React.useState<string[]>([]);
+  const isPresenter = presenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
-  const canSwitchViews = isHost || isCohost || isPresenter || screenShareActive;
+  // Interactive meetings: everyone can switch views by default
+  const canSwitchViews = true;
 
   const meetingRoomName = props.connectionDetails.roomName;
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
@@ -580,19 +616,38 @@ function VideoConferenceComponent(props: {
           // Correction from host — update to authoritative state
           setActiveView(msg.view as ViewMode);
           if (msg.presenter !== undefined) {
-            setPresenterIdentity(msg.presenter);
+            setPresenterIdentities(Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : []);
           }
           if (typeof (msg as { livedocInstanceId?: string }).livedocInstanceId === 'string') {
             setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
           }
         } else if (msg.type === 'SET_PRESENTER') {
-          setPresenterIdentity(msg.identity);
+          if (msg.identity) {
+            setPresenterIdentities((prev) =>
+              prev.includes(msg.identity) ? prev : [...prev, msg.identity],
+            );
+          }
+        } else if (msg.type === 'REMOVE_PRESENTER') {
+          setPresenterIdentities((prev) => prev.filter((id) => id !== msg.identity));
         } else if (msg.type === 'SET_COHOST') {
           setCohostIdentities((prev) =>
             prev.includes(msg.identity) ? prev : [...prev, msg.identity],
           );
         } else if (msg.type === 'REMOVE_COHOST') {
           setCohostIdentities((prev) => prev.filter((id) => id !== msg.identity));
+        } else if (msg.type === 'SET_HOST') {
+          // Host transfer: set the override so all clients agree on new host
+          if (msg.newHostIdentity && msg.oldHostIdentity) {
+            setHostIdentityOverride(msg.newHostIdentity);
+            // The old host becomes co-host automatically
+            setCohostIdentities((prev) => {
+              const without = prev.filter((id) => id !== msg.newHostIdentity);
+              if (!without.includes(msg.oldHostIdentity)) {
+                return [...without, msg.oldHostIdentity];
+              }
+              return without;
+            });
+          }
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
@@ -652,7 +707,7 @@ function VideoConferenceComponent(props: {
         {
           type: 'HEARTBEAT',
           view: activeView,
-          presenter: presenterIdentity,
+          presenters: presenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
         },
@@ -661,7 +716,7 @@ function VideoConferenceComponent(props: {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [room, activeView, presenterIdentity, livedocInstanceId, sendMeetingMsg]);
+  }, [room, activeView, presenterIdentities, livedocInstanceId, sendMeetingMsg]);
 
   // Draggable floating webcam panel state
   const floatingRef = React.useRef<HTMLDivElement>(null);
@@ -1080,28 +1135,20 @@ function VideoConferenceComponent(props: {
               </div>
               <div className="chat-overlay-body">
                 <AttendeePanel
-                  hostIdentity={(() => {
-                    let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
-                    let hId = room.localParticipant.identity;
-                    for (const [, p] of room.remoteParticipants) {
-                      const t = p.joinedAt?.getTime() || Infinity;
-                      if (t < earliest) {
-                        earliest = t;
-                        hId = p.identity;
-                      }
-                    }
-                    return hId;
-                  })()}
-                  presenterIdentity={presenterIdentity}
+                  hostIdentity={hostIdentity}
+                  presenterIdentities={presenterIdentities}
                   cohostIdentities={cohostIdentities}
-                  isHost={isHost}
-                  onSetPresenter={(identity) => {
-                    const id = identity || null;
-                    setPresenterIdentity(id);
-                    if (isHost) {
-                      authState.current.presenter = id;
-                    }
-                    sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
+                  canManageRoles={isHost || isCohost}
+                  localIdentity={room.localParticipant.identity}
+                  onAddPresenter={(identity) => {
+                    setPresenterIdentities((prev) =>
+                      prev.includes(identity) ? prev : [...prev, identity],
+                    );
+                    sendMeetingMsg({ type: 'SET_PRESENTER', identity });
+                  }}
+                  onRemovePresenter={(identity) => {
+                    setPresenterIdentities((prev) => prev.filter((id) => id !== identity));
+                    sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
                   }}
                   onSetCohost={(identity) => {
                     setCohostIdentities((prev) => [...prev, identity]);
@@ -1110,6 +1157,18 @@ function VideoConferenceComponent(props: {
                   onRemoveCohost={(identity) => {
                     setCohostIdentities((prev) => prev.filter((id) => id !== identity));
                     sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
+                  }}
+                  onSetHost={(identity) => {
+                    const oldHost = hostIdentity;
+                    setHostIdentityOverride(identity);
+                    setCohostIdentities((prev) => {
+                      const without = prev.filter((id) => id !== identity);
+                      if (!without.includes(oldHost)) {
+                        return [...without, oldHost];
+                      }
+                      return without;
+                    });
+                    sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
                   }}
                 />
               </div>
@@ -1531,6 +1590,7 @@ function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
+          canEndForAll={isHost || isCohost}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
@@ -1553,28 +1613,20 @@ function VideoConferenceComponent(props: {
           attendeePanelSlot={
             isToolbarMobile ? undefined : (
               <AttendeePanel
-                hostIdentity={(() => {
-                  let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
-                  let hId = room.localParticipant.identity;
-                  for (const [, p] of room.remoteParticipants) {
-                    const t = p.joinedAt?.getTime() || Infinity;
-                    if (t < earliest) {
-                      earliest = t;
-                      hId = p.identity;
-                    }
-                  }
-                  return hId;
-                })()}
-                presenterIdentity={presenterIdentity}
+                hostIdentity={hostIdentity}
+                presenterIdentities={presenterIdentities}
                 cohostIdentities={cohostIdentities}
-                isHost={isHost}
-                onSetPresenter={(identity) => {
-                  const id = identity || null;
-                  setPresenterIdentity(id);
-                  if (isHost) {
-                    authState.current.presenter = id;
-                  }
-                  sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
+                canManageRoles={isHost || isCohost}
+                localIdentity={room.localParticipant.identity}
+                onAddPresenter={(identity) => {
+                  setPresenterIdentities((prev) =>
+                    prev.includes(identity) ? prev : [...prev, identity],
+                  );
+                  sendMeetingMsg({ type: 'SET_PRESENTER', identity });
+                }}
+                onRemovePresenter={(identity) => {
+                  setPresenterIdentities((prev) => prev.filter((id) => id !== identity));
+                  sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
                 }}
                 onSetCohost={(identity) => {
                   setCohostIdentities((prev) => [...prev, identity]);
@@ -1583,6 +1635,18 @@ function VideoConferenceComponent(props: {
                 onRemoveCohost={(identity) => {
                   setCohostIdentities((prev) => prev.filter((id) => id !== identity));
                   sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
+                }}
+                onSetHost={(identity) => {
+                  const oldHost = hostIdentity;
+                  setHostIdentityOverride(identity);
+                  setCohostIdentities((prev) => {
+                    const without = prev.filter((id) => id !== identity);
+                    if (!without.includes(oldHost)) {
+                      return [...without, oldHost];
+                    }
+                    return without;
+                  });
+                  sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
                 }}
               />
             )
