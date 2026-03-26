@@ -1,40 +1,570 @@
+/* ═══════════════════════════════════════════════════
+   Kloud Meet – Landing Page Styles
+   ═══════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+/* ── Shared ────────────────────────────────────── */
 .main {
-  position: relative;
-  display: grid;
-  gap: 1rem;
-  justify-content: center;
-  place-content: center;
-  justify-items: center;
+  min-height: 100vh;
+  display: flex;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f8f9fb;
+  color: #1e1e2e;
   overflow: auto;
-  flex-grow: 1;
+}
+.main * {
+  box-sizing: border-box;
+}
+.main input, .main textarea {
+  background: #fff;
+  color: #1e1e2e;
 }
 
-.tabContainer {
+/* ── Gradient background decoration ─────────────── */
+.bgGlow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+.bgGlow::before {
+  content: '';
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 400px;
+  background: radial-gradient(ellipse, rgba(124, 58, 237, 0.18) 0%, transparent 70%);
+}
+
+/* ═══════════════════════════════════════════════════
+   Anonymous Join View
+   ═══════════════════════════════════════════════════ */
+.anonContainer {
   width: 100%;
-  max-width: 500px;
-  padding-inline: 2rem;
-}
-
-.tabSelect {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem;
+  position: relative;
+  z-index: 1;
   display: flex;
-  justify-content: stretch;
-  gap: 0.125rem;
-  padding: 0.125rem;
-  margin: 0 auto 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 0.5rem;
+  flex-direction: column;
+  align-items: center;
 }
-
-.tabSelect > * {
+.anonHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   width: 100%;
+  margin-bottom: 2.5rem;
+}
+.logoRow {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.logoIcon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+}
+.logoText {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #1e1e2e;
+}
+.signInBtn {
+  padding: 0.5rem 1.5rem;
+  border: 2px solid #5b21b6;
+  border-radius: 8px;
+  background: transparent;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.signInBtn:hover {
+  background: #5b21b6;
+  color: #fff;
 }
 
-.tabContent {
+.anonTitle {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.4rem;
+  text-align: center;
+}
+.anonSubtitle {
+  font-size: 0.95rem;
+  color: #6b7280;
+  margin: 0 0 2rem;
+  text-align: center;
+}
+
+/* Join row */
+.joinRow {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 480px;
+  margin-bottom: 2.5rem;
+}
+.joinInput {
+  flex: 1;
+  padding: 0.75rem 1rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border 0.2s;
+  font-family: inherit;
+  background: #fff;
+}
+.joinInput:focus {
+  border-color: #7c3aed;
+}
+.joinBtn {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #5b21b6, #7c3aed);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.joinBtn:hover { opacity: 0.9; transform: translateY(-1px); }
+.joinBtn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Recent meetings */
+.recentSection {
+  width: 100%;
+  max-width: 480px;
+}
+.recentTitle {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #5b21b6;
+  margin: 0 0 0.75rem;
+}
+.recentCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  margin-bottom: 0.6rem;
+  background: #fff;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  cursor: pointer;
+}
+.recentCard:hover {
+  border-color: #7c3aed;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.1);
+}
+.recentCardDate {
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.recentCardName {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.recentCardTime {
+  font-size: 0.82rem;
+  color: #9ca3af;
+}
+
+/* ═══════════════════════════════════════════════════
+   Login View – Split Layout
+   ═══════════════════════════════════════════════════ */
+.loginContainer {
+  display: flex;
+  width: 100%;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* Left brand panel */
+.loginBrand {
+  flex: 0 0 400px;
+  background: linear-gradient(160deg, #7c3aed 0%, #5b21b6 50%, #4c1d95 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem 2rem;
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+}
+.loginBrand::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  left: -60px;
+  width: 350px;
+  height: 350px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.06);
+}
+.loginBrand::after {
+  content: '';
+  position: absolute;
+  bottom: -100px;
+  right: -80px;
+  width: 300px;
+  height: 300px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+}
+.loginBrandLogo {
+  font-size: 2rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  z-index: 1;
+  margin-bottom: 1rem;
+}
+.loginBrandLogoIcon {
+  width: 48px;
+  height: 48px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.loginBrandTagline {
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1.6;
+  opacity: 0.85;
+  z-index: 1;
+  max-width: 260px;
+}
+
+/* Right form panel */
+.loginForm {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 3rem 2rem;
+  background: #fff;
+}
+.loginFormInner {
+  width: 100%;
+  max-width: 400px;
+}
+.loginTitle {
+  font-size: 1.8rem;
+  font-weight: 700;
+  text-align: center;
+  margin: 0 0 1.8rem;
+}
+.fieldLabel {
+  font-size: 0.88rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+  display: block;
+}
+.fieldInput {
+  width: 100%;
+  padding: 0.72rem 1rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border 0.2s;
+  font-family: inherit;
+  margin-bottom: 1rem;
+  box-sizing: border-box;
+}
+.fieldInput:focus {
+  border-color: #7c3aed;
+}
+.forgotRow {
+  display: flex;
+  justify-content: flex-end;
+  margin: -0.5rem 0 1.2rem;
+}
+.linkBtn {
+  background: none;
+  border: none;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+.linkBtn:hover { text-decoration: underline; }
+.loginSubmit {
+  width: 100%;
+  padding: 0.8rem;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #7c3aed, #6d28d9);
+  color: #fff;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  font-family: inherit;
+  margin-bottom: 1rem;
+}
+.loginSubmit:hover { opacity: 0.9; transform: translateY(-1px); }
+.registerRow {
   display: flex;
   justify-content: center;
-  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+.anonLink {
+  display: block;
+  text-align: center;
+  padding: 0.7rem 1.5rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 10px;
+  color: #374151;
+  font-size: 0.9rem;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  font-family: inherit;
+  width: 100%;
+}
+.anonLink:hover {
+  border-color: #7c3aed;
+}
+
+/* ═══════════════════════════════════════════════════
+   Dashboard View
+   ═══════════════════════════════════════════════════ */
+.dashContainer {
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  position: relative;
+  z-index: 1;
+}
+.dashHeader {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+.dashUser {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+.dashOrg {
+  font-size: 0.92rem;
+  color: #6b7280;
+  margin: 0 0 0.4rem;
+}
+.dashSignOut {
+  background: none;
+  border: none;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+.dashSignOut:hover { text-decoration: underline; }
+
+/* meeting action row */
+.dashActions {
+  display: flex;
   gap: 0.75rem;
-  padding: 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 0.5rem;
+  margin: 2rem 0 2.5rem;
+  align-items: stretch;
+}
+.newMeetingBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.5rem;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #5b21b6, #7c3aed);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.newMeetingBtn:hover { opacity: 0.9; transform: translateY(-1px); }
+.dashJoinRow {
+  flex: 1;
+  display: flex;
+  gap: 0;
+  position: relative;
+}
+.dashJoinInput {
+  flex: 1;
+  padding: 0.85rem 1rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 12px 0 0 12px;
+  font-size: 0.95rem;
+  outline: none;
+  border-right: none;
+  font-family: inherit;
+  background: #fff;
+}
+.dashJoinInput:focus {
+  border-color: #7c3aed;
+}
+.dashJoinBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.5rem;
+  border: 1.5px solid #5b21b6;
+  border-radius: 0 12px 12px 0;
+  background: #1e1e2e;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+.dashJoinBtn:hover { background: #2d2d40; }
+.dashJoinBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* info row */
+.dashInfoRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+.dashDate {
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+.dashDateSub {
+  font-size: 0.82rem;
+  color: #9ca3af;
+  margin-top: 0.15rem;
+}
+.dashSearchInput {
+  padding: 0.55rem 0.85rem 0.55rem 2.2rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  outline: none;
+  width: 180px;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") 0.65rem center / 16px 16px no-repeat;
+  font-family: inherit;
+}
+.dashSearchInput:focus { border-color: #7c3aed; }
+.scheduleBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.55rem 1rem;
+  border: 1.5px solid #5b21b6;
+  border-radius: 10px;
+  background: transparent;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+.scheduleBtn:hover {
+  background: #5b21b6;
+  color: #fff;
+}
+
+/* Tabs */
+.tabBar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+  margin-bottom: 1rem;
+}
+.tab {
+  padding: 0.65rem 1.5rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  transition: color 0.2s, border-color 0.2s;
+  font-family: inherit;
+}
+.tab:hover { color: #1e1e2e; }
+.tabActive {
+  composes: tab;
+  color: #5b21b6;
+  border-bottom-color: #5b21b6;
+}
+
+/* Toast */
+.toast {
+  position: fixed;
+  top: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e2e;
+  color: #fff;
+  padding: 0.7rem 1.5rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  z-index: 9999;
+  animation: toastIn 0.25s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+}
+@keyframes toastIn {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════
+   Responsive
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .loginContainer { flex-direction: column; }
+  .loginBrand { flex: none; min-height: 200px; padding: 2rem 1.5rem; }
+  .dashActions { flex-direction: column; }
+  .dashInfoRow { flex-direction: column; align-items: flex-start; }
+  .dashSearchInput { width: 100%; }
 }

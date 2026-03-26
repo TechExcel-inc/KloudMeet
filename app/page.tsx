@@ -1,201 +1,406 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
-import React, { Suspense, useState } from 'react';
-import { encodePassphrase, generateRoomId, randomString } from '@/lib/client-utils';
+import { useRouter } from 'next/navigation';
+import React, { Suspense, useEffect, useState } from 'react';
+import { generateRoomId } from '@/lib/client-utils';
 import styles from '../styles/Home.module.css';
 
-function Tabs(props: React.PropsWithChildren<{}>) {
-  const searchParams = useSearchParams();
-  const tabIndex = searchParams?.get('tab') === 'custom' ? 1 : 0;
+/* ────────── Types ────────── */
+type PageView = 'anonymous' | 'login' | 'dashboard';
 
-  const router = useRouter();
-  function onTabSelected(index: number) {
-    const tab = index === 1 ? 'custom' : 'demo';
-    router.push(`/?tab=${tab}`);
-  }
+interface MockUser {
+  username: string;
+  displayName: string;
+}
 
-  let tabs = React.Children.map(props.children, (child, index) => {
-    return (
-      <button
-        className="lk-button"
-        onClick={() => {
-          if (onTabSelected) {
-            onTabSelected(index);
-          }
-        }}
-        aria-pressed={tabIndex === index}
+/* ────────── Placeholder recent meetings ────────── */
+const MOCK_RECENT = [
+  { date: '2026-03-25', host: 'Alice', start: '10:30 am', end: '11:30 am' },
+  { date: '2026-03-24', host: 'Bob', start: '2:00 pm', end: '3:15 pm' },
+  { date: '2026-03-22', host: 'Charlie', start: '9:00 am', end: '9:45 am' },
+];
+const MOCK_SCHEDULED = [
+  { date: '2026-03-28', host: 'Alice', start: '10:00 am', end: '11:00 am' },
+  { date: '2026-03-30', host: 'Team Standup', start: '9:30 am', end: '10:00 am' },
+];
+
+/* ════════════════════════════════════════════════════
+   Logo Component
+   ════════════════════════════════════════════════════ */
+function KloudLogo({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+  const iconSize = size === 'lg' ? 48 : 36;
+  const fontSize = size === 'lg' ? '2rem' : '1.35rem';
+  return (
+    <div className={styles.logoRow}>
+      <div
+        className={size === 'lg' ? styles.loginBrandLogoIcon : styles.logoIcon}
+        style={{ width: iconSize, height: iconSize }}
       >
-        {/* @ts-ignore */}
-        {child?.props.label}
-      </button>
-    );
-  });
-
-  return (
-    <div className={styles.tabContainer}>
-      <div className={styles.tabSelect}>{tabs}</div>
-      {/* @ts-ignore */}
-      {props.children[tabIndex]}
-    </div>
-  );
-}
-
-function DemoMeetingTab(props: { label: string }) {
-  const router = useRouter();
-  const [e2ee, setE2ee] = useState(false);
-  const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
-  const startMeeting = () => {
-    if (e2ee) {
-      router.push(`/rooms/${generateRoomId()}#${encodePassphrase(sharedPassphrase)}`);
-    } else {
-      router.push(`/rooms/${generateRoomId()}`);
-    }
-  };
-  return (
-    <div className={styles.tabContent}>
-      <p style={{ margin: 0 }}>Try LiveKit Meet for free with our live demo project.</p>
-      <button style={{ marginTop: '1rem' }} className="lk-button" onClick={startMeeting}>
-        Start Meeting
-      </button>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-          <input
-            id="use-e2ee"
-            type="checkbox"
-            checked={e2ee}
-            onChange={(ev) => setE2ee(ev.target.checked)}
-          ></input>
-          <label htmlFor="use-e2ee">Enable end-to-end encryption</label>
-        </div>
-        {e2ee && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-            <label htmlFor="passphrase">Passphrase</label>
-            <input
-              id="passphrase"
-              type="password"
-              value={sharedPassphrase}
-              onChange={(ev) => setSharedPassphrase(ev.target.value)}
-            />
-          </div>
-        )}
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" width={iconSize * 0.5} height={iconSize * 0.5}>
+          <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
       </div>
+      <span className={styles.logoText} style={{ fontSize, color: size === 'lg' ? '#fff' : '#1e1e2e' }}>
+        Kloud Meet
+      </span>
     </div>
   );
 }
 
-function CustomConnectionTab(props: { label: string }) {
-  const router = useRouter();
-
-  const [e2ee, setE2ee] = useState(false);
-  const [sharedPassphrase, setSharedPassphrase] = useState(randomString(64));
-
-  const onSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
-    event.preventDefault();
-    const formData = new FormData(event.target as HTMLFormElement);
-    const serverUrl = formData.get('serverUrl');
-    const token = formData.get('token');
-    if (e2ee) {
-      router.push(
-        `/custom/?liveKitUrl=${serverUrl}&token=${token}#${encodePassphrase(sharedPassphrase)}`,
-      );
-    } else {
-      router.push(`/custom/?liveKitUrl=${serverUrl}&token=${token}`);
-    }
+/* ════════════════════════════════════════════════════
+   Toast Hook
+   ════════════════════════════════════════════════════ */
+function useToast() {
+  const [msg, setMsg] = useState<string | null>(null);
+  const show = (text: string) => {
+    setMsg(text);
+    setTimeout(() => setMsg(null), 2500);
   };
+  const el = msg ? <div className={styles.toast}>{msg}</div> : null;
+  return { show, el };
+}
+
+/* ════════════════════════════════════════════════════
+   View 1 – Anonymous Join
+   ════════════════════════════════════════════════════ */
+function AnonymousView({
+  onSignIn,
+  toast,
+}: {
+  onSignIn: () => void;
+  toast: { show: (t: string) => void };
+}) {
+  const router = useRouter();
+  const [code, setCode] = useState('');
+
+  const handleJoin = () => {
+    const roomId = code.trim() || generateRoomId();
+    router.push(`/rooms/${roomId}`);
+  };
+
   return (
-    <form className={styles.tabContent} onSubmit={onSubmit}>
-      <p style={{ marginTop: 0 }}>
-        Connect LiveKit Meet with a custom server using LiveKit Cloud or LiveKit Server.
+    <div className={styles.anonContainer}>
+      <div className={styles.anonHeader}>
+        <KloudLogo />
+        <button className={styles.signInBtn} onClick={onSignIn}>
+          Sign In
+        </button>
+      </div>
+
+      <h1 className={styles.anonTitle}>Join Meeting</h1>
+      <p className={styles.anonSubtitle}>
+        Enter a meeting code below or start a quick meeting
       </p>
-      <input
-        id="serverUrl"
-        name="serverUrl"
-        type="url"
-        placeholder="LiveKit Server URL: wss://*.livekit.cloud"
-        required
-      />
-      <textarea
-        id="token"
-        name="token"
-        placeholder="Token"
-        required
-        rows={5}
-        style={{ padding: '1px 2px', fontSize: 'inherit', lineHeight: 'inherit' }}
-      />
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-        <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-          <input
-            id="use-e2ee"
-            type="checkbox"
-            checked={e2ee}
-            onChange={(ev) => setE2ee(ev.target.checked)}
-          ></input>
-          <label htmlFor="use-e2ee">Enable end-to-end encryption</label>
-        </div>
-        {e2ee && (
-          <div style={{ display: 'flex', flexDirection: 'row', gap: '1rem' }}>
-            <label htmlFor="passphrase">Passphrase</label>
-            <input
-              id="passphrase"
-              type="password"
-              value={sharedPassphrase}
-              onChange={(ev) => setSharedPassphrase(ev.target.value)}
-            />
-          </div>
-        )}
+
+      <div className={styles.joinRow}>
+        <input
+          className={styles.joinInput}
+          placeholder="Enter meeting code"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+        />
+        <button className={styles.joinBtn} onClick={handleJoin}>
+          Join
+        </button>
       </div>
 
-      <hr
-        style={{ width: '100%', borderColor: 'rgba(255, 255, 255, 0.15)', marginBlock: '1rem' }}
-      />
-      <button
-        style={{ paddingInline: '1.25rem', width: '100%' }}
-        className="lk-button"
-        type="submit"
-      >
-        Connect
-      </button>
-    </form>
+      <div className={styles.recentSection}>
+        <h3 className={styles.recentTitle}>Recent Meetings</h3>
+        {MOCK_RECENT.map((m, i) => (
+          <div
+            key={i}
+            className={styles.recentCard}
+            onClick={() => toast.show('Meeting replay coming soon!')}
+          >
+            <div>
+              <div className={styles.recentCardDate}>{m.date}</div>
+              <div className={styles.recentCardTime}>{m.start}</div>
+            </div>
+            <div className={styles.recentCardName}>{m.host}</div>
+            <div className={styles.recentCardTime}>{m.end}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
+   View 2 – Login
+   ════════════════════════════════════════════════════ */
+function LoginView({
+  onBack,
+  onLoginSuccess,
+  toast,
+}: {
+  onBack: () => void;
+  onLoginSuccess: (user: MockUser) => void;
+  toast: { show: (t: string) => void };
+}) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = username.trim() || 'User';
+    const user: MockUser = { username: name, displayName: name };
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('kloudUser', JSON.stringify(user));
+    }
+    onLoginSuccess(user);
+  };
+
+  return (
+    <div className={styles.loginContainer}>
+      {/* Left brand panel */}
+      <div className={styles.loginBrand}>
+        <div className={styles.loginBrandLogo}>
+          <KloudLogo size="lg" />
+        </div>
+        <p className={styles.loginBrandTagline}>
+          Where your team, customer and AI digital human meet and collaborate
+        </p>
+      </div>
+
+      {/* Right form */}
+      <div className={styles.loginForm}>
+        <form className={styles.loginFormInner} onSubmit={handleLogin}>
+          <h1 className={styles.loginTitle}>Login</h1>
+
+          <label className={styles.fieldLabel}>Email or login name</label>
+          <input
+            className={styles.fieldInput}
+            type="text"
+            placeholder="Email or login name"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoFocus
+          />
+
+          <label className={styles.fieldLabel}>Password</label>
+          <input
+            className={styles.fieldInput}
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+
+          <div className={styles.forgotRow}>
+            <button
+              type="button"
+              className={styles.linkBtn}
+              onClick={() => toast.show('Forgot password coming soon!')}
+            >
+              Forgot password
+            </button>
+          </div>
+
+          <button type="submit" className={styles.loginSubmit}>
+            Login
+          </button>
+
+          <div className={styles.registerRow}>
+            <span>Not registered?</span>
+            <button
+              type="button"
+              className={styles.linkBtn}
+              onClick={() => toast.show('Registration coming soon!')}
+            >
+              Register now
+            </button>
+          </div>
+
+          <button type="button" className={styles.anonLink} onClick={onBack}>
+            Join meeting anonymously
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
+   View 3 – Dashboard (Signed In)
+   ════════════════════════════════════════════════════ */
+function DashboardView({
+  user,
+  onSignOut,
+  toast,
+}: {
+  user: MockUser;
+  onSignOut: () => void;
+  toast: { show: (t: string) => void };
+}) {
+  const router = useRouter();
+  const [joinCode, setJoinCode] = useState('');
+  const [activeTab, setActiveTab] = useState<'scheduled' | 'recent'>('scheduled');
+
+  const handleNewMeeting = () => {
+    router.push(`/rooms/${generateRoomId()}`);
+  };
+
+  const handleJoinMeeting = () => {
+    if (!joinCode.trim()) return;
+    router.push(`/rooms/${joinCode.trim()}`);
+  };
+
+  const today = new Date();
+  const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
+  const meetings = activeTab === 'scheduled' ? MOCK_SCHEDULED : MOCK_RECENT;
+
+  return (
+    <div className={styles.dashContainer}>
+      <div className={styles.dashHeader}>
+        <h1 className={styles.dashUser}>Signed in as {user.displayName}</h1>
+        <p className={styles.dashOrg}>@ Kloud Corporation</p>
+        <button className={styles.dashSignOut} onClick={onSignOut}>
+          Sign Out
+        </button>
+      </div>
+
+      {/* New Meeting + Join Meeting row */}
+      <div className={styles.dashActions}>
+        <button className={styles.newMeetingBtn} onClick={handleNewMeeting}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+            <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          New Meeting
+        </button>
+        <div className={styles.dashJoinRow}>
+          <input
+            className={styles.dashJoinInput}
+            placeholder="Enter meeting code"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
+          />
+          <button
+            className={styles.dashJoinBtn}
+            onClick={handleJoinMeeting}
+            disabled={!joinCode.trim()}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Join Meeting
+          </button>
+        </div>
+      </div>
+
+      {/* Date + Search + Schedule */}
+      <div className={styles.dashInfoRow}>
+        <div>
+          <div className={styles.dashDate}>{dateStr}</div>
+          <div className={styles.dashDateSub}>Your meetings for today</div>
+        </div>
+        <input
+          className={styles.dashSearchInput}
+          placeholder="Search"
+          onChange={() => toast.show('Search coming soon!')}
+        />
+        <button
+          className={styles.scheduleBtn}
+          onClick={() => toast.show('Schedule meeting coming soon!')}
+        >
+          + Schedule Meeting
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div className={styles.tabBar}>
+        <button
+          className={activeTab === 'scheduled' ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab('scheduled')}
+        >
+          Scheduled Meeting
+        </button>
+        <button
+          className={activeTab === 'recent' ? styles.tabActive : styles.tab}
+          onClick={() => setActiveTab('recent')}
+        >
+          Recent Meeting
+        </button>
+      </div>
+
+      {/* Meeting list */}
+      {meetings.map((m, i) => (
+        <div
+          key={i}
+          className={styles.recentCard}
+          onClick={() => toast.show('Meeting details coming soon!')}
+        >
+          <div>
+            <div className={styles.recentCardDate}>{m.date}</div>
+            <div className={styles.recentCardTime}>{m.start}</div>
+          </div>
+          <div className={styles.recentCardName}>{m.host}</div>
+          <div className={styles.recentCardTime}>{m.end}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
+   Main Page (state machine)
+   ════════════════════════════════════════════════════ */
+function HomeContent() {
+  const [view, setView] = useState<PageView>('anonymous');
+  const [user, setUser] = useState<MockUser | null>(null);
+  const toast = useToast();
+
+  // Restore session from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('kloudUser');
+      if (stored) {
+        const parsed = JSON.parse(stored) as MockUser;
+        setUser(parsed);
+        setView('dashboard');
+      }
+    } catch {}
+  }, []);
+
+  const handleLoginSuccess = (u: MockUser) => {
+    setUser(u);
+    setView('dashboard');
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem('kloudUser');
+    setUser(null);
+    setView('anonymous');
+  };
+
+  return (
+    <>
+      {toast.el}
+      <div className={styles.bgGlow} />
+      {view === 'anonymous' && (
+        <AnonymousView onSignIn={() => setView('login')} toast={toast} />
+      )}
+      {view === 'login' && (
+        <LoginView
+          onBack={() => setView('anonymous')}
+          onLoginSuccess={handleLoginSuccess}
+          toast={toast}
+        />
+      )}
+      {view === 'dashboard' && user && (
+        <DashboardView user={user} onSignOut={handleSignOut} toast={toast} />
+      )}
+    </>
   );
 }
 
 export default function Page() {
   return (
-    <>
-      <main className={styles.main} data-lk-theme="default">
-        <div className="header">
-          <img src="/images/livekit-meet-home.svg" alt="LiveKit Meet" width="360" height="45" />
-          <h2>
-            Open source video conferencing app built on{' '}
-            <a href="https://github.com/livekit/components-js?ref=meet" rel="noopener">
-              LiveKit&nbsp;Components
-            </a>
-            ,{' '}
-            <a href="https://livekit.io/cloud?ref=meet" rel="noopener">
-              LiveKit&nbsp;Cloud
-            </a>{' '}
-            and Next.js.
-          </h2>
-        </div>
-        <Suspense fallback="Loading">
-          <Tabs>
-            <DemoMeetingTab label="Demo" />
-            <CustomConnectionTab label="Custom" />
-          </Tabs>
-        </Suspense>
-      </main>
-      <footer data-lk-theme="default">
-        Hosted on{' '}
-        <a href="https://livekit.io/cloud?ref=meet" rel="noopener">
-          LiveKit Cloud
-        </a>
-        . Source code on{' '}
-        <a href="https://github.com/livekit/meet?ref=meet" rel="noopener">
-          GitHub
-        </a>
-        .
-      </footer>
-    </>
+    <main className={styles.main}>
+      <Suspense fallback="Loading">
+        <HomeContent />
+      </Suspense>
+    </main>
   );
 }

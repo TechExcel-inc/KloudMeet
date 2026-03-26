@@ -98,9 +98,21 @@ export function PageClientImpl(props: {
   }, []);
 
   return (
-    <main data-lk-theme="default" style={{ height: '100%' }}>
+    <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        <div style={{ display: 'grid', placeItems: 'center', height: '100%' }}>
+        <div className="kloud-prejoin-wrapper">
+          <div className="kloud-prejoin-header">
+            <a href="/" className="kloud-prejoin-logo">
+              <span className="kloud-prejoin-logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" width="18" height="18">
+                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </span>
+              Kloud Meet
+            </a>
+            <h2 className="kloud-prejoin-title">Ready to join?</h2>
+            <p className="kloud-prejoin-subtitle">Set up your camera and microphone before entering the meeting</p>
+          </div>
           <PreJoin
             defaults={preJoinDefaults}
             onSubmit={handlePreJoinSubmit}
@@ -108,11 +120,13 @@ export function PageClientImpl(props: {
           />
         </div>
       ) : (
-        <VideoConferenceComponent
-          connectionDetails={connectionDetails}
-          userChoices={preJoinChoices}
-          options={{ codec: props.codec, hq: props.hq }}
-        />
+        <div data-lk-theme="default" style={{ height: '100%' }}>
+          <VideoConferenceComponent
+            connectionDetails={connectionDetails}
+            userChoices={preJoinChoices}
+            options={{ codec: props.codec, hq: props.hq }}
+          />
+        </div>
       )}
     </main>
   );
