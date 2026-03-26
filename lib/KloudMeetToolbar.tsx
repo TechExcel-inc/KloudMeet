@@ -28,6 +28,7 @@ interface KloudMeetToolbarProps {
   onToggleChat: () => void;
   attendeeOpen: boolean;
   onToggleAttendee: () => void;
+  onOpenSheet?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -52,14 +53,33 @@ export function KloudMeetToolbar({
   onToggleChat,
   attendeeOpen,
   onToggleAttendee,
+  onOpenSheet,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  type ActionSheetType = 'views' | 'more' | null;
+  type ActionSheetType = 'views' | 'more' | 'exit' | null;
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
   
+  // Synchronous wrapper: close Chat/Attendee BEFORE opening a sheet
+  const openSheet = (sheet: ActionSheetType) => {
+    if (sheet !== null) {
+      onOpenSheet?.(); // closes Chat & Attendee in parent synchronously
+    }
+    setActiveSheet(sheet);
+  };
+
+  const handleToggleChat = () => {
+    setActiveSheet(null); // close any open sheet
+    onToggleChat();
+  };
+
+  const handleToggleAttendee = () => {
+    setActiveSheet(null); // close any open sheet
+    onToggleAttendee();
+  };
+
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -70,6 +90,11 @@ export function KloudMeetToolbar({
     };
     checkIsMobile();
   }, []);
+
+  // DEBUG: show state in browser tab title
+  useEffect(() => {
+    document.title = `[DEBUG] isMobile=${isMobile} sheet=${activeSheet}`;
+  }, [isMobile, activeSheet]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -167,14 +192,14 @@ export function KloudMeetToolbar({
               <div className={styles.controlGroup} style={{ gap: '4px' }}>
                 <button
                   className={`${styles.controlBtn} ${styles.controlBtnOff}`}
-                  onClick={() => setActiveSheet('views')}
+                  onClick={() => openSheet('views')}
                   style={{ width: '36px', height: '36px' }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: '16px', height: '16px' }}>
                     <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
                   </svg>
                 </button>
-                <button className={styles.chevron} onClick={() => setActiveSheet('views')} style={{ padding: '0 2px', color: '#fff' }}>
+                <button className={styles.chevron} onClick={() => openSheet('views')} style={{ padding: '0 2px', color: '#fff' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '10px', height: '10px' }}><path d="M18 15l-6-6-6 6" /></svg>
                 </button>
               </div>
@@ -184,7 +209,7 @@ export function KloudMeetToolbar({
             <button 
               className={`${styles.mobileBtn} ${styles.danger}`} 
               style={{ color: '#ef4444' }}
-              onClick={onExit}
+              onClick={() => openSheet('exit')}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -195,7 +220,7 @@ export function KloudMeetToolbar({
             {/* 5. Chat */}
             <button 
               className={`${styles.mobileBtn} ${chatOpen ? styles.active : ''}`}
-              onClick={onToggleChat}
+              onClick={handleToggleChat}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -206,7 +231,7 @@ export function KloudMeetToolbar({
             {/* 6. More */}
             <button 
               className={styles.mobileBtn}
-              onClick={() => setActiveSheet('more')}
+              onClick={() => openSheet('more')}
             >
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
@@ -332,35 +357,28 @@ export function KloudMeetToolbar({
             </>
           )}
           </>
-          )}
-
-          <button className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={onToggleAttendee}>
+          )}          <button className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleAttendee}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Attendee
+            Attendees
           </button>
 
-          <button className={styles.tabBtn} onClick={() => {
-            navigator.clipboard.writeText(window.location.href);
-            setToastMsg('Invite Link Copied to Clipboard!');
-            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-            toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-          }}>
+          <button className={`${styles.tabBtn} ${styles.tabBtnGreen}`} onClick={() => showComingSoon('Invite')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
             </svg>
             Invite
           </button>
 
-          <button className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={onToggleChat}>
+          <button className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleChat}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             Chats
           </button>
 
-          <button className={styles.tabBtn} onClick={() => setActiveSheet('more')}>
+          <button className={styles.tabBtn} onClick={() => openSheet('more')}>
             <svg viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
             </svg>
@@ -369,7 +387,7 @@ export function KloudMeetToolbar({
         </div>
 
         <div className={styles.rightControls}>
-          <button className={styles.exitBtn} onClick={onExit}>
+          <button className={styles.exitBtn} onClick={() => openSheet('exit')}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
@@ -378,77 +396,143 @@ export function KloudMeetToolbar({
         </div>
         </>
         )}
-      </div>
-
-      {/* Action Sheets */}
+      </div>      {/* Action Sheets / Popups */}
       {activeSheet && (
         <>
-          <div className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`} onClick={() => setActiveSheet(null)} />
-          <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
-            
-            <div className={styles.actionSheetHeader}>
-              <span className={styles.actionSheetTitle}>
-                {activeSheet === 'views' ? 'Select View Layout' : 'More Options'}
-              </span>
-              <button className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
+          {isMobile ? (
+            /* ------------------ MOBILE PULL-UP SHEET ------------------ */
+            <>
+              <div className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`} onClick={() => setActiveSheet(null)} />
+              <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
+                <div className={styles.actionSheetHeader}>
+                  <span className={styles.actionSheetTitle}>
+                    {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
+                  </span>
+                  <button className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
+                </div>
+                <div className={styles.actionSheetList}>
+                  <ActiveSheetContent 
+                    activeSheet={activeSheet} 
+                    activeView={activeView} 
+                    onViewChange={onViewChange}
+                    handleShareScreenClick={handleShareScreenClick}
+                    canShareScreen={canShareScreen}
+                    attendeeOpen={attendeeOpen}
+                    handleToggleAttendee={handleToggleAttendee}
+                    toastMsg={toastMsg}
+                    setToastMsg={setToastMsg}
+                    toastTimerRef={toastTimerRef}
+                    setActiveSheet={setActiveSheet}
+                    onExit={onExit}
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            /* ------------------ DESKTOP FLOATING POPUP ------------------ */
+            <div className={styles.desktopPopupMenu}>
+              <div className={styles.desktopPopupMenuHeader}>
+                <span className={styles.desktopPopupMenuTitle}>
+                  {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
+                </span>
+                <button className={styles.desktopPopupMenuClose} onClick={() => setActiveSheet(null)}>✕</button>
+              </div>
+              <div className={styles.desktopPopupMenuList}>
+                  <ActiveSheetContent 
+                    activeSheet={activeSheet} 
+                    activeView={activeView} 
+                    onViewChange={onViewChange}
+                    handleShareScreenClick={handleShareScreenClick}
+                    canShareScreen={canShareScreen}
+                    attendeeOpen={attendeeOpen}
+                    handleToggleAttendee={handleToggleAttendee}
+                    toastMsg={toastMsg}
+                    setToastMsg={setToastMsg}
+                    toastTimerRef={toastTimerRef}
+                    setActiveSheet={setActiveSheet}
+                    onExit={onExit}
+                  />              
+              </div>
             </div>
+          )}
+        </>
+      )}
+    </>
+  );
+}
 
-            <div className={styles.actionSheetList}>
-              {activeSheet === 'views' && (
-                <>
-                  <button className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`} onClick={() => { onViewChange('liveDoc'); setActiveSheet(null); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Live Doc & Collaborative Canvas
-                  </button>
-                  <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-                    Webcam Grid Video
-                  </button>
-                  <button className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`} onClick={() => { handleShareScreenClick(); setActiveSheet(null); }} style={{ opacity: canShareScreen ? 1 : 0.5 }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                    Screen Share Layout
-                  </button>
-                </>
-              )}
+/* Helper Component so we don't duplicate the 100 lines of buttons */
+function ActiveSheetContent({ 
+  activeSheet, activeView, onViewChange, handleShareScreenClick, canShareScreen, 
+  attendeeOpen, handleToggleAttendee, toastMsg, setToastMsg, toastTimerRef, setActiveSheet, onExit 
+}: any) {
+  const showComingSoon = (feature: string) => {
+    setToastMsg(`${feature} coming soon!`);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+  };
 
-              {activeSheet === 'more' && (
-                <>
-                  <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { onToggleAttendee(); setActiveSheet(null); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                    People & Attendees
-                  </button>
-                  <button className={styles.actionSheetItem} onClick={() => { 
-                    navigator.clipboard.writeText(window.location.href);
-                    setToastMsg('Invite Link Copied to Clipboard!');
-                    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-                    setActiveSheet(null);
-                  }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
-                    Copy Invite Link
-                  </button>
-                  <button className={styles.actionSheetItem} onClick={() => {
-                    const currentUrl = new URL(window.location.href);
-                    const rn = currentUrl.pathname.split('/').pop() || '';
-                    window.location.href = `kloudmeet://join/${rn}`;
-                    setActiveSheet(null);
-                  }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-                    Launch in App
-                  </button>
-                  <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Setting'); setActiveSheet(null); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
-                    App & Device Settings
-                  </button>
-                  <button className={`${styles.actionSheetItem} ${styles.danger}`} style={{ color: '#ef4444' }} onClick={() => { onExit(); setActiveSheet(null); }}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                    Exit Meeting
-                  </button>
-                </>
-              )}
-            </div>
+  return (
+    <>
+      {activeSheet === 'views' && (
+        <>
+          <button className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`} onClick={() => { onViewChange('liveDoc'); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+            Live Doc & Collaborative Canvas
+          </button>
+          <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+            Webcam Grid Video
+          </button>
+          <button className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`} onClick={() => { handleShareScreenClick(); setActiveSheet(null); }} style={{ opacity: canShareScreen ? 1 : 0.5 }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+            Screen Share Layout
+          </button>
+        </>
+      )}
 
-          </div>
+      {activeSheet === 'more' && (
+        <>
+          <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            People & Attendees
+          </button>
+          <button className={styles.actionSheetItem} onClick={() => { 
+            navigator.clipboard.writeText(window.location.href);
+            setToastMsg('Invite Link Copied to Clipboard!');
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+            setActiveSheet(null);
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
+            Copy Invite Link
+          </button>
+          <button className={styles.actionSheetItem} onClick={() => {
+            const currentUrl = new URL(window.location.href);
+            const rn = currentUrl.pathname.split('/').pop() || '';
+            window.location.href = `kloudmeet://join/${rn}`;
+            setActiveSheet(null);
+          }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+            Launch in App
+          </button>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Setting'); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
+            App & Device Settings
+          </button>
+        </>
+      )}
+
+      {activeSheet === 'exit' && (
+        <>
+          <button className={`${styles.actionSheetItem} ${styles.danger}`} style={{ color: '#ef4444' }} onClick={() => { onExit(); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            Leave Meeting (You leave, meeting continues)
+          </button>
+          <button className={`${styles.actionSheetItem} ${styles.danger}`} style={{ color: '#ef4444' }} onClick={() => { showComingSoon('End for All'); onExit(); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            End Meeting for All (Disconnects everyone)
+          </button>
         </>
       )}
     </>

@@ -1293,9 +1293,19 @@ function VideoConferenceComponent(props: {
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
           chatOpen={chatOpen}
-          onToggleChat={() => setChatOpen(prev => !prev)}
+          onToggleChat={() => {
+            setChatOpen(prev => !prev);
+            setAttendeeOpen(false);
+          }}
           attendeeOpen={attendeeOpen}
-          onToggleAttendee={() => setAttendeeOpen(prev => !prev)}
+          onToggleAttendee={() => {
+            setAttendeeOpen(prev => !prev);
+            setChatOpen(false);
+          }}
+          onOpenSheet={() => {
+            setChatOpen(false);
+            setAttendeeOpen(false);
+          }}
         />
 
         <DebugMode />

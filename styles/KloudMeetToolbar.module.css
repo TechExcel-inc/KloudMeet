@@ -449,6 +449,53 @@
   opacity: 1;
 }
 
+/* ============================================
+   Desktop Popup Menu (Strictly Desktop)
+   ============================================ */
+.desktopPopupMenu {
+  position: absolute;
+  bottom: 80px;
+  right: 16px;
+  width: 320px;
+  background: rgba(15, 23, 42, 0.96);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  z-index: 2001;
+}
+.desktopPopupMenuHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.desktopPopupMenuTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+}
+.desktopPopupMenuClose {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 14px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.desktopPopupMenuList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @media (max-width: 768px) {
   .toolbar {
     padding: 2px 4px;
