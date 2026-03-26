@@ -183,7 +183,7 @@ export function KloudMeetToolbar({
         desktopAnchorBubbleKind === 'chat'
           ? 500
           : desktopAnchorBubbleKind === 'attendee'
-            ? 200
+            ? 500
             : 440;
       const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
       const height = isPanel ? maxHeight : undefined;
@@ -227,7 +227,7 @@ export function KloudMeetToolbar({
         desktopAnchorBubbleKind === 'chat'
           ? 500
           : desktopAnchorBubbleKind === 'attendee'
-            ? 200
+            ? 500
             : 440;
       const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
       const height = isPanel ? maxHeight : undefined;
