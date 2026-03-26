@@ -28,10 +28,8 @@ const nextConfig = {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin',
           },
-          {
-            key: 'Cross-Origin-Embedder-Policy',
-            value: 'credentialless',
-          },
+          // No Cross-Origin-Embedder-Policy: embedding third-party iframes (e.g. LiveDoc on kloud.cn)
+          // requires their CORP headers or omitting COEP on the parent; we omit COEP for compatibility.
         ],
       },
     ];

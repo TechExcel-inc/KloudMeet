@@ -8,6 +8,7 @@ import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode } from '@/lib/KloudMeetToolbar';
 import { LiveDocView } from '@/lib/LiveDocView';
+import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay } from '@/lib/RemoteControlOverlay';
 import { useIsDesktop } from '@/lib/useIsDesktop';
@@ -20,7 +21,6 @@ import {
   RoomContext,
   VideoConference,
   VideoTrack,
-
   useTracks,
 } from '@livekit/components-react';
 import {
@@ -32,6 +32,8 @@ import {
   DeviceUnsupportedError,
   RoomConnectOptions,
   RoomEvent,
+  ConnectionState,
+  RemoteParticipant,
   TrackPublishDefaults,
   VideoCaptureOptions,
   Track,
@@ -77,13 +79,17 @@ export function PageClientImpl(props: {
       }
       const connectionDetailsResp = await fetch(url.toString());
       if (!connectionDetailsResp.ok) {
-        throw new Error(`Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`);
+        throw new Error(
+          `Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`,
+        );
       }
       const connectionDetailsData = await connectionDetailsResp.json();
       setConnectionDetails(connectionDetailsData);
     } catch (error: any) {
       console.error('Failed to get connection details:', error);
-      alert(`Could not connect to the room. Is your LiveKit server running? Error: ${error.message}`);
+      alert(
+        `Could not connect to the room. Is your LiveKit server running? Error: ${error.message}`,
+      );
     }
   }, []);
   const handlePreJoinError = React.useCallback((error: any) => {
@@ -132,7 +138,9 @@ function VideoConferenceComponent(props: {
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
-  const [screenShareSurface, setScreenShareSurface] = React.useState<'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'>('unknown');
+  const [screenShareSurface, setScreenShareSurface] = React.useState<
+    'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'
+  >('unknown');
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
 
@@ -140,12 +148,12 @@ function VideoConferenceComponent(props: {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
       try {
         (navigator.mediaDevices as any).setCaptureHandleConfig({
-          handle: "kloudmeet",
+          handle: 'kloudmeet',
           exposeOrigin: true,
-          permittedOrigins: ["*"]
+          permittedOrigins: ['*'],
         });
       } catch (e) {
-        console.warn("Capture Handle Config failed", e);
+        console.warn('Capture Handle Config failed', e);
       }
     }
   }, []);
@@ -195,15 +203,15 @@ function VideoConferenceComponent(props: {
           if (pub && pub.track) {
             const nativeStr = pub.track.mediaStreamTrack;
             if (nativeStr) {
-               const settings = nativeStr.getSettings();
-               let surf = (settings.displaySurface as any) || 'unknown';
-               if ((nativeStr as any).getCaptureHandle) {
-                  const handle = (nativeStr as any).getCaptureHandle();
-                  if (handle && handle.handle === 'kloudmeet') {
-                     surf = 'current-tab';
-                  }
-               }
-               setScreenShareSurface(surf);
+              const settings = nativeStr.getSettings();
+              let surf = (settings.displaySurface as any) || 'unknown';
+              if ((nativeStr as any).getCaptureHandle) {
+                const handle = (nativeStr as any).getCaptureHandle();
+                if (handle && handle.handle === 'kloudmeet') {
+                  surf = 'current-tab';
+                }
+              }
+              setScreenShareSurface(surf);
             }
           }
         }, 500);
@@ -232,19 +240,22 @@ function VideoConferenceComponent(props: {
   // Ref for broadcast function (defined later in DataChannel sync block)
   const broadcastViewChangeRef = React.useRef<((view: ViewMode) => void) | null>(null);
 
-  const handleViewChange = React.useCallback((view: ViewMode) => {
-    if (view !== 'shareScreen') {
-      setIsDrawingMode(false);
-      setIsRemoteControlMode(false);
-      if (screenShareActive) {
-        setScreenShareActive(false);
-        room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+  const handleViewChange = React.useCallback(
+    (view: ViewMode) => {
+      if (view !== 'shareScreen') {
+        setIsDrawingMode(false);
+        setIsRemoteControlMode(false);
+        if (screenShareActive) {
+          setScreenShareActive(false);
+          room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+        }
       }
-    }
-    setActiveView(view);
-    // Broadcast view change to all participants
-    broadcastViewChangeRef.current?.(view);
-  }, [screenShareActive, room]);
+      setActiveView(view);
+      // Broadcast view change to all participants
+      broadcastViewChangeRef.current?.(view);
+    },
+    [screenShareActive, room],
+  );
 
   React.useEffect(() => {
     if (e2eeEnabled) {
@@ -322,14 +333,14 @@ function VideoConferenceComponent(props: {
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
     if (
-      error.name === 'NotAllowedError' || 
+      error.name === 'NotAllowedError' ||
       error.message?.toLowerCase().includes('permission') ||
       error.message?.toLowerCase().includes('notallowed')
     ) {
       console.warn('User cancelled or denied media request:', error);
       return;
     }
-    
+
     console.error(error);
     alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
   }, []);
@@ -349,7 +360,7 @@ function VideoConferenceComponent(props: {
   // Force disable native Picture-in-Picture overlays (e.g. Firefox) on all videos
   React.useEffect(() => {
     const disablePiP = () => {
-      document.querySelectorAll('video').forEach(video => {
+      document.querySelectorAll('video').forEach((video) => {
         if (!video.hasAttribute('disablePictureInPicture')) {
           video.setAttribute('disablePictureInPicture', 'true');
         }
@@ -394,11 +405,6 @@ function VideoConferenceComponent(props: {
     router.push('/');
   }, [room, router]);
 
-  // Extract room name from connection URL for display
-  const displayRoomName = props.connectionDetails.serverUrl
-    ? props.connectionDetails.serverUrl.split('/').pop() || 'Room'
-    : 'Room';
-
   const isPresenterScreencast = screenShareActive;
   const isPureLiveDoc = activeView === 'liveDoc';
   // Mirror-blocked: presenter is sharing but it's NOT a safe "another tab" share
@@ -408,7 +414,7 @@ function VideoConferenceComponent(props: {
   const isHost = React.useMemo(() => {
     const allJoinTimes = [
       room.localParticipant.joinedAt?.getTime() || Infinity,
-      ...Array.from(room.remoteParticipants.values()).map(p => p.joinedAt?.getTime() || Infinity)
+      ...Array.from(room.remoteParticipants.values()).map((p) => p.joinedAt?.getTime() || Infinity),
     ];
     const earliest = Math.min(...allJoinTimes);
     return (room.localParticipant.joinedAt?.getTime() || Infinity) === earliest;
@@ -419,15 +425,44 @@ function VideoConferenceComponent(props: {
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
   const canSwitchViews = isHost || isCohost || isPresenter || screenShareActive;
 
+  const meetingRoomName = props.connectionDetails.roomName;
+  const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
+  const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
+  const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
+  const [livekitConnected, setLivekitConnected] = React.useState(false);
+  const livedocHostBootstrappedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    const onConnected = () => setLivekitConnected(true);
+    const onDisconnected = () => {
+      setLivekitConnected(false);
+      livedocHostBootstrappedRef.current = false;
+    };
+    room.on(RoomEvent.Connected, onConnected);
+    room.on(RoomEvent.Disconnected, onDisconnected);
+    if (room.state === ConnectionState.Connected) {
+      setLivekitConnected(true);
+    }
+    return () => {
+      room.off(RoomEvent.Connected, onConnected);
+      room.off(RoomEvent.Disconnected, onDisconnected);
+    };
+  }, [room]);
+
   // ═══ Meeting Control Sync via DataChannel ═══
   const TOPIC = 'meeting-control';
   const encoder = React.useMemo(() => new TextEncoder(), []);
   const decoder = React.useMemo(() => new TextDecoder(), []);
 
   // Host's authoritative state (only used when isHost)
-  const authState = React.useRef<{ view: ViewMode; presenter: string | null }>({
+  const authState = React.useRef<{
+    view: ViewMode;
+    presenter: string | null;
+    livedocInstanceId: string | null;
+  }>({
     view: activeView,
     presenter: null,
+    livedocInstanceId: null,
   });
 
   // Keep authState in sync when host changes view locally
@@ -437,25 +472,91 @@ function VideoConferenceComponent(props: {
     }
   }, [isHost, activeView]);
 
-  // Helper: send a meeting control message
-  const sendMeetingMsg = React.useCallback((msg: object, destinationIdentities?: string[]) => {
-    const data = encoder.encode(JSON.stringify(msg));
-    const opts: any = { reliable: true, topic: TOPIC };
-    if (destinationIdentities) {
-      opts.destinationIdentities = destinationIdentities;
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.livedocInstanceId = livedocInstanceId;
     }
-    room.localParticipant.publishData(data, opts).catch(() => {
-      room.localParticipant.publishData(data, { topic: TOPIC, ...(destinationIdentities ? { destinationIdentities } : {}) }).catch(console.error);
-    });
-  }, [room, encoder]);
+  }, [isHost, livedocInstanceId]);
+
+  // Helper: send a meeting control message
+  const sendMeetingMsg = React.useCallback(
+    (msg: object, destinationIdentities?: string[]) => {
+      const data = encoder.encode(JSON.stringify(msg));
+      const opts: any = { reliable: true, topic: TOPIC };
+      if (destinationIdentities) {
+        opts.destinationIdentities = destinationIdentities;
+      }
+      room.localParticipant.publishData(data, opts).catch(() => {
+        room.localParticipant
+          .publishData(data, {
+            topic: TOPIC,
+            ...(destinationIdentities ? { destinationIdentities } : {}),
+          })
+          .catch(console.error);
+      });
+    },
+    [room, encoder],
+  );
+
+  // Host: anonymous token + LiveDoc instance, then broadcast id to the room
+  React.useEffect(() => {
+    if (!livekitConnected || !isHost) return;
+    if (livedocHostBootstrappedRef.current) return;
+    let cancelled = false;
+    (async () => {
+      setLivedocInitInProgress(true);
+      setLivedocInitError(null);
+      try {
+        const userToken = await createOrUpdateInstantAccount(props.userChoices.username);
+        const id = await createLivedocInstance({
+          userToken,
+          jitsiInstanceId: meetingRoomName,
+        });
+        if (cancelled) return;
+        livedocHostBootstrappedRef.current = true;
+        setLivedocInstanceId(id);
+        authState.current.livedocInstanceId = id;
+        sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
+      } catch (e) {
+        if (!cancelled) {
+          livedocHostBootstrappedRef.current = true;
+          setLivedocInitError((e as Error).message ?? String(e));
+        }
+      } finally {
+        if (!cancelled) {
+          setLivedocInitInProgress(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
+
+  React.useEffect(() => {
+    if (!isHost) return;
+    const handler = (participant: RemoteParticipant) => {
+      const id = authState.current.livedocInstanceId;
+      if (id) {
+        sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id }, [participant.identity]);
+      }
+    };
+    room.on(RoomEvent.ParticipantConnected, handler);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, handler);
+    };
+  }, [room, isHost, sendMeetingMsg]);
 
   // Host/Presenter: broadcast VIEW_CHANGE to all participants
-  const broadcastViewChange = React.useCallback((view: ViewMode) => {
-    if (isHost) {
-      authState.current.view = view;
-    }
-    sendMeetingMsg({ type: 'VIEW_CHANGE', view });
-  }, [isHost, sendMeetingMsg]);
+  const broadcastViewChange = React.useCallback(
+    (view: ViewMode) => {
+      if (isHost) {
+        authState.current.view = view;
+      }
+      sendMeetingMsg({ type: 'VIEW_CHANGE', view });
+    },
+    [isHost, sendMeetingMsg],
+  );
 
   // Keep the ref in sync for handleViewChange
   React.useEffect(() => {
@@ -473,26 +574,45 @@ function VideoConferenceComponent(props: {
         if (msg.type === 'VIEW_CHANGE') {
           // View change from host/presenter — update immediately
           setActiveView(msg.view as ViewMode);
+        } else if (msg.type === 'LIVEDOC_INSTANCE' && typeof msg.livedocInstanceId === 'string') {
+          setLivedocInstanceId(msg.livedocInstanceId);
         } else if (msg.type === 'CORRECTION') {
           // Correction from host — update to authoritative state
           setActiveView(msg.view as ViewMode);
           if (msg.presenter !== undefined) {
             setPresenterIdentity(msg.presenter);
           }
+          if (typeof (msg as { livedocInstanceId?: string }).livedocInstanceId === 'string') {
+            setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
+          }
         } else if (msg.type === 'SET_PRESENTER') {
           setPresenterIdentity(msg.identity);
         } else if (msg.type === 'SET_COHOST') {
-          setCohostIdentities(prev => prev.includes(msg.identity) ? prev : [...prev, msg.identity]);
+          setCohostIdentities((prev) =>
+            prev.includes(msg.identity) ? prev : [...prev, msg.identity],
+          );
         } else if (msg.type === 'REMOVE_COHOST') {
-          setCohostIdentities(prev => prev.filter(id => id !== msg.identity));
+          setCohostIdentities((prev) => prev.filter((id) => id !== msg.identity));
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
-          if (msg.view !== auth.view || msg.presenter !== (auth.presenter || null)) {
-            // State differs — send correction to this participant only
+          const guestDoc = (msg as { livedocInstanceId?: string | null }).livedocInstanceId ?? null;
+          const authDoc = auth.livedocInstanceId ?? null;
+          const livedocMismatch =
+            (authDoc !== null && guestDoc !== authDoc) || (authDoc !== null && guestDoc === null);
+          if (
+            msg.view !== auth.view ||
+            msg.presenter !== (auth.presenter || null) ||
+            livedocMismatch
+          ) {
             sendMeetingMsg(
-              { type: 'CORRECTION', view: auth.view, presenter: auth.presenter },
-              [senderIdentity]
+              {
+                type: 'CORRECTION',
+                view: auth.view,
+                presenter: auth.presenter,
+                livedocInstanceId: auth.livedocInstanceId,
+              },
+              [senderIdentity],
             );
           }
         }
@@ -502,7 +622,9 @@ function VideoConferenceComponent(props: {
     };
 
     room.on(RoomEvent.DataReceived, handleData);
-    return () => { room.off(RoomEvent.DataReceived, handleData); };
+    return () => {
+      room.off(RoomEvent.DataReceived, handleData);
+    };
   }, [room, isHost, decoder, sendMeetingMsg]);
 
   // All participants: send heartbeat every 5s
@@ -527,13 +649,19 @@ function VideoConferenceComponent(props: {
       const hostId = getHostIdentity();
       if (hostId === room.localParticipant.identity) return; // host doesn't heartbeat to itself
       sendMeetingMsg(
-        { type: 'HEARTBEAT', view: activeView, presenter: presenterIdentity, identity: room.localParticipant.identity },
-        [hostId]
+        {
+          type: 'HEARTBEAT',
+          view: activeView,
+          presenter: presenterIdentity,
+          identity: room.localParticipant.identity,
+          livedocInstanceId,
+        },
+        [hostId],
       );
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [room, activeView, presenterIdentity, sendMeetingMsg]);
+  }, [room, activeView, presenterIdentity, livedocInstanceId, sendMeetingMsg]);
 
   // Draggable floating webcam panel state
   const floatingRef = React.useRef<HTMLDivElement>(null);
@@ -542,18 +670,23 @@ function VideoConferenceComponent(props: {
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
 
-  const handleFloatingMouseDown = React.useCallback((e: React.MouseEvent) => {
-    isDragging.current = true;
-    dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
-    e.preventDefault();
-  }, [floatingPos]);
+  const handleFloatingMouseDown = React.useCallback(
+    (e: React.MouseEvent) => {
+      isDragging.current = true;
+      dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+      e.preventDefault();
+    },
+    [floatingPos],
+  );
 
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
       setFloatingPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
     };
-    const handleMouseUp = () => { isDragging.current = false; };
+    const handleMouseUp = () => {
+      isDragging.current = false;
+    };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
     return () => {
@@ -570,13 +703,15 @@ function VideoConferenceComponent(props: {
   const CHAT_TOPIC = 'kloud-chat';
   const chatEncoder = React.useMemo(() => new TextEncoder(), []);
   const chatDecoder = React.useMemo(() => new TextDecoder(), []);
-  const [chatMessages, setChatMessages] = React.useState<Array<{
-    senderIdentity: string;
-    senderName: string;
-    message: string;
-    timestamp: number;
-    isLocal: boolean;
-  }>>([]);
+  const [chatMessages, setChatMessages] = React.useState<
+    Array<{
+      senderIdentity: string;
+      senderName: string;
+      message: string;
+      timestamp: number;
+      isLocal: boolean;
+    }>
+  >([]);
 
   React.useEffect(() => {
     const handleChatData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
@@ -584,42 +719,57 @@ function VideoConferenceComponent(props: {
       try {
         const data = JSON.parse(chatDecoder.decode(payload));
         if (data.type === 'chat') {
-          setChatMessages(prev => [...prev, {
-            senderIdentity: data.senderIdentity,
-            senderName: data.senderName,
-            message: data.message,
-            timestamp: data.timestamp,
-            isLocal: false,
-          }]);
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              senderIdentity: data.senderIdentity,
+              senderName: data.senderName,
+              message: data.message,
+              timestamp: data.timestamp,
+              isLocal: false,
+            },
+          ]);
         }
       } catch (e) {
         console.error('Chat message parse error:', e);
       }
     };
     room.on(RoomEvent.DataReceived, handleChatData);
-    return () => { room.off(RoomEvent.DataReceived, handleChatData); };
+    return () => {
+      room.off(RoomEvent.DataReceived, handleChatData);
+    };
   }, [room, chatDecoder]);
 
-  const sendChatMessage = React.useCallback((text: string) => {
-    const now = Date.now();
-    setChatMessages(prev => [...prev, {
-      senderIdentity: room.localParticipant.identity,
-      senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
-      message: text,
-      timestamp: now,
-      isLocal: true,
-    }]);
-    const payload = chatEncoder.encode(JSON.stringify({
-      type: 'chat',
-      senderIdentity: room.localParticipant.identity,
-      senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
-      message: text,
-      timestamp: now,
-    }));
-    room.localParticipant.publishData(payload, { reliable: true, topic: CHAT_TOPIC }).catch(() => {
-      room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
-    });
-  }, [room, chatEncoder]);
+  const sendChatMessage = React.useCallback(
+    (text: string) => {
+      const now = Date.now();
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          senderIdentity: room.localParticipant.identity,
+          senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
+          message: text,
+          timestamp: now,
+          isLocal: true,
+        },
+      ]);
+      const payload = chatEncoder.encode(
+        JSON.stringify({
+          type: 'chat',
+          senderIdentity: room.localParticipant.identity,
+          senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
+          message: text,
+          timestamp: now,
+        }),
+      );
+      room.localParticipant
+        .publishData(payload, { reliable: true, topic: CHAT_TOPIC })
+        .catch(() => {
+          room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
+        });
+    },
+    [room, chatEncoder],
+  );
 
   return (
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
@@ -627,213 +777,292 @@ function VideoConferenceComponent(props: {
         <KeyboardShortcuts />
 
         {/* View content area */}
-        <div className="main-meeting-area" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', display: 'flex' }}>
-
+        <div
+          className="main-meeting-area"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            overflow: 'hidden',
+            display: 'flex',
+          }}
+        >
           {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share) */}
           {isPureLiveDoc && !hasScreenShare && (
-             <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-               <LiveDocView
-                 roomName={displayRoomName}
-                 participantName={props.userChoices.username}
-               />
-             </div>
+            <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+              <LiveDocView
+                meetingRoomName={meetingRoomName}
+                participantName={props.userChoices.username}
+                livedocInstanceId={livedocInstanceId}
+                hostInitError={livedocInitError}
+                hostInitInProgress={livedocInitInProgress}
+                isHost={isHost}
+              />
+            </div>
           )}
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
-          <div 
-            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''}`} 
-            style={{ 
-              flex: 1, 
-              position: 'relative', 
-              display: (isPureLiveDoc && !hasScreenShare) ? 'none' : 'block' 
-            }}>
-             <VideoConference
-               chatMessageFormatter={formatChatMessageLinks}
-               SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
-             />
+          <div
+            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''}`}
+            style={{
+              flex: 1,
+              position: 'relative',
+              display: isPureLiveDoc && !hasScreenShare ? 'none' : 'block',
+            }}
+          >
+            <VideoConference
+              chatMessageFormatter={formatChatMessageLinks}
+              SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+            />
 
-             {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
-             {hasScreenShare && isMirrorBlocked && (
-                <div className="mirror-livedoc-overlay" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 50, overflow: 'auto', background: '#f5f5f5' }}>
-                  <LiveDocView
-                    roomName={displayRoomName}
-                    participantName={props.userChoices.username}
-                  />
+            {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
+            {hasScreenShare && isMirrorBlocked && (
+              <div
+                className="mirror-livedoc-overlay"
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  zIndex: 50,
+                  overflow: 'auto',
+                  background: '#f5f5f5',
+                }}
+              >
+                <LiveDocView
+                  meetingRoomName={meetingRoomName}
+                  participantName={props.userChoices.username}
+                  livedocInstanceId={livedocInstanceId}
+                  hostInitError={livedocInitError}
+                  hostInitInProgress={livedocInitInProgress}
+                  isHost={isHost}
+                />
+              </div>
+            )}
+
+            {/* Safe preview badge (another tab only) */}
+            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && (
+              <div className="screenshare-overlay-container">
+                <div className="screenshare-overlay-badge">
+                  {!screenShareActive ? "Viewing [Attendee]'s screen." : 'Preview: Another Tab.'}
                 </div>
-             )}
+              </div>
+            )}
 
-             {/* Safe preview badge (another tab only) */}
-             {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && (
-                <div className="screenshare-overlay-container">
-                   <div className="screenshare-overlay-badge">
-                      {!screenShareActive ? "Viewing [Attendee]'s screen." :
-                       "Preview: Another Tab."}
-                   </div>
-                </div>
-             )}
+            {hasScreenShare && activeView === 'shareScreen' && isDesktop && (
+              <>
+                <AnnotationCanvas isDrawingMode={isDrawingMode} />
+                <RemoteControlOverlay
+                  isActive={isRemoteControlMode}
+                  isPresenter={screenShareActive}
+                />
+              </>
+            )}
 
-             {hasScreenShare && activeView === 'shareScreen' && isDesktop && (
-               <>
-                 <AnnotationCanvas isDrawingMode={isDrawingMode} />
-                 <RemoteControlOverlay 
-                   isActive={isRemoteControlMode} 
-                   isPresenter={screenShareActive} 
-                 />
-               </>
-             )}
-
-             {/* Attendee sidebar collapse button (only for non-presenters watching screen share) */}
-             {hasScreenShare && !screenShareActive && (
-               <button
-                 className="webcam-collapse-toggle"
-                 onClick={(e) => {
-                   e.preventDefault();
-                   e.stopPropagation();
-                   setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
-                 }}
-                 style={{
-                   position: 'absolute',
-                   top: '50%',
-                   left: isWebcamSidebarCollapsed ? 0 : 160,
-                   right: 'auto',
-                   transform: 'translateY(-50%)',
-                   zIndex: 2000,
-                   background: 'rgba(30, 41, 59, 0.95)',
-                   color: 'rgba(255,255,255,0.8)',
-                   border: '1px solid rgba(255,255,255,0.1)',
-                   borderLeft: 'none',
-                   borderRadius: '0 8px 8px 0',
-                   width: '28px',
-                   height: '64px',
-                   cursor: 'pointer',
-                   display: 'flex',
-                   alignItems: 'center',
-                   justifyContent: 'center',
-                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                   boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
-                 }}
-                 title={isWebcamSidebarCollapsed ? 'Expand Webcams' : 'Collapse Webcams'}
-               >
-                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 16, height: 16 }}>
-                   {isWebcamSidebarCollapsed ? (
-                     <polyline points="9 18 15 12 9 6" />
-                   ) : (
-                     <polyline points="15 18 9 12 15 6" />
-                   )}
-                 </svg>
-               </button>
-             )}
+            {/* Attendee sidebar collapse button (only for non-presenters watching screen share) */}
+            {hasScreenShare && !screenShareActive && (
+              <button
+                className="webcam-collapse-toggle"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
+                }}
+                style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: isWebcamSidebarCollapsed ? 0 : 160,
+                  right: 'auto',
+                  transform: 'translateY(-50%)',
+                  zIndex: 2000,
+                  background: 'rgba(30, 41, 59, 0.95)',
+                  color: 'rgba(255,255,255,0.8)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderLeft: 'none',
+                  borderRadius: '0 8px 8px 0',
+                  width: '28px',
+                  height: '64px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
+                }}
+                title={isWebcamSidebarCollapsed ? 'Expand Webcams' : 'Collapse Webcams'}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  style={{ width: 16, height: 16 }}
+                >
+                  {isWebcamSidebarCollapsed ? (
+                    <polyline points="9 18 15 12 9 6" />
+                  ) : (
+                    <polyline points="15 18 9 12 15 6" />
+                  )}
+                </svg>
+              </button>
+            )}
           </div>
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
-          {activeView !== 'webcam' && (screenShareActive || (activeView === 'liveDoc' && !hasScreenShare)) && (() => {
-            const allParticipants = [
-              { id: 'local', name: props.userChoices.username || 'You' },
-              ...Array.from(room.remoteParticipants.values()).map(p => ({
-                id: p.identity, name: p.name || p.identity || '??'
-              }))
-            ];
-            const sortByJoinTime = (a: typeof allParticipants[0], b: typeof allParticipants[0]) => {
-              const pA = a.id === 'local' ? room.localParticipant : room.remoteParticipants.get(a.id);
-              const pB = b.id === 'local' ? room.localParticipant : room.remoteParticipants.get(b.id);
-              return (pA?.joinedAt?.getTime() || 0) - (pB?.joinedAt?.getTime() || 0);
-            };
-            allParticipants.sort(sortByJoinTime);
-            const maxVisible = 5;
-            const overflow = allParticipants.length - maxVisible;
+          {activeView !== 'webcam' &&
+            (screenShareActive || (activeView === 'liveDoc' && !hasScreenShare)) &&
+            (() => {
+              const allParticipants = [
+                { id: 'local', name: props.userChoices.username || 'You' },
+                ...Array.from(room.remoteParticipants.values()).map((p) => ({
+                  id: p.identity,
+                  name: p.name || p.identity || '??',
+                })),
+              ];
+              const sortByJoinTime = (
+                a: (typeof allParticipants)[0],
+                b: (typeof allParticipants)[0],
+              ) => {
+                const pA =
+                  a.id === 'local' ? room.localParticipant : room.remoteParticipants.get(a.id);
+                const pB =
+                  b.id === 'local' ? room.localParticipant : room.remoteParticipants.get(b.id);
+                return (pA?.joinedAt?.getTime() || 0) - (pB?.joinedAt?.getTime() || 0);
+              };
+              allParticipants.sort(sortByJoinTime);
+              const maxVisible = 5;
+              const overflow = allParticipants.length - maxVisible;
 
-            return (
-              <div
-                ref={floatingRef}
-                className={`floating-webcam-panel ${floatingExpanded ? 'expanded' : ''}`}
-                onMouseDown={handleFloatingMouseDown}
-                style={{
-                  position: 'absolute',
-                  top: floatingPos.y,
-                  left: floatingPos.x,
-                  zIndex: 200,
-                  cursor: isDragging.current ? 'grabbing' : 'grab',
-                  userSelect: 'none',
-                }}
-              >
-                {!floatingExpanded && (
-                  <div className="floating-collapsed-row">
-                    <div className="floating-stacked-avatars">
-                      {allParticipants.slice(0, maxVisible).map((p, i) => (
-                        <div key={p.id} className="floating-avatar" title={p.name} style={{ zIndex: maxVisible - i }}>
-                          {p.name.slice(0, 2).toUpperCase()}
-                        </div>
-                      ))}
-                      {overflow > 0 && (
-                        <div className="floating-avatar overflow-badge" style={{ zIndex: 0 }}>
-                          +{overflow}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      className="floating-chevron-btn"
-                      onClick={(e) => { e.stopPropagation(); setFloatingExpanded(true); }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title="Expand webcams"
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
-                        <polyline points="6 9 12 15 18 9" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
-                {floatingExpanded && (() => {
-                  return (
-                    <>
-                      <div className="floating-expanded-header">
-                        <span className="floating-expanded-title">{allParticipants.length} Participants</span>
-                        <button
-                          className="floating-chevron-btn up"
-                          onClick={(e) => { e.stopPropagation(); setFloatingExpanded(false); }}
-                          onMouseDown={(e) => e.stopPropagation()}
-                          title="Collapse webcams"
+              return (
+                <div
+                  ref={floatingRef}
+                  className={`floating-webcam-panel ${floatingExpanded ? 'expanded' : ''}`}
+                  onMouseDown={handleFloatingMouseDown}
+                  style={{
+                    position: 'absolute',
+                    top: floatingPos.y,
+                    left: floatingPos.x,
+                    zIndex: 200,
+                    cursor: isDragging.current ? 'grabbing' : 'grab',
+                    userSelect: 'none',
+                  }}
+                >
+                  {!floatingExpanded && (
+                    <div className="floating-collapsed-row">
+                      <div className="floating-stacked-avatars">
+                        {allParticipants.slice(0, maxVisible).map((p, i) => (
+                          <div
+                            key={p.id}
+                            className="floating-avatar"
+                            title={p.name}
+                            style={{ zIndex: maxVisible - i }}
+                          >
+                            {p.name.slice(0, 2).toUpperCase()}
+                          </div>
+                        ))}
+                        {overflow > 0 && (
+                          <div className="floating-avatar overflow-badge" style={{ zIndex: 0 }}>
+                            +{overflow}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="floating-chevron-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFloatingExpanded(true);
+                        }}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        title="Expand webcams"
+                      >
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          style={{ width: 14, height: 14 }}
                         >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ width: 14, height: 14 }}>
-                            <polyline points="18 15 12 9 6 15" />
-                          </svg>
-                        </button>
-                      </div>
-                      <div className="floating-expanded-grid">
-                        {allParticipants.map((p) => {
-                          const participant = p.id === 'local'
-                            ? room.localParticipant
-                            : room.remoteParticipants.get(p.id);
-                          const camPub = participant?.getTrackPublication(Track.Source.Camera);
-                          const hasVideo = camPub?.track && !camPub.isMuted;
-                          return (
-                            <div key={p.id} className="floating-grid-tile">
-                              <div className="floating-grid-video">
-                                {hasVideo && camPub?.track ? (
-                                  <VideoTrack trackRef={{ participant: participant!, source: Track.Source.Camera, publication: camPub }} />
-                                ) : (
-                                  <div className="floating-grid-avatar">
-                                    {p.name.slice(0, 2).toUpperCase()}
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                  {floatingExpanded &&
+                    (() => {
+                      return (
+                        <>
+                          <div className="floating-expanded-header">
+                            <span className="floating-expanded-title">
+                              {allParticipants.length} Participants
+                            </span>
+                            <button
+                              className="floating-chevron-btn up"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setFloatingExpanded(false);
+                              }}
+                              onMouseDown={(e) => e.stopPropagation()}
+                              title="Collapse webcams"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2.5"
+                                style={{ width: 14, height: 14 }}
+                              >
+                                <polyline points="18 15 12 9 6 15" />
+                              </svg>
+                            </button>
+                          </div>
+                          <div className="floating-expanded-grid">
+                            {allParticipants.map((p) => {
+                              const participant =
+                                p.id === 'local'
+                                  ? room.localParticipant
+                                  : room.remoteParticipants.get(p.id);
+                              const camPub = participant?.getTrackPublication(Track.Source.Camera);
+                              const hasVideo = camPub?.track && !camPub.isMuted;
+                              return (
+                                <div key={p.id} className="floating-grid-tile">
+                                  <div className="floating-grid-video">
+                                    {hasVideo && camPub?.track ? (
+                                      <VideoTrack
+                                        trackRef={{
+                                          participant: participant!,
+                                          source: Track.Source.Camera,
+                                          publication: camPub,
+                                        }}
+                                      />
+                                    ) : (
+                                      <div className="floating-grid-avatar">
+                                        {p.name.slice(0, 2).toUpperCase()}
+                                      </div>
+                                    )}
                                   </div>
-                                )}
-                              </div>
-                              <span className="floating-grid-name">{p.name}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-            );
-          })()}
+                                  <span className="floating-grid-name">{p.name}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
+                      );
+                    })()}
+                </div>
+              );
+            })()}
 
           {/* Chat / Attendees：移动端沿用侧栏浮层；桌面端由 KloudMeetToolbar 锚点气泡承载 */}
           {chatOpen && isToolbarMobile && (
             <div className="chat-overlay-panel">
               <div className="chat-overlay-header">
                 <span>Chat</span>
-                <button className="chat-overlay-close" onClick={() => setChatOpen(false)}>✕</button>
+                <button className="chat-overlay-close" onClick={() => setChatOpen(false)}>
+                  ✕
+                </button>
               </div>
               <div className="chat-overlay-body">
                 <ChatPanel messages={chatMessages} onSend={sendChatMessage} />
@@ -845,7 +1074,9 @@ function VideoConferenceComponent(props: {
             <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
               <div className="chat-overlay-header">
                 <span>Participants</span>
-                <button className="chat-overlay-close" onClick={() => setAttendeeOpen(false)}>✕</button>
+                <button className="chat-overlay-close" onClick={() => setAttendeeOpen(false)}>
+                  ✕
+                </button>
               </div>
               <div className="chat-overlay-body">
                 <AttendeePanel
@@ -854,7 +1085,10 @@ function VideoConferenceComponent(props: {
                     let hId = room.localParticipant.identity;
                     for (const [, p] of room.remoteParticipants) {
                       const t = p.joinedAt?.getTime() || Infinity;
-                      if (t < earliest) { earliest = t; hId = p.identity; }
+                      if (t < earliest) {
+                        earliest = t;
+                        hId = p.identity;
+                      }
                     }
                     return hId;
                   })()}
@@ -864,15 +1098,17 @@ function VideoConferenceComponent(props: {
                   onSetPresenter={(identity) => {
                     const id = identity || null;
                     setPresenterIdentity(id);
-                    if (isHost) { authState.current.presenter = id; }
+                    if (isHost) {
+                      authState.current.presenter = id;
+                    }
                     sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
                   }}
                   onSetCohost={(identity) => {
-                    setCohostIdentities(prev => [...prev, identity]);
+                    setCohostIdentities((prev) => [...prev, identity]);
                     sendMeetingMsg({ type: 'SET_COHOST', identity });
                   }}
                   onRemoveCohost={(identity) => {
-                    setCohostIdentities(prev => prev.filter(id => id !== identity));
+                    setCohostIdentities((prev) => prev.filter((id) => id !== identity));
                     sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
                   }}
                 />
@@ -880,11 +1116,11 @@ function VideoConferenceComponent(props: {
             </div>
           )}
 
-
-
           {/* Dynamic layout injections */}
           <style>{`
-            ${hasScreenShare ? `
+            ${
+              hasScreenShare
+                ? `
               /* Clean, Native-Friendly Screenshare Layout Overrides */
               
               /* 1. Reset base containment so we can fill the window safely */
@@ -1030,7 +1266,9 @@ function VideoConferenceComponent(props: {
                  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
               }
 
-            ` : ''}
+            `
+                : ''
+            }
 
             /* ═══ Always-available styles (floating panel, chat overlay) ═══ */
 
@@ -1284,23 +1522,23 @@ function VideoConferenceComponent(props: {
           canShareScreen={!hasScreenShare || screenShareActive}
           isDrawingMode={isDrawingMode}
           onToggleDrawingMode={() => {
-            if (hasScreenShare) setIsDrawingMode(prev => !prev);
+            if (hasScreenShare) setIsDrawingMode((prev) => !prev);
           }}
           isRemoteControlMode={isRemoteControlMode}
           onToggleRemoteControlMode={() => {
-            if (hasScreenShare) setIsRemoteControlMode(prev => !prev);
+            if (hasScreenShare) setIsRemoteControlMode((prev) => !prev);
           }}
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
           chatOpen={chatOpen}
           onToggleChat={() => {
-            setChatOpen(prev => !prev);
+            setChatOpen((prev) => !prev);
             setAttendeeOpen(false);
           }}
           attendeeOpen={attendeeOpen}
           onToggleAttendee={() => {
-            setAttendeeOpen(prev => !prev);
+            setAttendeeOpen((prev) => !prev);
             setChatOpen(false);
           }}
           onOpenSheet={() => {
@@ -1320,7 +1558,10 @@ function VideoConferenceComponent(props: {
                   let hId = room.localParticipant.identity;
                   for (const [, p] of room.remoteParticipants) {
                     const t = p.joinedAt?.getTime() || Infinity;
-                    if (t < earliest) { earliest = t; hId = p.identity; }
+                    if (t < earliest) {
+                      earliest = t;
+                      hId = p.identity;
+                    }
                   }
                   return hId;
                 })()}
@@ -1330,15 +1571,17 @@ function VideoConferenceComponent(props: {
                 onSetPresenter={(identity) => {
                   const id = identity || null;
                   setPresenterIdentity(id);
-                  if (isHost) { authState.current.presenter = id; }
+                  if (isHost) {
+                    authState.current.presenter = id;
+                  }
                   sendMeetingMsg({ type: 'SET_PRESENTER', identity: id });
                 }}
                 onSetCohost={(identity) => {
-                  setCohostIdentities(prev => [...prev, identity]);
+                  setCohostIdentities((prev) => [...prev, identity]);
                   sendMeetingMsg({ type: 'SET_COHOST', identity });
                 }}
                 onRemoveCohost={(identity) => {
-                  setCohostIdentities(prev => prev.filter(id => id !== identity));
+                  setCohostIdentities((prev) => prev.filter((id) => id !== identity));
                   sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
                 }}
               />
