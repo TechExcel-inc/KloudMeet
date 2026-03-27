@@ -158,6 +158,8 @@ function VideoConferenceComponent(props: {
   >('unknown');
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
+  // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
+  const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
 
   React.useEffect(() => {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
@@ -214,6 +216,30 @@ function VideoConferenceComponent(props: {
     if (isToolbarMobile && hasScreenShare && !screenShareActive) {
       setIsWebcamSidebarCollapsed(true);
     }
+  }, [isToolbarMobile, hasScreenShare, screenShareActive]);
+
+  // 手机端检测：屏幕共享出现时，尝试自动 play 所有视频；如果被浏览器拒绝（微信等），显示「点击播放」按钮
+  React.useEffect(() => {
+    if (!isToolbarMobile || !hasScreenShare || screenShareActive) {
+      setNeedsPlayTap(false);
+      return;
+    }
+    // 短暂等待 LiveKit 把 video 元素渲染出来
+    const timer = setTimeout(() => {
+      const videos = Array.from(document.querySelectorAll('video'));
+      if (videos.length === 0) { setNeedsPlayTap(true); return; }
+      // 尝试 play，如果所有 video 都已经在播放则不需要显示按钮
+      const allPlaying = videos.every((v) => !v.paused);
+      if (allPlaying) { setNeedsPlayTap(false); return; }
+      // 尝试静默 play
+      Promise.all(videos.map((v) => v.play().catch(() => null)))
+        .then(() => {
+          const stillPaused = videos.some((v) => v.paused);
+          setNeedsPlayTap(stillPaused);
+        })
+        .catch(() => setNeedsPlayTap(true));
+    }, 800);
+    return () => clearTimeout(timer);
   }, [isToolbarMobile, hasScreenShare, screenShareActive]);
 
   // React to screen share status logic automatically
@@ -379,17 +405,22 @@ function VideoConferenceComponent(props: {
     }
   }, [lowPowerMode]);
 
-  // Force disable native Picture-in-Picture overlays (e.g. Firefox) on all videos
+  // Modify video elements globally:
+  // 1. Force disable native PiP overlays (e.g. Firefox)
+  // 2. Add properties specifically for WeChat / X5 engine to support inline viewing
   React.useEffect(() => {
-    const disablePiP = () => {
+    const patchVideoElements = () => {
       document.querySelectorAll('video').forEach((video) => {
-        if (!video.hasAttribute('disablePictureInPicture')) {
-          video.setAttribute('disablePictureInPicture', 'true');
-        }
+        if (!video.hasAttribute('disablePictureInPicture')) video.setAttribute('disablePictureInPicture', 'true');
+        // WeChat & Mobile browser specific attributes to ensure screen shares (and normal video) play inline
+        if (!video.hasAttribute('playsinline')) video.setAttribute('playsinline', 'true');
+        if (!video.hasAttribute('webkit-playsinline')) video.setAttribute('webkit-playsinline', 'true');
+        if (!video.hasAttribute('x5-playsinline')) video.setAttribute('x5-playsinline', 'true');
+        if (!video.hasAttribute('x5-video-player-type')) video.setAttribute('x5-video-player-type', 'h5');
       });
     };
-    disablePiP();
-    const observer = new MutationObserver(disablePiP);
+    patchVideoElements();
+    const observer = new MutationObserver(patchVideoElements);
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
   }, []);
@@ -937,6 +968,60 @@ function VideoConferenceComponent(props: {
                 <div className="screenshare-overlay-badge">
                   {!screenShareActive ? "Viewing [Attendee]'s screen." : 'Preview: Another Tab.'}
                 </div>
+              </div>
+            )}
+
+            {/* 微信/手机浏览器「点击播放」按钮 —— 自动播放被拒绝时显示 */}
+            {needsPlayTap && hasScreenShare && !screenShareActive && isToolbarMobile && (
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  zIndex: 12000,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'rgba(0,0,0,0.55)',
+                  backdropFilter: 'blur(4px)',
+                  WebkitBackdropFilter: 'blur(4px)',
+                }}
+              >
+                <button
+                  onClick={() => {
+                    // 强制 play 页面上所有视频（需要在用户点击事件内触发，微信才会允许）
+                    document.querySelectorAll('video').forEach((v) => {
+                      v.play().catch(() => null);
+                    });
+                    setNeedsPlayTap(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 14,
+                    background: 'rgba(255,255,255,0.12)',
+                    border: '2px solid rgba(255,255,255,0.55)',
+                    borderRadius: 20,
+                    padding: '28px 40px',
+                    cursor: 'pointer',
+                    WebkitTapHighlightColor: 'transparent',
+                    backdropFilter: 'blur(8px)',
+                    touchAction: 'manipulation',
+                  }}
+                >
+                  {/* 播放图标 */}
+                  <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
+                    <circle cx="12" cy="12" r="11" stroke="white" strokeWidth="1.5" fill="rgba(255,255,255,0.15)" />
+                    <polygon points="10,8 18,12 10,16" fill="white" />
+                  </svg>
+                  <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
+                    点击播放屏幕共享
+                  </span>
+                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+                    点击即可观看对方的屏幕
+                  </span>
+                </button>
               </div>
             )}
 
