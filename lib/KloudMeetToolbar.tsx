@@ -526,7 +526,7 @@ export function KloudMeetToolbar({
           </button>
 
           <button
-            className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''}`}
+            className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
             onClick={handleShareScreenClick}
             style={{ opacity: canShareScreen ? 1 : 0.5, cursor: canShareScreen ? 'pointer' : 'not-allowed' }}
             title={!canShareScreen ? 'Someone else is already sharing' : 'Share Screen'}
@@ -540,7 +540,7 @@ export function KloudMeetToolbar({
           {isDesktop && (
             <>
               <button
-                className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnActive : ''}`}
+                className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleDrawingMode}
                 style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
                 title={!hasScreenShare ? 'No active screenshare to annotate' : 'Annotate Screenshare'}
@@ -552,7 +552,7 @@ export function KloudMeetToolbar({
               </button>
 
               <button
-                className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnActive : ''}`}
+                className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleRemoteControlMode}
                 style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
                 title={!hasScreenShare ? 'No active screenshare to control' : 'Remote Control'}

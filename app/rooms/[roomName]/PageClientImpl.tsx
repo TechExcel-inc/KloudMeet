@@ -406,6 +406,12 @@ function VideoConferenceComponent(props: {
   }, [camEnabled, room]);
 
   const handleShareScreen = React.useCallback(() => {
+    // Mobile browsers can't do screen share — show a warning toast
+    if (isToolbarMobile) {
+      alert('Use Kloud Meet App to be able to do screenshare.');
+      return;
+    }
+
     // If someone else is actively sharing, we cannot share
     if (hasScreenShare && !screenShareActive) {
       alert('Only one person can share their screen at a time.');
@@ -419,7 +425,7 @@ function VideoConferenceComponent(props: {
       setScreenShareActive(false);
       console.error(e);
     });
-  }, [screenShareActive, room, hasScreenShare]);
+  }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
 
   const handleExit = React.useCallback(() => {
     room.disconnect();
@@ -475,10 +481,15 @@ function VideoConferenceComponent(props: {
 
   const hostIdentity = hostIdentityOverride || hostIdentityFromJoin;
   const isHost = hostIdentity === room.localParticipant.identity;
-  const [presenterIdentities, setPresenterIdentities] = React.useState<string[]>([]);
-  const isPresenter = presenterIdentities.includes(room.localParticipant.identity);
+  const [copresenterIdentities, setCopresenterIdentities] = React.useState<string[]>([]);
+  const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
+  // Auto-assign Presenter: whoever owns the active screen share track
+  const autoPresenterIdentity = screenShareTracks.length > 0
+    ? (screenShareTracks[0].participant?.identity ?? null)
+    : null;
+  const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
   // Interactive meetings: everyone can switch views by default
   const canSwitchViews = true;
 
@@ -637,19 +648,19 @@ function VideoConferenceComponent(props: {
           // Correction from host — update to authoritative state
           setActiveView(msg.view as ViewMode);
           if (msg.presenter !== undefined) {
-            setPresenterIdentities(Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : []);
+            setCopresenterIdentities(Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : []);
           }
           if (typeof (msg as { livedocInstanceId?: string }).livedocInstanceId === 'string') {
             setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
           }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
-            setPresenterIdentities((prev) =>
+            setCopresenterIdentities((prev) =>
               prev.includes(msg.identity) ? prev : [...prev, msg.identity],
             );
           }
         } else if (msg.type === 'REMOVE_PRESENTER') {
-          setPresenterIdentities((prev) => prev.filter((id) => id !== msg.identity));
+          setCopresenterIdentities((prev) => prev.filter((id) => id !== msg.identity));
         } else if (msg.type === 'SET_COHOST') {
           setCohostIdentities((prev) =>
             prev.includes(msg.identity) ? prev : [...prev, msg.identity],
@@ -728,7 +739,7 @@ function VideoConferenceComponent(props: {
         {
           type: 'HEARTBEAT',
           view: activeView,
-          presenters: presenterIdentities,
+          presenters: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
         },
@@ -737,7 +748,7 @@ function VideoConferenceComponent(props: {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [room, activeView, presenterIdentities, livedocInstanceId, sendMeetingMsg]);
+  }, [room, activeView, copresenterIdentities, livedocInstanceId, sendMeetingMsg]);
 
   // Draggable floating webcam panel state
   const floatingRef = React.useRef<HTMLDivElement>(null);
@@ -1182,18 +1193,19 @@ function VideoConferenceComponent(props: {
               <div className="chat-overlay-body">
                 <AttendeePanel
                   hostIdentity={hostIdentity}
-                  presenterIdentities={presenterIdentities}
+                  copresenterIdentities={copresenterIdentities}
                   cohostIdentities={cohostIdentities}
                   canManageRoles={isHost || isCohost}
                   localIdentity={room.localParticipant.identity}
-                  onAddPresenter={(identity) => {
-                    setPresenterIdentities((prev) =>
+                  autoPresenterIdentity={autoPresenterIdentity}
+                  onAddCopresenter={(identity) => {
+                    setCopresenterIdentities((prev) =>
                       prev.includes(identity) ? prev : [...prev, identity],
                     );
                     sendMeetingMsg({ type: 'SET_PRESENTER', identity });
                   }}
-                  onRemovePresenter={(identity) => {
-                    setPresenterIdentities((prev) => prev.filter((id) => id !== identity));
+                  onRemoveCopresenter={(identity) => {
+                    setCopresenterIdentities((prev) => prev.filter((id) => id !== identity));
                     sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
                   }}
                   onSetCohost={(identity) => {
@@ -1660,18 +1672,19 @@ function VideoConferenceComponent(props: {
             isToolbarMobile ? undefined : (
               <AttendeePanel
                 hostIdentity={hostIdentity}
-                presenterIdentities={presenterIdentities}
+                copresenterIdentities={copresenterIdentities}
                 cohostIdentities={cohostIdentities}
                 canManageRoles={isHost || isCohost}
                 localIdentity={room.localParticipant.identity}
-                onAddPresenter={(identity) => {
-                  setPresenterIdentities((prev) =>
+                autoPresenterIdentity={autoPresenterIdentity}
+                onAddCopresenter={(identity) => {
+                  setCopresenterIdentities((prev) =>
                     prev.includes(identity) ? prev : [...prev, identity],
                   );
                   sendMeetingMsg({ type: 'SET_PRESENTER', identity });
                 }}
-                onRemovePresenter={(identity) => {
-                  setPresenterIdentities((prev) => prev.filter((id) => id !== identity));
+                onRemoveCopresenter={(identity) => {
+                  setCopresenterIdentities((prev) => prev.filter((id) => id !== identity));
                   sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
                 }}
                 onSetCohost={(identity) => {

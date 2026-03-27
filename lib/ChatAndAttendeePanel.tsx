@@ -76,12 +76,13 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
 // ════════════════════════════════════
 interface AttendeePanelProps {
   hostIdentity: string | null;
-  presenterIdentities: string[];
+  copresenterIdentities: string[];
   cohostIdentities: string[];
   canManageRoles: boolean; // host OR co-host
   localIdentity: string;
-  onAddPresenter?: (identity: string) => void;
-  onRemovePresenter?: (identity: string) => void;
+  autoPresenterIdentity: string | null;
+  onAddCopresenter?: (identity: string) => void;
+  onRemoveCopresenter?: (identity: string) => void;
   onSetCohost?: (identity: string) => void;
   onRemoveCohost?: (identity: string) => void;
   onSetHost?: (identity: string) => void;
@@ -89,12 +90,13 @@ interface AttendeePanelProps {
 
 export function AttendeePanel({
   hostIdentity,
-  presenterIdentities,
+  copresenterIdentities,
   cohostIdentities,
   canManageRoles,
   localIdentity,
-  onAddPresenter,
-  onRemovePresenter,
+  autoPresenterIdentity,
+  onAddCopresenter,
+  onRemoveCopresenter,
   onSetCohost,
   onRemoveCohost,
   onSetHost,
@@ -118,7 +120,8 @@ export function AttendeePanel({
     const roles: { label: string; cls: string }[] = [];
     if (identity === hostIdentity) roles.push({ label: 'Host', cls: 'role-host' });
     if (cohostIdentities.includes(identity) && identity !== hostIdentity) roles.push({ label: 'Co-host', cls: 'role-cohost' });
-    if (presenterIdentities.includes(identity)) roles.push({ label: 'Presenter', cls: 'role-presenter' });
+    if (identity === autoPresenterIdentity) roles.push({ label: 'Presenter', cls: 'role-presenter' });
+    if (copresenterIdentities.includes(identity)) roles.push({ label: 'Co-Presenter', cls: 'role-copresenter' });
     if (roles.length === 0) roles.push({ label: 'Attendee', cls: 'role-attendee' });
     return roles;
   };
@@ -128,7 +131,8 @@ export function AttendeePanel({
     const roleOrder = (identity: string) => {
       if (identity === hostIdentity) return 0;
       if (cohostIdentities.includes(identity)) return 1;
-      if (presenterIdentities.includes(identity)) return 2;
+      if (identity === autoPresenterIdentity) return 2;
+      if (copresenterIdentities.includes(identity)) return 2;
       return 3;
     };
     const rA = roleOrder(a.identity);
@@ -191,7 +195,7 @@ export function AttendeePanel({
           const isLocalParticipant = p.identity === localIdentity;
           const isThisHost = p.identity === hostIdentity;
           const isThisCohost = cohostIdentities.includes(p.identity);
-          const isThisPresenter = presenterIdentities.includes(p.identity);
+          const isThisCopresenter = copresenterIdentities.includes(p.identity);
 
           return (
             <div key={p.identity} className="kloud-attendee-row">
@@ -214,9 +218,9 @@ export function AttendeePanel({
                 <div className="kloud-attendee-actions">
                   {isLocalParticipant && (
                     <button
-                      className={`kloud-role-icon-btn ${isThisPresenter ? 'checked' : ''}`}
-                      onClick={() => isThisPresenter ? onRemovePresenter?.(p.identity) : onAddPresenter?.(p.identity)}
-                      title={isThisPresenter ? 'Stop Presenting' : 'Present'}
+                      className={`kloud-role-icon-btn ${isThisCopresenter ? 'checked' : ''}`}
+                      onClick={() => isThisCopresenter ? onRemoveCopresenter?.(p.identity) : onAddCopresenter?.(p.identity)}
+                      title={isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
                         <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
@@ -224,7 +228,7 @@ export function AttendeePanel({
                         <line x1="12" y1="18" x2="12" y2="23" />
                         <line x1="8" y1="23" x2="16" y2="23" />
                       </svg>
-                      {isThisPresenter && (
+                      {isThisCopresenter && (
                         <span className="kloud-check-badge">
                           <svg viewBox="0 0 16 16" fill="none" width="10" height="10">
                             <circle cx="8" cy="8" r="8" fill="#22c55e" />
@@ -274,9 +278,9 @@ export function AttendeePanel({
               {canManageRoles && !isLocalParticipant && !isThisHost && (
                 <div className="kloud-attendee-actions">
                   <button
-                    className={`kloud-role-icon-btn ${isThisPresenter ? 'checked' : ''}`}
-                    onClick={() => isThisPresenter ? onRemovePresenter?.(p.identity) : onAddPresenter?.(p.identity)}
-                    title={isThisPresenter ? 'Remove Presenter' : 'Make Presenter'}
+                    className={`kloud-role-icon-btn ${isThisCopresenter ? 'checked' : ''}`}
+                    onClick={() => isThisCopresenter ? onRemoveCopresenter?.(p.identity) : onAddCopresenter?.(p.identity)}
+                    title={isThisCopresenter ? 'Remove Co-Presenter' : 'Make Co-Presenter'}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
                       <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
@@ -284,7 +288,7 @@ export function AttendeePanel({
                       <line x1="12" y1="18" x2="12" y2="23" />
                       <line x1="8" y1="23" x2="16" y2="23" />
                     </svg>
-                    {isThisPresenter && (
+                    {isThisCopresenter && (
                       <span className="kloud-check-badge">
                         <svg viewBox="0 0 16 16" fill="none" width="10" height="10">
                           <circle cx="8" cy="8" r="8" fill="#22c55e" />
@@ -619,6 +623,10 @@ export const chatAndAttendeeStyles = `
   .role-presenter {
     color: #34d399;
     background: rgba(52, 211, 153, 0.15);
+  }
+  .role-copresenter {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.15);
   }
   .role-attendee {
     color: rgba(255,255,255,0.4);
