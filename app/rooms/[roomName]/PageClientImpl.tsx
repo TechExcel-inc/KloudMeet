@@ -208,6 +208,13 @@ function VideoConferenceComponent(props: {
   const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
   const hasScreenShare = screenShareTracks.length > 0;
 
+  // 手机端观看他人共享时默认折叠头像栏，优先看到共享画面
+  React.useEffect(() => {
+    if (isToolbarMobile && hasScreenShare && !screenShareActive) {
+      setIsWebcamSidebarCollapsed(true);
+    }
+  }, [isToolbarMobile, hasScreenShare, screenShareActive]);
+
   // React to screen share status logic automatically
   React.useEffect(() => {
     if (hasScreenShare) {
@@ -940,27 +947,52 @@ function VideoConferenceComponent(props: {
                   e.stopPropagation();
                   setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
                 }}
-                style={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: isWebcamSidebarCollapsed ? 0 : 160,
-                  right: 'auto',
-                  transform: 'translateY(-50%)',
-                  zIndex: 2000,
-                  background: 'rgba(30, 41, 59, 0.95)',
-                  color: 'rgba(255,255,255,0.8)',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderLeft: 'none',
-                  borderRadius: '0 8px 8px 0',
-                  width: '28px',
-                  height: '64px',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
-                }}
+                style={
+                  isToolbarMobile
+                    ? {
+                        position: 'fixed',
+                        top: 'max(44px, env(safe-area-inset-top, 0px), 7vh)',
+                        left: 'max(10px, env(safe-area-inset-left, 0px))',
+                        right: 'auto',
+                        transform: 'none',
+                        zIndex: 15000,
+                        background: 'rgba(30, 41, 59, 0.96)',
+                        color: 'rgba(255,255,255,0.86)',
+                        border: '1px solid rgba(255,255,255,0.14)',
+                        borderRadius: '10px',
+                        width: '36px',
+                        height: '50px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+                        WebkitTapHighlightColor: 'transparent',
+                        touchAction: 'manipulation',
+                      }
+                    : {
+                        position: 'absolute',
+                        top: '50%',
+                        left: isWebcamSidebarCollapsed ? 0 : 160,
+                        right: 'auto',
+                        transform: 'translateY(-50%)',
+                        zIndex: 2000,
+                        background: 'rgba(30, 41, 59, 0.95)',
+                        color: 'rgba(255,255,255,0.8)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderLeft: 'none',
+                        borderRadius: '0 8px 8px 0',
+                        width: '28px',
+                        height: '64px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
+                      }
+                }
                 title={isWebcamSidebarCollapsed ? 'Expand Webcams' : 'Collapse Webcams'}
               >
                 <svg

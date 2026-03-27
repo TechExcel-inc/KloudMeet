@@ -122,6 +122,8 @@ export function KloudMeetToolbar({
   };
 
   const isMobile = useToolbarIsMobile();
+  const lastMouseYRef = useRef<number>(window.innerHeight);
+  const bottomAreaPriorityUntilRef = useRef<number>(0);
 
   type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee';
   const desktopAnchorBubbleKind: DesktopAnchorKind | null =
@@ -137,22 +139,91 @@ export function KloudMeetToolbar({
               : null
       : null;
 
+  const applyMouseVisibility = (clientY: number) => {
+    if (isMobile) {
+      setVisible(true); // Always visible on mobile
+      return;
+    }
+    if (activeSheetRef.current || chatOpen || attendeeOpen) {
+      setVisible(true);
+      return;
+    }
+    const threshold = window.innerHeight - 90;
+    setVisible(clientY >= threshold);
+  };
+
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (isMobile) {
-        setVisible(true); // Always visible on mobile
-        return;
-      }
-      if (activeSheetRef.current || chatOpen || attendeeOpen) {
-        setVisible(true);
-        return;
-      }
-      const threshold = window.innerHeight - 90;
-      setVisible(e.clientY >= threshold);
+      lastMouseYRef.current = e.clientY;
+      applyMouseVisibility(e.clientY);
     };
-
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, [isMobile, chatOpen, attendeeOpen]);
+
+  // 接收 iframe postMessage：mousemove 事件沿用同一套显示/隐藏逻辑
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const payload = event.data;
+      const msgType =
+        typeof payload === 'object' && payload !== null && 'type' in payload
+          ? String((payload as { type?: unknown }).type ?? '')
+          : '';
+      if (msgType === 'mousemove') {
+        const now = Date.now();
+        if (now < bottomAreaPriorityUntilRef.current) {
+          // 底部热区刚触发过时，忽略主区 mousemove 的短时抖动覆盖
+          return;
+        }
+        const data =
+          typeof payload === 'object' && payload !== null && 'data' in payload
+            ? (payload as { data?: unknown }).data
+            : null;
+        const yFromData =
+          typeof data === 'object' && data !== null && 'clientY' in data
+            ? Number((data as { clientY?: unknown }).clientY)
+            : typeof data === 'object' && data !== null && 'y' in data
+              ? Number((data as { y?: unknown }).y)
+              : NaN;
+
+        if (Number.isFinite(yFromData)) {
+          lastMouseYRef.current = yFromData;
+          applyMouseVisibility(yFromData);
+        } else {
+          // data 为空时，按“主区域移动”处理（等价于靠上区域）
+          applyMouseVisibility(0);
+        }
+        return;
+      }
+
+      // 来自 iframe 底部热区：等价鼠标在底部，显示 toolbar
+      if (msgType === 'Kloud-onBottomAreaMouseMove') {
+        bottomAreaPriorityUntilRef.current = Date.now() + 220;
+        lastMouseYRef.current = window.innerHeight;
+        applyMouseVisibility(window.innerHeight);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [isMobile, chatOpen, attendeeOpen]);
+
+  // 鼠标离开窗口/页面失焦时，桌面端按“上方区域”处理，避免 toolbar 悬停不消失
+  useEffect(() => {
+    const hideByLeave = () => {
+      if (!isMobile && !activeSheetRef.current && !chatOpen && !attendeeOpen) {
+        setVisible(false);
+      }
+    };
+    const handleMouseOut = (e: MouseEvent) => {
+      if (!(e as MouseEvent).relatedTarget) hideByLeave();
+    };
+    window.addEventListener('mouseout', handleMouseOut);
+    window.addEventListener('blur', hideByLeave);
+    return () => {
+      window.removeEventListener('mouseout', handleMouseOut);
+      window.removeEventListener('blur', hideByLeave);
+    };
   }, [isMobile, chatOpen, attendeeOpen]);
 
   useLayoutEffect(() => {
