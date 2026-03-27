@@ -72,6 +72,10 @@ export function PageClientImpl(props: {
   const [meetingInfo, setMeetingInfo] = React.useState<any>(null);
   const [currentUser, setCurrentUser] = React.useState<any>(null);
   const [isSameTabRefresh, setIsSameTabRefresh] = React.useState(false);
+  const [elapsedTime, setElapsedTime] = React.useState('');
+  const [showAvatarMenu, setShowAvatarMenu] = React.useState(false);
+  const [showLangMenu, setShowLangMenu] = React.useState(false);
+  const [activeLang, setActiveLang] = React.useState('EN');
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -93,6 +97,25 @@ export function PageClientImpl(props: {
       .catch(console.error);
   }, [props.roomName]);
 
+  React.useEffect(() => {
+    if (!meetingInfo?.startedAt) return;
+    const tick = () => {
+      const start = new Date(meetingInfo.startedAt).getTime();
+      const diffMs = Date.now() - start;
+      if (diffMs < 0) {
+        setElapsedTime('00:00');
+        return;
+      }
+      const totalSec = Math.floor(diffMs / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      setElapsedTime(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+    };
+    tick();
+    const intv = setInterval(tick, 1000);
+    return () => clearInterval(intv);
+  }, [meetingInfo?.startedAt]);
+
   const isHost = React.useMemo(() => {
     return meetingInfo?.createdByMemberId && currentUser?.id === meetingInfo.createdByMemberId;
   }, [meetingInfo, currentUser]);
@@ -111,9 +134,9 @@ export function PageClientImpl(props: {
     if (isSameTabRefresh) return 'Please re-configure your devices to enter.';
     if (isHost && !isActive) return 'Please configure your device settings before the meeting begins.';
     if (isHost && isActive) return 'You are already hosting this meeting in another session. Do you want to rejoin?';
-    if (meetingInfo?.startedAt) return `Meeting started at ${new Date(meetingInfo.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    if (meetingInfo?.startedAt) return `Meeting in progress for ${elapsedTime || '00:00'}`;
     return 'Please configure your device settings before the meeting begins.';
-  }, [isSameTabRefresh, isHost, isActive, meetingInfo]);
+  }, [isSameTabRefresh, isHost, isActive, meetingInfo, elapsedTime]);
 
   const preJoinButtonText = React.useMemo(() => {
     if (isSameTabRefresh) return 'Rejoin';
@@ -193,16 +216,282 @@ export function PageClientImpl(props: {
             .kloud-prejoin-wrapper .lk-button-group > div:hover {
               background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
             }
+
+            /* Toolbar CSS - EAD-PFM Aesthetic */
+            .kloud-prejoin-toolbar {
+              position: absolute;
+              top: 0;
+              left: 0;
+              width: 100%;
+              height: 72px;
+              padding: 0 2rem;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              z-index: 50;
+            }
+            .kloud-prejoin-logo-toolbar {
+              display: flex;
+              align-items: center;
+              gap: 0.6rem;
+              text-decoration: none;
+              color: #1e1e2e;
+              font-weight: 700;
+              font-size: 1.25rem;
+              font-family: 'Inter', sans-serif;
+            }
+            .kloud-prejoin-logo-icon-toolbar {
+              width: 32px;
+              height: 32px;
+              border-radius: 9px;
+              background: linear-gradient(135deg, #7c3aed, #5b21b6);
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+            }
+            .ead-toolbar-right {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+            }
+            .ead-btn {
+              height: 38px;
+              background: #fff;
+              border: 1px solid #d1d5db;
+              color: #4b5563;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              transition: all 0.15s ease;
+              outline: none;
+              font-family: 'Inter', sans-serif;
+              box-sizing: border-box;
+            }
+            .ead-btn:hover {
+              background: #f9fafb;
+              border-color: #9ca3af;
+              color: #111827;
+            }
+            .ead-icon-btn, .ead-avatar-btn {
+              width: 38px;
+              border-radius: 50%;
+              padding: 0;
+            }
+            .ead-pill-btn {
+              padding: 0 12px;
+              border-radius: 19px;
+              gap: 6px;
+              font-size: 0.85rem;
+              font-weight: 600;
+            }
+            .ead-btn-active {
+              background: #8b5cf6 !important;
+              color: #fff !important;
+              border-color: #f59e0b !important;
+              box-shadow: 0 0 0 1px #f59e0b !important;
+            }
+            .ead-avatar-fallback {
+              width: 100%;
+              height: 100%;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              overflow: hidden;
+            }
+            .ead-avatar-fallback svg {
+              width: 18px;
+              height: 18px;
+            }
+            .ead-avatar-btn img {
+              width: 100%;
+              height: 100%;
+              border-radius: 50%;
+              object-fit: cover;
+            }
+            .ead-dropdown-container {
+              position: relative;
+            }
+            .ead-dropdown-menu {
+              position: absolute;
+              top: calc(100% + 8px);
+              right: 0;
+              background: #252834;
+              border-radius: 8px;
+              box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+              width: 220px;
+              display: flex;
+              flex-direction: column;
+              border: 1px solid #374151;
+              animation: eadFade 0.15s ease;
+              z-index: 100;
+              overflow: hidden;
+            }
+            @keyframes eadFade {
+              from { opacity: 0; transform: translateY(-8px); }
+              to { opacity: 1; transform: translateY(0); }
+            }
+            .ead-menu-header {
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              padding: 12px 16px;
+              font-size: 0.72rem;
+              font-weight: 700;
+              letter-spacing: 0.08em;
+              color: #9ca3af;
+              text-transform: uppercase;
+              border-bottom: 1px solid #374151;
+              font-family: 'Inter', sans-serif;
+            }
+            .ead-menu-item {
+              background: transparent;
+              border: none;
+              text-align: left;
+              padding: 10px 16px;
+              font-size: 0.9rem;
+              font-weight: 500;
+              color: #d1d5db;
+              cursor: pointer;
+              transition: all 0.1s;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              font-family: 'Inter', sans-serif;
+            }
+            .ead-menu-item:hover {
+              background: #374151;
+              color: #fff;
+            }
+            .ead-menu-item-active {
+              background: #8b5cf6 !important;
+              color: #fff !important;
+            }
+            .ead-menu-code {
+              margin-left: auto;
+              font-size: 0.8rem;
+              color: #9ca3af;
+              display: flex;
+              align-items: center;
+            }
+            .ead-menu-item-active .ead-menu-code {
+              color: #ddd6fe;
+            }
           `}</style>
-          <div className="kloud-prejoin-header">
-            <Link href="/" className="kloud-prejoin-logo">
-              <span className="kloud-prejoin-logo-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" width="18" height="18">
-                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+          
+          <header className="kloud-prejoin-toolbar">
+            <div className="kloud-prejoin-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <Link href="/" className="ead-btn ead-icon-btn" title="Go Back" style={{ textDecoration: 'none' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                  <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-              </span>
-              Kloud Meet
-            </Link>
+              </Link>
+              <Link href="/" className="kloud-prejoin-logo-toolbar">
+                <span className="kloud-prejoin-logo-icon-toolbar">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" width="18" height="18">
+                    <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+                Kloud Meet
+              </Link>
+            </div>
+            
+            <div className="ead-toolbar-right">
+              {/* Help Button */}
+              <button className="ead-btn ead-icon-btn" title="Help" onClick={() => { setShowLangMenu(false); setShowAvatarMenu(false); }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </button>
+              
+              {/* Language Pill Button */}
+              <div className="ead-dropdown-container">
+                <button 
+                  className={`ead-btn ead-pill-btn ${showLangMenu ? 'ead-btn-active' : ''}`}
+                  onClick={() => { setShowLangMenu(!showLangMenu); setShowAvatarMenu(false); }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
+                    <circle cx="12" cy="12" r="10"/>
+                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                  </svg>
+                  <span>{activeLang}</span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {showLangMenu && (
+                  <div className="ead-dropdown-menu">
+                    <div className="ead-menu-header">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                      </svg>
+                      SELECT LANGUAGE
+                    </div>
+                    {[{code: 'EN', label: 'English'}, {code: 'ZH', label: '中文'}, {code: 'JA', label: '日本語'}, {code: 'KO', label: '한국어'}].map(lang => (
+                      <button 
+                        key={lang.code}
+                        className={`ead-menu-item ${activeLang === lang.code ? 'ead-menu-item-active' : ''}`}
+                        onClick={() => { setActiveLang(lang.code); setShowLangMenu(false); }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        </svg>
+                        {lang.label}
+                        <span className="ead-menu-code">
+                          {lang.code} 
+                          {activeLang === lang.code && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{marginLeft:'6px'}}><path d="M20 6L9 17l-5-5"/></svg>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              {/* Avatar Button */}
+              <div className="ead-dropdown-container">
+                <button 
+                  className={`ead-btn ead-avatar-btn ${showAvatarMenu ? 'ead-btn-active' : ''}`}
+                  onClick={() => { setShowAvatarMenu(!showAvatarMenu); setShowLangMenu(false); }}
+                >
+                  {currentUser?.avatarUrl ? (
+                    <img src={currentUser.avatarUrl} alt="Avatar" />
+                  ) : (
+                    <div className="ead-avatar-fallback">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                        <circle cx="12" cy="7" r="4" />
+                      </svg>
+                    </div>
+                  )}
+                </button>
+                {showAvatarMenu && (
+                  <div className="ead-dropdown-menu">
+                    <button onClick={() => alert('Profile coming soon')} className="ead-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      Profile
+                    </button>
+                    <button onClick={() => alert('System Settings coming soon')} className="ead-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                      System Settings
+                    </button>
+                    <button onClick={() => alert('AI Digital Human Setup coming soon')} className="ead-menu-item">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                      AI Digital Human Setup
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          <div className="kloud-prejoin-header">
             <h2 className="kloud-prejoin-title">{preJoinTitle}</h2>
             <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
