@@ -48,6 +48,8 @@ interface KloudMeetToolbarProps {
   attendeePanelSlot?: React.ReactNode;
   /** Only host/co-host can end meeting for everyone */
   canEndForAll?: boolean;
+  isRecording?: boolean;
+  onOpenRecordPopup?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -76,12 +78,15 @@ export function KloudMeetToolbar({
   chatPanelSlot,
   attendeePanelSlot,
   canEndForAll,
+  isRecording,
+  onOpenRecordPopup,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const recordMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const exitMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const chatMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const attendeeMenuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -98,7 +103,7 @@ export function KloudMeetToolbar({
   };
   const [desktopBubblePos, setDesktopBubblePos] = useState<BubblePos | null>(null);
 
-  type ActionSheetType = 'views' | 'more' | 'exit' | null;
+  type ActionSheetType = 'views' | 'more' | 'exit' | 'recording' | null;
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
   const activeSheetRef = useRef<ActionSheetType>(null);
   activeSheetRef.current = activeSheet;
@@ -125,18 +130,20 @@ export function KloudMeetToolbar({
   const lastMouseYRef = useRef<number>(window.innerHeight);
   const bottomAreaPriorityUntilRef = useRef<number>(0);
 
-  type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee';
+  type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee' | 'recording';
   const desktopAnchorBubbleKind: DesktopAnchorKind | null =
     !isMobile
-      ? activeSheet === 'more'
-        ? 'more'
-        : activeSheet === 'exit'
-          ? 'exit'
-          : chatOpen && chatPanelSlot
-            ? 'chat'
-            : attendeeOpen && attendeePanelSlot
-              ? 'attendee'
-              : null
+      ? activeSheet === 'recording'
+        ? 'recording'
+        : activeSheet === 'more'
+          ? 'more'
+          : activeSheet === 'exit'
+            ? 'exit'
+            : chatOpen && chatPanelSlot
+              ? 'chat'
+              : attendeeOpen && attendeePanelSlot
+                ? 'attendee'
+                : null
       : null;
 
   const applyMouseVisibility = (clientY: number, forceVisible?: boolean) => {
@@ -243,13 +250,15 @@ export function KloudMeetToolbar({
       return;
     }
     const anchorEl =
-      desktopAnchorBubbleKind === 'more'
-        ? moreMenuBtnRef.current
-        : desktopAnchorBubbleKind === 'exit'
-          ? exitMenuBtnRef.current
-          : desktopAnchorBubbleKind === 'chat'
-            ? chatMenuBtnRef.current
-            : attendeeMenuBtnRef.current;
+      desktopAnchorBubbleKind === 'recording'
+        ? recordMenuBtnRef.current
+        : desktopAnchorBubbleKind === 'more'
+          ? moreMenuBtnRef.current
+          : desktopAnchorBubbleKind === 'exit'
+            ? exitMenuBtnRef.current
+            : desktopAnchorBubbleKind === 'chat'
+              ? chatMenuBtnRef.current
+              : attendeeMenuBtnRef.current;
     if (!anchorEl) {
       setDesktopBubblePos(null);
       return;
@@ -293,13 +302,15 @@ export function KloudMeetToolbar({
   useEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) return;
     const anchorEl =
-      desktopAnchorBubbleKind === 'more'
-        ? moreMenuBtnRef.current
-        : desktopAnchorBubbleKind === 'exit'
-          ? exitMenuBtnRef.current
-          : desktopAnchorBubbleKind === 'chat'
-            ? chatMenuBtnRef.current
-            : attendeeMenuBtnRef.current;
+      desktopAnchorBubbleKind === 'recording'
+        ? recordMenuBtnRef.current
+        : desktopAnchorBubbleKind === 'more'
+          ? moreMenuBtnRef.current
+          : desktopAnchorBubbleKind === 'exit'
+            ? exitMenuBtnRef.current
+            : desktopAnchorBubbleKind === 'chat'
+              ? chatMenuBtnRef.current
+              : attendeeMenuBtnRef.current;
     const isPanel = desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee';
     const width = isPanel
       ? Math.min(400, Math.max(300, window.innerWidth - 24))
@@ -457,6 +468,18 @@ export function KloudMeetToolbar({
               </svg>
               <span>More</span>
             </button>
+            {isRecording && (
+              <button 
+                className={`${styles.mobileBtn} ${styles.active}`}
+                onClick={() => openSheet('recording')}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" />
+                  <circle cx="12" cy="12" r="10" />
+                </svg>
+                <span style={{ color: '#ef4444' }}>Recording</span>
+              </button>
+            )}
           </>
         ) : (
           <>
@@ -612,6 +635,16 @@ export function KloudMeetToolbar({
             </svg>
             More
           </button>
+
+          {isRecording && (
+            <button ref={recordMenuBtnRef} type="button" className={`${styles.tabBtn} ${activeSheet === 'recording' ? styles.tabBtnActive : ''}`} style={{ color: '#ef4444' }} onClick={() => openSheet('recording')}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" />
+                <circle cx="12" cy="12" r="10" />
+              </svg>
+              Recording
+            </button>
+          )}
         </div>
 
         <div className={styles.rightControls}>
@@ -633,7 +666,7 @@ export function KloudMeetToolbar({
           <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
             <div className={styles.actionSheetHeader}>
               <span className={styles.actionSheetTitle}>
-                {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
+                {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'recording' ? 'Recording Controls' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
               </span>
               <button type="button" className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
             </div>
@@ -653,6 +686,8 @@ export function KloudMeetToolbar({
                 onExit={onExit}
                 isDesktop={isDesktop}
                 canEndForAll={canEndForAll}
+                isRecording={isRecording}
+                onOpenRecordPopup={onOpenRecordPopup}
               />
             </div>
           </div>
@@ -681,6 +716,8 @@ export function KloudMeetToolbar({
               onExit={onExit}
               isDesktop={isDesktop}
               canEndForAll={canEndForAll}
+              isRecording={isRecording}
+              onOpenRecordPopup={onOpenRecordPopup}
             />
           </div>
         </div>
@@ -695,7 +732,7 @@ export function KloudMeetToolbar({
                   role="presentation"
                   className={styles.toolbarBubbleDismiss}
                   onMouseDown={() => {
-                    if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit') {
+                    if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
                       setActiveSheet(null);
                     } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
                       onToggleChat();
@@ -729,17 +766,19 @@ export function KloudMeetToolbar({
                     <span className={styles.toolbarBubbleTitle}>
                       {desktopAnchorBubbleKind === 'exit'
                         ? 'Leave Meeting?'
-                        : desktopAnchorBubbleKind === 'chat'
-                          ? 'Chats'
-                          : desktopAnchorBubbleKind === 'attendee'
-                            ? 'Participants'
-                            : 'More Options'}
+                        : desktopAnchorBubbleKind === 'recording'
+                          ? 'Recording Controls'
+                          : desktopAnchorBubbleKind === 'chat'
+                            ? 'Chats'
+                            : desktopAnchorBubbleKind === 'attendee'
+                              ? 'Participants'
+                              : 'More Options'}
                     </span>
                     <button
                       type="button"
                       className={styles.toolbarBubbleClose}
                       onClick={() => {
-                        if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit') {
+                        if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
                           setActiveSheet(null);
                         } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
                           onToggleChat();
@@ -772,6 +811,8 @@ export function KloudMeetToolbar({
                         onExit={onExit}
                         isDesktop={isDesktop}
                         canEndForAll={canEndForAll}
+                        isRecording={isRecording}
+                        onOpenRecordPopup={onOpenRecordPopup}
                       />
                     </div>
                   )}
@@ -800,6 +841,8 @@ function ActiveSheetContent({
   onExit,
   isDesktop,
   canEndForAll,
+  isRecording,
+  onOpenRecordPopup,
 }: any) {
   const showComingSoon = (feature: string) => {
     setToastMsg(`${feature} coming soon!`);
@@ -828,6 +871,12 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
+          {!isRecording && (
+            <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
+               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
+               {isRecording ? 'Stop Recording' : 'Record'}
+            </button>
+          )}
           <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             People & Attendees
@@ -855,6 +904,50 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
             App & Device Settings
           </button>
+        </>
+      )}
+
+      {activeSheet === 'recording' && (
+        <>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Pause Recording'); setActiveSheet(null); }}>
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+             Pause Recording
+          </button>
+          <button className={styles.actionSheetItem} style={{ color: '#ef4444' }} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+             Stop Recording
+          </button>
+
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
+          
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Live Transcription'); setActiveSheet(null); }}>
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
+             Live Transcript (Speech to Text)
+          </button>
+
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Cloud Recording Settings</div>
+          
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Cloud Recording Mode'); setActiveSheet(null); }}>
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+             Cloud Recording Mode
+          </button>
+
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
+                Sync Transcript with Video
+             </div>
+             <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+          </label>
+
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Local Permissions</div>
+          
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                Only Host Can Record
+             </div>
+             <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+          </label>
         </>
       )}
 

@@ -176,6 +176,8 @@ model Meeting {
   createdByMemberId Int
   startedAt         DateTime  @default(now())
   endedAt           DateTime?
+  scheduledFor      DateTime?
+  timezone          String?
   maxParticipants   Int       @default(0)
   status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
   createdAt         DateTime  @default(now())

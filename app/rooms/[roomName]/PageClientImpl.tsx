@@ -6,7 +6,7 @@ import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
-import { KloudMeetToolbar, ViewMode } from '@/lib/KloudMeetToolbar';
+import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { LiveDocView } from '@/lib/LiveDocView';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
@@ -550,6 +550,13 @@ function VideoConferenceComponent(props: {
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
 
+  const searchParams = useSearchParams();
+  const isActionStart = searchParams?.get('action') === 'start';
+  const [showMeetingReadyModal, setShowMeetingReadyModal] = React.useState(false);
+  const [isRecording, setIsRecording] = React.useState(false);
+  const [showRecordPopup, setShowRecordPopup] = React.useState(false);
+  const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
+
   React.useEffect(() => {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
       try {
@@ -711,6 +718,10 @@ function VideoConferenceComponent(props: {
           connectOptions,
         )
         .then(() => {
+          if (isActionStart) {
+            const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
+            if (!wasRefresh) setShowMeetingReadyModal(true);
+          }
           // Auto-copy the meeting link to clipboard when joining to make it easy to invite others,
           // especially if the app goes to the background during screen sharing.
           if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -2041,6 +2052,8 @@ function VideoConferenceComponent(props: {
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
           canEndForAll={isHost || isCohost}
+          isRecording={isRecording}
+          onOpenRecordPopup={() => setShowRecordPopup(true)}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
@@ -2104,6 +2117,109 @@ function VideoConferenceComponent(props: {
           }
         />
 
+        {/* --- MODALS --- */}
+        {showMeetingReadyModal && (
+          <div className="kloud-modal-overlay" onMouseDown={() => setShowMeetingReadyModal(false)}>
+            <div className="kloud-modal" onMouseDown={e => e.stopPropagation()}>
+              <div className="kloud-modal-header">
+                <h3>Your meeting's ready</h3>
+                <button className="kloud-modal-close" onClick={() => setShowMeetingReadyModal(false)}>✕</button>
+              </div>
+              <div className="kloud-modal-body">
+                <button className="kloud-btn-primary" onClick={() => {
+                  navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M16 21v-2a4 4 0 00-4-4H5c-1.2 0-2-.8-2-2v-2c0-1.2.8-2 2-2h4a4 4 0 014 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" /></svg>
+                  Add others
+                </button>
+                <div style={{ margin: '16px 0', fontSize: '13px', color: '#4b5563' }}>
+                  Or share this meeting link with others you want in the meeting
+                </div>
+                <div className="kloud-meeting-link-box">
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {typeof window !== 'undefined' ? window.location.href.split('?')[0] : ''}
+                  </span>
+                  <button onClick={() => {
+                    navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
+                  }} title="Copy link">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" /></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showRecordPopup && (
+          <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordPopup(false)}>
+            <div className="kloud-modal kloud-modal-side" onMouseDown={e => e.stopPropagation()}>
+              <div className="kloud-modal-header">
+                <h3>Recording</h3>
+                <button className="kloud-modal-close" onClick={() => setShowRecordPopup(false)}>✕</button>
+              </div>
+              <div className="kloud-modal-body" style={{ textAlign: 'center' }}>
+                <div style={{ background: '#f3f4f6', borderRadius: '8px', padding: '24px', marginBottom: '24px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#6d28d9" strokeWidth="1.5" width="64" height="64"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill="#ef4444" stroke="none" /></svg>
+                  <div style={{ marginTop: '16px', fontWeight: 600, color: '#111827' }}>Record your video call</div>
+                  <p style={{ fontSize: '13px', color: '#4b5563', marginTop: '8px' }}>
+                    The recording will be saved in your KloudMeet dashboard. When appropriate, a link will be available for you to download and share.
+                  </p>
+                </div>
+                <button className="kloud-btn-primary" style={{ width: '100%' }} onClick={() => {
+                  setShowRecordPopup(false);
+                  setShowRecordingConsent(true);
+                }}>
+                  Start recording
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {showRecordingConsent && (
+          <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordingConsent(false)}>
+            <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
+              <div className="kloud-modal-body">
+                <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827' }}>Make sure everyone is ready</h3>
+                <p style={{ fontSize: '14px', color: '#4b5563', lineHeight: 1.5, margin: '0 0 24px' }}>
+                  Recording a meeting without the consent of all participants may be illegal and actionable. You should obtain consent to record this meeting from all participants, including external guests and guests who join late.
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+                  <button className="kloud-btn-text" onClick={() => setShowRecordingConsent(false)}>Cancel</button>
+                  <button className="kloud-btn-text" style={{ color: '#2563eb', fontWeight: 600 }} onClick={() => {
+                    setIsRecording(true);
+                    setShowRecordingConsent(false);
+                    // trigger API later
+                  }}>Start</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          .kloud-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+          }
+          .kloud-modal {
+            background: #fff; border-radius: 8px; width: 400px; max-width: 90vw; color: #111827; font-family: 'Inter', sans-serif; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          }
+          .kloud-modal-center { padding: 24px; }
+          .kloud-modal-side { position: absolute; right: 24px; top: 24px; bottom: 24px; height: auto; border-radius: 12px; display: flex; flex-direction: column; width: 360px; }
+          .kloud-modal-header { padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f3f4f6; }
+          .kloud-modal-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: #111827; }
+          .kloud-modal-close { background: none; border: none; font-size: 16px; cursor: pointer; color: #6b7280; padding: 4px; border-radius: 4px; }
+          .kloud-modal-close:hover { background: #f3f4f6; color: #111827; }
+          .kloud-modal-body { padding: 24px; flex: 1; overflow-y: auto; }
+          .kloud-btn-primary { background: #0b57d0; color: #fff; border: none; padding: 10px 24px; border-radius: 100px; font-weight: 600; font-size: 14px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+          .kloud-btn-primary:hover { background: #0842a0; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+          .kloud-meeting-link-box { background: #f3f4f6; border-radius: 4px; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; color: #111827; }
+          .kloud-meeting-link-box button { background: none; border: none; cursor: pointer; color: #4b5563; padding: 4px; border-radius: 4px; display: flex; align-items: center; }
+          .kloud-meeting-link-box button:hover { background: #e5e7eb; color: #111827; }
+          .kloud-btn-text { background: none; border: none; font-size: 14px; font-weight: 500; color: #4b5563; cursor: pointer; padding: 8px 16px; border-radius: 4px; }
+          .kloud-btn-text:hover { background: #f3f4f6; }
+        `}</style>
+        
         <DebugMode />
         <RecordingIndicator />
       </RoomContext.Provider>

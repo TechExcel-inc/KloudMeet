@@ -79,8 +79,28 @@ function AnonymousView({
   const [code, setCode] = useState('');
 
   const handleJoin = () => {
-    const roomId = code.trim() || generateRoomId();
-    router.push(`/rooms/${roomId}`);
+    const raw = code.trim();
+    if (!raw) {
+      router.push(`/rooms/${generateRoomId()}`);
+      return;
+    }
+
+    // Parse input for any 9-character room ID matching xxxx-xxxx pattern
+    const match = raw.match(/[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}/);
+    if (!match) {
+      toast.show('Please enter a valid 9-character meeting code');
+      return;
+    }
+    
+    const roomId = match[0].toLowerCase();
+    
+    // Preserve query string if they pasted a full URL with ?action=...
+    let query = '';
+    if (raw.includes('?')) {
+      query = raw.substring(raw.indexOf('?'));
+    }
+
+    router.push(`/rooms/${roomId}${query}`);
   };
 
   return (
@@ -646,6 +666,29 @@ function DashboardView({
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [activeTab, setActiveTab] = useState<'scheduled' | 'recent'>('scheduled');
+  
+  const [isJoining, setIsJoining] = useState(false);
+  const [scheduledModalData, setScheduledModalData] = useState<any>(null);
+  const [countdown, setCountdown] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!scheduledModalData?.scheduledFor) return;
+    const tick = () => {
+      const target = new Date(scheduledModalData.scheduledFor).getTime();
+      const diffMs = target - Date.now();
+      if (diffMs <= 0) {
+        setCountdown("00:00");
+        return;
+      }
+      const totalSec = Math.floor(diffMs / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      setCountdown(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+    };
+    tick();
+    const intv = setInterval(tick, 1000);
+    return () => clearInterval(intv);
+  }, [scheduledModalData]);
 
   const handleNewMeeting = async () => {
     const roomId = generateRoomId();
@@ -663,9 +706,50 @@ function DashboardView({
     router.push(`/rooms/${roomId}?action=start`);
   };
 
-  const handleJoinMeeting = () => {
-    if (!joinCode.trim()) return;
-    router.push(`/rooms/${joinCode.trim()}?action=join`);
+  const handleJoinMeeting = async () => {
+    if (!joinCode.trim() || isJoining) return;
+    
+    // Parse input for any 9-character room ID matching xxxx-xxxx pattern
+    const match = joinCode.trim().match(/[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}/);
+    if (!match) {
+      toast.show('Please enter a valid 9-character meeting code');
+      return;
+    }
+    const roomId = match[0].toLowerCase();
+    setIsJoining(true);
+
+    try {
+      const res = await fetch(`/api/meetings/${roomId}`);
+      if (!res.ok) {
+        router.push(`/rooms/${roomId}?action=join`);
+        setIsJoining(false);
+        return;
+      }
+      
+      const data = await res.json();
+      
+      // If active, route immediately
+      if (data.isActive) {
+        router.push(`/rooms/${roomId}?action=join`);
+        return;
+      }
+
+      // If scheduled in the future, show modal
+      if (data.scheduledFor) {
+        const diffMs = new Date(data.scheduledFor).getTime() - Date.now();
+        if (diffMs > 0) {
+          setScheduledModalData(data);
+          setIsJoining(false);
+          return;
+        }
+      }
+      
+      // Default fallback
+      router.push(`/rooms/${roomId}?action=join`);
+    } catch(e) {
+      console.error(e);
+      router.push(`/rooms/${roomId}?action=join`);
+    }
   };
 
   const today = new Date();
@@ -761,6 +845,53 @@ function DashboardView({
           <div className={styles.recentCardTime}>{m.end}</div>
         </div>
       ))}
+
+      {scheduledModalData && (
+        <div className={styles.dashModalOverlay}>
+          <div className={styles.dashModalContent}>
+            <h3>Scheduled Meeting</h3>
+            <p style={{ marginTop: '1rem', color: '#4b5563', lineHeight: '1.5' }}>
+              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
+            </p>
+            {(() => {
+              const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
+              return diffMs > 60 * 60 * 1000 ? (
+                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <p style={{ color: '#64748b' }}>Scheduled for: <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
+                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>This meeting is more than an hour away. Please check back closer to the start time.</p>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
+                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
+                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#7c3aed', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                </div>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+              <button 
+                onClick={() => setScheduledModalData(null)} 
+                className={styles.dashSignOut} 
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
+              >
+                Close
+              </button>
+              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
+                <button 
+                  onClick={() => {
+                    setScheduledModalData(null);
+                    router.push(`/rooms/${scheduledModalData.roomName}?action=join`);
+                  }} 
+                  className={styles.dashJoinBtn} 
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
+                  disabled={new Date(scheduledModalData.scheduledFor).getTime() - Date.now() > 0}
+                >
+                  Join Anyway
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
