@@ -9,6 +9,7 @@ const nextConfig = {
   images: {
     formats: ['image/webp'],
   },
+  serverExternalPackages: ['better-sqlite3'],
   webpack: (config, { buildId, dev, isServer, defaultLoaders, nextRuntime, webpack }) => {
     // Important: return the modified config
     config.module.rules.push({

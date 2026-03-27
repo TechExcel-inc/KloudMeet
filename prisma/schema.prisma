@@ -1,0 +1,303 @@
+// KloudMeet Database Schema — Prisma + SQLite
+// v6: 13 tables for auth, teams, meetings, LiveDoc activity, recordings
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ============================================================
+// 1. TeamMember — Registered users (replaces "User")
+// ============================================================
+model TeamMember {
+  id              Int       @id @default(autoincrement())
+  email           String?   @unique
+  username        String    @unique
+  phone           String?
+  passwordHash    String
+  fullName        String?
+  firstName       String?
+  lastName        String?
+  avatarUrl       String?
+  emailVerified   Boolean   @default(false)
+  emailVerifiedAt DateTime?
+  phoneVerified   Boolean   @default(false)
+  phoneVerifiedAt DateTime?
+  status          String    @default("ACTIVE") // ACTIVE, SUSPENDED, DELETED
+  createdAt       DateTime  @default(now())
+  createdBy       String?
+  modifiedAt      DateTime?
+  modifiedBy      String?
+  deletedAt       DateTime?
+  deletedBy       String?
+
+  sessions              Session[]
+  accountOwnerships     AccountOwnerAndAdmin[]
+  accountMemberships    AccountMembership[]
+  createdMeetings       Meeting[]              @relation("CreatedMeetings")
+  meetingParticipations MeetingParticipant[]
+  recordings            Recording[]
+}
+
+// ============================================================
+// 2. Session — Auth sessions
+// ============================================================
+model Session {
+  id           Int      @id @default(autoincrement())
+  teamMemberId Int
+  token        String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id])
+}
+
+// ============================================================
+// 3. VerificationCode — Email/SMS codes for signup & password reset
+// ============================================================
+model VerificationCode {
+  id        Int      @id @default(autoincrement())
+  target    String   // email or phone number
+  code      String   // 6-digit code
+  type      String   // SIGNUP_EMAIL, SIGNUP_SMS, RESET_EMAIL, RESET_SMS
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([target, code])
+}
+
+// ============================================================
+// 4. KloudMeetAccount — Top-level account (company/team)
+// ============================================================
+model KloudMeetAccount {
+  id                    Int       @id @default(autoincrement())
+  accountCode           String    @unique
+  accountName           String
+  organizationType      Int?      // 1=Company, 2=School, 3=Team, 4=Other
+  teamSize              String?
+  enableAutoJoinViaEmail Boolean  @default(false)
+  emailDomains          String?   // Comma-separated: "acme.com,acme.org"
+  joinTeamCode          String?   @unique
+  contactEmail          String?
+  contactPhone          String?
+  description           String?
+  status                Int       @default(1) // 1=Active, 0=Inactive
+  createdAt             DateTime  @default(now())
+  createdBy             String?
+  modifiedAt            DateTime?
+  modifiedBy            String?
+  deletedAt             DateTime?
+  deletedBy             String?
+
+  owners     AccountOwnerAndAdmin[]
+  members    AccountMembership[]
+  meetings   Meeting[]
+}
+
+// ============================================================
+// 5. AccountOwnerAndAdmin — OWNER / CO_OWNER of an account
+// ============================================================
+model AccountOwnerAndAdmin {
+  id                 Int       @id @default(autoincrement())
+  accountId          Int
+  teamMemberId       Int
+  role               String    // OWNER, CO_OWNER
+  assignedAt         DateTime  @default(now())
+  assignedByMemberId Int?
+  status             String    @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt          DateTime  @default(now())
+  createdBy          String?
+  modifiedAt         DateTime?
+  modifiedBy         String?
+
+  account    KloudMeetAccount @relation(fields: [accountId], references: [id])
+  teamMember TeamMember       @relation(fields: [teamMemberId], references: [id])
+
+  @@unique([accountId, teamMemberId])
+}
+
+// ============================================================
+// 6. AccountMembership — TeamMember ↔ Account (multi-tenant ready)
+// ============================================================
+model AccountMembership {
+  id           Int       @id @default(autoincrement())
+  accountId    Int
+  teamMemberId Int
+  status       String    @default("ACTIVE") // ACTIVE, INACTIVE, SUSPENDED
+  joinedVia    String?   // EMAIL_DOMAIN, JOIN_CODE, INVITATION, MANUAL
+  joinedAt     DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  createdBy    String?
+  modifiedAt   DateTime?
+  modifiedBy   String?
+  deletedAt    DateTime?
+  deletedBy    String?
+
+  account    KloudMeetAccount @relation(fields: [accountId], references: [id])
+  teamMember TeamMember       @relation(fields: [teamMemberId], references: [id])
+
+  @@unique([accountId, teamMemberId])
+}
+
+// ============================================================
+// 7. MeetUser — External guests (email/phone, not registered)
+// ============================================================
+model MeetUser {
+  id          Int       @id @default(autoincrement())
+  email       String    @unique
+  phone       String?
+  displayName String?
+  note        String?
+  createdAt   DateTime  @default(now())
+  createdBy   String?
+  modifiedAt  DateTime?
+  modifiedBy  String?
+
+  meetingParticipations MeetingParticipant[]
+  recordingRequests     RecordingAccessRequest[]
+}
+
+// ============================================================
+// 8. Meeting — Meeting/room history
+// ============================================================
+model Meeting {
+  id                Int       @id @default(autoincrement())
+  roomName          String    @unique
+  roomSid           String?
+  title             String?
+  accountId         Int?
+  createdByMemberId Int
+  startedAt         DateTime  @default(now())
+  endedAt           DateTime?
+  maxParticipants   Int       @default(0)
+  status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
+  createdAt         DateTime  @default(now())
+  createdBy         String?
+  modifiedAt        DateTime?
+  modifiedBy        String?
+
+  account      KloudMeetAccount?    @relation(fields: [accountId], references: [id])
+  createdByMember TeamMember        @relation("CreatedMeetings", fields: [createdByMemberId], references: [id])
+  participants MeetingParticipant[]
+  recordings   Recording[]
+  recordingAccessRequests RecordingAccessRequest[]
+}
+
+// ============================================================
+// 9. MeetingParticipant — Who joined (TeamMember or MeetUser)
+// ============================================================
+model MeetingParticipant {
+  id              Int       @id @default(autoincrement())
+  meetingId       Int
+  teamMemberId    Int?
+  meetUserId      Int?
+  displayName     String
+  roles           String    @default("PARTICIPANT") // Comma-separated: "HOST,PRESENTER"
+  joinedAt        DateTime  @default(now())
+  leftAt          DateTime?
+  durationSeconds Int?
+
+  meeting    Meeting     @relation(fields: [meetingId], references: [id])
+  teamMember TeamMember? @relation(fields: [teamMemberId], references: [id])
+  meetUser   MeetUser?   @relation(fields: [meetUserId], references: [id])
+
+  activities     MeetingActivity[]
+  liveDocActions MeetLiveDocActivity[]
+}
+
+// ============================================================
+// 10. MeetingActivity — General participant actions
+// ============================================================
+model MeetingActivity {
+  id              Int       @id @default(autoincrement())
+  meetingId       Int
+  participantId   Int
+  activityType    String    // SCREEN_SHARE, PRESENT, CO_PRESENT, ANNOTATE, RECORD,
+                            // CHAT_MESSAGE, CAMERA_ON, CAMERA_OFF, MIC_ON, MIC_OFF,
+                            // ROLE_CHANGE, RAISE_HAND, JOIN, LEAVE, LIVEDOC_SESSION
+  startedAt       DateTime
+  endedAt         DateTime?
+  durationSeconds Int?
+  metadata        String?   // JSON
+  createdAt       DateTime  @default(now())
+
+  participant    MeetingParticipant @relation(fields: [participantId], references: [id])
+  liveDocActions MeetLiveDocActivity[]
+}
+
+// ============================================================
+// 11. MeetLiveDocActivity — LiveDoc-specific actions
+// ============================================================
+model MeetLiveDocActivity {
+  id                Int       @id @default(autoincrement())
+  meetingId         Int
+  participantId     Int
+  meetingActivityId Int?      // Parent LIVEDOC_SESSION activity (optional)
+  actionType        String    // LOAD_DOCUMENT, SWITCH_DOCUMENT, CLOSE_DOCUMENT,
+                              // TURN_PAGE, JUMP_TO_PAGE, ZOOM_IN, ZOOM_OUT,
+                              // ANNOTATE_START, ANNOTATE_END, ANNOTATE_CLEAR,
+                              // HIGHLIGHT, POINTER, BOOKMARK, SCROLL, DOWNLOAD
+  documentName      String?
+  documentUrl       String?
+  pageNumber        Int?
+  totalPages        Int?
+  timestamp         DateTime
+  durationSeconds   Int?
+  metadata          String?   // JSON
+  createdAt         DateTime  @default(now())
+
+  participant     MeetingParticipant @relation(fields: [participantId], references: [id])
+  meetingActivity MeetingActivity?   @relation(fields: [meetingActivityId], references: [id])
+}
+
+// ============================================================
+// 12. Recording — Saved recordings with storage provider
+// ============================================================
+model Recording {
+  id              Int       @id @default(autoincrement())
+  meetingId       Int
+  teamMemberId    Int
+  fileName        String
+  storageProvider String    @default("LOCAL") // LOCAL, S3, GOOGLE_DRIVE, ONEDRIVE, DROPBOX, KLOUD_LIVEDOC
+  storageKey      String
+  storageUrl      String?
+  fileSizeBytes   Int?
+  durationSeconds Int?
+  mimeType        String?
+  status          String    @default("UPLOADING") // UPLOADING, READY, FAILED, DELETED
+  createdAt       DateTime  @default(now())
+  createdBy       String?
+  deletedAt       DateTime?
+  deletedBy       String?
+
+  meeting    Meeting    @relation(fields: [meetingId], references: [id])
+  teamMember TeamMember @relation(fields: [teamMemberId], references: [id])
+  accessRequests RecordingAccessRequest[]
+}
+
+// ============================================================
+// 13. RecordingAccessRequest — MeetUsers requesting recording access
+// ============================================================
+model RecordingAccessRequest {
+  id                  Int       @id @default(autoincrement())
+  recordingId         Int
+  meetUserId          Int
+  meetingId           Int
+  status              String    @default("PENDING") // PENDING, APPROVED, DENIED, EXPIRED
+  accessToken         String    @unique
+  expiresAt           DateTime?
+  requestedAt         DateTime  @default(now())
+  respondedAt         DateTime?
+  respondedByMemberId Int?
+
+  recording Recording @relation(fields: [recordingId], references: [id])
+  meetUser  MeetUser   @relation(fields: [meetUserId], references: [id])
+  meeting   Meeting    @relation(fields: [meetingId], references: [id])
+}

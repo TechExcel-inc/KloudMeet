@@ -39,7 +39,7 @@ import {
   Track,
   DataPacket_Kind,
 } from 'livekit-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
@@ -69,6 +69,59 @@ export function PageClientImpl(props: {
     undefined,
   );
 
+  const [meetingInfo, setMeetingInfo] = React.useState<any>(null);
+  const [currentUser, setCurrentUser] = React.useState<any>(null);
+  const [isSameTabRefresh, setIsSameTabRefresh] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('kloudUser');
+        if (stored) setCurrentUser(JSON.parse(stored));
+        
+        if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
+          setIsSameTabRefresh(true);
+        }
+      } catch (e) {}
+    }
+
+    fetch(`/api/meetings/${props.roomName}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) setMeetingInfo(data);
+      })
+      .catch(console.error);
+  }, [props.roomName]);
+
+  const isHost = React.useMemo(() => {
+    return meetingInfo?.createdByMemberId && currentUser?.id === meetingInfo.createdByMemberId;
+  }, [meetingInfo, currentUser]);
+
+  const isActive = meetingInfo?.isActive === true;
+
+  const preJoinTitle = React.useMemo(() => {
+    if (isSameTabRefresh) return 'Rejoining Meeting';
+    if (isHost && !isActive) return 'Starting New Meeting';
+    if (isHost && isActive) return 'Active Meeting in Progress';
+    if (meetingInfo?.createdByMember) return `Joining ${meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username}'s meeting`;
+    return 'Joining a Meeting';
+  }, [isSameTabRefresh, isHost, isActive, meetingInfo]);
+
+  const preJoinSubtitle = React.useMemo(() => {
+    if (isSameTabRefresh) return 'Please re-configure your devices to enter.';
+    if (isHost && !isActive) return 'Please configure your device settings before the meeting begins.';
+    if (isHost && isActive) return 'You are already hosting this meeting in another session. Do you want to rejoin?';
+    if (meetingInfo?.startedAt) return `Meeting started at ${new Date(meetingInfo.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+    return 'Please configure your device settings before the meeting begins.';
+  }, [isSameTabRefresh, isHost, isActive, meetingInfo]);
+
+  const preJoinButtonText = React.useMemo(() => {
+    if (isSameTabRefresh) return 'Rejoin';
+    if (isHost && !isActive) return 'Start Now';
+    if (isHost && isActive) return 'Rejoin as Host';
+    return 'Join Now';
+  }, [isSameTabRefresh, isHost, isActive]);
+
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
     try {
       setPreJoinChoices(values);
@@ -86,6 +139,10 @@ export function PageClientImpl(props: {
       }
       const connectionDetailsData = await connectionDetailsResp.json();
       setConnectionDetails(connectionDetailsData);
+      
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('activeKloudRoom', props.roomName);
+      }
     } catch (error: any) {
       console.error('Failed to get connection details:', error);
       alert(
@@ -102,6 +159,41 @@ export function PageClientImpl(props: {
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
         <div className="kloud-prejoin-wrapper">
+          <style>{`
+            .kloud-prejoin-wrapper button[type="submit"].lk-button,
+            .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type {
+              color: transparent !important;
+              position: relative !important;
+              overflow: hidden !important;
+            }
+            .kloud-prejoin-wrapper button[type="submit"].lk-button::after,
+            .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type::after {
+              content: "${preJoinButtonText}";
+              position: absolute !important;
+              left: 0;
+              top: 0;
+              width: 100%;
+              height: 100%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              color: white !important;
+              font-size: 1rem !important;
+              font-weight: 600 !important;
+              pointer-events: none !important;
+            }
+
+            /* Make dropdown arrow backgrounds match the main purple backgrounds precisely */
+            .kloud-prejoin-wrapper .lk-button-group,
+            .kloud-prejoin-wrapper .lk-button-group > button,
+            .kloud-prejoin-wrapper .lk-button-group > div {
+              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+            }
+            .kloud-prejoin-wrapper .lk-button-group > button:hover,
+            .kloud-prejoin-wrapper .lk-button-group > div:hover {
+              background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
+            }
+          `}</style>
           <div className="kloud-prejoin-header">
             <Link href="/" className="kloud-prejoin-logo">
               <span className="kloud-prejoin-logo-icon">
@@ -111,14 +203,24 @@ export function PageClientImpl(props: {
               </span>
               Kloud Meet
             </Link>
-            <h2 className="kloud-prejoin-title">Ready to join?</h2>
-            <p className="kloud-prejoin-subtitle">Set up your camera and microphone before entering the meeting</p>
+            <h2 className="kloud-prejoin-title">{preJoinTitle}</h2>
+            <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
           <PreJoin
             defaults={preJoinDefaults}
             onSubmit={handlePreJoinSubmit}
             onError={handlePreJoinError}
           />
+          {isHost && isActive && !isSameTabRefresh && (
+            <div style={{ textAlign: 'center', marginTop: '1.25rem', zIndex: 2 }}>
+              <button 
+                onClick={() => { window.location.href = '/'; }} 
+                style={{ background: 'transparent', border: 'none', color: '#ff6352', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem', fontFamily: 'Inter, sans-serif' }}
+              >
+                Or start a new meeting instead
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div data-lk-theme="default" style={{ height: '100%' }}>

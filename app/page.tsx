@@ -1,16 +1,21 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
-type PageView = 'anonymous' | 'login' | 'dashboard';
+type PageView = 'anonymous' | 'login' | 'signup' | 'dashboard';
+type SignupStep = 'email' | 'verify' | 'create';
 
-interface MockUser {
+interface AuthUser {
+  id: string;
   username: string;
   displayName: string;
+  email?: string;
+  avatarUrl?: string;
+  token: string;
 }
 
 /* ────────── Placeholder recent meetings ────────── */
@@ -127,28 +132,59 @@ function AnonymousView({
 }
 
 /* ════════════════════════════════════════════════════
-   View 2 – Login
+   View 2 – Login (Real API)
    ════════════════════════════════════════════════════ */
 function LoginView({
   onBack,
   onLoginSuccess,
+  onSignUp,
   toast,
 }: {
   onBack: () => void;
-  onLoginSuccess: (user: MockUser) => void;
+  onLoginSuccess: (user: AuthUser) => void;
+  onSignUp: () => void;
   toast: { show: (t: string) => void };
 }) {
-  const [username, setUsername] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const name = username.trim() || 'User';
-    const user: MockUser = { username: name, displayName: name };
-    if (typeof window !== 'undefined') {
+    setError('');
+    const id = identifier.trim();
+    if (!id) { setError('Please enter your email or login name'); return; }
+    if (!password) { setError('Please enter your password'); return; }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: id, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Login failed');
+        return;
+      }
+      const user: AuthUser = {
+        id: data.user.id,
+        username: data.user.username,
+        displayName: data.user.fullName || data.user.username,
+        email: data.user.email,
+        avatarUrl: data.user.avatarUrl,
+        token: data.token,
+      };
       localStorage.setItem('kloudUser', JSON.stringify(user));
+      onLoginSuccess(user);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    onLoginSuccess(user);
   };
 
   return (
@@ -168,24 +204,37 @@ function LoginView({
         <form className={styles.loginFormInner} onSubmit={handleLogin}>
           <h1 className={styles.loginTitle}>Login</h1>
 
+          {error && <div className={styles.errorBanner}>⚠ {error}</div>}
+
           <label className={styles.fieldLabel}>Email or login name</label>
           <input
             className={styles.fieldInput}
             type="text"
             placeholder="Email or login name"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={identifier}
+            onChange={(e) => { setIdentifier(e.target.value); setError(''); }}
             autoFocus
           />
 
           <label className={styles.fieldLabel}>Password</label>
-          <input
-            className={styles.fieldInput}
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
+          <div className={styles.passwordWrap}>
+            <input
+              className={styles.fieldInput}
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); setError(''); }}
+              style={{ paddingRight: '2.5rem' }}
+            />
+            <button
+              type="button"
+              className={styles.passwordToggle}
+              onClick={() => setShowPassword(!showPassword)}
+              style={{ top: 'calc(50% - 8px)' }}
+            >
+              {showPassword ? '🙈' : '👁'}
+            </button>
+          </div>
 
           <div className={styles.forgotRow}>
             <button
@@ -197,17 +246,17 @@ function LoginView({
             </button>
           </div>
 
-          <button type="submit" className={styles.loginSubmit}>
-            Login
+          <button
+            type="submit"
+            className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
+            disabled={loading}
+          >
+            {loading ? 'Logging in...' : 'Login'}
           </button>
 
           <div className={styles.registerRow}>
             <span>Not registered?</span>
-            <button
-              type="button"
-              className={styles.linkBtn}
-              onClick={() => toast.show('Registration coming soon!')}
-            >
+            <button type="button" className={styles.linkBtn} onClick={onSignUp}>
               Register now
             </button>
           </div>
@@ -222,6 +271,367 @@ function LoginView({
 }
 
 /* ════════════════════════════════════════════════════
+   View 2b – Signup (3-step flow)
+   ════════════════════════════════════════════════════ */
+function SignupView({
+  onBack,
+  onSignupSuccess,
+  toast,
+}: {
+  onBack: () => void;
+  onSignupSuccess: (user: AuthUser) => void;
+  toast: { show: (t: string) => void };
+}) {
+  const [step, setStep] = useState<SignupStep>('email');
+  const [email, setEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+  const [devCode, setDevCode] = useState<string | null>(null);
+
+  /* ── Step indicator ── */
+  const stepIndex = step === 'email' ? 0 : step === 'verify' ? 1 : 2;
+  const StepIndicator = () => (
+    <div className={styles.signupSteps}>
+      {[0, 1, 2].map((i) => (
+        <React.Fragment key={i}>
+          <div
+            className={
+              i < stepIndex
+                ? styles.signupStepDotDone
+                : i === stepIndex
+                  ? styles.signupStepDotActive
+                  : styles.signupStepDot
+            }
+          />
+          {i < 2 && (
+            <div className={i < stepIndex ? styles.signupStepLineDone : styles.signupStepLine} />
+          )}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+
+  /* ── Start countdown timer ── */
+  const startCountdown = useCallback(() => {
+    setCountdown(60);
+    const timer = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) { clearInterval(timer); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+  }, []);
+
+  /* ── Send verification code ── */
+  const sendCode = async (target?: string) => {
+    const t = (target || email).trim();
+    if (!t) { setError('Please enter your email address'); return false; }
+    setLoading(true);
+    setError('');
+    try {
+      const isPhone = t.startsWith('+');
+      const res = await fetch('/api/auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: t, type: isPhone ? 1 : 0, intent: 'signup' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to send code');
+        return false;
+      }
+      if (data.code) setDevCode(data.code);
+      startCountdown();
+      return true;
+    } catch {
+      setError('Network error. Please try again.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Step 1: Email ── */
+  const handleEmailNext = async () => {
+    const t = email.trim();
+    if (!t) { setError('Please enter your email address'); return; }
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(t)) { setError('Please enter a valid email address'); return; }
+    const ok = await sendCode(t);
+    if (ok) setStep('verify');
+  };
+
+  /* ── Step 2: Verify ── */
+  const handleVerifyNext = () => {
+    if (verificationCode.length !== 6) {
+      setError('Please enter the 6-digit verification code');
+      return;
+    }
+    setError('');
+    setStep('create');
+  };
+
+  /* ── Step 3: Create account ── */
+  const handleCreate = async () => {
+    setError('');
+    const usernameRe = /^(?!\d+$)[a-zA-Z0-9]{2,20}$/;
+    if (!usernameRe.test(username)) {
+      setError('Login name: 2-20 chars, letters & numbers, cannot be all digits');
+      return;
+    }
+    const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
+    if (!passwordRe.test(password)) {
+      setError('Password: 8-30 chars with both letters and numbers');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email.trim(),
+          username: username.trim(),
+          password,
+          verificationCode: verificationCode.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Signup failed');
+        return;
+      }
+      const user: AuthUser = {
+        id: data.user.id,
+        username: data.user.username,
+        displayName: data.user.fullName || data.user.username,
+        email: data.user.email,
+        avatarUrl: data.user.avatarUrl,
+        token: data.token,
+      };
+      localStorage.setItem('kloudUser', JSON.stringify(user));
+      onSignupSuccess(user);
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /* ── Back navigation ── */
+  const handleBack = () => {
+    setError('');
+    if (step === 'create') setStep('verify');
+    else if (step === 'verify') { setStep('email'); setVerificationCode(''); }
+    else onBack();
+  };
+
+  return (
+    <div className={styles.loginContainer}>
+      {/* Left brand panel */}
+      <div className={styles.loginBrand}>
+        <div className={styles.loginBrandLogo}>
+          <KloudLogo size="lg" />
+        </div>
+        <p className={styles.loginBrandTagline}>
+          Where your team, customer and AI digital human meet and collaborate
+        </p>
+      </div>
+
+      {/* Right form */}
+      <div className={styles.loginForm}>
+        <div className={styles.loginFormInner}>
+          <button type="button" className={styles.signupBackBtn} onClick={handleBack}>
+            ← Back
+          </button>
+
+          <h1 className={styles.loginTitle}>
+            {step === 'verify' ? 'Verify Email' : 'Sign Up'}
+          </h1>
+
+          <StepIndicator />
+
+          {error && <div className={styles.errorBanner}>⚠ {error}</div>}
+
+          {/* ── Step 1: Email ── */}
+          {step === 'email' && (
+            <>
+              <label className={styles.fieldLabel}>Email address</label>
+              <input
+                className={styles.fieldInput}
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
+                autoFocus
+              />
+
+              <button
+                type="button"
+                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
+                disabled={loading}
+                onClick={handleEmailNext}
+              >
+                {loading ? 'Sending code...' : 'Next'}
+              </button>
+
+              <div className={styles.registerRow}>
+                <span>Already a registered user?</span>
+                <button type="button" className={styles.linkBtn} onClick={onBack}>
+                  Sign In
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* ── Step 2: Verify ── */}
+          {step === 'verify' && (
+            <>
+              <div className={styles.verifyIcon}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="28" height="28">
+                  <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+              <p className={styles.signupSubtext}>
+                We sent a 6-digit code to <strong>{email}</strong>
+              </p>
+
+              <input
+                className={styles.verifyCodeInput}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => {
+                  setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setError('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
+                autoFocus
+              />
+
+              {devCode && (
+                <div className={styles.devHint}>Dev mode — use code: <strong>{devCode}</strong></div>
+              )}
+
+              <button
+                type="button"
+                className={verificationCode.length === 6 ? styles.loginSubmit : styles.loginSubmitLoading}
+                disabled={verificationCode.length !== 6}
+                onClick={handleVerifyNext}
+              >
+                Continue
+              </button>
+
+              <div className={styles.resendRow}>
+                {countdown > 0 ? (
+                  <span>Resend code in {countdown}s</span>
+                ) : (
+                  <button type="button" className={styles.linkBtn} onClick={() => sendCode()}>
+                    Resend code
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+
+          {/* ── Step 3: Create account ── */}
+          {step === 'create' && (
+            <>
+              <p className={styles.signupSubtext}>
+                Creating account for <strong>{email}</strong>
+              </p>
+
+              <label className={styles.fieldLabel}>Login name *</label>
+              <input
+                className={styles.fieldInput}
+                type="text"
+                placeholder="2-20 characters, letters & numbers"
+                maxLength={20}
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError(''); }}
+                autoFocus
+              />
+              <p className={styles.fieldHint}>Cannot be all digits</p>
+
+              <label className={styles.fieldLabel}>Password *</label>
+              <div className={styles.passwordWrap}>
+                <input
+                  className={styles.fieldInput}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="8-30 chars, letters & numbers"
+                  maxLength={30}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                  style={{ paddingRight: '2.5rem' }}
+                />
+                <button
+                  type="button"
+                  className={styles.passwordToggle}
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{ top: 'calc(50% - 8px)' }}
+                >
+                  {showPassword ? '🙈' : '👁'}
+                </button>
+              </div>
+
+              <label className={styles.fieldLabel}>Confirm Password *</label>
+              <div className={styles.passwordWrap}>
+                <input
+                  className={styles.fieldInput}
+                  type={showConfirm ? 'text' : 'password'}
+                  placeholder="Enter password again"
+                  maxLength={30}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                  style={{ paddingRight: '2.5rem' }}
+                />
+                <button
+                  type="button"
+                  className={styles.passwordToggle}
+                  onClick={() => setShowConfirm(!showConfirm)}
+                  style={{ top: 'calc(50% - 8px)' }}
+                >
+                  {showConfirm ? '🙈' : '👁'}
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
+                disabled={loading}
+                onClick={handleCreate}
+              >
+                {loading ? 'Creating Account...' : 'Create Account'}
+              </button>
+
+              <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.5rem' }}>
+                By signing up, you agree to our Terms of Use and Privacy Policy
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
    View 3 – Dashboard (Signed In)
    ════════════════════════════════════════════════════ */
 function DashboardView({
@@ -229,7 +639,7 @@ function DashboardView({
   onSignOut,
   toast,
 }: {
-  user: MockUser;
+  user: AuthUser;
   onSignOut: () => void;
   toast: { show: (t: string) => void };
 }) {
@@ -237,13 +647,25 @@ function DashboardView({
   const [joinCode, setJoinCode] = useState('');
   const [activeTab, setActiveTab] = useState<'scheduled' | 'recent'>('scheduled');
 
-  const handleNewMeeting = () => {
-    router.push(`/rooms/${generateRoomId()}`);
+  const handleNewMeeting = async () => {
+    const roomId = generateRoomId();
+    if (user && user.id) {
+      try {
+        await fetch('/api/meetings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomName: roomId, createdByMemberId: user.id }),
+        });
+      } catch (e) {
+        console.error('Failed to register meeting:', e);
+      }
+    }
+    router.push(`/rooms/${roomId}?action=start`);
   };
 
   const handleJoinMeeting = () => {
     if (!joinCode.trim()) return;
-    router.push(`/rooms/${joinCode.trim()}`);
+    router.push(`/rooms/${joinCode.trim()}?action=join`);
   };
 
   const today = new Date();
@@ -348,7 +770,7 @@ function DashboardView({
    ════════════════════════════════════════════════════ */
 function HomeContent() {
   const [view, setView] = useState<PageView>('anonymous');
-  const [user, setUser] = useState<MockUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const toast = useToast();
 
   // Restore session from localStorage
@@ -356,14 +778,14 @@ function HomeContent() {
     try {
       const stored = localStorage.getItem('kloudUser');
       if (stored) {
-        const parsed = JSON.parse(stored) as MockUser;
+        const parsed = JSON.parse(stored) as AuthUser;
         setUser(parsed);
         setView('dashboard');
       }
     } catch {}
   }, []);
 
-  const handleLoginSuccess = (u: MockUser) => {
+  const handleAuthSuccess = (u: AuthUser) => {
     setUser(u);
     setView('dashboard');
   };
@@ -384,7 +806,15 @@ function HomeContent() {
       {view === 'login' && (
         <LoginView
           onBack={() => setView('anonymous')}
-          onLoginSuccess={handleLoginSuccess}
+          onLoginSuccess={handleAuthSuccess}
+          onSignUp={() => setView('signup')}
+          toast={toast}
+        />
+      )}
+      {view === 'signup' && (
+        <SignupView
+          onBack={() => setView('login')}
+          onSignupSuccess={handleAuthSuccess}
           toast={toast}
         />
       )}

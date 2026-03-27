@@ -559,6 +559,175 @@
 }
 
 /* ═══════════════════════════════════════════════════
+   Signup View
+   ═══════════════════════════════════════════════════ */
+
+/* Step indicators */
+.signupSteps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+}
+.signupStepDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #e2e5eb;
+  transition: background 0.3s, transform 0.3s;
+}
+.signupStepDotActive {
+  composes: signupStepDot;
+  background: #7c3aed;
+  transform: scale(1.2);
+}
+.signupStepDotDone {
+  composes: signupStepDot;
+  background: #5b21b6;
+}
+.signupStepLine {
+  width: 28px;
+  height: 2px;
+  background: #e2e5eb;
+  transition: background 0.3s;
+}
+.signupStepLineDone {
+  composes: signupStepLine;
+  background: #5b21b6;
+}
+
+/* Back button */
+.signupBackBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  color: #5b21b6;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  margin-bottom: 1.5rem;
+}
+.signupBackBtn:hover { text-decoration: underline; }
+
+/* Verification code input */
+.verifyCodeInput {
+  width: 100%;
+  padding: 1rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 12px;
+  font-size: 1.8rem;
+  text-align: center;
+  letter-spacing: 0.5em;
+  font-family: 'SF Mono', 'Fira Code', 'Courier New', monospace;
+  outline: none;
+  transition: border 0.2s;
+  margin-bottom: 0.75rem;
+  background: #fff;
+  color: #1e1e2e;
+}
+.verifyCodeInput:focus { border-color: #7c3aed; }
+.verifyCodeInput::placeholder { color: #d1d5db; letter-spacing: 0.5em; }
+
+/* Verify icon circle */
+.verifyIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+}
+.verifyIcon svg { color: #fff; }
+
+/* Error banner */
+.errorBanner {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  color: #dc2626;
+  font-size: 0.85rem;
+  font-weight: 500;
+  margin-bottom: 1rem;
+}
+
+/* Dev hint banner */
+.devHint {
+  padding: 0.5rem 0.75rem;
+  background: #f5f3ff;
+  border: 1px solid #e2d9f3;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #6b7280;
+  text-align: center;
+  margin-bottom: 0.75rem;
+}
+
+/* Password field with toggle */
+.passwordWrap {
+  position: relative;
+}
+.passwordToggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9ca3af;
+  padding: 0;
+  display: flex;
+  align-items: center;
+}
+.passwordToggle:hover { color: #6b7280; }
+
+/* Resend row */
+.resendRow {
+  text-align: center;
+  padding-top: 0.5rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+/* Signup subtitle (shows email/phone) */
+.signupSubtext {
+  text-align: center;
+  font-size: 0.9rem;
+  color: #6b7280;
+  margin-bottom: 1.5rem;
+}
+.signupSubtext strong {
+  color: #1e1e2e;
+  font-weight: 600;
+}
+
+/* Helper text under fields */
+.fieldHint {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin: -0.5rem 0 0.75rem;
+}
+
+/* Loading state for buttons */
+.loginSubmitLoading {
+  composes: loginSubmit;
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.loginSubmitLoading:hover { opacity: 0.7; transform: none; }
+
+/* ═══════════════════════════════════════════════════
    Responsive
    ═══════════════════════════════════════════════════ */
 @media (max-width: 768px) {
