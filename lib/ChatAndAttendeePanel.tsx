@@ -320,7 +320,7 @@ export function AttendeePanel({
           );
         })}
         {filtered.length === 0 && searchQuery && (
-          <div className="kloud-attendee-empty">No participants match "{searchQuery}"</div>
+          <div className="kloud-attendee-empty">No participants match &quot;{searchQuery}&quot;</div>
         )}
       </div>
 

@@ -139,12 +139,12 @@ export function KloudMeetToolbar({
               : null
       : null;
 
-  const applyMouseVisibility = (clientY: number) => {
+  const applyMouseVisibility = (clientY: number, forceVisible?: boolean) => {
     if (isMobile) {
       setVisible(true); // Always visible on mobile
       return;
     }
-    if (activeSheetRef.current || chatOpen || attendeeOpen) {
+    if (activeSheetRef.current || chatOpen || attendeeOpen || forceVisible) {
       setVisible(true);
       return;
     }
@@ -155,7 +155,13 @@ export function KloudMeetToolbar({
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       lastMouseYRef.current = e.clientY;
-      applyMouseVisibility(e.clientY);
+      const target = e.target as Element;
+      // 防止鼠标在菜单设备选项缝隙间滑动时导致底栏隐藏
+      const isHoveringMenu = !!(
+        toolbarRef.current?.contains(target) ||
+        target?.closest?.('.lk-device-menu, .lk-menu, [class*="lk-"]')
+      );
+      applyMouseVisibility(e.clientY, isHoveringMenu);
     };
     window.addEventListener('mousemove', handleMouseMove);
     return () => window.removeEventListener('mousemove', handleMouseMove);
@@ -216,7 +222,12 @@ export function KloudMeetToolbar({
       }
     };
     const handleMouseOut = (e: MouseEvent) => {
-      if (!(e as MouseEvent).relatedTarget) hideByLeave();
+      // 当 relatedTarget 为 null 且鼠标超出了可视区域时，才认为是真正的离开窗口
+      if (!e.relatedTarget) {
+        if (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight - 1) {
+          hideByLeave();
+        }
+      }
     };
     window.addEventListener('mouseout', handleMouseOut);
     window.addEventListener('blur', hideByLeave);
