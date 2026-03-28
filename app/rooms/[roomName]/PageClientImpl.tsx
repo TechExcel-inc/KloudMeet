@@ -2257,7 +2257,7 @@ function VideoConferenceComponent(props: {
           <div className="kloud-modal-overlay" onMouseDown={() => setShowMeetingReadyModal(false)}>
             <div className="kloud-modal" onMouseDown={e => e.stopPropagation()}>
               <div className="kloud-modal-header">
-                <h3>Your meeting's ready</h3>
+                <h3>Your meeting&apos;s ready</h3>
                 <button className="kloud-modal-close" onClick={() => setShowMeetingReadyModal(false)}>✕</button>
               </div>
               <div className="kloud-modal-body">
