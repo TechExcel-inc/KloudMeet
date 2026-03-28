@@ -436,7 +436,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           title="Join us for KloudMeeting" 
           body={<>
             Welcome, Please start registration process by entering your name and email.<br/><br/>
-            For those who can't attend our live session, we are providing recording after the event.<br/>
+            For those who can&apos;t attend our live session, we are providing recording after the event.<br/>
             Once registered, a confirmation email will be sent to you with info on how to join the event.<br/><br/>
             Cheers,<br/>The Kloud team
           </>} 
@@ -453,8 +453,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             Join from a PC, Mac, or any mobile device.<br/>
             Please click the link to join the conference at the scheduled start time.<br/><br/>
             <strong>To cancel this registration</strong><br/>
-            If you can't attend, you may <span style={{color:'#3b82f6', cursor:'pointer'}}>Cancel</span> your registration at any time.<br/><br/>
-            Please contact us with any questions. We're always happy to help.<br/><br/>
+            If you can&apos;t attend, you may <span style={{color:'#3b82f6', cursor:'pointer'}}>Cancel</span> your registration at any time.<br/><br/>
+            Please contact us with any questions. We&apos;re always happy to help.<br/><br/>
             Cheers,<br/>The Kloud team
           </>} 
           onClose={() => setSubModal(null)} 
