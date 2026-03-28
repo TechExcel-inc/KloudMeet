@@ -22,9 +22,6 @@ export async function GET(request: NextRequest) {
 
     const member = session.teamMember;
 
-    const url = new URL(request.url);
-    const type = url.searchParams.get('type') || 'recent'; // 'recent' or 'scheduled'
-
     const meetings = await prisma.meeting.findMany({
       where: {
         createdByMemberId: member.id,

@@ -128,7 +128,7 @@ export function PageClientImpl(props: {
 
   const preJoinTitle = React.useMemo(() => {
     if (isSameTabRefresh) return 'Rejoining Meeting';
-    if (isHost && !isActive) return 'Starting New Meeting';
+    if (isHost && !isActive) return 'Starting Meeting';
     if (isHost && isActive) return 'Active Meeting in Progress';
     if (meetingInfo?.createdByMember) return `Joining ${meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username}'s meeting`;
     return 'Joining a Meeting';
@@ -511,11 +511,13 @@ export function PageClientImpl(props: {
             <h2 className="kloud-prejoin-title">{preJoinTitle}</h2>
             <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
-          <PreJoin
-            defaults={preJoinDefaults}
-            onSubmit={handlePreJoinSubmit}
-            onError={handlePreJoinError}
-          />
+          {!isBot && (
+            <PreJoin
+              defaults={preJoinDefaults}
+              onSubmit={handlePreJoinSubmit}
+              onError={handlePreJoinError}
+            />
+          )}
           {isHost && isActive && !isSameTabRefresh && (
             <div style={{ textAlign: 'center', marginTop: '1.25rem', zIndex: 2 }}>
               <button 
@@ -584,9 +586,7 @@ function VideoConferenceComponent(props: {
         return;
       }
       setIsRecording(action === 'start');
-      let pageUrlStr = window.location.href;
-      // Strip out query params so we can append cleanly
-      pageUrlStr = pageUrlStr.split('?')[0];
+      const pageUrlStr = window.location.href;
 
       const res = await fetch(`/api/meetings/${window.location.pathname.split('/').filter(Boolean).pop()}/record`, {
         method: 'POST',

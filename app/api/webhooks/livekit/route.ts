@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
 
     if (event.event === 'egress_ended' && event.egressInfo) {
       const egressId = event.egressInfo.egressId;
-      const fileInfo = event.egressInfo.fileResults?.[0];
+      const fileInfo = event.egressInfo.fileResults?.[0] || (event.egressInfo.result?.case === 'file' ? event.egressInfo.result.value : null);
       const error = event.egressInfo.error;
 
       // Find the recording by egressId which we stored in storageKey temporarily

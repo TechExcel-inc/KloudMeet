@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
+import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -66,6 +67,97 @@ function useToast() {
 }
 
 /* ════════════════════════════════════════════════════
+   Top Toolbar Component
+   ════════════════════════════════════════════════════ */
+function TopToolbar({ onBack, onSignIn, onSignOut, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  return (
+    <div className={styles.topToolbar}>
+      <div className={styles.toolbarLeft}>
+        {onBack && (
+          <button className={styles.iconBtn} onClick={onBack} aria-label="Go Back" title="Back" style={{ marginRight: '1rem' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
+              <line x1="19" y1="12" x2="5" y2="12"></line>
+              <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+          </button>
+        )}
+        <KloudLogo />
+      </div>
+      <div className={styles.toolbarRight}>
+        <button className={styles.iconBtn} aria-label="Help" title="Help">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+            <circle cx="12" cy="12" r="10"></circle>
+            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </button>
+        <button className={styles.iconBtn} aria-label="Language Selector" style={{ paddingLeft: '0.65rem', paddingRight: '0.55rem' }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="2" y1="12" x2="22" y2="12"></line>
+            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
+          </svg>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: '0.3rem' }}>EN</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '0.1rem', marginTop: '1px' }}>
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+        {!hideAvatar && (user ? (
+          <div style={{ position: 'relative' }} ref={menuRef}>
+            <button 
+              className={styles.avatarBtn} 
+              onClick={() => setMenuOpen(!menuOpen)} 
+              aria-label="User Menu" 
+              title="User Menu"
+              style={{ overflow: 'hidden' }}
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user.displayName.charAt(0).toUpperCase()}</span>
+              )}
+            </button>
+            {menuOpen && (
+              <div className={styles.dropdownMenu}>
+                <button 
+                  className={styles.dropdownItem} 
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSignOut && onSignOut();
+                  }}
+                >
+                  Sign Out
+                </button>
+              </div>
+            )}
+          </div>
+        ) : onSignIn && (
+          <button className={styles.avatarBtn} onClick={onSignIn} aria-label="Sign In via User Profile">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
    View 1 – Anonymous Join
    ════════════════════════════════════════════════════ */
 function AnonymousView({
@@ -85,14 +177,17 @@ function AnonymousView({
       return;
     }
 
-    // Parse input for any 9-character room ID matching xxxx-xxxx pattern
-    const match = raw.match(/[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}/);
-    if (!match) {
-      toast.show('Please enter a valid 9-character meeting code');
+    let roomId = raw;
+    if (raw.includes('/rooms/')) {
+      roomId = raw.split('/rooms/')[1].split('?')[0].split('#')[0];
+    } else {
+      roomId = raw.replace(/\s/g, '');
+    }
+
+    if (!roomId) {
+      toast.show('Please enter a valid meeting code');
       return;
     }
-    
-    const roomId = match[0].toLowerCase();
     
     // Preserve query string if they pasted a full URL with ?action=...
     let query = '';
@@ -104,48 +199,54 @@ function AnonymousView({
   };
 
   return (
-    <div className={styles.anonContainer}>
-      <div className={styles.anonHeader}>
-        <KloudLogo />
-        <button className={styles.signInBtn} onClick={onSignIn}>
-          Sign In
-        </button>
-      </div>
+    <div className={styles.anonWrapper}>
+      <TopToolbar onSignIn={onSignIn} />
 
-      <h1 className={styles.anonTitle}>Join Meeting</h1>
-      <p className={styles.anonSubtitle}>
-        Enter a meeting code below or start a quick meeting
-      </p>
-
-      <div className={styles.joinRow}>
-        <input
-          className={styles.joinInput}
-          placeholder="Enter meeting code"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-        />
-        <button className={styles.joinBtn} onClick={handleJoin}>
-          Join
-        </button>
-      </div>
-
-      <div className={styles.recentSection}>
-        <h3 className={styles.recentTitle}>Recent Meetings</h3>
-        {MOCK_RECENT.map((m, i) => (
-          <div
-            key={i}
-            className={styles.recentCard}
-            onClick={() => toast.show('Meeting replay coming soon!')}
+      {/* ── Central Join Container ── */}
+      <div className={styles.anonContainer}>
+        <h1 className={styles.anonTitle}>Join Meeting</h1>
+        <p className={styles.anonSubtitle}>
+          To host a meeting or join with more privileges,{' '}
+          <button 
+            type="button" 
+            className={styles.linkBtn} 
+            onClick={onSignIn} 
+            style={{ fontSize: 'inherit', fontWeight: 500, display: 'inline', color: '#5b21b6' }}
           >
-            <div>
-              <div className={styles.recentCardDate}>{m.date}</div>
-              <div className={styles.recentCardTime}>{m.start}</div>
+            Sign In Here
+          </button>
+        </p>
+
+        <div className={styles.joinRow}>
+          <input
+            className={styles.joinInput}
+            placeholder="Enter meeting code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+          />
+          <button className={styles.joinBtn} onClick={handleJoin}>
+            Join
+          </button>
+        </div>
+
+        <div className={styles.recentSection}>
+          <h3 className={styles.recentTitle}>Recent Meetings</h3>
+          {MOCK_RECENT.map((m, i) => (
+            <div
+              key={i}
+              className={styles.recentCard}
+              onClick={() => toast.show('Meeting replay coming soon!')}
+            >
+              <div style={{ minWidth: '85px' }}>
+                <div className={styles.recentCardDate}>{m.date}</div>
+                <div className={styles.recentCardTime}>{m.start}</div>
+              </div>
+              <div className={styles.recentCardName} style={{ flex: 1, textAlign: 'center' }}>{m.host}</div>
+              <div className={styles.recentCardTime} style={{ minWidth: '85px', textAlign: 'right' }}>{m.end}</div>
             </div>
-            <div className={styles.recentCardName}>{m.host}</div>
-            <div className={styles.recentCardTime}>{m.end}</div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -208,27 +309,18 @@ function LoginView({
   };
 
   return (
-    <div className={styles.loginContainer}>
-      {/* Left brand panel */}
-      <div className={styles.loginBrand}>
-        <div className={styles.loginBrandLogo}>
-          <KloudLogo size="lg" />
-        </div>
-        <p className={styles.loginBrandTagline}>
-          Where your team, customer and AI digital human meet and collaborate
-        </p>
-      </div>
-
-      {/* Right form */}
-      <div className={styles.loginForm}>
-        <form className={styles.loginFormInner} onSubmit={handleLogin}>
-          <h1 className={styles.loginTitle}>Login</h1>
+    <div className={styles.anonWrapper}>
+      <TopToolbar onBack={onBack} hideAvatar />
+      
+      <div className={styles.authContainer}>
+        <form className={styles.authCard} onSubmit={handleLogin}>
+          <h1 className={styles.loginTitle}>Sign In</h1>
 
           {error && <div className={styles.errorBanner}>⚠ {error}</div>}
 
           <label className={styles.fieldLabel}>Email or login name</label>
           <input
-            className={styles.fieldInput}
+            className={error ? styles.fieldInputError : styles.fieldInput}
             type="text"
             placeholder="Email or login name"
             value={identifier}
@@ -239,7 +331,7 @@ function LoginView({
           <label className={styles.fieldLabel}>Password</label>
           <div className={styles.passwordWrap}>
             <input
-              className={styles.fieldInput}
+              className={error ? styles.fieldInputError : styles.fieldInput}
               type={showPassword ? 'text' : 'password'}
               placeholder="Password"
               value={password}
@@ -271,19 +363,28 @@ function LoginView({
             className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
             disabled={loading}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? (
+              <>
+                <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 11-6.219-8.56"></path>
+                </svg>
+                Signing in...
+              </>
+            ) : 'Sign In'}
           </button>
 
-          <div className={styles.registerRow}>
-            <span>Not registered?</span>
-            <button type="button" className={styles.linkBtn} onClick={onSignUp}>
-              Register now
-            </button>
+          <div className={styles.ssoDivider}>or continue with</div>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
+            <button type="button" className={styles.anonLink} onClick={() => toast.show('Google SSO coming soon!')}>Google</button>
+            <button type="button" className={styles.anonLink} onClick={() => toast.show('Microsoft SSO coming soon!')}>Microsoft</button>
           </div>
 
-          <button type="button" className={styles.anonLink} onClick={onBack}>
-            Join meeting anonymously
-          </button>
+          <div className={styles.registerRow}>
+            <span>Don't have an account?</span>
+            <button type="button" className={styles.linkBtn} onClick={onSignUp}>
+              Sign Up
+            </button>
+          </div>
         </form>
       </div>
     </div>
@@ -459,24 +560,11 @@ function SignupView({
   };
 
   return (
-    <div className={styles.loginContainer}>
-      {/* Left brand panel */}
-      <div className={styles.loginBrand}>
-        <div className={styles.loginBrandLogo}>
-          <KloudLogo size="lg" />
-        </div>
-        <p className={styles.loginBrandTagline}>
-          Where your team, customer and AI digital human meet and collaborate
-        </p>
-      </div>
-
-      {/* Right form */}
-      <div className={styles.loginForm}>
-        <div className={styles.loginFormInner}>
-          <button type="button" className={styles.signupBackBtn} onClick={handleBack}>
-            ← Back
-          </button>
-
+    <div className={styles.anonWrapper}>
+      <TopToolbar onBack={handleBack} hideAvatar />
+      
+      <div className={styles.authContainer}>
+        <div className={styles.authCard}>
           <h1 className={styles.loginTitle}>
             {step === 'verify' ? 'Verify Email' : 'Sign Up'}
           </h1>
@@ -490,7 +578,7 @@ function SignupView({
             <>
               <label className={styles.fieldLabel}>Email address</label>
               <input
-                className={styles.fieldInput}
+                className={error ? styles.fieldInputError : styles.fieldInput}
                 type="email"
                 placeholder="you@example.com"
                 value={email}
@@ -505,11 +593,24 @@ function SignupView({
                 disabled={loading}
                 onClick={handleEmailNext}
               >
-                {loading ? 'Sending code...' : 'Next'}
+                {loading ? (
+                  <>
+                    <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a9 9 0 11-6.219-8.56"></path>
+                    </svg>
+                    Sending code...
+                  </>
+                ) : 'Next'}
               </button>
 
-              <div className={styles.registerRow}>
-                <span>Already a registered user?</span>
+              <div className={styles.ssoDivider}>or sign up with</div>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button type="button" className={styles.anonLink} onClick={() => toast.show('Google SSO coming soon!')}>Google</button>
+                <button type="button" className={styles.anonLink} onClick={() => toast.show('Microsoft SSO coming soon!')}>Microsoft</button>
+              </div>
+
+              <div className={styles.registerRow} style={{ marginTop: '1rem' }}>
+                <span>Already have an account?</span>
                 <button type="button" className={styles.linkBtn} onClick={onBack}>
                   Sign In
                 </button>
@@ -546,7 +647,7 @@ function SignupView({
               />
 
               {devCode && (
-                <div className={styles.devHint}>Dev mode — use code: <strong>{devCode}</strong></div>
+               <div className={styles.devHint}>Dev mode — use code: <strong>{devCode}</strong></div>
               )}
 
               <button
@@ -636,11 +737,19 @@ function SignupView({
                 className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
                 disabled={loading}
                 onClick={handleCreate}
+                style={{ marginTop: '0.5rem' }}
               >
-                {loading ? 'Creating Account...' : 'Create Account'}
+                {loading ? (
+                  <>
+                    <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a9 9 0 11-6.219-8.56"></path>
+                    </svg>
+                    Creating Account...
+                  </>
+                ) : 'Sign Up'}
               </button>
 
-              <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.5rem' }}>
+              <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.75rem' }}>
                 By signing up, you agree to our Terms of Use and Privacy Policy
               </p>
             </>
@@ -665,7 +774,8 @@ function DashboardView({
 }) {
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
-  const [activeTab, setActiveTab] = useState<'scheduled' | 'recent'>('scheduled');
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState<any>(null);
   
   const [isJoining, setIsJoining] = useState(false);
   const [scheduledModalData, setScheduledModalData] = useState<any>(null);
@@ -677,16 +787,64 @@ function DashboardView({
   useEffect(() => {
     if (!user || (!user.token && !user.id)) return;
     setLoadingMeetings(true);
-    fetch(`/api/account/meetings?type=${activeTab}`, {
+    fetch('/api/account/meetings', {
       headers: { Authorization: `Bearer ${user.token}` }
     })
       .then(res => res.json())
       .then(data => {
-        if (data.meetings) setDbMeetings(data.meetings);
+        if (data.meetings) {
+          const sorted = data.meetings.sort((a: any, b: any) => {
+            const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
+            const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+            return tB - tA;
+          });
+          setDbMeetings(sorted);
+        }
       })
       .catch(console.error)
       .finally(() => setLoadingMeetings(false));
-  }, [user, activeTab]);
+  }, [user]);
+
+  // Polling fallback to check processing recordings
+  useEffect(() => {
+    if (!user?.token) return;
+    
+    // Check if any meetings in the current list have a PROCESSING/UPLOADING recording
+    const hasProcessing = dbMeetings.some(m => 
+      m.recordings?.some((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status))
+    );
+
+    if (!hasProcessing) return;
+
+    const intervalId = setInterval(() => {
+      fetch('/api/account/recordings/sync', {
+        headers: { Authorization: `Bearer ${user.token}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.updatedCount > 0) {
+          // Re-fetch meetings silently without setting loading state
+          fetch('/api/account/meetings', {
+            headers: { Authorization: `Bearer ${user.token}` }
+          })
+            .then(res => res.json())
+            .then(d => {
+              if (d.meetings) {
+                const sorted = d.meetings.sort((a: any, b: any) => {
+                  const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
+                  const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                  return tB - tA;
+                });
+                setDbMeetings(sorted);
+              }
+            });
+        }
+      })
+      .catch(console.error);
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [user, dbMeetings]);
 
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;
@@ -724,30 +882,39 @@ function DashboardView({
   };
 
   const handleJoinMeeting = async () => {
-    if (!joinCode.trim() || isJoining) return;
+    const raw = joinCode.trim();
+    if (!raw || isJoining) return;
     
-    // Parse input for any 9-character room ID matching xxxx-xxxx pattern
-    const match = joinCode.trim().match(/[a-zA-Z0-9]{4}-[a-zA-Z0-9]{4}/);
-    if (!match) {
-      toast.show('Please enter a valid 9-character meeting code');
+    let roomId = raw;
+    if (raw.includes('/rooms/')) {
+      roomId = raw.split('/rooms/')[1].split('?')[0].split('#')[0];
+    } else {
+      roomId = raw.replace(/\s/g, '');
+    }
+
+    if (!roomId) {
+      toast.show('Please enter a valid meeting code');
       return;
     }
-    const roomId = match[0].toLowerCase();
+    
     setIsJoining(true);
 
     try {
       const res = await fetch(`/api/meetings/${roomId}`);
       if (!res.ok) {
-        router.push(`/rooms/${roomId}?action=join`);
+        // If room doesn't exist, we start a new one automatically
+        router.push(`/rooms/${roomId}?action=start`);
         setIsJoining(false);
         return;
       }
       
       const data = await res.json();
+      const isHost = data.createdByMemberId === user.id;
+      const targetAction = isHost && !data.isActive ? 'start' : 'join';
       
       // If active, route immediately
       if (data.isActive) {
-        router.push(`/rooms/${roomId}?action=join`);
+        router.push(`/rooms/${roomId}?action=${targetAction}`);
         return;
       }
 
@@ -762,25 +929,22 @@ function DashboardView({
       }
       
       // Default fallback
-      router.push(`/rooms/${roomId}?action=join`);
+      router.push(`/rooms/${roomId}?action=${targetAction}`);
     } catch(e) {
       console.error(e);
       router.push(`/rooms/${roomId}?action=join`);
     }
   };
 
-  const today = new Date();
-  const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-
   return (
-    <div className={styles.dashContainer}>
-      <div className={styles.dashHeader}>
-        <h1 className={styles.dashUser}>Signed in as {user.displayName}</h1>
-        <p className={styles.dashOrg}>@ Kloud Corporation</p>
-        <button className={styles.dashSignOut} onClick={onSignOut}>
-          Sign Out
-        </button>
-      </div>
+    <div className={styles.anonWrapper}>
+      <TopToolbar user={user} onSignOut={onSignOut} hideAvatar={false} />
+      
+      <div className={styles.dashContainer}>
+        <div className={styles.dashHeader}>
+          <h1 className={styles.dashUser}>Signed in as {user.displayName}</h1>
+          <p className={styles.dashOrg}>@ Kloud Corporation</p>
+        </div>
 
       {/* New Meeting + Join Meeting row */}
       <div className={styles.dashActions}>
@@ -811,67 +975,82 @@ function DashboardView({
         </div>
       </div>
 
-      {/* Date + Search + Schedule */}
+      {/* Search + Schedule */}
       <div className={styles.dashInfoRow}>
-        <div>
-          <div className={styles.dashDate}>{dateStr}</div>
-          <div className={styles.dashDateSub}>Your meetings for today</div>
-        </div>
         <input
           className={styles.dashSearchInput}
-          placeholder="Search"
+          placeholder="Search meetings..."
           onChange={() => toast.show('Search coming soon!')}
+          style={{ width: '100%', maxWidth: '300px' }}
         />
         <button
           className={styles.scheduleBtn}
-          onClick={() => toast.show('Schedule meeting coming soon!')}
+          onClick={() => setShowScheduleModal(true)}
         >
           + Schedule Meeting
         </button>
       </div>
 
-      {/* Tabs */}
-      <div className={styles.tabBar}>
-        <button
-          className={activeTab === 'scheduled' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('scheduled')}
-        >
-          Scheduled Meeting
-        </button>
-        <button
-          className={activeTab === 'recent' ? styles.tabActive : styles.tab}
-          onClick={() => setActiveTab('recent')}
-        >
-          Recent Meeting
-        </button>
-      </div>
-
       {/* Meeting list */}
+      <h3 className={styles.feedTitle}>Your Recent and Scheduled Meetings</h3>
+      
       {loadingMeetings ? (
         <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading meetings...</div>
       ) : dbMeetings.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>No {activeTab} meetings found.</div>
+        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>No meetings found.</div>
       ) : (
         dbMeetings.map((m, i) => {
-          const d = new Date(m.createdAt);
+          // Use scheduledFor time if it exists, otherwise fallback to creation date
+          const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
           const recording = m.recordings?.find((r: any) => r.status === 'READY');
+          const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+          const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
+
           return (
             <div
               key={m.id || i}
               className={styles.recentCard}
+              onClick={() => {
+                if (m.createdByMemberId === user.id) {
+                  setEditingMeeting(m);
+                } else {
+                  toast.show('You can only edit meetings you created');
+                }
+              }}
             >
-              <div onClick={() => toast.show('Meeting details coming soon!')} style={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <div style={{ minWidth: '120px' }}>
-                  <div className={styles.recentCardDate}>{d.toLocaleDateString()}</div>
-                  <div className={styles.recentCardTime}>{d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '1.5rem' }}>
+                {/* Column 1: Meeting Info */}
+                <div className={styles.recentCardName} style={{ flex: 1 }}>
+                  <div style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
+                    {m.title || m.roomName || 'Untitled Meeting'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <span>Host: {m.createdByMember?.fullName || m.createdByMember?.username || 'Unknown'}</span>
+                    <span>•</span>
+                    <span style={{ fontFamily: 'monospace' }}>{m.roomName}</span>
+                  </div>
                 </div>
-                <div className={styles.recentCardName} style={{ minWidth: '180px' }}>
-                  Host: {m.createdByMember?.fullName || m.createdByMember?.username || 'Unknown'}
-                  <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal', marginTop: '2px' }}>{m.roomName}</div>
+
+                {/* Column 2: Scheduled Time */}
+                <div style={{ width: '220px' }}>
+                  <div style={{ 
+                    fontSize: '11px', 
+                    color: m.scheduledFor ? '#7c3aed' : '#94a3b8', 
+                    textTransform: 'uppercase', 
+                    marginBottom: '4px', 
+                    fontWeight: 600, 
+                    letterSpacing: '0.02em' 
+                  }}>
+                    {m.scheduledFor ? 'Scheduled Time' : 'Time'}
+                  </div>
+                  <div style={{ fontSize: '0.9rem', color: '#334155', fontWeight: 500 }}>
+                    {d.toLocaleDateString()} • {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </div>
                 </div>
               </div>
               
-              {recording && (
+              <div style={{ width: '130px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+              {recording ? (
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -881,7 +1060,7 @@ function DashboardView({
                     background: '#e8f0fe', 
                     color: '#0b57d0', 
                     border: 'none', 
-                    padding: '8px 16px', 
+                    padding: '8px 20px', 
                     borderRadius: '100px',
                     fontSize: '13px',
                     fontWeight: 500,
@@ -894,9 +1073,47 @@ function DashboardView({
                   <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
                     <path d="M8 5v14l11-7z" />
                   </svg>
-                  Play Recording
+                  Play
                 </button>
-              )}
+              ) : processingRecording ? (
+                <div style={{ 
+                  padding: '8px 16px', 
+                  fontSize: '13px', 
+                  color: '#6b7280', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  background: '#f3f4f6',
+                  borderRadius: '100px',
+                  fontWeight: 500
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  Processing
+                </div>
+              ) : failedRecording ? (
+                <div style={{ 
+                  padding: '8px 16px', 
+                  fontSize: '13px', 
+                  color: '#dc2626', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: '6px',
+                  background: '#fef2f2',
+                  borderRadius: '100px',
+                  fontWeight: 500
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                  </svg>
+                  Failed
+                </div>
+              ) : null}
+              </div>
             </div>
           );
         })
@@ -934,20 +1151,75 @@ function DashboardView({
               {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
                 <button 
                   onClick={() => {
+                    const isHost = scheduledModalData.createdByMemberId === user.id;
+                    const action = isHost ? 'start' : 'join';
                     setScheduledModalData(null);
-                    router.push(`/rooms/${scheduledModalData.roomName}?action=join`);
+                    router.push(`/rooms/${scheduledModalData.roomName}?action=${action}`);
                   }} 
                   className={styles.dashJoinBtn} 
                   style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
-                  disabled={new Date(scheduledModalData.scheduledFor).getTime() - Date.now() > 0}
                 >
-                  Join Anyway
+                  {scheduledModalData.createdByMemberId === user.id ? 'Start Meeting' : 'Join Anyway'}
                 </button>
               )}
             </div>
           </div>
         </div>
       )}
+
+      {showScheduleModal && (
+        <ScheduleMeetingModal 
+          user={user}
+          onClose={() => setShowScheduleModal(false)}
+          onSave={() => {
+            setShowScheduleModal(false);
+            setLoadingMeetings(true);
+            fetch('/api/account/meetings', {
+              headers: { Authorization: `Bearer ${user.token}` }
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.meetings) {
+                  const sorted = data.meetings.sort((a: any, b: any) => {
+                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
+                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                    return tB - tA;
+                  });
+                  setDbMeetings(sorted);
+                }
+              })
+              .finally(() => setLoadingMeetings(false));
+          }} 
+        />
+      )}
+
+      {editingMeeting && (
+        <ScheduleMeetingModal 
+          user={user}
+          existingMeeting={editingMeeting}
+          onClose={() => setEditingMeeting(null)}
+          onSave={() => {
+            setEditingMeeting(null);
+            setLoadingMeetings(true);
+            fetch('/api/account/meetings', {
+              headers: { Authorization: `Bearer ${user.token}` }
+            })
+              .then(res => res.json())
+              .then(data => {
+                if (data.meetings) {
+                  const sorted = data.meetings.sort((a: any, b: any) => {
+                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
+                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                    return tB - tA;
+                  });
+                  setDbMeetings(sorted);
+                }
+              })
+              .finally(() => setLoadingMeetings(false));
+          }} 
+        />
+      )}
+      </div>
     </div>
   );
 }

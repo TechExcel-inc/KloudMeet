@@ -4,7 +4,16 @@ import { prisma } from '@/lib/db';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { roomName, createdByMemberId } = body;
+    const { 
+      roomName, 
+      createdByMemberId,
+      title,
+      description,
+      scheduledFor,
+      durationMinutes,
+      timezone,
+      status
+    } = body;
 
     if (!roomName || !createdByMemberId) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
@@ -14,7 +23,12 @@ export async function POST(request: NextRequest) {
       data: {
         roomName,
         createdByMemberId,
-        status: 'ACTIVE',
+        title,
+        description,
+        scheduledFor: scheduledFor ? new Date(scheduledFor) : undefined,
+        durationMinutes,
+        timezone,
+        status: status || 'ACTIVE',
       },
     });
 

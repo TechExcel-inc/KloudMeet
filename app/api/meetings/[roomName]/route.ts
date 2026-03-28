@@ -52,3 +52,34 @@ export async function GET(
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ roomName: string }> }
+) {
+  try {
+    const resolvedParams = await params;
+    const roomName = resolvedParams?.roomName;
+    if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+
+    const body = await request.json();
+    const { title, description, scheduledFor, durationMinutes, timezone, status } = body;
+
+    const data: any = {};
+    if (title !== undefined) data.title = title;
+    if (description !== undefined) data.description = description;
+    if (scheduledFor !== undefined) data.scheduledFor = new Date(scheduledFor);
+    if (durationMinutes !== undefined) data.durationMinutes = durationMinutes;
+    if (timezone !== undefined) data.timezone = timezone;
+    if (status !== undefined) data.status = status;
+
+    const updated = await prisma.meeting.update({
+      where: { roomName },
+      data
+    });
+    return NextResponse.json({ success: true, meeting: updated });
+  } catch (error) {
+    console.error('[meetings PUT]', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}

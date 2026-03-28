@@ -112,7 +112,9 @@ export async function POST(
 
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
-    const targetUrl = `${pageUrl}?isBot=true`;
+    const parsedUrl = new URL(pageUrl);
+    parsedUrl.searchParams.set('isBot', 'true');
+    const targetUrl = parsedUrl.toString();
 
     const info = await egressClient.startWebEgress(
       targetUrl,

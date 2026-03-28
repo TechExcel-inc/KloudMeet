@@ -178,6 +178,8 @@ model Meeting {
   endedAt           DateTime?
   scheduledFor      DateTime?
   timezone          String?
+  durationMinutes   Int?
+  description       String?
   maxParticipants   Int       @default(0)
   status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
   createdAt         DateTime  @default(now())
