@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 
 export default async function PlaybackPage({ params }: { params: Promise<{ id: string }> }) {
   const resolvedParams = await params;
@@ -22,7 +23,7 @@ export default async function PlaybackPage({ params }: { params: Promise<{ id: s
       <div style={{ padding: '40px', textAlign: 'center', fontFamily: 'Inter, sans-serif' }}>
         <h2>Recording Not Available</h2>
         <p>This recording is still processing, failed, or has been deleted.</p>
-        <a href="/" style={{ color: '#0b57d0', textDecoration: 'none' }}>Back to Dashboard</a>
+        <Link href="/" style={{ color: '#0b57d0', textDecoration: 'none' }}>Back to Dashboard</Link>
       </div>
     );
   }
@@ -74,7 +75,7 @@ export default async function PlaybackPage({ params }: { params: Promise<{ id: s
             </svg>
             Download MP4
           </a>
-          <a 
+          <Link 
             href="/"
             style={{ 
               background: '#0b57d0', 
@@ -88,7 +89,7 @@ export default async function PlaybackPage({ params }: { params: Promise<{ id: s
             }}
           >
             Dashboard
-          </a>
+          </Link>
         </div>
       </header>
       

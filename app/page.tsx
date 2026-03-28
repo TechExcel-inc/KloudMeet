@@ -380,7 +380,7 @@ function LoginView({
           </div>
 
           <div className={styles.registerRow}>
-            <span>Don't have an account?</span>
+            <span>Don&apos;t have an account?</span>
             <button type="button" className={styles.linkBtn} onClick={onSignUp}>
               Sign Up
             </button>
