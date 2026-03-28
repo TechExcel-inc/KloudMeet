@@ -371,6 +371,92 @@
 .dropdownItem:hover {
   background: #f3f4f6;
 }
+
+/* Org Dropdown Menu */
+.orgDropdownWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.orgDropdownBtn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+.orgDropdownBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.orgDropdownMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  min-width: 250px;
+  z-index: 100;
+  overflow: hidden;
+}
+.orgDropdownSection {
+  padding: 0.5rem 0;
+}
+.orgDropdownSection + .orgDropdownSection {
+  border-top: 1px solid #f1f5f9;
+}
+.orgDropdownTitle {
+  padding: 0.25rem 1rem 0.5rem;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.orgDropdownIdentity {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 500;
+  background: #f8fafc;
+  margin-bottom: 0.25rem;
+}
+.orgDropdownItemActive {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: #4f46e5;
+  background: #eef2ff;
+  border: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+.orgDropdownItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  color: #334155;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.orgDropdownItem:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
 .anonLink {
   display: block;
   text-align: center;
@@ -394,9 +480,9 @@
    ═══════════════════════════════════════════════════ */
 .dashContainer {
   width: 100%;
-  max-width: 780px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 1rem 1.5rem 2.5rem 1.5rem;
+  padding: 0.5rem 1.5rem 2.5rem 1.5rem;
   position: relative;
   z-index: 1;
 }
@@ -430,7 +516,7 @@
 .dashActions {
   display: flex;
   gap: 0.75rem;
-  margin: 2rem 0 2.5rem;
+  margin: 0.5rem 0 2rem;
   align-items: stretch;
 }
 .newMeetingBtn {
@@ -538,6 +624,56 @@
   color: #fff;
 }
 
+/* Row Action Hover Classes */
+.rowActions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.5rem;
+  width: 180px;
+  flex-shrink: 0;
+}
+
+.hoverAction {
+  opacity: 0;
+  transform: translateX(10px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.recentCard:hover .hoverAction {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.iconBtn {
+  background: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0;
+}
+.iconBtn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.iconBtnStart {
+  background: #fdf2f8;
+  color: #db2777;
+  border: 1px solid #fbcfe8;
+}
+.iconBtnStart:hover {
+  background: #fbcfe8;
+  color: #be185d;
+}
+
 /* Toast */
 .toast {
   position: fixed;
@@ -557,6 +693,36 @@
 @keyframes toastIn {
   0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
   100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Dash / Warning Modals */
+.dashModalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+.dashModalContent {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 450px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid #e2e8f0;
+  position: relative;
+  animation: modalIn 0.25s ease-out;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ═══════════════════════════════════════════════════

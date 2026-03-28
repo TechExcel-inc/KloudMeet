@@ -1,3 +1,4 @@
+import { prisma } from '@/lib/db';
 import { randomString } from '@/lib/client-utils';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
 import { ConnectionDetails } from '@/lib/types';
@@ -31,6 +32,19 @@ export async function GET(request: NextRequest) {
     }
     if (participantName === null) {
       return new NextResponse('Missing required query parameter: participantName', { status: 400 });
+    }
+
+    // Strict Database Validation for Room Existence
+    const meeting = await prisma.meeting.findUnique({
+      where: { roomName: roomName }
+    });
+
+    if (!meeting) {
+      return new NextResponse('Meeting not found', { status: 404 });
+    }
+
+    if (meeting.status === 'ENDED') {
+      return new NextResponse('Meeting has already ended', { status: 403 });
     }
 
     // Generate participant token

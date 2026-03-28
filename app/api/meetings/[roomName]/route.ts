@@ -33,6 +33,10 @@ export async function GET(
       },
     });
 
+    if (!meeting) {
+      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
     let isActive = false;
     try {
       if (LIVEKIT_URL && API_KEY && API_SECRET) {

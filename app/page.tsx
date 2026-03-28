@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
+import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -33,7 +34,7 @@ const MOCK_SCHEDULED = [
 /* ════════════════════════════════════════════════════
    Logo Component
    ════════════════════════════════════════════════════ */
-function KloudLogo({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
+function KloudLogo({ size = 'sm', appendNode }: { size?: 'sm' | 'lg', appendNode?: React.ReactNode }) {
   const iconSize = size === 'lg' ? 48 : 36;
   const fontSize = size === 'lg' ? '2rem' : '1.35rem';
   return (
@@ -49,6 +50,7 @@ function KloudLogo({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
       <span className={styles.logoText} style={{ fontSize, color: size === 'lg' ? '#fff' : '#1e1e2e' }}>
         Kloud Meet
       </span>
+      {appendNode}
     </div>
   );
 }
@@ -69,14 +71,20 @@ function useToast() {
 /* ════════════════════════════════════════════════════
    Top Toolbar Component
    ════════════════════════════════════════════════════ */
-function TopToolbar({ onBack, onSignIn, onSignOut, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
+  
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const orgMenuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
+      }
+      if (orgMenuRef.current && !orgMenuRef.current.contains(event.target as Node)) {
+        setOrgMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -94,9 +102,55 @@ function TopToolbar({ onBack, onSignIn, onSignOut, user, hideAvatar }: { onBack?
             </svg>
           </button>
         )}
-        <KloudLogo />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => window.location.assign('/')}>
+          <KloudLogo />
+        </div>
       </div>
       <div className={styles.toolbarRight}>
+        {user && (
+          <div className={styles.orgDropdownWrapper} ref={orgMenuRef} style={{ marginRight: '0.5rem' }}>
+            <button 
+              className={styles.orgDropdownBtn} 
+              onClick={() => setOrgMenuOpen(!orgMenuOpen)}
+              style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', color: '#4b5563', fontWeight: 500 }}
+            >
+              {user.displayName}@Kloud Corp
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" style={{ marginLeft: '6px', opacity: 0.6 }}>
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+            
+            {orgMenuOpen && (
+              <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '1rem' }}>
+                <div className={styles.orgDropdownSection}>
+                  <div className={styles.orgDropdownTitle}>Switch Account</div>
+                  <button className={styles.orgDropdownItemActive}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
+                      Kloud Corp
+                    </div>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </button>
+                  <button className={styles.orgDropdownItem} onClick={() => setOrgMenuOpen(false)}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>P</div>
+                      KloudMeet Personal
+                    </div>
+                  </button>
+                </div>
+                <div className={styles.orgDropdownSection}>
+                  <div className={styles.orgDropdownIdentity}>Signed in as {user.displayName}</div>
+                  <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
+                    Sign Out
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <button className={styles.iconBtn} aria-label="Help" title="Help">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
             <circle cx="12" cy="12" r="10"></circle>
@@ -136,6 +190,16 @@ function TopToolbar({ onBack, onSignIn, onSignOut, user, hideAvatar }: { onBack?
                   className={styles.dropdownItem} 
                   onClick={() => {
                     setMenuOpen(false);
+                    onOpenSettings && onOpenSettings();
+                  }}
+                  style={{ borderBottom: '1px solid #f1f5f9' }}
+                >
+                  System Settings
+                </button>
+                <button 
+                  className={styles.dropdownItem} 
+                  onClick={() => {
+                    setMenuOpen(false);
                     onSignOut && onSignOut();
                   }}
                 >
@@ -162,20 +226,46 @@ function TopToolbar({ onBack, onSignIn, onSignOut, user, hideAvatar }: { onBack?
    ════════════════════════════════════════════════════ */
 function AnonymousView({
   onSignIn,
+  onSignUp,
   toast,
 }: {
   onSignIn: () => void;
+  onSignUp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const router = useRouter();
   const [code, setCode] = useState('');
+  const [isJoining, setIsJoining] = useState(false);
+  const [scheduledModalData, setScheduledModalData] = useState<any>(null);
+  const [countdown, setCountdown] = useState<string>('');
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
-  const handleJoin = () => {
+  useEffect(() => {
+    if (!scheduledModalData?.scheduledFor) return;
+    const tick = () => {
+      const target = new Date(scheduledModalData.scheduledFor).getTime();
+      const diffMs = target - Date.now();
+      if (diffMs <= 0) {
+        setCountdown("00:00");
+        return;
+      }
+      const totalSec = Math.floor(diffMs / 1000);
+      const m = Math.floor(totalSec / 60);
+      const s = totalSec % 60;
+      setCountdown(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
+    };
+    tick();
+    const intv = setInterval(tick, 1000);
+    return () => clearInterval(intv);
+  }, [scheduledModalData]);
+
+  const handleJoin = async () => {
     const raw = code.trim();
     if (!raw) {
-      router.push(`/rooms/${generateRoomId()}`);
+      setWarningMessage('Meeting code cannot be empty. Please enter a valid code to join.');
       return;
     }
+    if (isJoining) return;
 
     let roomId = raw;
     if (raw.includes('/rooms/')) {
@@ -195,12 +285,62 @@ function AnonymousView({
       query = raw.substring(raw.indexOf('?'));
     }
 
-    router.push(`/rooms/${roomId}${query}`);
+    setIsJoining(true);
+
+    try {
+      const res = await fetch(`/api/meetings/${roomId}`);
+      
+      // 1. Non-Existing
+      if (!res.ok) {
+        setWarningMessage('Meeting not found. Please review the code or Sign In to schedule a new one.');
+        setIsJoining(false);
+        return;
+      }
+      
+      const data = await res.json();
+      
+      // 2. Already Finished
+      if (data.status === 'ENDED') {
+        setWarningMessage('This meeting has already ended and is no longer available.');
+        setIsJoining(false);
+        return;
+      }
+      
+      // 6. Already In Progress
+      if (data.isActive) {
+        router.push(`/rooms/${roomId}${query}`);
+        return;
+      }
+
+      // Check Scheduling
+      if (data.scheduledFor) {
+        const diffMs = new Date(data.scheduledFor).getTime() - Date.now();
+        
+        if (diffMs > 0) {
+          // 4 & 5. Scheduled for Future (> 1Hr & < 1Hr) handled by Modal
+          setScheduledModalData(data);
+          setIsJoining(false);
+          return;
+        } else {
+          // 3. Past Start Date (But Not Started)
+          toast.show('The scheduled start time has passed. We are waiting for the Host to begin.');
+          router.push(`/rooms/${roomId}${query}`);
+          return;
+        }
+      }
+      
+      // Valid Path (3, 4, 5, 6)
+      router.push(`/rooms/${roomId}${query}`);
+    } catch(e) {
+      console.error(e);
+      setWarningMessage('An error occurred connecting to the API. Please try again.');
+      setIsJoining(false);
+    }
   };
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar onSignIn={onSignIn} />
+      <TopToolbar onSignIn={onSignIn} hideAvatar={true} />
 
       {/* ── Central Join Container ── */}
       <div className={styles.anonContainer}>
@@ -225,8 +365,8 @@ function AnonymousView({
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
           />
-          <button className={styles.joinBtn} onClick={handleJoin}>
-            Join
+          <button className={isJoining ? styles.joinBtnLoading : styles.joinBtn} onClick={handleJoin} disabled={isJoining} style={isJoining ? { opacity: 0.7, cursor: 'not-allowed' } : {}}>
+            {isJoining ? 'Joining...' : 'Join'}
           </button>
         </div>
 
@@ -247,7 +387,88 @@ function AnonymousView({
             </div>
           ))}
         </div>
+
+        <div className={styles.registerRow} style={{ marginTop: '1.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
+          <span>Don't have a Kloud account?</span>
+          <button type="button" className={styles.linkBtn} onClick={onSignUp}>
+            Sign Up
+          </button>
+        </div>
+
       </div>
+
+      {/* ── Warning Message Overlay ── */}
+      {warningMessage && (
+        <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
+          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+            <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1rem' }}>Warning</h3>
+            <p style={{ color: '#4b5563', lineHeight: '1.5', marginBottom: '2rem' }}>
+              {warningMessage}
+            </p>
+            <button 
+              onClick={() => setWarningMessage(null)} 
+              className={styles.dashSignOut} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '12px' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Scheduled Meeting Overlay ── */}
+      {scheduledModalData && (
+        <div className={styles.dashModalOverlay}>
+          <div className={styles.dashModalContent}>
+            <h3>Scheduled Meeting</h3>
+            <p style={{ marginTop: '1rem', color: '#4b5563', lineHeight: '1.5' }}>
+              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
+            </p>
+            {(() => {
+              const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
+              return diffMs > 60 * 60 * 1000 ? (
+                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
+                  <p style={{ color: '#64748b' }}>Scheduled for: <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
+                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>This meeting is more than an hour away. Please check back closer to the start time.</p>
+                </div>
+              ) : (
+                <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
+                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
+                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#7c3aed', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                </div>
+              );
+            })()}
+            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+              <button 
+                onClick={() => setScheduledModalData(null)} 
+                className={styles.dashSignOut} 
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
+              >
+                Close
+              </button>
+              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
+                <button 
+                  onClick={() => {
+                    router.push(`/rooms/${scheduledModalData.roomName}?action=join`);
+                    setScheduledModalData(null);
+                  }}
+                  className={styles.modalBtnSubmit} 
+                  style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
+                >
+                  Join Anyway
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -380,7 +601,7 @@ function LoginView({
           </div>
 
           <div className={styles.registerRow}>
-            <span>Don't have an account?</span>
+            <span>Don't have a Kloud account?</span>
             <button type="button" className={styles.linkBtn} onClick={onSignUp}>
               Sign Up
             </button>
@@ -775,11 +996,13 @@ function DashboardView({
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   
   const [isJoining, setIsJoining] = useState(false);
   const [scheduledModalData, setScheduledModalData] = useState<any>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
   const [dbMeetings, setDbMeetings] = useState<any[]>([]);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
@@ -853,6 +1076,14 @@ function DashboardView({
       const diffMs = target - Date.now();
       if (diffMs <= 0) {
         setCountdown("00:00");
+        const action = scheduledModalData.createdByMemberId === user.id ? 'start' : 'join';
+        toast.show('Meeting is starting! Joining automatically...');
+        router.push(`/rooms/${scheduledModalData.roomName}?action=${action}`);
+        setScheduledModalData(null);
+        return;
+      }
+      if (diffMs > 3600000) {
+        setCountdown("MORE_THAN_HOUR");
         return;
       }
       const totalSec = Math.floor(diffMs / 1000);
@@ -863,7 +1094,7 @@ function DashboardView({
     tick();
     const intv = setInterval(tick, 1000);
     return () => clearInterval(intv);
-  }, [scheduledModalData]);
+  }, [scheduledModalData, router, user.id, toast]);
 
   const handleNewMeeting = async () => {
     const roomId = generateRoomId();
@@ -883,7 +1114,11 @@ function DashboardView({
 
   const handleJoinMeeting = async () => {
     const raw = joinCode.trim();
-    if (!raw || isJoining) return;
+    if (!raw) {
+      setWarningMessage('Please enter a valid meeting code to join.');
+      return;
+    }
+    if (isJoining) return;
     
     let roomId = raw;
     if (raw.includes('/rooms/')) {
@@ -901,9 +1136,10 @@ function DashboardView({
 
     try {
       const res = await fetch(`/api/meetings/${roomId}`);
+      
+      // 1. Non-Existing
       if (!res.ok) {
-        // If room doesn't exist, we start a new one automatically
-        router.push(`/rooms/${roomId}?action=start`);
+        setWarningMessage("Meeting not found. Please use 'Schedule Meeting' to create a new one.");
         setIsJoining(false);
         return;
       }
@@ -912,44 +1148,55 @@ function DashboardView({
       const isHost = data.createdByMemberId === user.id;
       const targetAction = isHost && !data.isActive ? 'start' : 'join';
       
-      // If active, route immediately
+      // 2. Already Finished
+      if (data.status === 'ENDED') {
+        setWarningMessage('This meeting has already ended and is no longer available.');
+        setIsJoining(false);
+        return;
+      }
+      
+      // 6. Already In Progress
       if (data.isActive) {
         router.push(`/rooms/${roomId}?action=${targetAction}`);
         return;
       }
 
-      // If scheduled in the future, show modal
+      // Check Scheduling
       if (data.scheduledFor) {
         const diffMs = new Date(data.scheduledFor).getTime() - Date.now();
+        
         if (diffMs > 0) {
+          // 4 & 5. Scheduled for Future
           setScheduledModalData(data);
           setIsJoining(false);
+          return;
+        } else {
+          // 3. Past Start Date (But Not Started)
+          toast.show('The scheduled start time has passed. We are waiting for the Host to begin.');
+          router.push(`/rooms/${roomId}?action=${targetAction}`);
           return;
         }
       }
       
-      // Default fallback
+      // Valid routing
       router.push(`/rooms/${roomId}?action=${targetAction}`);
     } catch(e) {
       console.error(e);
-      router.push(`/rooms/${roomId}?action=join`);
+      setWarningMessage('An error occurred connecting to the API. Please try again.');
+      setIsJoining(false);
     }
   };
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar user={user} onSignOut={onSignOut} hideAvatar={false} />
+      <TopToolbar 
+        user={user} 
+        onSignOut={onSignOut} 
+        onOpenSettings={() => setShowSettingsModal(true)}
+        hideAvatar={false} 
+      />
       
       <div className={styles.dashContainer}>
-        <div className={styles.dashHeader}>
-          <h1 className={styles.dashUser}>Signed in as {user.displayName}</h1>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-            <span className={styles.dashOrg} style={{ margin: 0 }}>@ Kloud Corporation</span>
-            <span style={{ color: '#d1d5db', fontSize: '0.9rem' }}>|</span>
-            <button className={styles.dashSignOut} onClick={onSignOut}>Sign Out</button>
-          </div>
-        </div>
-
       {/* New Meeting + Join Meeting row */}
       <div className={styles.dashActions}>
         <button className={styles.newMeetingBtn} onClick={handleNewMeeting}>
@@ -979,24 +1226,25 @@ function DashboardView({
         </div>
       </div>
 
-      {/* Search + Schedule */}
-      <div className={styles.dashInfoRow}>
-        <input
-          className={styles.dashSearchInput}
-          placeholder="Search meetings..."
-          onChange={() => toast.show('Search coming soon!')}
-          style={{ width: '100%', maxWidth: '300px' }}
-        />
-        <button
-          className={styles.scheduleBtn}
-          onClick={() => setShowScheduleModal(true)}
-        >
-          + Schedule Meeting
-        </button>
+      {/* Search + Schedule + Title */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '2rem 0 1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: '1rem' }}>
+        <h3 style={{ fontSize: '1rem', color: '#4b5563', fontWeight: 600, margin: 0 }}>Your past and scheduled meetings</h3>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <input
+            className={styles.dashSearchInput}
+            placeholder="Search meetings..."
+            onChange={() => toast.show('Search coming soon!')}
+            style={{ width: '250px', margin: 0 }}
+          />
+          <button
+            className={styles.scheduleBtn}
+            onClick={() => setShowScheduleModal(true)}
+            style={{ margin: 0 }}
+          >
+            + Schedule Meeting
+          </button>
+        </div>
       </div>
-
-      {/* Meeting list */}
-      <h3 className={styles.feedTitle}>Your Recent and Scheduled Meetings</h3>
       
       {loadingMeetings ? (
         <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading meetings...</div>
@@ -1010,19 +1258,18 @@ function DashboardView({
           const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
           const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
 
+          const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - Date.now() : -1;
+          const isWithinOneHour = diffMs <= 60 * 60 * 1000;
+          const isHost = m.createdByMemberId === user.id;
+          const showStart = isHost && isWithinOneHour && m.status !== 'ENDED' && !m.isActive;
+
           return (
             <div
               key={m.id || i}
               className={styles.recentCard}
-              onClick={() => {
-                if (m.createdByMemberId === user.id) {
-                  setEditingMeeting(m);
-                } else {
-                  toast.show('You can only edit meetings you created');
-                }
-              }}
+              style={{ cursor: 'default' }}
             >
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer', gap: '1.5rem' }}>
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
                 {/* Column 1: Meeting Info */}
                 <div className={styles.recentCardName} style={{ flex: 1 }}>
                   <div style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
@@ -1057,13 +1304,35 @@ function DashboardView({
                 </div>
               </div>
               
-              <div style={{ width: '130px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+              <div className={styles.rowActions}>
+                {showStart && (
+                  <button
+                    title="Start Meeting"
+                    className={`${styles.iconBtn} ${styles.iconBtnStart} ${styles.hoverAction}`}
+                    onClick={() => router.push(`/rooms/${m.roomName}?action=start`)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </button>
+                )}
+
+                {isHost && (
+                  <button
+                    title="Edit Meeting"
+                    className={`${styles.iconBtn} ${styles.hoverAction}`}
+                    onClick={() => setEditingMeeting(m)}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                )}
+                
               {recording ? (
                 <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    window.open(`/recordings/${recording.id}`, '_blank');
-                  }}
+                  onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
                   style={{ 
                     background: '#e8f0fe', 
                     color: '#0b57d0', 
@@ -1227,6 +1496,42 @@ function DashboardView({
           }} 
         />
       )}
+
+      {showSettingsModal && (
+        <SystemSettingsModal 
+          onClose={() => setShowSettingsModal(false)}
+          onSave={() => {
+            setShowSettingsModal(false);
+            toast.show('System Settings saved globally!');
+          }}
+        />
+      )}
+
+      {/* ── Warning Message Overlay ── */}
+      {warningMessage && (
+        <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
+          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+            <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+              </svg>
+            </div>
+            <h3 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1rem' }}>Warning</h3>
+            <p style={{ color: '#4b5563', lineHeight: '1.5', marginBottom: '2rem' }}>
+              {warningMessage}
+            </p>
+            <button 
+              onClick={() => setWarningMessage(null)} 
+              className={styles.dashSignOut} 
+              style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
@@ -1237,6 +1542,7 @@ function DashboardView({
    ════════════════════════════════════════════════════ */
 function HomeContent() {
   const [view, setView] = useState<PageView>('anonymous');
+  const [signupSource, setSignupSource] = useState<PageView>('login');
   const [user, setUser] = useState<AuthUser | null>(null);
   const toast = useToast();
 
@@ -1268,19 +1574,19 @@ function HomeContent() {
       {toast.el}
       <div className={styles.bgGlow} />
       {view === 'anonymous' && (
-        <AnonymousView onSignIn={() => setView('login')} toast={toast} />
+        <AnonymousView onSignIn={() => setView('login')} onSignUp={() => { setSignupSource('anonymous'); setView('signup'); }} toast={toast} />
       )}
       {view === 'login' && (
         <LoginView
           onBack={() => setView('anonymous')}
           onLoginSuccess={handleAuthSuccess}
-          onSignUp={() => setView('signup')}
+          onSignUp={() => { setSignupSource('login'); setView('signup'); }}
           toast={toast}
         />
       )}
       {view === 'signup' && (
         <SignupView
-          onBack={() => setView('login')}
+          onBack={() => setView(signupSource)}
           onSignupSuccess={handleAuthSuccess}
           toast={toast}
         />

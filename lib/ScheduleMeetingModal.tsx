@@ -111,6 +111,24 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           <div className={styles.header}>
             <h2 className={styles.title}>{existingMeeting ? 'Edit Meeting' : 'New Meeting'}</h2>
             <div className={styles.headerActions}>
+              {existingMeeting && (
+                <button 
+                  className={styles.btnOutline} 
+                  onClick={() => {
+                    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
+                    navigator.clipboard.writeText(`Join my KloudMeet meeting:\n${existingMeeting.title || 'Untitled Meeting'}\n${url}`);
+                    alert('Invite copied to clipboard!');
+                  }}
+                  type="button"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                  </svg>
+                  Copy Invite
+                </button>
+              )}
               <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
@@ -149,6 +167,20 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           {/* Tab Content: General Information */}
           {activeTab === 'general' && (
             <div className={styles.content}>
+              {existingMeeting && (
+                <div className={styles.formRow}>
+                  <label className={styles.label}>Meeting ID</label>
+                  <div className={styles.inputWrapper}>
+                    <input 
+                      type="text" 
+                      className={styles.input} 
+                      value={existingMeeting.roomName}
+                      readOnly
+                      style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed', fontFamily: 'monospace' }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className={styles.formRow}>
                 <label className={styles.label}>Title</label>
                 <div className={styles.inputWrapper}>
