@@ -943,7 +943,11 @@ function DashboardView({
       <div className={styles.dashContainer}>
         <div className={styles.dashHeader}>
           <h1 className={styles.dashUser}>Signed in as {user.displayName}</h1>
-          <p className={styles.dashOrg}>@ Kloud Corporation</p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <span className={styles.dashOrg} style={{ margin: 0 }}>@ Kloud Corporation</span>
+            <span style={{ color: '#d1d5db', fontSize: '0.9rem' }}>|</span>
+            <button className={styles.dashSignOut} onClick={onSignOut}>Sign Out</button>
+          </div>
         </div>
 
       {/* New Meeting + Join Meeting row */}
@@ -1035,7 +1039,7 @@ function DashboardView({
                 <div style={{ width: '220px' }}>
                   <div style={{ 
                     fontSize: '11px', 
-                    color: m.scheduledFor ? '#7c3aed' : '#94a3b8', 
+                    color: '#94a3b8', 
                     textTransform: 'uppercase', 
                     marginBottom: '4px', 
                     fontWeight: 600, 
@@ -1043,7 +1047,11 @@ function DashboardView({
                   }}>
                     {m.scheduledFor ? 'Scheduled Time' : 'Time'}
                   </div>
-                  <div style={{ fontSize: '0.9rem', color: '#334155', fontWeight: 500 }}>
+                  <div style={{ 
+                    fontSize: '0.9rem', 
+                    color: m.scheduledFor ? '#7c3aed' : '#334155', 
+                    fontWeight: m.scheduledFor ? 600 : 500 
+                  }}>
                     {d.toLocaleDateString()} • {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
