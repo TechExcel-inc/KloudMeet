@@ -50,6 +50,7 @@ interface KloudMeetToolbarProps {
   canEndForAll?: boolean;
   isRecording?: boolean;
   onOpenRecordPopup?: () => void;
+  onStopRecording?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -80,6 +81,7 @@ export function KloudMeetToolbar({
   canEndForAll,
   isRecording,
   onOpenRecordPopup,
+  onStopRecording,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -688,6 +690,7 @@ export function KloudMeetToolbar({
                 canEndForAll={canEndForAll}
                 isRecording={isRecording}
                 onOpenRecordPopup={onOpenRecordPopup}
+                onStopRecording={onStopRecording}
               />
             </div>
           </div>
@@ -718,6 +721,7 @@ export function KloudMeetToolbar({
               canEndForAll={canEndForAll}
               isRecording={isRecording}
               onOpenRecordPopup={onOpenRecordPopup}
+              onStopRecording={onStopRecording}
             />
           </div>
         </div>
@@ -813,6 +817,7 @@ export function KloudMeetToolbar({
                         canEndForAll={canEndForAll}
                         isRecording={isRecording}
                         onOpenRecordPopup={onOpenRecordPopup}
+                        onStopRecording={onStopRecording}
                       />
                     </div>
                   )}
@@ -843,6 +848,7 @@ function ActiveSheetContent({
   canEndForAll,
   isRecording,
   onOpenRecordPopup,
+  onStopRecording,
 }: any) {
   const showComingSoon = (feature: string) => {
     setToastMsg(`${feature} coming soon!`);
@@ -913,7 +919,7 @@ function ActiveSheetContent({
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
              Pause Recording
           </button>
-          <button className={styles.actionSheetItem} style={{ color: '#ef4444' }} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} style={{ color: '#ef4444' }} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
              Stop Recording
           </button>

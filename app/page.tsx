@@ -671,6 +671,23 @@ function DashboardView({
   const [scheduledModalData, setScheduledModalData] = useState<any>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
 
+  const [dbMeetings, setDbMeetings] = useState<any[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
+
+  useEffect(() => {
+    if (!user || (!user.token && !user.id)) return;
+    setLoadingMeetings(true);
+    fetch(`/api/account/meetings?type=${activeTab}`, {
+      headers: { Authorization: `Bearer ${user.token}` }
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.meetings) setDbMeetings(data.meetings);
+      })
+      .catch(console.error)
+      .finally(() => setLoadingMeetings(false));
+  }, [user, activeTab]);
+
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;
     const tick = () => {
@@ -754,7 +771,6 @@ function DashboardView({
 
   const today = new Date();
   const dateStr = `${today.getMonth() + 1}/${today.getDate()}/${today.getFullYear()}`;
-  const meetings = activeTab === 'scheduled' ? MOCK_SCHEDULED : MOCK_RECENT;
 
   return (
     <div className={styles.dashContainer}>
@@ -831,20 +847,60 @@ function DashboardView({
       </div>
 
       {/* Meeting list */}
-      {meetings.map((m, i) => (
-        <div
-          key={i}
-          className={styles.recentCard}
-          onClick={() => toast.show('Meeting details coming soon!')}
-        >
-          <div>
-            <div className={styles.recentCardDate}>{m.date}</div>
-            <div className={styles.recentCardTime}>{m.start}</div>
-          </div>
-          <div className={styles.recentCardName}>{m.host}</div>
-          <div className={styles.recentCardTime}>{m.end}</div>
-        </div>
-      ))}
+      {loadingMeetings ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading meetings...</div>
+      ) : dbMeetings.length === 0 ? (
+        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>No {activeTab} meetings found.</div>
+      ) : (
+        dbMeetings.map((m, i) => {
+          const d = new Date(m.createdAt);
+          const recording = m.recordings?.find((r: any) => r.status === 'READY');
+          return (
+            <div
+              key={m.id || i}
+              className={styles.recentCard}
+            >
+              <div onClick={() => toast.show('Meeting details coming soon!')} style={{ flex: 1, display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <div style={{ minWidth: '120px' }}>
+                  <div className={styles.recentCardDate}>{d.toLocaleDateString()}</div>
+                  <div className={styles.recentCardTime}>{d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                </div>
+                <div className={styles.recentCardName} style={{ minWidth: '180px' }}>
+                  Host: {m.createdByMember?.fullName || m.createdByMember?.username || 'Unknown'}
+                  <div style={{ fontSize: '12px', color: '#6b7280', fontWeight: 'normal', marginTop: '2px' }}>{m.roomName}</div>
+                </div>
+              </div>
+              
+              {recording && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(`/recordings/${recording.id}`, '_blank');
+                  }}
+                  style={{ 
+                    background: '#e8f0fe', 
+                    color: '#0b57d0', 
+                    border: 'none', 
+                    padding: '8px 16px', 
+                    borderRadius: '100px',
+                    fontSize: '13px',
+                    fontWeight: 500,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Play Recording
+                </button>
+              )}
+            </div>
+          );
+        })
+      )}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>

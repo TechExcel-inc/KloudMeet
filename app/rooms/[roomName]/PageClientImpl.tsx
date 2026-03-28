@@ -55,6 +55,10 @@ export function PageClientImpl(props: {
   hq: boolean;
   codec: VideoCodec;
 }) {
+  const searchParams = useSearchParams();
+  const isActionStart = searchParams?.get('action') === 'start';
+  const isBot = searchParams?.get('isBot') === 'true';
+
   const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
     undefined,
   );
@@ -178,10 +182,22 @@ export function PageClientImpl(props: {
     alert(`LiveKit PreJoin Error: ${error?.message || String(error)}`);
   }, []);
 
+  React.useEffect(() => {
+    if (isBot && !connectionDetails && preJoinChoices === undefined) {
+      handlePreJoinSubmit({
+        username: 'KloudMeet Recorder',
+        videoEnabled: false,
+        audioEnabled: false,
+        videoDeviceId: '',
+        audioDeviceId: '',
+      });
+    }
+  }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
+
   return (
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        <div className="kloud-prejoin-wrapper">
+        <div className="kloud-prejoin-wrapper" style={{ display: isBot ? 'none' : undefined }}>
           <style>{`
             .kloud-prejoin-wrapper button[type="submit"].lk-button,
             .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type {
@@ -535,6 +551,9 @@ function VideoConferenceComponent(props: {
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
+  
+  const searchParams = useSearchParams();
+  const isActionStart = searchParams?.get('action') === 'start';
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
   const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
@@ -552,12 +571,42 @@ function VideoConferenceComponent(props: {
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
   const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
 
-  const searchParams = useSearchParams();
-  const isActionStart = searchParams?.get('action') === 'start';
   const [showMeetingReadyModal, setShowMeetingReadyModal] = React.useState(false);
   const [isRecording, setIsRecording] = React.useState(false);
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
+
+  const handleToggleRecording = async (action: 'start' | 'stop') => {
+    try {
+      const dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}');
+      if (!dbUser.id) {
+        alert('You must be logged in to record');
+        return;
+      }
+      setIsRecording(action === 'start');
+      let pageUrlStr = window.location.href;
+      // Strip out query params so we can append cleanly
+      pageUrlStr = pageUrlStr.split('?')[0];
+
+      const res = await fetch(`/api/meetings/${window.location.pathname.split('/').filter(Boolean).pop()}/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, teamMemberId: dbUser.id, pageUrl: pageUrlStr })
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Recording failed: ${data.error}`);
+        setIsRecording(action === 'stop'); // revert
+      } else {
+        console.log(`Recording ${action} successful`, data);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Network error while toggling recording');
+      setIsRecording(action === 'stop'); // revert
+    }
+  };
 
   React.useEffect(() => {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
@@ -2139,6 +2188,7 @@ function VideoConferenceComponent(props: {
           canEndForAll={isHost || isCohost}
           isRecording={isRecording}
           onOpenRecordPopup={() => setShowRecordPopup(true)}
+          onStopRecording={() => handleToggleRecording('stop')}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
@@ -2272,9 +2322,8 @@ function VideoConferenceComponent(props: {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
                   <button className="kloud-btn-text" onClick={() => setShowRecordingConsent(false)}>Cancel</button>
                   <button className="kloud-btn-text" style={{ color: '#2563eb', fontWeight: 600 }} onClick={() => {
-                    setIsRecording(true);
                     setShowRecordingConsent(false);
-                    // trigger API later
+                    handleToggleRecording('start');
                   }}>Start</button>
                 </div>
               </div>
