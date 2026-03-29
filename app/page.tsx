@@ -389,7 +389,7 @@ function AnonymousView({
         </div>
 
         <div className={styles.registerRow} style={{ marginTop: '1.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
-          <span>Don't have a Kloud account?</span>
+          <span>Don&apos;t have a Kloud account?</span>
           <button type="button" className={styles.linkBtn} onClick={onSignUp}>
             Sign Up
           </button>
@@ -601,7 +601,7 @@ function LoginView({
           </div>
 
           <div className={styles.registerRow}>
-            <span>Don't have a Kloud account?</span>
+            <span>Don&apos;t have a Kloud account?</span>
             <button type="button" className={styles.linkBtn} onClick={onSignUp}>
               Sign Up
             </button>
