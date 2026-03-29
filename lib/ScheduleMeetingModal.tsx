@@ -43,6 +43,38 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   
   const [isSaving, setIsSaving] = useState(false);
 
+  const isFinished = existingMeeting?.status === 'ENDED' || existingMeeting?.status === 'FINISHED';
+  const isCanceled = existingMeeting?.status === 'CANCELED';
+  const isReadOnly = isFinished || isCanceled;
+
+  const handleCancelMeeting = async () => {
+    if (!confirm('Are you sure you want to cancel this meeting?')) return;
+    setIsSaving(true);
+    try {
+      await fetch(`/api/meetings/${existingMeeting.roomName}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELED' }),
+      });
+      onSave();
+    } catch (e) {
+      alert('Failed to cancel meeting.');
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteMeeting = async () => {
+    if (!confirm('Are you sure you want to delete this meeting? This cannot be undone.')) return;
+    setIsSaving(true);
+    try {
+      await fetch(`/api/meetings/${existingMeeting.roomName}`, { method: 'DELETE' });
+      onSave();
+    } catch (e) {
+      alert('Failed to delete meeting.');
+      setIsSaving(false);
+    }
+  };
+
   // Timezone display (Forced to US Pacific Time)
   const tzString = '(GMT-08:00) Pacific Time (US & Canada)';
 
@@ -111,7 +143,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           <div className={styles.header}>
             <h2 className={styles.title}>{existingMeeting ? 'Edit Meeting' : 'New Meeting'}</h2>
             <div className={styles.headerActions}>
-              {existingMeeting && (
+              {existingMeeting && !isCanceled && (
                 <button 
                   className={styles.btnOutline} 
                   onClick={() => {
@@ -128,6 +160,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   </svg>
                   Copy Invite
                 </button>
+              )}
+              {existingMeeting && !isFinished && !isCanceled && (
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>Cancel</button>
+              )}
+              {existingMeeting && (
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>Delete</button>
               )}
               <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
                 {isSaving ? 'Saving...' : 'Save'}
@@ -168,18 +206,40 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           {activeTab === 'general' && (
             <div className={styles.content}>
               {existingMeeting && (
-                <div className={styles.formRow}>
-                  <label className={styles.label}>Meeting ID</label>
-                  <div className={styles.inputWrapper}>
-                    <input 
-                      type="text" 
-                      className={styles.input} 
-                      value={existingMeeting.roomName}
-                      readOnly
-                      style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed', fontFamily: 'monospace' }}
-                    />
+                <>
+                  <div className={styles.formRow}>
+                    <label className={styles.label}>Status</label>
+                    <div className={styles.inputWrapper} style={{ paddingTop: '0.4rem' }}>
+                      <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: 600, 
+                        background: existingMeeting.status === 'ENDED' ? '#dcfce7' : 
+                                    existingMeeting.status === 'CANCELED' ? '#fee2e2' : 
+                                    existingMeeting.status === 'PAST_DUE' ? '#ffedd5' : 
+                                    existingMeeting.status === 'ACTIVE' ? '#e0e7ff' : '#f1f5f9',
+                        color: existingMeeting.status === 'ENDED' ? '#166534' : 
+                               existingMeeting.status === 'CANCELED' ? '#991b1b' : 
+                               existingMeeting.status === 'PAST_DUE' ? '#9a3412' : 
+                               existingMeeting.status === 'ACTIVE' ? '#3730a3' : '#475569'
+                      }}>
+                        {existingMeeting.status === 'ENDED' ? 'Finished' : 
+                         existingMeeting.status === 'PAST_DUE' ? 'Past Due' : 
+                         existingMeeting.status === 'ACTIVE' ? (new Date(existingMeeting.startedAt) > new Date(existingMeeting.createdAt) ? 'In Progress' : 'Scheduled') : 
+                         existingMeeting.status || 'Scheduled'}
+                      </div>
+                    </div>
                   </div>
-                </div>
+                  <div className={styles.formRow}>
+                    <label className={styles.label}>Meeting ID</label>
+                    <div className={styles.inputWrapper}>
+                      <input 
+                        type="text" 
+                        className={styles.input} 
+                        value={existingMeeting.roomName}
+                        readOnly
+                        style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed', fontFamily: 'monospace' }}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
               <div className={styles.formRow}>
                 <label className={styles.label}>Title</label>
@@ -215,17 +275,20 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     className={`${styles.input} ${styles.timeInput}`} 
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
+                    disabled={isReadOnly}
                   />
                   <input 
                     type="time" 
                     className={`${styles.input} ${styles.timeInput}`} 
                     value={time}
                     onChange={(e) => setTime(e.target.value)}
+                    disabled={isReadOnly}
                   />
                   <select 
                     className={`${styles.input} ${styles.select} ${styles.timeInput}`}
                     value={durationStr}
                     onChange={(e) => setDurationStr(e.target.value)}
+                    disabled={isReadOnly}
                   >
                     <option value="15min">15min</option>
                     <option value="30min">30min</option>
@@ -254,14 +317,14 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 <label className={styles.label}>Access Option</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', paddingTop: '0.6rem' }}>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="radio" name="access" value="public" defaultChecked className={styles.radio} />
+                    <input type="radio" name="access" value="public" defaultChecked className={styles.radio} disabled={isReadOnly} />
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Public</div>
                       <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Anybody can freely join.</div>
                     </div>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="radio" name="access" value="private" className={styles.radio} />
+                    <input type="radio" name="access" value="private" className={styles.radio} disabled={isReadOnly} />
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Private</div>
                       <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Invited only or require approval to join.</div>
@@ -269,6 +332,30 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   </label>
                 </div>
               </div>
+
+              {isFinished && existingMeeting?.recordings && existingMeeting.recordings.length > 0 && (
+                <div className={styles.formRow}>
+                  <label className={styles.label}>Recordings</label>
+                  <div className={styles.inputWrapper} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {existingMeeting.recordings.map((r: any) => (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" width="18" height="18">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                          </svg>
+                          <div>
+                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>Meeting Recording</div>
+                            <div style={{ color: '#64748b', fontSize: '0.8rem' }}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
+                          </div>
+                        </div>
+                        {r.status === 'READY' && r.storageUrl && (
+                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>View</a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

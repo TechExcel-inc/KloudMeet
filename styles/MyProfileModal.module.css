@@ -1,0 +1,284 @@
+.modalOverlay * {
+  box-sizing: border-box;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 1000px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+.headerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.btnSave {
+  background: #4f46e5;
+  color: white;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnSave:hover:not(:disabled) {
+  background: #4338ca;
+}
+.btnSave:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.btnCancel {
+  background: #f1f5f9;
+  color: #0f172a;
+  border: none;
+  padding: 8px 24px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnCancel:hover {
+  background: #e2e8f0;
+}
+
+.bodyContent {
+  padding: 2rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.topSection {
+  display: flex;
+  gap: 3rem;
+}
+
+.leftCol {
+  flex: 0 0 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.avatarWrapper {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 4px solid #e0e7ff;
+  overflow: hidden;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  color: #94a3b8;
+}
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatarName {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #0f172a;
+  text-align: center;
+}
+
+.rightCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.formRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.formLabel {
+  width: 160px;
+  text-align: right;
+  color: #94a3b8;
+  font-size: 0.95rem;
+  padding-top: 8px; /* align with input */
+}
+
+.formField {
+  flex: 1;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.readOnlyText {
+  padding-top: 8px;
+  color: #1e293b;
+  font-size: 0.95rem;
+}
+
+.inputGroup {
+  display: flex;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  align-items: center;
+  padding-right: 12px;
+  flex: 1;
+  min-width: 0;
+}
+.inputGroup.focused {
+  border-color: #4f46e5;
+  background: white;
+}
+
+.inputBox {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  background: #e2e8f0;
+  transition: all 0.2s;
+}
+.inputBox:focus {
+  border-color: #4f46e5;
+  background: #f8fafc;
+}
+
+.inputGroup .inputBox {
+  border: none;
+  background: transparent;
+}
+.inputGroup .inputBox:focus {
+  background: transparent;
+}
+
+.inputBox:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #e2e8f0;
+}
+
+.textareaBox {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #0f172a;
+  outline: none;
+  resize: vertical;
+  min-height: 120px;
+  font-family: inherit;
+}
+.textareaBox:focus {
+  border-color: #4f46e5;
+}
+
+.notVerifiedText {
+  color: #ef4444;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.btnVerify {
+  background: #3730a3;
+  color: white;
+  border: none;
+  padding: 8px 20px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.btnVerify:hover {
+  background: #312e81;
+}
+
+.dividerContainer {
+  position: relative;
+  margin: 1rem 0;
+  display: flex;
+  align-items: center;
+}
+.dividerLine {
+  width: 100%;
+  height: 1px;
+  background: #e2e8f0;
+}
+.dividerText {
+  position: absolute;
+  left: 0;
+  background: white;
+  padding-right: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 1.1rem;
+}
+
+.securitySection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-left: 188px; /* Perfectly aligns with rightCol offset (140px leftCol + 3rem/48px gap = 188px) */
+}
+
+.changeBtnWrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.btnChange {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f1f5f9;
+  color: #334155;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnChange:hover {
+  background: #e2e8f0;
+}

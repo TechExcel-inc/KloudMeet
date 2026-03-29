@@ -127,27 +127,24 @@ export function PageClientImpl(props: {
   const isActive = meetingInfo?.isActive === true;
 
   const preJoinTitle = React.useMemo(() => {
-    if (isSameTabRefresh) return 'Rejoining Meeting';
     if (isHost && !isActive) return 'Starting Meeting';
     if (isHost && isActive) return 'Active Meeting in Progress';
     if (meetingInfo?.createdByMember) return `Joining ${meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username}'s meeting`;
     return 'Joining a Meeting';
-  }, [isSameTabRefresh, isHost, isActive, meetingInfo]);
+  }, [isHost, isActive, meetingInfo]);
 
   const preJoinSubtitle = React.useMemo(() => {
-    if (isSameTabRefresh) return 'Please re-configure your devices to enter.';
     if (isHost && !isActive) return 'Please configure your device settings before the meeting begins.';
-    if (isHost && isActive) return 'You are already hosting this meeting in another session. Do you want to rejoin?';
+    if (isHost && isActive) return 'You are already hosting this meeting in another session. Do you want to join?';
     if (meetingInfo?.startedAt) return `Meeting in progress for ${elapsedTime || '00:00'}`;
     return 'Please configure your device settings before the meeting begins.';
-  }, [isSameTabRefresh, isHost, isActive, meetingInfo, elapsedTime]);
+  }, [isHost, isActive, meetingInfo, elapsedTime]);
 
   const preJoinButtonText = React.useMemo(() => {
-    if (isSameTabRefresh) return 'Rejoin';
     if (isHost && !isActive) return 'Start Now';
-    if (isHost && isActive) return 'Rejoin as Host';
+    if (isHost && isActive) return 'Join as Host';
     return 'Join Now';
-  }, [isSameTabRefresh, isHost, isActive]);
+  }, [isHost, isActive]);
 
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
     try {
@@ -193,6 +190,33 @@ export function PageClientImpl(props: {
       });
     }
   }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
+
+  if (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>
+        <div style={{ background: '#fff', padding: '3rem 2.5rem', borderRadius: '16px', boxShadow: '0 8px 35px rgba(17,24,39,0.05)', textAlign: 'center', maxWidth: '440px', width: '90%', border: '1px solid #e5e7eb' }}>
+          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: meetingInfo.status === 'ENDED' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
+            {meetingInfo.status === 'ENDED' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" width="32" height="32"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" width="32" height="32"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            )}
+          </div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: '0 0 0.5rem' }}>
+            {meetingInfo.status === 'ENDED' ? 'Meeting Concluded' : 'Meeting Canceled'}
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '1rem', margin: '0 0 2rem' }}>
+            {meetingInfo.status === 'ENDED' 
+              ? 'This meeting has ended and is permanently closed.' 
+              : 'This meeting has been canceled and is no longer available.'}
+          </p>
+          <Link href="/" style={{ display: 'inline-block', padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, width: '100%' }}>
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <main style={{ height: '100%' }}>

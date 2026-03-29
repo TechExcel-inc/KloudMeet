@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { RoomServiceClient } from 'livekit-server-sdk';
+
+const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
+const API_KEY = process.env.LIVEKIT_API_KEY;
+const API_SECRET = process.env.LIVEKIT_API_SECRET;
 
 export async function GET(request: NextRequest) {
   try {
@@ -58,8 +63,29 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
+    // REST API Fallback check for active LiveKit rooms
+    let activeRooms: string[] = [];
+    try {
+      if (LIVEKIT_URL && API_KEY && API_SECRET) {
+        const roomService = new RoomServiceClient(LIVEKIT_URL, API_KEY, API_SECRET);
+        const rooms = await roomService.listRooms();
+        activeRooms = rooms.map(r => r.name);
+      }
+    } catch (e) {
+      console.error('[account meetings GET] LiveKit fallback query failed', e);
+    }
+
+    const enhancedMeetings = meetings.map(m => {
+      const isLive = activeRooms.includes(m.roomName);
+      return {
+        ...m,
+        isActive: isLive,
+        actualStartedAt: isLive && !m.actualStartedAt ? new Date(m.startedAt) : m.actualStartedAt
+      };
+    });
+
     return NextResponse.json({
-      meetings,
+      meetings: enhancedMeetings,
       total,
       page,
       pageSize,

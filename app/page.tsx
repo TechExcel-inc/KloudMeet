@@ -1,14 +1,15 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import React, { Suspense, useCallback, useEffect, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
 import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
+import { MyProfileModal } from '@/lib/MyProfileModal';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
-type PageView = 'anonymous' | 'login' | 'signup' | 'dashboard';
+type PageView = 'anonymous' | 'login' | 'signup' | 'dashboard' | 'forgot-password';
 type SignupStep = 'email' | 'verify' | 'create';
 
 interface AuthUser {
@@ -71,7 +72,7 @@ function useToast() {
 /* ════════════════════════════════════════════════════
    Top Toolbar Component
    ════════════════════════════════════════════════════ */
-function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
   
@@ -142,6 +143,9 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, user, hideAva
                 </div>
                 <div className={styles.orgDropdownSection}>
                   <div className={styles.orgDropdownIdentity}>Signed in as {user.displayName}</div>
+                  <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onOpenProfile && onOpenProfile(); }}>
+                    My Profile
+                  </button>
                   <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
                     Sign Out
                   </button>
@@ -186,6 +190,16 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, user, hideAva
             </button>
             {menuOpen && (
               <div className={styles.dropdownMenu}>
+                <button 
+                  className={styles.dropdownItem} 
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenProfile && onOpenProfile();
+                  }}
+                  style={{ borderBottom: '1px solid #f1f5f9' }}
+                >
+                  My Profile
+                </button>
                 <button 
                   className={styles.dropdownItem} 
                   onClick={() => {
@@ -480,11 +494,13 @@ function LoginView({
   onBack,
   onLoginSuccess,
   onSignUp,
+  onForgotPassword,
   toast,
 }: {
   onBack: () => void;
   onLoginSuccess: (user: AuthUser) => void;
   onSignUp: () => void;
+  onForgotPassword: () => void;
   toast: { show: (t: string) => void };
 }) {
   const [identifier, setIdentifier] = useState('');
@@ -573,7 +589,7 @@ function LoginView({
             <button
               type="button"
               className={styles.linkBtn}
-              onClick={() => toast.show('Forgot password coming soon!')}
+              onClick={onForgotPassword}
             >
               Forgot password
             </button>
@@ -595,9 +611,8 @@ function LoginView({
           </button>
 
           <div className={styles.ssoDivider}>or continue with</div>
-          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem' }}>
-            <button type="button" className={styles.anonLink} onClick={() => toast.show('Google SSO coming soon!')}>Google</button>
-            <button type="button" className={styles.anonLink} onClick={() => toast.show('Microsoft SSO coming soon!')}>Microsoft</button>
+          <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', justifyContent: 'center' }}>
+            <button type="button" className={styles.anonLink} style={{ flex: 1 }} onClick={() => window.location.href = '/api/auth/google'}>Google</button>
           </div>
 
           <div className={styles.registerRow}>
@@ -825,9 +840,8 @@ function SignupView({
               </button>
 
               <div className={styles.ssoDivider}>or sign up with</div>
-              <div style={{ display: 'flex', gap: '0.75rem' }}>
-                <button type="button" className={styles.anonLink} onClick={() => toast.show('Google SSO coming soon!')}>Google</button>
-                <button type="button" className={styles.anonLink} onClick={() => toast.show('Microsoft SSO coming soon!')}>Microsoft</button>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+                <button type="button" className={styles.anonLink} style={{ flex: 1 }} onClick={() => window.location.href = '/api/auth/google'}>Google</button>
               </div>
 
               <div className={styles.registerRow} style={{ marginTop: '1rem' }}>
@@ -997,6 +1011,7 @@ function DashboardView({
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   
   const [isJoining, setIsJoining] = useState(false);
@@ -1208,10 +1223,12 @@ function DashboardView({
       <TopToolbar 
         user={user} 
         onSignOut={onSignOut} 
-        onOpenSettings={() => setShowSettingsModal(true)}
+        onOpenSettings={() => setShowSettingsModal(true)} 
+        onOpenProfile={() => setShowProfileModal(true)}
         hideAvatar={false} 
       />
       
+
       <div className={styles.dashContainer}>
       {/* New Meeting + Join Meeting row */}
       <div className={styles.dashActions}>
@@ -1271,17 +1288,20 @@ function DashboardView({
           <table className={styles.dashTable}>
             <thead>
               <tr>
-                <th>Meeting name</th>
-                <th>
+                <th style={{ minWidth: '180px' }}>Meeting Title</th>
+                <th style={{ minWidth: '140px' }}>
                   Created <span style={{ fontSize: '10px' }}>▼</span>
                 </th>
-                <th>
+                <th style={{ minWidth: '180px' }}>
                   Scheduled <span style={{ fontSize: '10px' }}>▼</span>
+                </th>
+                <th style={{ minWidth: '100px' }}>
+                  Actual
                 </th>
                 <th>Host</th>
                 <th>Attendees</th>
                 <th>Status</th>
-                <th style={{ textAlign: 'right', width: '150px' }}>Action</th>
+                <th style={{ textAlign: 'left', width: '150px' }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -1347,22 +1367,36 @@ function DashboardView({
                     </td>
                     <td>
                       {m.scheduledFor ? (
-                        <>
-                          <div>{d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
-                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <span>{m.durationMinutes ? `${m.durationMinutes} mins` : '-'}</span>
-                            {showCountdown && (
-                              <span style={{ color: '#ef4444', fontWeight: 600 }}>
-                                • {countdownText}
-                              </span>
-                            )}
+                        <div>
+                          <div style={{ color: '#111827', fontWeight: 500, fontSize: '0.9rem' }}>
+                            {d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                           </div>
+                          {m.durationMinutes ? (
+                            <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>{m.durationMinutes} mins</div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div style={{ fontWeight: 500, color: '#4b5563', fontSize: '0.9rem' }}>Instant Meeting</div>
+                      )}
+                    </td>
+                    <td>
+                      {m.actualStartedAt || (m.status === 'ENDED' && m.startedAt) || (m.isActive && m.status === 'ACTIVE') ? (
+                        <>
+                          <div style={{ color: '#111827', fontSize: '0.9rem', fontWeight: 500 }}>
+                            {new Date(m.actualStartedAt || m.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                          </div>
+                          {m.actualDurationMinutes || (m.status === 'ENDED' && m.durationMinutes) ? (
+                            <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
+                              {m.actualDurationMinutes || m.durationMinutes} mins
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.85rem', color: '#ef4444', marginTop: '2px', fontWeight: 600 }}>
+                              {Math.max(1, Math.round((Date.now() - new Date(m.actualStartedAt || m.startedAt).getTime()) / 60000))} mins
+                            </div>
+                          )}
                         </>
                       ) : (
-                        <>
-                          <div style={{ fontWeight: 500, color: '#4b5563' }}>Instant Meeting</div>
-                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{m.durationMinutes ? `${m.durationMinutes} mins` : '-'}</div>
-                        </>
+                        <div style={{ color: '#9ca3af', fontSize: '0.9rem', fontWeight: 500 }}>-</div>
                       )}
                     </td>
                     <td>{m.createdByMember?.username || 'Unknown'}</td>
@@ -1423,7 +1457,7 @@ function DashboardView({
                               background: '#e8f0fe', 
                               color: '#0b57d0', 
                               border: 'none', 
-                              padding: '8px 16px', 
+                              padding: '6px 12px', 
                               borderRadius: '100px',
                               fontSize: '13px',
                               fontWeight: 500,
@@ -1649,6 +1683,14 @@ function DashboardView({
         />
       )}
 
+      {showProfileModal && (
+        <MyProfileModal 
+          user={user} 
+          onClose={() => setShowProfileModal(false)}
+          toast={toast}
+        />
+      )}
+
       {/* ── Warning Message Overlay ── */}
       {warningMessage && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
@@ -1680,6 +1722,216 @@ function DashboardView({
 }
 
 /* ════════════════════════════════════════════════════
+   View 4 – Forgot Password
+   ════════════════════════════════════════════════════ */
+function ForgotPasswordView({
+  onBack,
+  toast,
+}: {
+  onBack: () => void;
+  toast: { show: (t: string) => void };
+}) {
+  const [step, setStep] = useState<'email' | 'verify' | 'reset'>('email');
+  const [email, setEmail] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [devCode, setDevCode] = useState<string | null>(null);
+
+  const sendCode = async () => {
+    const t = email.trim();
+    if (!t) { setError('Please enter your email or phone'); return false; }
+    setLoading(true);
+    setError('');
+    try {
+      const isPhone = t.startsWith('+');
+      const res = await fetch('/api/auth/send-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: t, type: isPhone ? 1 : 0, intent: 'reset' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to send code');
+        return false;
+      }
+      if (data.code) setDevCode(data.code);
+      return true;
+    } catch {
+      setError('Network error.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEmailNext = async () => {
+    const ok = await sendCode();
+    if (ok) setStep('verify');
+  };
+
+  const handleVerifyNext = () => {
+    if (verificationCode.length !== 6) { setError('Please enter the 6-digit code'); return; }
+    setError('');
+    setStep('reset');
+  };
+
+  const handleReset = async () => {
+    setError('');
+    const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
+    if (!passwordRe.test(password)) {
+      setError('Password: 8-30 chars with both letters and numbers');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const isPhone = email.trim().startsWith('+');
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [isPhone ? 'phone' : 'email']: email.trim(),
+          code: verificationCode.trim(),
+          password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Reset failed');
+        return;
+      }
+      toast.show('Password reset successfully!');
+      onBack();
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className={styles.anonWrapper}>
+      <TopToolbar onBack={() => {
+        if (step === 'reset') setStep('verify');
+        else if (step === 'verify') { setStep('email'); setVerificationCode(''); }
+        else onBack();
+      }} hideAvatar />
+      <div className={styles.authContainer}>
+        <div className={styles.authCard}>
+          <h1 className={styles.loginTitle}>Forgot Password</h1>
+          {error && <div className={styles.errorBanner}>⚠ {error}</div>}
+
+          {step === 'email' && (
+            <>
+              <p className={styles.signupSubtext}>Enter your email or phone to reset your password.</p>
+              <label className={styles.fieldLabel}>Email or phone</label>
+              <input
+                className={error ? styles.fieldInputError : styles.fieldInput}
+                type="text"
+                placeholder="you@example.com or +123"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
+                autoFocus
+              />
+              <button
+                type="button"
+                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
+                disabled={loading}
+                onClick={handleEmailNext}
+              >
+                {loading ? 'Sending code...' : 'Next'}
+              </button>
+            </>
+          )}
+
+          {step === 'verify' && (
+            <>
+              <p className={styles.signupSubtext}>We sent a code to <strong>{email}</strong></p>
+              <input
+                className={styles.verifyCodeInput}
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+                maxLength={6}
+                value={verificationCode}
+                onChange={(e) => {
+                  setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+                  setError('');
+                }}
+                onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
+                autoFocus
+              />
+              {devCode && <div className={styles.devHint}>Dev mode code: <strong>{devCode}</strong></div>}
+              <button
+                type="button"
+                className={verificationCode.length === 6 ? styles.loginSubmit : styles.loginSubmitLoading}
+                disabled={verificationCode.length !== 6}
+                onClick={handleVerifyNext}
+              >
+                Verify Code
+              </button>
+            </>
+          )}
+
+          {step === 'reset' && (
+            <>
+              <label className={styles.fieldLabel}>New Password</label>
+              <div className={styles.passwordWrap}>
+                <input
+                  className={styles.fieldInput}
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="8-30 chars, letters & numbers"
+                  maxLength={30}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                  style={{ paddingRight: '2.5rem' }}
+                />
+                <button type="button" className={styles.passwordToggle} onClick={() => setShowPassword(!showPassword)}>{showPassword ? '🙈' : '👁'}</button>
+              </div>
+
+              <label className={styles.fieldLabel}>Confirm New Password</label>
+              <div className={styles.passwordWrap}>
+                <input
+                  className={styles.fieldInput}
+                  type={showConfirm ? 'text' : 'password'}
+                  placeholder="Enter password again"
+                  maxLength={30}
+                  value={confirmPassword}
+                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                  style={{ paddingRight: '2.5rem' }}
+                />
+                <button type="button" className={styles.passwordToggle} onClick={() => setShowConfirm(!showConfirm)}>{showConfirm ? '🙈' : '👁'}</button>
+              </div>
+
+              <button
+                type="button"
+                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
+                disabled={loading}
+                onClick={handleReset}
+                style={{ marginTop: '0.5rem' }}
+              >
+                {loading ? 'Resetting...' : 'Reset Password'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════
    Main Page (state machine)
    ════════════════════════════════════════════════════ */
 function HomeContent() {
@@ -1687,6 +1939,47 @@ function HomeContent() {
   const [signupSource, setSignupSource] = useState<PageView>('login');
   const [user, setUser] = useState<AuthUser | null>(null);
   const toast = useToast();
+  const searchParams = useSearchParams();
+
+  // Handle SSO token via URL
+  useEffect(() => {
+    const ssoToken = searchParams.get('sso_token');
+    const errorMsg = searchParams.get('error');
+
+    if (errorMsg) {
+      toast.show(errorMsg);
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (ssoToken) {
+      fetch('/api/auth/profile', {
+        headers: { Authorization: `Bearer ${ssoToken}` }
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          const u: AuthUser = {
+            id: data.id,
+            username: data.username,
+            displayName: data.fullName || data.username,
+            email: data.email,
+            avatarUrl: data.avatarUrl,
+            token: ssoToken,
+          };
+          localStorage.setItem('kloudUser', JSON.stringify(u));
+          handleAuthSuccess(u);
+          toast.show('Signed in with Google');
+        } else {
+          toast.show(data.error || 'Failed to get profile');
+        }
+      })
+      .catch(err => {
+        console.error('SSO profile error', err);
+        toast.show('Network error logging in with Google');
+      })
+      .finally(() => {
+        window.history.replaceState({}, document.title, window.location.pathname);
+      });
+    }
+  }, [searchParams]);
 
   // Restore session from localStorage
   useEffect(() => {
@@ -1723,6 +2016,13 @@ function HomeContent() {
           onBack={() => setView('anonymous')}
           onLoginSuccess={handleAuthSuccess}
           onSignUp={() => { setSignupSource('login'); setView('signup'); }}
+          onForgotPassword={() => setView('forgot-password')}
+          toast={toast}
+        />
+      )}
+      {view === 'forgot-password' && (
+        <ForgotPasswordView
+          onBack={() => setView('login')}
           toast={toast}
         />
       )}

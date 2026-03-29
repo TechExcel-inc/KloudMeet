@@ -43,3 +43,4 @@ yarn-error.log*
 # prisma sqlite database
 prisma/*.db
 prisma/*.db-journal
+\n.env.production\n*.tar.gz

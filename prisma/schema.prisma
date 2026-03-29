@@ -16,12 +16,16 @@ generator client {
 model TeamMember {
   id              Int       @id @default(autoincrement())
   email           String?   @unique
+  googleId        String?   @unique
   username        String    @unique
   phone           String?
   passwordHash    String
   fullName        String?
   firstName       String?
+  middleName      String?
   lastName        String?
+  biography       String?
+  personalRoomId  String?   @unique
   avatarUrl       String?
   emailVerified   Boolean   @default(false)
   emailVerifiedAt DateTime?
@@ -176,16 +180,19 @@ model Meeting {
   createdByMemberId Int
   startedAt         DateTime  @default(now())
   endedAt           DateTime?
-  scheduledFor      DateTime?
-  timezone          String?
-  durationMinutes   Int?
-  description       String?
+  scheduledFor          DateTime?
+  timezone              String?
+  durationMinutes       Int?
+  actualStartedAt       DateTime?
+  actualDurationMinutes Int?
+  description           String?
   maxParticipants   Int       @default(0)
   status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
   createdAt         DateTime  @default(now())
   createdBy         String?
   modifiedAt        DateTime?
   modifiedBy        String?
+  deletedAt         DateTime?
 
   account      KloudMeetAccount?    @relation(fields: [accountId], references: [id])
   createdByMember TeamMember        @relation("CreatedMeetings", fields: [createdByMemberId], references: [id])

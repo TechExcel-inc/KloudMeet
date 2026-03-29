@@ -58,6 +58,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Capture Exact Start Time when the first user joins an Instant or Scheduled Meeting
+    if (event.event === 'room_started' && event.room) {
+      const roomName = event.room.name;
+      const actualStartedAt = new Date(Number(event.room.creationTime) * 1000);
+      
+      const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+      if (meeting && meeting.status !== 'ENDED') {
+        await prisma.meeting.update({
+          where: { roomName },
+          data: {
+            actualStartedAt,
+            status: 'ACTIVE'
+          }
+        });
+      }
+    }
+
+    // Capture Exact End Time when the final user leaves the meeting
+    if (event.event === 'room_finished' && event.room) {
+      const roomName = event.room.name;
+      const endedAt = new Date();
+      
+      const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+      if (meeting && meeting.status !== 'ENDED') {
+        const startedTimeMs = meeting.actualStartedAt ? meeting.actualStartedAt.getTime() : meeting.startedAt.getTime();
+        const actualDurationMinutes = Math.max(1, Math.round((endedAt.getTime() - startedTimeMs) / 60000));
+        
+        await prisma.meeting.update({
+          where: { roomName },
+          data: {
+            endedAt,
+            actualDurationMinutes,
+            status: 'ENDED'
+          }
+        });
+      }
+    }
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error('[webhooks livekit POST]', error);

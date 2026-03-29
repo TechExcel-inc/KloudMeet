@@ -25,11 +25,9 @@ export async function GET(
       },
       include: {
         createdByMember: {
-          select: {
-            fullName: true,
-            username: true,
-          },
+          select: { fullName: true, username: true },
         },
+        recordings: true,
       },
     });
 
@@ -50,7 +48,20 @@ export async function GET(
       console.error('[meetings GET] LiveKit query failed', e);
     }
 
-    return NextResponse.json({ ...meeting, isActive });
+    // Auto update status to PAST_DUE if scheduled time has passed and not currently active
+    let currentStatus = meeting.status;
+    if (currentStatus === 'ACTIVE' && !isActive && meeting.scheduledFor) {
+      const isPast = meeting.scheduledFor < new Date(Date.now() - 5 * 60000); // 5 minutes grace period
+      if (isPast) {
+        await prisma.meeting.update({
+          where: { id: meeting.id },
+          data: { status: 'PAST_DUE' }
+        });
+        currentStatus = 'PAST_DUE';
+      }
+    }
+
+    return NextResponse.json({ ...meeting, status: currentStatus, isActive });
   } catch (error) {
     console.error('[meetings GET]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -84,6 +95,26 @@ export async function PUT(
     return NextResponse.json({ success: true, meeting: updated });
   } catch (error) {
     console.error('[meetings PUT]', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ roomName: string }> }
+) {
+  try {
+    const resolvedParams = await params;
+    const roomName = resolvedParams?.roomName;
+    if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+
+    const updated = await prisma.meeting.update({
+      where: { roomName },
+      data: { deletedAt: new Date() }
+    });
+    return NextResponse.json({ success: true, meeting: updated });
+  } catch (error) {
+    console.error('[meetings DELETE]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
