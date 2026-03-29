@@ -640,7 +640,7 @@
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.recentCard:hover .hoverAction {
+.recentCard:hover .hoverAction, .dashTableRow:hover .hoverAction {
   opacity: 1;
   transform: translateX(0);
 }
@@ -670,6 +670,28 @@
   border: 1px solid #fbcfe8;
 }
 .iconBtnStart:hover {
+  background: #fbcfe8;
+  color: #be185d;
+}
+
+.startActionBtn {
+  background: #fdf2f8;
+  color: #db2777;
+  border: 1px solid #fbcfe8;
+  height: 36px;
+  border-radius: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  padding: 0 16px;
+  gap: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+.startActionBtn:hover {
   background: #fbcfe8;
   color: #be185d;
 }
@@ -730,6 +752,222 @@
    ═══════════════════════════════════════════════════ */
 
 /* Step indicators */
+
+/* ── Dashboard Table Styles ── */
+.dashTableContainer {
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  margin-top: 1rem;
+}
+.dashTable {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+.dashTable th {
+  background: #fdfdfd;
+  color: #6b7280;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 1rem 1.2rem;
+  border-bottom: 1px solid #e5e7eb;
+  white-space: nowrap;
+}
+.dashTableRow {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 0.2s;
+}
+.dashTableRow:last-child {
+  border-bottom: none;
+}
+.dashTableRow:hover {
+  background: #f8fafc;
+}
+.dashTable td {
+  padding: 0.85rem 1.2rem;
+  font-size: 0.88rem;
+  color: #334155;
+  vertical-align: middle;
+}
+.meetingNameCol {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.meetingAvatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #5b21b6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.recordingIndicatorIcon {
+  color: #3b82f6;
+  background: #eef2ff;
+  border-radius: 4px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Status Badges */
+.statusBadge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.attendeesBadge {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #475569;
+}
+.attendeeAvatars {
+  display: flex;
+}
+.attendeeAvatarIcon {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+}
+.statusFinished {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+.statusInProgress {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+.statusScheduled {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+.statusPastDue {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+.statusCanceled {
+  background: #fef3c7;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.rowActionsRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.rowOptionsBtn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-weight: bold;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+}
+.rowOptionsBtn:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+/* Pagination Footer */
+.paginationFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.2rem;
+  border-top: 1px solid #e5e7eb;
+  background: #fff;
+}
+.paginationLeft {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.pageSizeSelect {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: #374151;
+  background: #fff;
+  cursor: pointer;
+}
+.totalFiles {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+.paginationRight {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pageArrow {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+}
+.pageArrow:hover:not(:disabled) {
+  color: #4b5563;
+}
+.pageArrow:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pageNum {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #4b5563;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.pageNum:hover {
+  background: #f3f4f6;
+}
+.pageNumActive {
+  composes: pageNum;
+  background: #4f46e5;
+  color: #fff;
+}
+.pageNumActive:hover {
+  background: #4338ca;
+}
 .signupSteps {
   display: flex;
   align-items: center;

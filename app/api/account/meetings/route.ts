@@ -22,28 +22,49 @@ export async function GET(request: NextRequest) {
 
     const member = session.teamMember;
 
-    const meetings = await prisma.meeting.findMany({
-      where: {
-        createdByMemberId: member.id,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-      include: {
-        recordings: {
-          select: {
-            id: true,
-            status: true,
-            storageUrl: true,
-            durationSeconds: true,
-          }
-        },
-        createdByMember: {
-          select: { fullName: true, username: true }
-        }
-      }
-    });
+    // Parse pagination
+    const { searchParams } = new URL(request.url);
+    const page = parseInt(searchParams.get('page') || '1', 10);
+    const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
+    const skip = (page - 1) * pageSize;
 
-    return NextResponse.json({ meetings });
+    const whereClause = {
+      createdByMemberId: member.id,
+    };
+
+    const [total, meetings] = await Promise.all([
+      prisma.meeting.count({ where: whereClause }),
+      prisma.meeting.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: pageSize,
+        include: {
+          recordings: {
+            select: {
+              id: true,
+              status: true,
+              storageUrl: true,
+              durationSeconds: true,
+            }
+          },
+          createdByMember: {
+            select: { fullName: true, username: true }
+          },
+          _count: {
+            select: { participants: true }
+          }
+        }
+      })
+    ]);
+
+    return NextResponse.json({
+      meetings,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize)
+    });
   } catch (error) {
     console.error('[account meetings GET]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

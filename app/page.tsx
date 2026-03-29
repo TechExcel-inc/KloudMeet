@@ -1005,12 +1005,22 @@ function DashboardView({
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
 
   const [dbMeetings, setDbMeetings] = useState<any[]>([]);
+  const [totalMeetings, setTotalMeetings] = useState(0);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(15);
   const [loadingMeetings, setLoadingMeetings] = useState(false);
+  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [earlyStartMeeting, setEarlyStartMeeting] = useState<any>(null);
 
   useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const fetchMeetings = () => {
     if (!user || (!user.token && !user.id)) return;
     setLoadingMeetings(true);
-    fetch('/api/account/meetings', {
+    fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
       headers: { Authorization: `Bearer ${user.token}` }
     })
       .then(res => res.json())
@@ -1022,11 +1032,16 @@ function DashboardView({
             return tB - tA;
           });
           setDbMeetings(sorted);
+          setTotalMeetings(data.total || 0);
         }
       })
       .catch(console.error)
       .finally(() => setLoadingMeetings(false));
-  }, [user]);
+  };
+
+  useEffect(() => {
+    fetchMeetings();
+  }, [user, page, pageSize]);
 
   // Polling fallback to check processing recordings
   useEffect(() => {
@@ -1047,20 +1062,21 @@ function DashboardView({
       .then(data => {
         if (data.updatedCount > 0) {
           // Re-fetch meetings silently without setting loading state
-          fetch('/api/account/meetings', {
-            headers: { Authorization: `Bearer ${user.token}` }
-          })
-            .then(res => res.json())
-            .then(d => {
-              if (d.meetings) {
-                const sorted = d.meetings.sort((a: any, b: any) => {
-                  const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                  const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-                  return tB - tA;
-                });
-                setDbMeetings(sorted);
-              }
-            });
+            fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
+              headers: { Authorization: `Bearer ${user.token}` }
+            })
+              .then(res => res.json())
+              .then(d => {
+                if (d.meetings) {
+                  const sorted = d.meetings.sort((a: any, b: any) => {
+                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
+                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                    return tB - tA;
+                  });
+                  setDbMeetings(sorted);
+                  setTotalMeetings(d.total || 0);
+                }
+              });
         }
       })
       .catch(console.error);
@@ -1251,149 +1267,274 @@ function DashboardView({
       ) : dbMeetings.length === 0 ? (
         <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>No meetings found.</div>
       ) : (
-        dbMeetings.map((m, i) => {
-          // Use scheduledFor time if it exists, otherwise fallback to creation date
-          const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
-          const recording = m.recordings?.find((r: any) => r.status === 'READY');
-          const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-          const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
+        <div className={styles.dashTableContainer}>
+          <table className={styles.dashTable}>
+            <thead>
+              <tr>
+                <th>Meeting name</th>
+                <th>
+                  Created <span style={{ fontSize: '10px' }}>▼</span>
+                </th>
+                <th>
+                  Scheduled <span style={{ fontSize: '10px' }}>▼</span>
+                </th>
+                <th>Host</th>
+                <th>Attendees</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right', width: '150px' }}>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dbMeetings.map((m, i) => {
+                const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+                const cDate = new Date(m.createdAt);
+                const recording = m.recordings?.find((r: any) => r.status === 'READY');
+                const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+                const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
 
-          const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - Date.now() : -1;
-          const isWithinOneHour = diffMs <= 60 * 60 * 1000;
-          const isHost = m.createdByMemberId === user.id;
-          const showStart = isHost && isWithinOneHour && m.status !== 'ENDED' && !m.isActive;
-
-          return (
-            <div
-              key={m.id || i}
-              className={styles.recentCard}
-              style={{ cursor: 'default' }}
-            >
-              <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                {/* Column 1: Meeting Info */}
-                <div className={styles.recentCardName} style={{ flex: 1 }}>
-                  <div style={{ fontSize: '1rem', fontWeight: 600, color: '#1e293b', marginBottom: '4px' }}>
-                    {m.title || m.roomName || 'Untitled Meeting'}
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    <span>Host: {m.createdByMember?.fullName || m.createdByMember?.username || 'Unknown'}</span>
-                    <span>•</span>
-                    <span style={{ fontFamily: 'monospace' }}>{m.roomName}</span>
-                  </div>
-                </div>
-
-                {/* Column 2: Scheduled Time */}
-                <div style={{ width: '220px' }}>
-                  <div style={{ 
-                    fontSize: '11px', 
-                    color: '#94a3b8', 
-                    textTransform: 'uppercase', 
-                    marginBottom: '4px', 
-                    fontWeight: 600, 
-                    letterSpacing: '0.02em' 
-                  }}>
-                    {m.scheduledFor ? 'Scheduled Time' : 'Time'}
-                  </div>
-                  <div style={{ 
-                    fontSize: '0.9rem', 
-                    color: m.scheduledFor ? '#7c3aed' : '#334155', 
-                    fontWeight: m.scheduledFor ? 600 : 500 
-                  }}>
-                    {d.toLocaleDateString()} • {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </div>
-                </div>
-              </div>
-              
-              <div className={styles.rowActions}>
-                {showStart && (
-                  <button
-                    title="Start Meeting"
-                    className={`${styles.iconBtn} ${styles.iconBtnStart} ${styles.hoverAction}`}
-                    onClick={() => router.push(`/rooms/${m.roomName}?action=start`)}
-                  >
-                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                      <path d="M8 5v14l11-7z" />
-                    </svg>
-                  </button>
-                )}
-
-                {isHost && (
-                  <button
-                    title="Edit Meeting"
-                    className={`${styles.iconBtn} ${styles.hoverAction}`}
-                    onClick={() => setEditingMeeting(m)}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                )}
+                const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
+                const isHost = m.createdByMemberId === user.id;
+                const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
                 
-              {recording ? (
-                <button 
-                  onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
-                  style={{ 
-                    background: '#e8f0fe', 
-                    color: '#0b57d0', 
-                    border: 'none', 
-                    padding: '8px 20px', 
-                    borderRadius: '100px',
-                    fontSize: '13px',
-                    fontWeight: 500,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px'
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  Play
-                </button>
-              ) : processingRecording ? (
-                <div style={{ 
-                  padding: '8px 16px', 
-                  fontSize: '13px', 
-                  color: '#6b7280', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px',
-                  background: '#f3f4f6',
-                  borderRadius: '100px',
-                  fontWeight: 500
-                }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <polyline points="12 6 12 12 16 14"></polyline>
-                  </svg>
-                  Processing
-                </div>
-              ) : failedRecording ? (
-                <div style={{ 
-                  padding: '8px 16px', 
-                  fontSize: '13px', 
-                  color: '#dc2626', 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  gap: '6px',
-                  background: '#fef2f2',
-                  borderRadius: '100px',
-                  fontWeight: 500
-                }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                  </svg>
-                  Failed
-                </div>
-              ) : null}
-              </div>
+                const showCountdown = m.scheduledFor && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && diffMs <= 60 * 60 * 1000 && diffMs >= -15 * 60 * 1000;
+                let countdownText = '';
+                if (showCountdown) {
+                  const absDiff = Math.abs(diffMs);
+                  const mm = Math.floor(absDiff / 60000).toString().padStart(2, '0');
+                  const ss = Math.floor((absDiff % 60000) / 1000).toString().padStart(2, '0');
+                  countdownText = diffMs > 0 ? `Starts in ${mm}:${ss}` : `Overdue by ${mm}:${ss}`;
+                }
+
+                let displayStatusText = m.status; // 'ACTIVE', 'ENDED', 'ARCHIVED', 'CANCELED'
+                let displayStatusBadge = styles.statusFinished;
+                if (m.status === 'ACTIVE') {
+                  if (m.isActive) {
+                    displayStatusText = 'In Progress';
+                    displayStatusBadge = styles.statusInProgress;
+                  } else if (m.scheduledFor) {
+                    if (diffMs < 0) {
+                      displayStatusText = 'Past Due';
+                      displayStatusBadge = styles.statusPastDue;
+                    } else {
+                      displayStatusText = 'Scheduled';
+                      displayStatusBadge = styles.statusScheduled;
+                    }
+                  } else {
+                    displayStatusText = 'Created';
+                  }
+                } else if (m.status === 'ENDED') {
+                  displayStatusText = 'Finished';
+                } else if (m.status === 'CANCELED') {
+                  displayStatusText = 'Canceled';
+                  displayStatusBadge = styles.statusCanceled;
+                }
+
+                return (
+                  <tr key={m.id || i} className={styles.dashTableRow} onDoubleClick={() => setEditingMeeting(m)}>
+                    <td>
+                      <div className={styles.meetingNameCol}>
+                        <div className={styles.meetingAvatar}>
+                          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{ color: '#fff' }}>
+                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+                          </svg>
+                        </div>
+                        <span style={{ fontWeight: 500 }}>{m.title || m.roomName || 'Untitled Meeting'}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div>{cDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {cDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+                      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>By {m.createdByMember?.username}</div>
+                    </td>
+                    <td>
+                      {m.scheduledFor ? (
+                        <>
+                          <div>{d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span>{m.durationMinutes ? `${m.durationMinutes} mins` : '-'}</span>
+                            {showCountdown && (
+                              <span style={{ color: '#ef4444', fontWeight: 600 }}>
+                                • {countdownText}
+                              </span>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontWeight: 500, color: '#4b5563' }}>Instant Meeting</div>
+                          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>{m.durationMinutes ? `${m.durationMinutes} mins` : '-'}</div>
+                        </>
+                      )}
+                    </td>
+                    <td>{m.createdByMember?.username || 'Unknown'}</td>
+                    <td>
+                      {m._count?.participants > 0 && (
+                        <div className={styles.attendeesBadge}>
+                          <div className={styles.attendeeAvatars}>
+                            <div className={styles.attendeeAvatarIcon}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                                <circle cx="12" cy="7" r="4"></circle>
+                              </svg>
+                            </div>
+                          </div>
+                          <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{m._count.participants}</span>
+                        </div>
+                      )}
+                    </td>
+                    <td><span className={`${styles.statusBadge} ${displayStatusBadge}`}>{displayStatusText}</span></td>
+                    <td>
+                      <div className={styles.rowActionsRight}>
+                        {isHost && (
+                          <button
+                            title="Edit Meeting"
+                            className={`${styles.iconBtn} ${styles.hoverAction}`}
+                            onClick={() => setEditingMeeting(m)}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
+                        {showStart && (
+                          <button
+                            title="Start Meeting"
+                            className={`${styles.startActionBtn} ${styles.hoverAction}`}
+                            onClick={() => {
+                              const diff = new Date(m.scheduledFor).getTime() - Date.now();
+                              if (Math.abs(diff) > 15 * 60 * 1000) {
+                                setEarlyStartMeeting(m);
+                              } else {
+                                router.push(`/rooms/${m.roomName}?action=start`);
+                              }
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                            Start
+                          </button>
+                        )}
+                        
+                        {recording ? (
+                          <button 
+                            onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
+                            style={{ 
+                              background: '#e8f0fe', 
+                              color: '#0b57d0', 
+                              border: 'none', 
+                              padding: '8px 16px', 
+                              borderRadius: '100px',
+                              fontSize: '13px',
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                              <path d="M8 5v14l11-7z" />
+                            </svg>
+                            Play
+                          </button>
+                        ) : processingRecording ? (
+                          <div style={{ 
+                            padding: '8px 16px', 
+                            fontSize: '13px', 
+                            color: '#6b7280', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            background: '#f3f4f6',
+                            borderRadius: '100px',
+                            fontWeight: 500
+                          }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <polyline points="12 6 12 12 16 14"></polyline>
+                            </svg>
+                            Processing
+                          </div>
+                        ) : failedRecording ? (
+                          <div style={{ 
+                            padding: '8px 16px', 
+                            fontSize: '13px', 
+                            color: '#dc2626', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '6px',
+                            background: '#fef2f2',
+                            borderRadius: '100px',
+                            fontWeight: 500
+                          }}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                              <circle cx="12" cy="12" r="10"></circle>
+                              <line x1="12" y1="8" x2="12" y2="12"></line>
+                              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                            </svg>
+                            Failed
+                          </div>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          
+          <div className={styles.paginationFooter}>
+            <div className={styles.paginationLeft}>
+              <select 
+                className={styles.pageSizeSelect} 
+                value={pageSize} 
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setPage(1);
+                }}
+              >
+                <option value={15}>15 / Page</option>
+                <option value={25}>25 / Page</option>
+                <option value={50}>50 / Page</option>
+                <option value={100}>100 / Page</option>
+              </select>
+              <span className={styles.totalFiles}>{totalMeetings} Total Files</span>
             </div>
-          );
-        })
+            <div className={styles.paginationRight}>
+              <button 
+                className={styles.pageArrow} 
+                disabled={page <= 1} 
+                onClick={() => setPage(typeof page === 'number' ? Math.max(1, page - 1) : 1)}
+              >
+                &lt;
+              </button>
+              {(() => {
+                const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
+                const pages = [];
+                for (let i = 1; i <= Math.min(4, totalPages); i++) {
+                  pages.push(
+                    <button 
+                      key={i} 
+                      className={page === i ? styles.pageNumActive : styles.pageNum}
+                      onClick={() => setPage(i)}
+                    >
+                      {i}
+                    </button>
+                  );
+                }
+                return pages;
+              })()}
+              <button 
+                className={styles.pageArrow} 
+                disabled={page >= Math.ceil(totalMeetings / pageSize)} 
+                onClick={() => setPage(typeof page === 'number' ? Math.min(Math.ceil(totalMeetings / pageSize), page + 1) : 1)}
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {scheduledModalData && (
@@ -1450,22 +1591,7 @@ function DashboardView({
           onClose={() => setShowScheduleModal(false)}
           onSave={() => {
             setShowScheduleModal(false);
-            setLoadingMeetings(true);
-            fetch('/api/account/meetings', {
-              headers: { Authorization: `Bearer ${user.token}` }
-            })
-              .then(res => res.json())
-              .then(data => {
-                if (data.meetings) {
-                  const sorted = data.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-                    return tB - tA;
-                  });
-                  setDbMeetings(sorted);
-                }
-              })
-              .finally(() => setLoadingMeetings(false));
+            fetchMeetings();
           }} 
         />
       )}
@@ -1477,24 +1603,40 @@ function DashboardView({
           onClose={() => setEditingMeeting(null)}
           onSave={() => {
             setEditingMeeting(null);
-            setLoadingMeetings(true);
-            fetch('/api/account/meetings', {
-              headers: { Authorization: `Bearer ${user.token}` }
-            })
-              .then(res => res.json())
-              .then(data => {
-                if (data.meetings) {
-                  const sorted = data.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-                    return tB - tA;
-                  });
-                  setDbMeetings(sorted);
-                }
-              })
-              .finally(() => setLoadingMeetings(false));
+            fetchMeetings();
           }} 
         />
+      )}
+
+      {earlyStartMeeting && (
+        <div className={styles.dashModalOverlay}>
+          <div className={styles.dashModalContent}>
+            <h3 style={{ marginTop: 0, color: '#111827', fontSize: '1.25rem' }}>Start Meeting Outside Window?</h3>
+            <p style={{ color: '#4b5563', lineHeight: '1.5', fontSize: '0.95rem' }}>
+              This meeting is scheduled to begin at <strong>{new Date(earlyStartMeeting.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong>. The current time is outside the standard 15-minute starting window.
+              <br /><br />
+              Are you sure you want to start this meeting right now?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
+              <button 
+                onClick={() => setEarlyStartMeeting(null)}
+                style={{
+                  padding: '9px 18px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => router.push(`/rooms/${earlyStartMeeting.roomName}?action=start`)}
+                style={{
+                  padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#db2777', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
+                }}
+              >
+                Yes, Start Meeting
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showSettingsModal && (
