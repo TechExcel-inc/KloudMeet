@@ -7,6 +7,10 @@ const fs = require('fs');
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
+// In packaged builds, load the remote server directly (no local Next.js needed).
+// In dev mode, APP_ORIGIN (local Next.js) is used as usual.
+const REMOTE_ORIGIN = 'https://meet.kloud.cn';
+
 let nextServerProcess;
 
 /** Lazy-load native stack so a failure does not kill the app before any window (packaged builds). */
@@ -85,18 +89,21 @@ function navigateMainToDeepLink(rawUrl) {
 }
 
 function getInitialMainWindowUrl() {
+  // In packaged builds, always load the remote server directly.
+  const origin = app.isPackaged ? REMOTE_ORIGIN : APP_ORIGIN;
+
   if (pendingDeepLink) {
     const raw = pendingDeepLink;
     pendingDeepLink = null;
     const p = parseKloudMeetDeepLink(raw);
-    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+    if (p) return `${origin}/rooms/${encodeURIComponent(p.room)}${p.search}`;
   }
   const argvDeep = getDeepLinkFromArgv(process.argv);
   if (argvDeep) {
     const p = parseKloudMeetDeepLink(argvDeep);
-    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+    if (p) return `${origin}/rooms/${encodeURIComponent(p.room)}${p.search}`;
   }
-  return APP_ORIGIN;
+  return origin;
 }
 
 function getDeepLinkFromArgv(argv) {

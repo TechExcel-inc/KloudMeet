@@ -1026,6 +1026,8 @@ function DashboardView({
   const [loadingMeetings, setLoadingMeetings] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
   const [earlyStartMeeting, setEarlyStartMeeting] = useState<any>(null);
+  const [deletingMeeting, setDeletingMeeting] = useState<any>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -1126,6 +1128,27 @@ function DashboardView({
     const intv = setInterval(tick, 1000);
     return () => clearInterval(intv);
   }, [scheduledModalData, router, user.id, toast]);
+
+  const handleDeleteMeeting = async (roomName: string) => {
+    setDeleteLoading(true);
+    try {
+      const res = await fetch(`/api/meetings/${roomName}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${user.token}` },
+      });
+      if (res.ok) {
+        setDbMeetings(prev => prev.filter(m => m.roomName !== roomName));
+        toast.show('Meeting deleted');
+      } else {
+        toast.show('Failed to delete meeting');
+      }
+    } catch {
+      toast.show('Network error');
+    } finally {
+      setDeleteLoading(false);
+      setDeletingMeeting(null);
+    }
+  };
 
   const handleNewMeeting = async () => {
     const roomId = generateRoomId();
@@ -1430,6 +1453,21 @@ function DashboardView({
                             </svg>
                           </button>
                         )}
+                        {isHost && m.status !== 'ENDED' && !m.isActive && (
+                          <button
+                            title="Delete Meeting"
+                            className={`${styles.iconBtn} ${styles.hoverAction}`}
+                            onClick={() => setDeletingMeeting(m)}
+                            style={{ color: '#ef4444' }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                              <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
+                              <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </button>
+                        )}
                         {showStart && (
                           <button
                             title="Start Meeting"
@@ -1713,6 +1751,43 @@ function DashboardView({
             >
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deletingMeeting && (
+        <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
+          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+            <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
+                <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <h3 style={{ fontSize: '1.2rem', color: '#1e293b', marginBottom: '0.5rem' }}>Delete Meeting?</h3>
+            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: 1.5 }}>
+              <strong>{deletingMeeting.title || deletingMeeting.roomName}</strong> will be permanently deleted.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                onClick={() => setDeletingMeeting(null)}
+                className={styles.dashSignOut}
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+                disabled={deleteLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteMeeting(deletingMeeting.roomName)}
+                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#ef4444', color: '#fff', border: 'none', fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1 }}
+                disabled={deleteLoading}
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

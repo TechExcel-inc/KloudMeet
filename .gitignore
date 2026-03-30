@@ -43,4 +43,8 @@ yarn-error.log*
 # prisma sqlite database
 prisma/*.db
 prisma/*.db-journal
+prisma/create_tables.sql
 \n.env.production\n*.tar.gz
+
+# local db / scratch files
+mysql.txt

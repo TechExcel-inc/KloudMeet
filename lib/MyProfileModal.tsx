@@ -5,7 +5,7 @@ interface AuthUser {
   id: string;
   username: string;
   displayName: string;
-  email: string;
+  email?: string;
   avatarUrl?: string;
   token: string;
 }

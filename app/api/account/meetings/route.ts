@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
 
     const whereClause = {
       createdByMemberId: member.id,
+      deletedAt: null,
     };
 
     const [total, meetings] = await Promise.all([
@@ -76,11 +77,12 @@ export async function GET(request: NextRequest) {
     }
 
     const enhancedMeetings = meetings.map(m => {
+      const mx = m as any;
       const isLive = activeRooms.includes(m.roomName);
       return {
-        ...m,
+        ...mx,
         isActive: isLive,
-        actualStartedAt: isLive && !m.actualStartedAt ? new Date(m.startedAt) : m.actualStartedAt
+        actualStartedAt: isLive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
       };
     });
 
