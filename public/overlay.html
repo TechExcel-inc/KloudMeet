@@ -43,7 +43,7 @@
         const absY = data.y * canvas.height;
 
         ctx.strokeStyle = data.color || '#ef4444';
-        ctx.lineWidth = 4;
+        ctx.lineWidth = data.lineWidth || 4;
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 

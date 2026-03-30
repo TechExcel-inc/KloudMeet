@@ -744,6 +744,7 @@ function VideoConferenceComponent(props: {
       }
     } else {
       setIsDrawingMode(false);
+      setIsRemoteControlMode(false);
       setScreenShareSurface('unknown');
       setActiveView((prev) => {
         if (prev === 'shareScreen') {
@@ -1500,7 +1501,7 @@ function VideoConferenceComponent(props: {
               </div>
             )}
 
-            {hasScreenShare && activeView === 'shareScreen' && isDesktop && (
+            {hasScreenShare && activeView === 'shareScreen' && (
               <>
                 <AnnotationCanvas isDrawingMode={isDrawingMode} />
                 <RemoteControlOverlay
@@ -2200,11 +2201,23 @@ function VideoConferenceComponent(props: {
           canShareScreen={!hasScreenShare || screenShareActive}
           isDrawingMode={isDrawingMode}
           onToggleDrawingMode={() => {
-            if (hasScreenShare) setIsDrawingMode((prev) => !prev);
+            if (hasScreenShare) {
+              setIsDrawingMode((prev) => {
+                const next = !prev;
+                if (next) setIsRemoteControlMode(false); // mutual exclusion
+                return next;
+              });
+            }
           }}
           isRemoteControlMode={isRemoteControlMode}
           onToggleRemoteControlMode={() => {
-            if (hasScreenShare) setIsRemoteControlMode((prev) => !prev);
+            if (hasScreenShare) {
+              setIsRemoteControlMode((prev) => {
+                const next = !prev;
+                if (next) setIsDrawingMode(false); // mutual exclusion
+                return next;
+              });
+            }
           }}
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}

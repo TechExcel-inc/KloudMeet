@@ -573,8 +573,7 @@ export function KloudMeetToolbar({
             Share Screen
           </button>
 
-          {isDesktop && (
-            <>
+          <>
               <button
                 className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleDrawingMode}
@@ -599,7 +598,6 @@ export function KloudMeetToolbar({
                 Control
               </button>
             </>
-          )}
           </>
           )}
           <button ref={attendeeMenuBtnRef} className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleAttendee}>

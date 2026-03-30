@@ -18,7 +18,11 @@ export type DrawMessage = {
   x: number;
   y: number;
   color: string;
+  lineWidth?: number;
 };
+
+const LINE_WIDTHS = [3, 6, 12];
+const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#ffffff'];
 
 interface AnnotationCanvasProps {
   isDrawingMode: boolean;
@@ -30,7 +34,40 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const room = useRoomContext();
   const [isDrawing, setIsDrawing] = useState(false);
-  const [color, setColor] = useState('#ef4444'); // Default red
+  const [color, setColor] = useState('#ef4444');
+  const [lineWidthIdx, setLineWidthIdx] = useState(0);
+  // Track whether we are in the middle of rendering a remote message to avoid re-sending IPC
+  const isRemoteRenderRef = useRef(false);
+
+  /** Draw on local canvas from a DrawMessage (normalized coords). */
+  const renderOnCanvas = useCallback((data: DrawMessage) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (data.type === 'clear') {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    const absX = data.x * canvas.width;
+    const absY = data.y * canvas.height;
+    ctx.strokeStyle = data.color;
+    ctx.lineWidth = data.lineWidth ?? 4;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (data.type === 'start') {
+      ctx.beginPath();
+      ctx.moveTo(absX, absY);
+    } else if (data.type === 'draw') {
+      ctx.lineTo(absX, absY);
+      ctx.stroke();
+    } else if (data.type === 'end') {
+      ctx.closePath();
+    }
+  }, []);
 
   // Handle incoming drawing data from DataChannel
   const onDataReceived = useCallback((msg: any) => {
@@ -39,73 +76,44 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
       const str = decoder.decode(msg.payload);
       const data = JSON.parse(str) as DrawMessage;
 
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      // Render on local canvas
+      renderOnCanvas(data);
 
-      if (data.type === 'clear') {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      } else {
-        // Convert normalized coords back to absolute pixels based on current canvas size
-        const absX = data.x * canvas.width;
-        const absY = data.y * canvas.height;
-
-        ctx.strokeStyle = data.color;
-        ctx.lineWidth = 4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        if (data.type === 'start') {
-          ctx.beginPath();
-          ctx.moveTo(absX, absY);
-        } else if (data.type === 'draw') {
-          ctx.lineTo(absX, absY);
-          ctx.stroke();
-        } else if (data.type === 'end') {
-          ctx.closePath();
-        }
-      }
-
-      // Forward to Desktop app context if running in Electron
+      // Forward to Electron overlay window (only for remote messages — we already sent IPC for local strokes)
       if (typeof window !== 'undefined' && window.electronAPI) {
         window.electronAPI.sendDrawMessage(data);
       }
     } catch (e) {
       console.error('Failed to parse annotation data', e);
     }
-  }, []);
+  }, [renderOnCanvas]);
 
   useDataChannel('annotations', onDataReceived);
 
-  // Resize canvas to match its container exactly
+  // Resize canvas to match its container exactly, preserving the drawing
   useEffect(() => {
     const handleResize = () => {
       const canvas = canvasRef.current;
       if (!canvas || !canvas.parentElement) return;
 
-      // Save current drawing
       const ctx = canvas.getContext('2d');
       let tmpData: ImageData | null = null;
       if (ctx && canvas.width > 0 && canvas.height > 0) {
         tmpData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       }
 
-      // We measure the direct parent, which should perfectly mirror the lk-focus-layout
       canvas.width = canvas.parentElement.clientWidth;
       canvas.height = canvas.parentElement.clientHeight;
 
-      // Restore drawing inside the bounds
       if (ctx && tmpData) {
         ctx.putImageData(tmpData, 0, 0);
       }
     };
-    
-    // We delay the initial measurement slightly to ensure DOM has fully injected the LiveKit layout
+
     const timeoutIds = [
       setTimeout(handleResize, 100),
       setTimeout(handleResize, 500),
-      setTimeout(handleResize, 1000)
+      setTimeout(handleResize, 1000),
     ];
 
     window.addEventListener('resize', handleResize);
@@ -115,41 +123,49 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
     };
   }, []);
 
+  /**
+   * Publish a draw event to the DataChannel AND render locally.
+   * We render locally by calling onDataReceived with the raw encoded bytes so
+   * the same rendering path is used for both local and remote strokes.
+   * IPC forwarding is handled inside onDataReceived for REMOTE messages only.
+   * For LOCAL strokes we send IPC directly here to avoid double-sending.
+   */
   const sendDrawData = (type: DrawMessage['type'], e?: React.PointerEvent<HTMLCanvasElement>) => {
     if (!room) return;
-    
+
     let x = 0;
     let y = 0;
 
     if (e && canvasRef.current) {
       const rect = canvasRef.current.getBoundingClientRect();
-      const absX = e.clientX - rect.left;
-      const absY = e.clientY - rect.top;
-      // Normalize to 0.0 - 1.0!
-      x = absX / canvasRef.current.width;
-      y = absY / canvasRef.current.height;
+      x = Math.max(0, Math.min(1, (e.clientX - rect.left) / canvasRef.current.width));
+      y = Math.max(0, Math.min(1, (e.clientY - rect.top) / canvasRef.current.height));
     }
 
-    const msg: DrawMessage = { type, x, y, color };
+    const msg: DrawMessage = { type, x, y, color, lineWidth: LINE_WIDTHS[lineWidthIdx] };
+
+    // Render locally immediately (without going through DataChannel roundtrip)
+    renderOnCanvas(msg);
+
+    // Forward to Electron overlay for local strokes as well
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      window.electronAPI.sendDrawMessage(msg);
+    }
+
+    // Broadcast to other participants via DataChannel
     const encoder = new TextEncoder();
     const data = encoder.encode(JSON.stringify(msg));
-
     room.localParticipant.publishData(data, { reliable: true, topic: 'annotations' }).catch(() => {
-      // Ignore if reliable isn't supported, fallback to default DataPublishOptions
       room.localParticipant.publishData(data, { topic: 'annotations' }).catch(console.error);
     });
-    
-    // Also draw locally immediately
-    onDataReceived({ payload: data });
   };
 
-  const clearCanvas = () => {
-    sendDrawData('clear');
-  };
+  const clearCanvas = () => sendDrawData('clear');
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawingMode) return;
     e.preventDefault();
+    (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     setIsDrawing(true);
     sendDrawData('start', e);
   };
@@ -178,7 +194,7 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
         onPointerCancel={handlePointerUp}
         style={{
           position: 'absolute',
-          top: 0, // Injected perfectly over the Video Wrapper
+          top: 0,
           left: 0,
           width: '100%',
           height: '100%',
@@ -187,60 +203,148 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
           cursor: isDrawingMode ? 'crosshair' : 'default',
         }}
       />
-      
-      {/* Dynamic Overlay Floating Tool Palette */}
+
+      {/* Floating Tool Palette */}
       {isDrawingMode && (
-        <div style={{
-          position: 'absolute',
-          top: 24,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 1001,
-          display: 'flex',
-          gap: 12,
-          background: 'rgba(15, 23, 42, 0.95)',
-          backdropFilter: 'blur(10px)',
-          padding: '10px 14px',
-          borderRadius: '24px',
-          border: '1px solid rgba(255,255,255,0.15)',
-          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        }}>
-          {['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#ffffff'].map(c => (
+        <div
+          style={{
+            position: 'absolute',
+            top: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1001,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'rgba(10, 15, 30, 0.92)',
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            padding: '8px 14px',
+            borderRadius: '28px',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+          }}
+        >
+          {/* Color swatches */}
+          {COLORS.map((c) => (
             <div
               key={c}
               onClick={() => setColor(c)}
+              title={c}
               style={{
-                width: 24,
-                height: 24,
+                width: 22,
+                height: 22,
                 borderRadius: '50%',
                 background: c,
                 cursor: 'pointer',
-                border: color === c ? '2px solid white' : '2px solid transparent',
-                boxShadow: color === c ? '0 0 10px rgba(255,255,255,0.4)' : 'none',
-                transition: 'all 0.2s',
-                transform: color === c ? 'scale(1.1)' : 'scale(1)'
+                border: color === c ? '2.5px solid white' : '2px solid rgba(255,255,255,0.15)',
+                boxShadow:
+                  color === c
+                    ? `0 0 0 2px rgba(255,255,255,0.3), 0 0 10px ${c}99`
+                    : 'none',
+                transition: 'all 0.18s ease',
+                transform: color === c ? 'scale(1.2)' : 'scale(1)',
+                flexShrink: 0,
               }}
             />
           ))}
-          <div style={{ width: '1px', height: '24px', background: 'rgba(255,255,255,0.2)', margin: '0 4px' }} />
-          <button 
+
+          {/* Divider */}
+          <div
+            style={{
+              width: 1,
+              height: 22,
+              background: 'rgba(255,255,255,0.15)',
+              margin: '0 2px',
+              flexShrink: 0,
+            }}
+          />
+
+          {/* Line width selector */}
+          {LINE_WIDTHS.map((w, i) => (
+            <div
+              key={w}
+              onClick={() => setLineWidthIdx(i)}
+              title={`Line width: ${w}px`}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                background:
+                  lineWidthIdx === i ? 'rgba(255,255,255,0.18)' : 'transparent',
+                border:
+                  lineWidthIdx === i
+                    ? '1.5px solid rgba(255,255,255,0.4)'
+                    : '1.5px solid transparent',
+                transition: 'all 0.15s ease',
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  width: 6 + i * 3,
+                  height: 6 + i * 3,
+                  borderRadius: '50%',
+                  background: color,
+                  opacity: 0.9,
+                }}
+              />
+            </div>
+          ))}
+
+          {/* Divider */}
+          <div
+            style={{
+              width: 1,
+              height: 22,
+              background: 'rgba(255,255,255,0.15)',
+              margin: '0 2px',
+              flexShrink: 0,
+            }}
+          />
+
+          {/* Clear button */}
+          <button
             onClick={clearCanvas}
+            title="Clear all annotations"
             style={{
               background: 'transparent',
               border: 'none',
-              color: '#f87171',
+              color: 'rgba(248, 113, 113, 0.8)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 0,
-              transition: 'color 0.2s'
+              padding: 4,
+              borderRadius: 8,
+              transition: 'all 0.15s ease',
+              flexShrink: 0,
             }}
-            onMouseOver={(e) => e.currentTarget.style.color = '#fff'}
-            onMouseOut={(e) => e.currentTarget.style.color = '#f87171'}
-            title="Clear canvas"
+            onMouseOver={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color = '#f87171';
+              (e.currentTarget as HTMLButtonElement).style.background =
+                'rgba(248,113,113,0.12)';
+            }}
+            onMouseOut={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.color =
+                'rgba(248, 113, 113, 0.8)';
+              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
+            }}
           >
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.2"
+            >
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
             </svg>
           </button>

@@ -178,9 +178,19 @@ function installSessionAndIpcOnce() {
   ipcMain.on('remote-control-message', async (event, data) => {
     try {
       const { mouse, Point, Button } = getNutTree();
-      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
-      const targetX = Math.round(data.x * w);
-      const targetY = Math.round(data.y * h);
+
+      let targetX, targetY;
+
+      if (data.absX !== undefined && data.absY !== undefined) {
+        // New protocol: controller sends absolute screen coordinates directly
+        targetX = Math.round(data.absX);
+        targetY = Math.round(data.absY);
+      } else {
+        // Legacy fallback: normalized 0-1 mapped to primary display
+        const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+        targetX = Math.round(data.x * w);
+        targetY = Math.round(data.y * h);
+      }
 
       if (data.type === 'mousemove') {
         await mouse.setPosition(new Point(targetX, targetY));
@@ -192,11 +202,19 @@ function installSessionAndIpcOnce() {
         const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
         await mouse.setPosition(new Point(targetX, targetY));
         await mouse.releaseButton(btn);
+      } else if (data.type === 'dblclick') {
+        await mouse.setPosition(new Point(targetX, targetY));
+        await mouse.pressButton(Button.LEFT);
+        await mouse.releaseButton(Button.LEFT);
+        await new Promise((r) => setTimeout(r, 30));
+        await mouse.pressButton(Button.LEFT);
+        await mouse.releaseButton(Button.LEFT);
       }
     } catch (err) {
       console.error('Remote control error:', err);
     }
   });
+
 }
 
 function createWindows() {
