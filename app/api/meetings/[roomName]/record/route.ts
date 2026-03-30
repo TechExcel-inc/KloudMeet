@@ -100,7 +100,7 @@ export async function POST(
             secret: S3_SECRET,
             region: S3_REGION,
             bucket: S3_BUCKET,
-            endpoint: S3_ENDPOINT || '',
+            ...(S3_ENDPOINT && !S3_ENDPOINT.includes('amazonaws.com') ? { endpoint: S3_ENDPOINT } : {})
           }
         }
       });

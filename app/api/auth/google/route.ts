@@ -7,9 +7,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Determine the callback URL based on the exact Host the browser used
-  const host = request.headers.get('host') || 'localhost:3201';
-  const protocol = host.includes('localhost') ? 'http' : 'https';
-  const origin = `${protocol}://${host}`;
+  const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3201';
   const redirectUri = `${origin}/api/auth/google/callback`;
 
   const params = new URLSearchParams({

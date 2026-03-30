@@ -7,7 +7,7 @@
   "main": "main.js",
   "scripts": {
     "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://127.0.0.1:3201 && electron .\"",
-    "dev": "next dev -p 3201 -H 0.0.0.0",
+    "dev": "next dev -p 3201 --turbopack",
     "build": "next build",
     "electron:prepare-standalone": "node scripts/prepare-standalone.js",
     "electron:pack": "npm run build && npm run electron:prepare-standalone",
