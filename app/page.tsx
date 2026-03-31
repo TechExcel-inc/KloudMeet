@@ -1453,7 +1453,7 @@ function DashboardView({
                             </svg>
                           </button>
                         )}
-                        {isHost && m.status !== 'ENDED' && !m.isActive && (
+                        {isHost && !m.isActive && (
                           <button
                             title="Delete Meeting"
                             className={`${styles.iconBtn} ${styles.hoverAction}`}
