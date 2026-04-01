@@ -642,6 +642,27 @@ function LoginView({
               Sign Up
             </button>
           </div>
+
+          {/* ── Download Desktop App ── */}
+          <div className={styles.downloadRow}>
+            <a
+              href="/api/download"
+              className={styles.downloadBtn}
+              id="download-desktop-app-login-btn"
+              title="Download Kloud Meet for Windows"
+            >
+              {/* Windows Logo */}
+              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+              </svg>
+              <span className={styles.downloadBtnLabel}>下载桌面版</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
+            </a>
+          </div>
         </form>
       </div>
     </div>
