@@ -881,6 +881,180 @@ function VideoConferenceComponent(props: {
     }
   }, [lowPowerMode]);
 
+  // ── 手机息屏恢复音频 ──
+  // iOS/Android 浏览器在息屏或切后台时会 suspend AudioContext，
+  // 当页面重新可见时，调用 room.startAudio() 恢复音频播放。
+  React.useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          await room.startAudio();
+          console.log('[KloudMeet] Audio resumed after visibility change');
+        } catch (e) {
+          console.warn('[KloudMeet] Audio resume after screen-on failed:', e);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [room]);
+
+  // ── Wake Lock: 防止手机息屏中断音频 ──
+  // 在支持 Wake Lock API 的浏览器上，保持屏幕唤醒以避免
+  // AudioContext 被系统挂起。如果 Wake Lock 被释放（如切后台），
+  // 页面恢复可见时自动重新获取。
+  React.useEffect(() => {
+    let wakeLock: WakeLockSentinel | null = null;
+    let cancelled = false;
+
+    const requestWakeLock = async () => {
+      if (cancelled || !('wakeLock' in navigator)) return;
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          console.log('[KloudMeet] Wake Lock released');
+        });
+        console.log('[KloudMeet] Wake Lock acquired');
+      } catch (e) {
+        console.warn('[KloudMeet] Wake Lock request failed:', e);
+      }
+    };
+
+    // 页面恢复可见时重新获取 Wake Lock（iOS Safari / Android Chrome 切后台后会自动释放）
+    const handleVisibilityForWakeLock = () => {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+      }
+    };
+
+    requestWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityForWakeLock);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener('visibilitychange', handleVisibilityForWakeLock);
+      if (wakeLock) {
+        wakeLock.release().catch(() => {});
+      }
+    };
+  }, []);
+
+  // ── 静音音频保活：防止 iOS Safari 息屏时挂起 WebRTC ──
+  // iOS Safari（以及部分 Android 浏览器）在息屏后会暂停页面中所有音频。
+  // 通过在一个隐藏的 <audio> 元素中循环播放极短的静音音频，
+  // 可以保持浏览器的音频会话处于激活状态，从而让 WebRTC 的音频流持续工作。
+  // 这样即使息屏，双方也能继续听到对方说话。
+  React.useEffect(() => {
+    // 1秒静音 WAV：44字节 WAV 头 + 8000个零采样（8kHz mono 8-bit, ~1 秒）
+    // 用 base64 data URL 避免额外文件请求
+    const createSilentWav = (): string => {
+      const sampleRate = 8000;
+      const numSamples = sampleRate; // 1 second
+      const bitsPerSample = 8;
+      const numChannels = 1;
+      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const dataSize = numSamples * numChannels * (bitsPerSample / 8);
+      const headerSize = 44;
+      const buffer = new ArrayBuffer(headerSize + dataSize);
+      const view = new DataView(buffer);
+
+      // RIFF header
+      const writeString = (offset: number, str: string) => {
+        for (let i = 0; i < str.length; i++) {
+          view.setUint8(offset + i, str.charCodeAt(i));
+        }
+      };
+      writeString(0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(8, 'WAVE');
+      writeString(12, 'fmt ');
+      view.setUint32(16, 16, true); // chunk size
+      view.setUint16(20, 1, true);  // PCM
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, byteRate, true);
+      view.setUint16(32, blockAlign, true);
+      view.setUint16(34, bitsPerSample, true);
+      writeString(36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      // 静音数据（8-bit PCM 的静音值是 128）
+      for (let i = 0; i < dataSize; i++) {
+        view.setUint8(headerSize + i, 128);
+      }
+
+      // 转 base64
+      const bytes = new Uint8Array(buffer);
+      let binary = '';
+      for (let i = 0; i < bytes.length; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return 'data:audio/wav;base64,' + btoa(binary);
+    };
+
+    let audio: HTMLAudioElement | null = null;
+    let started = false;
+
+    const startKeepAlive = () => {
+      if (started) return;
+      started = true;
+      try {
+        audio = new Audio(createSilentWav());
+        audio.loop = true;
+        audio.volume = 0.01; // 几乎静音，但非零以保持音频会话
+        // Safari 需要 playsinline
+        audio.setAttribute('playsinline', 'true');
+        audio.setAttribute('webkit-playsinline', 'true');
+        audio.play().then(() => {
+          console.log('[KloudMeet] Silent audio keep-alive started');
+        }).catch((e) => {
+          console.warn('[KloudMeet] Silent audio keep-alive autoplay blocked:', e);
+          started = false;
+        });
+      } catch (e) {
+        console.warn('[KloudMeet] Silent audio keep-alive creation failed:', e);
+        started = false;
+      }
+    };
+
+    // 进入会议后立即尝试播放（此时已有用户交互，一般不会被阻止）
+    startKeepAlive();
+
+    // 如果第一次被 autoplay policy 阻止，下一次用户交互时重试
+    const retryOnInteraction = () => {
+      if (!started) {
+        startKeepAlive();
+      }
+    };
+    document.addEventListener('click', retryOnInteraction, { once: true });
+    document.addEventListener('touchstart', retryOnInteraction, { once: true });
+
+    // 页面恢复可见时确保还在播放
+    const handleVisibilityForKeepAlive = () => {
+      if (document.visibilityState === 'visible' && audio) {
+        if (audio.paused) {
+          audio.play().catch(() => {});
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityForKeepAlive);
+
+    return () => {
+      document.removeEventListener('click', retryOnInteraction);
+      document.removeEventListener('touchstart', retryOnInteraction);
+      document.removeEventListener('visibilitychange', handleVisibilityForKeepAlive);
+      if (audio) {
+        audio.pause();
+        audio.src = '';
+        audio = null;
+      }
+    };
+  }, []);
+
   // Modify video elements globally:
   // 1. Force disable native PiP overlays (e.g. Firefox)
   // 2. Add properties specifically for WeChat / X5 engine to support inline viewing

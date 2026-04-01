@@ -382,6 +382,56 @@
   margin-bottom: 1.5rem;
 }
 
+/* ── Desktop Download Banner ── */
+.downloadRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 480px;
+  margin-top: 0.25rem;
+}
+
+.downloadBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 1.4rem;
+  border: 1.5px solid #e2e5eb;
+  border-radius: 12px;
+  background: #fff;
+  color: #374151;
+  font-size: 0.88rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  white-space: nowrap;
+}
+
+.downloadBtn:hover {
+  border-color: #7c3aed;
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.12);
+  transform: translateY(-1px);
+  color: #5b21b6;
+}
+
+.downloadBtnIcon {
+  color: #0078d4;
+  flex-shrink: 0;
+}
+
+.downloadBtnLabel {
+  color: #4b5563;
+}
+
+.downloadBtnVersion {
+  font-size: 0.78rem;
+  color: #9ca3af;
+  margin-left: 0.15rem;
+}
+
 .feedTitle {
   font-size: 1rem;
   color: #4b5563;

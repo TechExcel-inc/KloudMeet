@@ -3,6 +3,7 @@ const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
@@ -414,6 +415,43 @@ if (!gotLock) {
       showFatal('创建窗口失败', e instanceof Error ? e.message : String(e));
       app.quit();
       return;
+    }
+
+    // ── 自动更新 ──────────────────────────────────────────────
+    if (app.isPackaged) {
+      autoUpdater.logger = {
+        info:  (msg) => appendStartupLog(`[updater] ${msg}`),
+        warn:  (msg) => appendStartupLog(`[updater][warn] ${msg}`),
+        error: (msg) => appendStartupLog(`[updater][error] ${msg}`),
+      };
+
+      autoUpdater.on('update-available', (info) => {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: '发现新版本',
+          message: `Kloud Meet ${info.version} 已发布，正在后台下载…`,
+          buttons: ['好的'],
+        });
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        dialog.showMessageBox(mainWindow, {
+          type: 'question',
+          title: '更新已就绪',
+          message: `Kloud Meet ${info.version} 下载完成，立即重启安装？`,
+          buttons: ['立即重启', '稍后'],
+          defaultId: 0,
+        }).then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        });
+      });
+
+      autoUpdater.on('error', (err) => {
+        appendStartupLog(`autoUpdater error: ${err.message}`);
+      });
+
+      // 启动后延迟 5 秒检查，避免影响启动速度
+      setTimeout(() => autoUpdater.checkForUpdates(), 5000);
     }
 
     app.on('activate', () => {

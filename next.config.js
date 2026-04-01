@@ -38,6 +38,16 @@ const nextConfig = {
           // requires their CORP headers or omitting COEP on the parent; we omit COEP for compatibility.
         ],
       },
+      {
+        // HTML 页面不缓存，每次部署后浏览器立即拿到新版本
+        source: '/:path((?!_next/|api/).*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
     ];
   },
   // Proxy /api/* to remote server — beforeFiles ensures this runs BEFORE local API routes

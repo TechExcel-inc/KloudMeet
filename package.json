@@ -34,6 +34,7 @@
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "dotenv": "^17.3.1",
+    "electron-updater": "^6.8.3",
     "livekit-client": "2.17.3",
     "livekit-server-sdk": "2.15.0",
     "next": "15.2.8",
@@ -124,6 +125,10 @@
         ]
       }
     ],
+    "publish": {
+      "provider": "generic",
+      "url": "https://meet.kloud.cn/releases"
+    },
     "win": {
       "executableName": "KloudMeet",
       "target": [
