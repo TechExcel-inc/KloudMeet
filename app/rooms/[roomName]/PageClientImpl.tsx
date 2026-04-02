@@ -1132,21 +1132,6 @@ function VideoConferenceComponent(props: {
     router.push('/');
   }, [room, router]);
 
-  // End for All (host/co-host only): mark meeting as ended in DB, then disconnect
-  const handleEndForAll = React.useCallback(async () => {
-    const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
-    try {
-      await fetch(`/api/meetings/${rn}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endedAt: new Date().toISOString() }),
-      });
-    } catch (e) {
-      console.warn('[meeting end] failed', e);
-    }
-    room.disconnect();
-    router.push('/');
-  }, [room, router]);
 
   const isPresenterScreencast = screenShareActive;
   const isPureLiveDoc = activeView === 'liveDoc';
@@ -1282,6 +1267,27 @@ function VideoConferenceComponent(props: {
     [room, encoder],
   );
 
+  // End for All (host/co-host only): broadcast END_MEETING, mark as ended in DB, then disconnect
+  const handleEndForAll = React.useCallback(async () => {
+    // Notify all participants to leave via DataChannel
+    sendMeetingMsg({ type: 'END_MEETING' });
+
+    const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
+    try {
+      await fetch(`/api/meetings/${rn}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endedAt: new Date().toISOString() }),
+      });
+    } catch (e) {
+      console.warn('[meeting end] failed', e);
+    }
+    // Small delay to allow the DataChannel message to propagate
+    await new Promise((r) => setTimeout(r, 300));
+    room.disconnect();
+    router.push('/');
+  }, [room, router, sendMeetingMsg]);
+
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
     if (!livekitConnected || !isHost) return;
@@ -1396,6 +1402,10 @@ function VideoConferenceComponent(props: {
               return without;
             });
           }
+        } else if (msg.type === 'END_MEETING') {
+          // Host/Co-host ended the meeting for everyone — disconnect and redirect
+          room.disconnect();
+          router.push('/');
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
