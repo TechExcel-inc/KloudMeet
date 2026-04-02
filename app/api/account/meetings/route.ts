@@ -79,10 +79,13 @@ export async function GET(request: NextRequest) {
     const enhancedMeetings = meetings.map(m => {
       const mx = m as any;
       const isLive = activeRooms.includes(m.roomName);
+      // If DB says ENDED, don't override with LiveKit active status
+      // (LiveKit rooms may take seconds to be reclaimed after last participant leaves)
+      const isActive = m.status === 'ENDED' ? false : isLive;
       return {
         ...mx,
-        isActive: isLive,
-        actualStartedAt: isLive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
+        isActive,
+        actualStartedAt: isActive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
       };
     });
 

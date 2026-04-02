@@ -1445,20 +1445,24 @@ function DashboardView({
                       )}
                     </td>
                     <td>
-                      {m.actualStartedAt || (m.status === 'ENDED' && m.startedAt) || (m.isActive && m.status === 'ACTIVE') ? (
+                      {m.actualStartedAt ? (
                         <>
                           <div style={{ color: '#111827', fontSize: '0.9rem', fontWeight: 500 }}>
-                            {new Date(m.actualStartedAt || m.startedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                            {new Date(m.actualStartedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {new Date(m.actualStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                           </div>
-                          {m.actualDurationMinutes || (m.status === 'ENDED' && m.durationMinutes) ? (
+                          {m.actualDurationMinutes ? (
                             <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
-                              {m.actualDurationMinutes || m.durationMinutes} mins
+                              {m.actualDurationMinutes} mins
                             </div>
-                          ) : (
+                          ) : m.isActive ? (
                             <div style={{ fontSize: '0.85rem', color: '#ef4444', marginTop: '2px', fontWeight: 600 }}>
-                              {Math.max(1, Math.round((Date.now() - new Date(m.actualStartedAt || m.startedAt).getTime()) / 60000))} mins
+                              {Math.max(1, Math.round((currentTime - new Date(m.actualStartedAt).getTime()) / 60000))} mins (ongoing)
                             </div>
-                          )}
+                          ) : m.status === 'ENDED' ? (
+                            <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '2px' }}>
+                              —
+                            </div>
+                          ) : null}
                         </>
                       ) : (
                         <div style={{ color: '#9ca3af', fontSize: '0.9rem', fontWeight: 500 }}>-</div>

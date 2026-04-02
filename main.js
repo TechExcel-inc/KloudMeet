@@ -182,13 +182,17 @@ function installSessionAndIpcOnce() {
 
       let targetX, targetY;
 
+      // Controller sends content-normalized (0-1) coordinates corrected for
+      // object-fit:contain letterboxing. Map to physical screen pixels using
+      // our own display bounds (avoids DPI scaling issues across machines).
+      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+
       if (data.absX !== undefined && data.absY !== undefined) {
-        // New protocol: controller sends absolute screen coordinates directly
+        // Legacy: controller sent pre-computed absolute coords
         targetX = Math.round(data.absX);
         targetY = Math.round(data.absY);
       } else {
-        // Legacy fallback: normalized 0-1 mapped to primary display
-        const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+        // Standard: normalized 0-1 mapped to primary display physical pixels
         targetX = Math.round(data.x * w);
         targetY = Math.round(data.y * h);
       }

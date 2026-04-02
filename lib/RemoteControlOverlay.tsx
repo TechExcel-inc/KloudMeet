@@ -38,51 +38,46 @@ function throttle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
 }
 
 /**
- * Given normalized (0-1) coordinates relative to the VIDEO CONTAINER (which may have
- * letterbox bars), and the presenter's screen + video resolution info, compute the
- * absolute pixel position on the presenter's screen.
+ * Given raw cursor position and the video element's CSS bounding box, compute
+ * content-normalized (0-1) coordinates that account for object-fit: contain
+ * letterboxing. The actual video content may be smaller than the CSS box.
  *
- * The overlay div fills the whole video container. The actual video content is
- * letterboxed inside (object-fit: contain). We need to compute where the content
- * starts/ends inside the container to get accurate coordinates.
+ * Returns x/y in 0-1 range relative to the actual video CONTENT, not the CSS box.
  */
-function toAbsolute(
-  normX: number,
-  normY: number,
-  containerW: number,
-  containerH: number,
-  presenterScreenW: number,
-  presenterScreenH: number,
-  presenterVideoW: number,
-  presenterVideoH: number,
-): { absX: number; absY: number } {
-  // Compute letterbox offsets: the video content aspect ratio vs container aspect ratio
-  const videoAspect = presenterVideoW / presenterVideoH;
-  const containerAspect = containerW / containerH;
+function toContentNormalized(
+  clientX: number,
+  clientY: number,
+  rect: DOMRect,
+  videoW: number,
+  videoH: number,
+): { x: number; y: number } {
+  // Compute how object-fit: contain positions the content within the CSS box
+  const videoAspect = videoW / videoH;
+  const boxAspect = rect.width / rect.height;
 
   let contentW: number, contentH: number, offsetX: number, offsetY: number;
-  if (videoAspect > containerAspect) {
-    // Pillarbox (black bars on top/bottom)
-    contentW = containerW;
-    contentH = containerW / videoAspect;
+  if (videoAspect > boxAspect) {
+    // Video is wider than box → content fills width, bars on top/bottom
+    contentW = rect.width;
+    contentH = rect.width / videoAspect;
     offsetX = 0;
-    offsetY = (containerH - contentH) / 2;
+    offsetY = (rect.height - contentH) / 2;
   } else {
-    // Letterbox (black bars on left/right)
-    contentH = containerH;
-    contentW = containerH * videoAspect;
+    // Video is taller than box → content fills height, bars on left/right
+    contentH = rect.height;
+    contentW = rect.height * videoAspect;
     offsetY = 0;
-    offsetX = (containerW - contentW) / 2;
+    offsetX = (rect.width - contentW) / 2;
   }
 
-  // Map click position from container space to content space
-  const contentX = (normX * containerW - offsetX) / contentW;
-  const contentY = (normY * containerH - offsetY) / contentH;
+  // Map from CSS box space to content space (0-1)
+  const x = (clientX - rect.left - offsetX) / contentW;
+  const y = (clientY - rect.top - offsetY) / contentH;
 
-  // Map from content-normalized to presenter screen pixels
-  const absX = Math.round(Math.max(0, Math.min(1, contentX)) * presenterScreenW);
-  const absY = Math.round(Math.max(0, Math.min(1, contentY)) * presenterScreenH);
-  return { absX, absY };
+  return {
+    x: Math.max(0, Math.min(1, x)),
+    y: Math.max(0, Math.min(1, y)),
+  };
 }
 
 export function RemoteControlOverlay({
@@ -195,30 +190,29 @@ export function RemoteControlOverlay({
       e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
       button = 0,
     ): RemoteControlMessage => {
-      const container = containerRef.current;
-      if (!container) return { type, x: 0, y: 0, button };
+      // Find the actual screen share video element for accurate coordinate mapping
+      const video =
+        document.querySelector<HTMLVideoElement>('[data-lk-source="screen_share"] video') ||
+        document.querySelector<HTMLVideoElement>('[data-lk-source="screen_share_audio"] video') ||
+        document.querySelector<HTMLVideoElement>('.lk-focus-layout .lk-participant-tile video') ||
+        document.querySelector<HTMLVideoElement>('.lk-focus-layout video');
 
-      const rect = container.getBoundingClientRect();
-      const normX = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-      const normY = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height));
+      const rect = video
+        ? video.getBoundingClientRect()
+        : containerRef.current?.getBoundingClientRect();
+      if (!rect) return { type, x: 0, y: 0, button };
 
-      const info = presenterInfoRef.current;
-      if (info) {
-        const { absX, absY } = toAbsolute(
-          normX,
-          normY,
-          rect.width,
-          rect.height,
-          info.screenW,
-          info.screenH,
-          info.videoW,
-          info.videoH,
-        );
-        return { type, x: normX, y: normY, absX, absY, button };
-      }
+      // Get actual video content dimensions for letterbox correction
+      const videoW = video?.videoWidth || rect.width;
+      const videoH = video?.videoHeight || rect.height;
 
-      // Fallback: no presenter info yet, use raw normalized coords
-      return { type, x: normX, y: normY, button };
+      // Compute content-normalized 0-1 coordinates (corrected for object-fit: contain)
+      const { x, y } = toContentNormalized(e.clientX, e.clientY, rect, videoW, videoH);
+
+      // Only send normalized 0-1 coords — the presenter's Electron main process
+      // will map these to physical screen pixels using its own screen dimensions.
+      // This avoids DPI scaling mismatches between controller and presenter.
+      return { type, x, y, button };
     },
     [],
   );
@@ -270,6 +264,16 @@ export function RemoteControlOverlay({
     e.preventDefault();
   };
 
+  // Auto-hide badge after 3 seconds
+  const [showBadge, setShowBadge] = useState(true);
+  useEffect(() => {
+    if (isActive && !isPresenter) {
+      setShowBadge(true);
+      const timer = setTimeout(() => setShowBadge(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isActive, isPresenter]);
+
   if (!isActive && !isPresenter) return null;
 
   const isController = isActive && !isPresenter;
@@ -293,44 +297,44 @@ export function RemoteControlOverlay({
         zIndex: 1000,
         pointerEvents: isController ? 'auto' : 'none',
         cursor: isController ? (isControlling ? 'grabbing' : 'crosshair') : 'default',
-        boxShadow: isController ? 'inset 0 0 0 3px rgba(59, 130, 246, 0.55)' : 'none',
+        boxShadow: isController ? 'inset 0 0 0 2px rgba(59, 130, 246, 0.4)' : 'none',
         borderRadius: 'inherit',
         transition: 'box-shadow 0.2s ease',
       }}
     >
-      {/* Controller badge */}
-      {isController && (
+      {/* Controller badge — bottom-right, auto-fades after 3s */}
+      {isController && showBadge && (
         <div
           style={{
             position: 'absolute',
-            top: 16,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            background: 'rgba(29, 78, 216, 0.92)',
-            backdropFilter: 'blur(8px)',
-            WebkitBackdropFilter: 'blur(8px)',
+            bottom: 60,
+            right: 12,
+            background: 'rgba(29, 78, 216, 0.85)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
             color: 'white',
-            padding: '5px 14px',
-            borderRadius: '20px',
-            fontSize: '12px',
+            padding: '4px 10px',
+            borderRadius: '14px',
+            fontSize: '11px',
             fontWeight: 600,
-            letterSpacing: '0.3px',
             pointerEvents: 'none',
-            boxShadow: '0 4px 16px rgba(37, 99, 235, 0.4)',
-            border: '1px solid rgba(147, 197, 253, 0.3)',
+            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.3)',
+            border: '1px solid rgba(147, 197, 253, 0.2)',
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 4,
             whiteSpace: 'nowrap',
             zIndex: 1001,
+            opacity: 0.9,
+            transition: 'opacity 0.5s ease',
           }}
         >
-          <svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" style={{ opacity: 0.9 }}>
+          <svg viewBox="0 0 24 24" width="11" height="11" fill="currentColor" style={{ opacity: 0.8 }}>
             <path d="M4 0l16 12.279-6.951 1.17 4.325 8.817-2.123 1.034-4.285-8.745-5.966 5.014z" />
           </svg>
-          Controlling Screen
+          Controlling
           {!presenterInfoRef.current && (
-            <span style={{ opacity: 0.6, fontSize: 10, marginLeft: 4 }}>(syncing...)</span>
+            <span style={{ opacity: 0.6, fontSize: 9, marginLeft: 2 }}>(syncing...)</span>
           )}
         </div>
       )}

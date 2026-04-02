@@ -78,7 +78,11 @@ export async function PUT(
     if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
 
     const body = await request.json();
-    const { title, description, scheduledFor, durationMinutes, timezone, status } = body;
+    const { title, description, scheduledFor, durationMinutes, timezone, status, actualStartedAt, endedAt } = body;
+
+    // Fetch current meeting to avoid overwriting webhook-provided values
+    const current = await prisma.meeting.findUnique({ where: { roomName } });
+    if (!current) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
 
     const data: any = {};
     if (title !== undefined) data.title = title;
@@ -87,6 +91,24 @@ export async function PUT(
     if (durationMinutes !== undefined) data.durationMinutes = durationMinutes;
     if (timezone !== undefined) data.timezone = timezone;
     if (status !== undefined) data.status = status;
+
+    // Only set actualStartedAt if not already set (webhook has priority)
+    if (actualStartedAt && !current.actualStartedAt) {
+      data.actualStartedAt = new Date(actualStartedAt);
+    }
+
+    // Calculate actualDurationMinutes when ending a meeting
+    if (endedAt && current.status !== 'ENDED') {
+      data.endedAt = new Date(endedAt);
+      data.status = 'ENDED';
+      const startMs = (current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime
+        ? new Date(current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime()
+        : Date.now();
+      const endMs = new Date(endedAt).getTime();
+      if (!current.actualDurationMinutes) {
+        data.actualDurationMinutes = Math.max(1, Math.round((endMs - startMs) / 60000));
+      }
+    }
 
     const updated = await prisma.meeting.update({
       where: { roomName },

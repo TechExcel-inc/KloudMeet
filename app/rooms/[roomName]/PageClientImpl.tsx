@@ -689,6 +689,13 @@ function VideoConferenceComponent(props: {
     }
   }, [isToolbarMobile, hasScreenShare, screenShareActive]);
 
+  // Auto-collapse webcam sidebar when entering remote control mode for maximum screen visibility
+  React.useEffect(() => {
+    if (isRemoteControlMode && hasScreenShare) {
+      setIsWebcamSidebarCollapsed(true);
+    }
+  }, [isRemoteControlMode, hasScreenShare]);
+
   // 手机端检测：屏幕共享出现时，尝试自动 play 所有视频；如果被浏览器拒绝（微信等），显示「点击播放」按钮
   React.useEffect(() => {
     if (!isToolbarMobile || !hasScreenShare || screenShareActive) {
@@ -828,6 +835,14 @@ function VideoConferenceComponent(props: {
             navigator.clipboard.writeText(window.location.href).catch(console.error);
             console.log('Meeting URL auto-copied to clipboard!');
           }
+
+          // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
+          const rn = props.connectionDetails.roomName;
+          fetch(`/api/meetings/${rn}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
+          }).catch(e => console.warn('[meeting start fallback] failed', e));
         })
         .catch((error) => {
           handleError(error);
@@ -853,7 +868,9 @@ function VideoConferenceComponent(props: {
   const lowPowerMode = useLowCPUOptimizer(room);
 
   const router = useRouter();
-  const handleOnLeave = React.useCallback(() => router.push('/'), [router]);
+  const handleOnLeave = React.useCallback(() => {
+    router.push('/');
+  }, [router]);
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
     if (
@@ -1109,7 +1126,18 @@ function VideoConferenceComponent(props: {
     });
   }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
 
-  const handleExit = React.useCallback(() => {
+  const handleExit = React.useCallback(async () => {
+    // Mark meeting as ended in DB before leaving
+    const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
+    try {
+      await fetch(`/api/meetings/${rn}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endedAt: new Date().toISOString() }),
+      });
+    } catch (e) {
+      console.warn('[meeting end] failed', e);
+    }
     room.disconnect();
     router.push('/');
   }, [room, router]);
@@ -1612,8 +1640,8 @@ function VideoConferenceComponent(props: {
               </div>
             )}
 
-            {/* Safe preview badge (another tab only) */}
-            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && (
+            {/* Safe preview badge (hidden during remote control for clear view) */}
+            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !isRemoteControlMode && (
               <div className="screenshare-overlay-container">
                 <div className="screenshare-overlay-badge">
                   {!screenShareActive ? "Viewing [Attendee]'s screen." : 'Preview: Another Tab.'}
@@ -1685,8 +1713,8 @@ function VideoConferenceComponent(props: {
               </>
             )}
 
-            {/* Attendee sidebar collapse button (only for non-presenters watching screen share) */}
-            {hasScreenShare && !screenShareActive && (
+            {/* Attendee sidebar collapse button (hidden during remote control for unobstructed view) */}
+            {hasScreenShare && !screenShareActive && !isRemoteControlMode && (
               <button
                 className="webcam-collapse-toggle"
                 onClick={(e) => {
