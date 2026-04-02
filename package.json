@@ -1,6 +1,6 @@
 {
   "name": "livekit-meet",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "private": true,
   "description": "Kloud Meet — LiveKit + Next.js desktop and web client",
   "author": "Kloud",
@@ -127,7 +127,7 @@
     ],
     "publish": {
       "provider": "generic",
-      "url": "https://meet.kloud.cn/releases"
+      "url": "https://kloud.cn/kloudmeet-exe"
     },
     "win": {
       "executableName": "KloudMeet",

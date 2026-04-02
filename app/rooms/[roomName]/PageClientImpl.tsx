@@ -1126,8 +1126,14 @@ function VideoConferenceComponent(props: {
     });
   }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
 
-  const handleExit = React.useCallback(async () => {
-    // Mark meeting as ended in DB before leaving
+  // Leave: just disconnect without ending the meeting for everyone
+  const handleLeave = React.useCallback(() => {
+    room.disconnect();
+    router.push('/');
+  }, [room, router]);
+
+  // End for All (host/co-host only): mark meeting as ended in DB, then disconnect
+  const handleEndForAll = React.useCallback(async () => {
     const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
     try {
       await fetch(`/api/meetings/${rn}`, {
@@ -2393,7 +2399,8 @@ function VideoConferenceComponent(props: {
         <KloudMeetToolbar
           activeView={activeView}
           onViewChange={handleViewChange}
-          onExit={handleExit}
+          onExit={handleLeave}
+          onEndForAll={handleEndForAll}
           micEnabled={micEnabled}
           camEnabled={camEnabled}
           onToggleMic={handleToggleMic}

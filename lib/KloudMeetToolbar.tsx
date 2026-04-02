@@ -48,6 +48,8 @@ interface KloudMeetToolbarProps {
   attendeePanelSlot?: React.ReactNode;
   /** Only host/co-host can end meeting for everyone */
   canEndForAll?: boolean;
+  /** Callback to end meeting for all participants (host/co-host only) */
+  onEndForAll?: () => void;
   isRecording?: boolean;
   onOpenRecordPopup?: () => void;
   onStopRecording?: () => void;
@@ -57,6 +59,7 @@ export function KloudMeetToolbar({
   activeView,
   onViewChange,
   onExit,
+  onEndForAll,
   micEnabled,
   camEnabled,
   onToggleMic,
@@ -684,6 +687,7 @@ export function KloudMeetToolbar({
                 toastTimerRef={toastTimerRef}
                 setActiveSheet={setActiveSheet}
                 onExit={onExit}
+                onEndForAll={onEndForAll}
                 isDesktop={isDesktop}
                 canEndForAll={canEndForAll}
                 isRecording={isRecording}
@@ -715,6 +719,7 @@ export function KloudMeetToolbar({
               toastTimerRef={toastTimerRef}
               setActiveSheet={setActiveSheet}
               onExit={onExit}
+              onEndForAll={onEndForAll}
               isDesktop={isDesktop}
               canEndForAll={canEndForAll}
               isRecording={isRecording}
@@ -811,6 +816,7 @@ export function KloudMeetToolbar({
                         toastTimerRef={toastTimerRef}
                         setActiveSheet={setActiveSheet}
                         onExit={onExit}
+                        onEndForAll={onEndForAll}
                         isDesktop={isDesktop}
                         canEndForAll={canEndForAll}
                         isRecording={isRecording}
@@ -842,6 +848,7 @@ function ActiveSheetContent({
   toastTimerRef,
   setActiveSheet,
   onExit,
+  onEndForAll,
   isDesktop,
   canEndForAll,
   isRecording,
@@ -962,7 +969,7 @@ function ActiveSheetContent({
             Leave the meeting
           </button>
           {canEndForAll && (
-            <button className={styles.actionSheetItem} onClick={() => { showComingSoon('End for All'); onExit(); setActiveSheet(null); }}>
+            <button className={styles.actionSheetItem} onClick={() => { if (onEndForAll) onEndForAll(); else onExit(); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
               End meeting for everyone
             </button>
