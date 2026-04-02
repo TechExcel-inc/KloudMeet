@@ -76,39 +76,14 @@ export async function GET(request: NextRequest) {
       console.error('[account meetings GET] LiveKit fallback query failed', e);
     }
 
-    // ── Auto-cleanup: mark stale ACTIVE meetings as ENDED ──
-    // If DB says ACTIVE but LiveKit says room no longer exists,
-    // the webhook was missed (e.g. last person closed browser).
-    const staleIds: number[] = [];
-    for (const m of meetings) {
-      if (
-        m.status === 'ACTIVE' &&
-        !activeRooms.includes(m.roomName)
-      ) {
-        staleIds.push(m.id);
-      }
-    }
-    if (staleIds.length > 0) {
-      const now = new Date();
-      await prisma.meeting.updateMany({
-        where: { id: { in: staleIds } },
-        data: {
-          status: 'ENDED',
-          endedAt: now,
-        },
-      });
-      console.log(`[account meetings] auto-ended ${staleIds.length} stale meeting(s)`);
-    }
-
     const enhancedMeetings = meetings.map(m => {
       const mx = m as any;
       const isLive = activeRooms.includes(m.roomName);
-      // If we just auto-ended it above, reflect that
-      const effectiveStatus = staleIds.includes(m.id) ? 'ENDED' : m.status;
-      const isActive = effectiveStatus === 'ENDED' ? false : isLive;
+      // If DB says ENDED, don't override with LiveKit active status
+      // (LiveKit rooms may take seconds to be reclaimed after last participant leaves)
+      const isActive = m.status === 'ENDED' ? false : isLive;
       return {
         ...mx,
-        status: effectiveStatus,
         isActive,
         actualStartedAt: isActive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
       };
