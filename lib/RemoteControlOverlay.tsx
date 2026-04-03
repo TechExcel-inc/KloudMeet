@@ -19,6 +19,12 @@ export type RemoteControlMessage = {
   videoH?: number;
 };
 
+// Pending request info for the presenter's approval dialog
+export type RemoteControlRequest = {
+  requesterIdentity: string;
+  requesterName: string;
+};
+
 interface RemoteControlOverlayProps {
   isActive: boolean;
   isPresenter: boolean;

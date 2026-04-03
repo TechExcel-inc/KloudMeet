@@ -34,6 +34,7 @@ interface KloudMeetToolbarProps {
   onToggleDrawingMode: () => void;
   isRemoteControlMode: boolean;
   onToggleRemoteControlMode: () => void;
+  remoteControlPending?: boolean;
   hasScreenShare: boolean;
   isDesktop: boolean;
   canSwitchViews: boolean;
@@ -71,6 +72,7 @@ export function KloudMeetToolbar({
   onToggleDrawingMode,
   isRemoteControlMode,
   onToggleRemoteControlMode,
+  remoteControlPending,
   hasScreenShare,
   isDesktop,
   canSwitchViews,
@@ -576,12 +578,12 @@ export function KloudMeetToolbar({
             Share Screen
           </button>
 
-          <>
+          {hasScreenShare && (
+            <>
               <button
                 className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleDrawingMode}
-                style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
-                title={!hasScreenShare ? 'No active screenshare to annotate' : 'Annotate Screenshare'}
+                title={'Annotate Screenshare'}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
@@ -590,17 +592,29 @@ export function KloudMeetToolbar({
               </button>
 
               <button
-                className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnCheck : ''}`}
+                className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnCheck : ''} ${remoteControlPending ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleRemoteControlMode}
-                style={{ opacity: hasScreenShare ? 1 : 0.5, cursor: hasScreenShare ? 'pointer' : 'not-allowed' }}
-                title={!hasScreenShare ? 'No active screenshare to control' : 'Remote Control'}
+                title={remoteControlPending ? 'Cancel Control Request' : isRemoteControlMode ? 'Stop Remote Control' : 'Request Remote Control'}
+                style={remoteControlPending ? { position: 'relative' } : undefined}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
-                </svg>
-                Control
+                {remoteControlPending ? (
+                  <>
+                    <style>{`
+                      @keyframes rcSpinner { to { transform: rotate(360deg); } }
+                    `}</style>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'rcSpinner 1s linear infinite' }}>
+                      <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+                    </svg>
+                  </>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
+                  </svg>
+                )}
+                {remoteControlPending ? 'Requesting...' : 'Control'}
               </button>
             </>
+          )}
           </>
           )}
           <button ref={attendeeMenuBtnRef} className={`${styles.tabBtn} ${attendeeOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleAttendee}>

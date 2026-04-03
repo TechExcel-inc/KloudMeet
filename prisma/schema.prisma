@@ -312,3 +312,14 @@ model RecordingAccessRequest {
   meetUser  MeetUser   @relation(fields: [meetUserId], references: [id])
   meeting   Meeting    @relation(fields: [meetingId], references: [id])
 }
+
+// ============================================================
+// 14. SystemSetting — Key-value store for platform configuration
+// ============================================================
+model SystemSetting {
+  id         Int       @id @default(autoincrement())
+  key        String    @unique
+  value      String    @db.Text
+  createdAt  DateTime  @default(now())
+  modifiedAt DateTime? @updatedAt
+}

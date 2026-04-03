@@ -10,7 +10,7 @@ import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/K
 import { LiveDocView } from '@/lib/LiveDocView';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
-import { RemoteControlOverlay } from '@/lib/RemoteControlOverlay';
+import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { useToolbarIsMobile } from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
@@ -62,6 +62,23 @@ export function PageClientImpl(props: {
   const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
     undefined,
   );
+
+  // Force microphone to always default ON, regardless of persisted state.
+  // Camera and other choices remain persisted from localStorage.
+  if (typeof window !== 'undefined') {
+    try {
+      const key = 'lk-user-choices';
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed.audioEnabled === false) {
+          parsed.audioEnabled = true;
+          localStorage.setItem(key, JSON.stringify(parsed));
+        }
+      }
+    } catch (_) { /* ignore */ }
+  }
+
   const preJoinDefaults = React.useMemo(() => {
     return {
       username: '',
@@ -538,6 +555,7 @@ export function PageClientImpl(props: {
           {!isBot && (
             <PreJoin
               defaults={preJoinDefaults}
+
               onSubmit={handlePreJoinSubmit}
               onError={handlePreJoinError}
             />
@@ -589,6 +607,10 @@ function VideoConferenceComponent(props: {
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
+  // Remote control permission flow
+  const [remoteControlPending, setRemoteControlPending] = React.useState(false);
+  const [remoteControlRequest, setRemoteControlRequest] = React.useState<RemoteControlRequest | null>(null);
+  const [approvedControllerIdentity, setApprovedControllerIdentity] = React.useState<string | null>(null);
   const [screenShareSurface, setScreenShareSurface] = React.useState<
     'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'
   >('unknown');
@@ -1406,6 +1428,35 @@ function VideoConferenceComponent(props: {
           // Host/Co-host ended the meeting for everyone — disconnect and redirect
           room.disconnect();
           router.push('/');
+        } else if (msg.type === 'RC_REQUEST') {
+          // Remote Control: someone is requesting control of our screen
+          if (screenShareActive) {
+            if (approvedControllerIdentity) {
+              // Already have a controller — auto-deny
+              sendMeetingMsg({ type: 'RC_DENIED', requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
+            } else {
+              setRemoteControlRequest({ requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
+            }
+          }
+        } else if (msg.type === 'RC_APPROVED') {
+          if (msg.requesterIdentity === room.localParticipant.identity) {
+            setRemoteControlPending(false);
+            setIsRemoteControlMode(true);
+            setIsDrawingMode(false);
+          }
+        } else if (msg.type === 'RC_DENIED') {
+          if (msg.requesterIdentity === room.localParticipant.identity) {
+            setRemoteControlPending(false);
+          }
+        } else if (msg.type === 'RC_REVOKED') {
+          if (msg.requesterIdentity === room.localParticipant.identity) {
+            setIsRemoteControlMode(false);
+            setRemoteControlPending(false);
+          }
+        } else if (msg.type === 'RC_CANCELLED') {
+          if (remoteControlRequest?.requesterIdentity === msg.requesterIdentity) {
+            setRemoteControlRequest(null);
+          }
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
@@ -1438,7 +1489,41 @@ function VideoConferenceComponent(props: {
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room, isHost, decoder, sendMeetingMsg]);
+  }, [room, isHost, decoder, sendMeetingMsg, screenShareActive, approvedControllerIdentity, remoteControlRequest]);
+
+  // ═══ Remote Control Permission (uses meeting-control topic) ═══
+
+  // Clear all remote control permission state when screen share ends
+  React.useEffect(() => {
+    if (!hasScreenShare) {
+      setRemoteControlPending(false);
+      setRemoteControlRequest(null);
+      setApprovedControllerIdentity(null);
+    }
+  }, [hasScreenShare]);
+
+  // Presenter approves a remote control request
+  const handleApproveRcRequest = React.useCallback(
+    (identity: string) => {
+      setApprovedControllerIdentity(identity);
+      setRemoteControlRequest(null);
+      sendMeetingMsg(
+        { type: 'RC_APPROVED', requesterIdentity: identity, requesterName: '' },
+      );
+    },
+    [sendMeetingMsg],
+  );
+
+  // Presenter denies a remote control request
+  const handleDenyRcRequest = React.useCallback(
+    (identity: string) => {
+      setRemoteControlRequest(null);
+      sendMeetingMsg(
+        { type: 'RC_DENIED', requesterIdentity: identity, requesterName: '' },
+      );
+    },
+    [sendMeetingMsg],
+  );
 
   // All participants: send heartbeat every 5s
   React.useEffect(() => {
@@ -1588,6 +1673,145 @@ function VideoConferenceComponent(props: {
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
+
+        {/* Remote Control approval dialog — rendered at top level to avoid overflow clipping */}
+        {remoteControlRequest && screenShareActive && (
+          <div
+            id="rc-approval-dialog"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(0,0,0,0.35)',
+                backdropFilter: 'blur(2px)',
+                WebkitBackdropFilter: 'blur(2px)',
+              }}
+              onClick={() => handleDenyRcRequest(remoteControlRequest.requesterIdentity)}
+            />
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                background: 'linear-gradient(145deg, #1e1e2e, #252538)',
+                borderRadius: '16px',
+                padding: '28px 32px',
+                minWidth: '340px',
+                maxWidth: '420px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(139,92,246,0.15)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                fontFamily: "'Inter', sans-serif",
+                animation: 'rcPermDialogIn 0.25s ease',
+              }}
+            >
+              <style>{`
+                @keyframes rcPermDialogIn {
+                  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+                  to { opacity: 1; transform: scale(1) translateY(0); }
+                }
+                @keyframes rcPermPulse {
+                  0%, 100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+                  50% { box-shadow: 0 0 0 8px rgba(139,92,246,0); }
+                }
+              `}</style>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    animation: 'rcPermPulse 2s ease infinite',
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.5" width="22" height="22">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#f1f1f4' }}>
+                    Remote Control Request
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                    Screen sharing permission
+                  </div>
+                </div>
+              </div>
+              <div style={{ fontSize: '14px', color: '#d1d5db', lineHeight: 1.6, marginBottom: '24px' }}>
+                <strong style={{ color: '#c4b5fd' }}>{remoteControlRequest.requesterName || remoteControlRequest.requesterIdentity}</strong>{' '}
+                is requesting to control your shared screen.
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => handleDenyRcRequest(remoteControlRequest.requesterIdentity)}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: '#d1d5db',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'rgba(239,68,68,0.15)';
+                    e.currentTarget.style.borderColor = 'rgba(239,68,68,0.3)';
+                    e.currentTarget.style.color = '#fca5a5';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                    e.currentTarget.style.color = '#d1d5db';
+                  }}
+                >
+                  Decline
+                </button>
+                <button
+                  onClick={() => handleApproveRcRequest(remoteControlRequest.requesterIdentity)}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #7c3aed, #5b21b6)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    fontFamily: "'Inter', sans-serif",
+                    boxShadow: '0 2px 10px rgba(124,58,237,0.3)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #6d28d9, #4c1d95)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, #7c3aed, #5b21b6)';
+                  }}
+                >
+                  Allow Control
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* View content area */}
         <div
@@ -2429,13 +2653,51 @@ function VideoConferenceComponent(props: {
             }
           }}
           isRemoteControlMode={isRemoteControlMode}
+          remoteControlPending={remoteControlPending}
           onToggleRemoteControlMode={() => {
-            if (hasScreenShare) {
+            if (!hasScreenShare) return;
+
+            // If I am the presenter (A), no permission needed — toggle directly
+            if (screenShareActive) {
               setIsRemoteControlMode((prev) => {
                 const next = !prev;
-                if (next) setIsDrawingMode(false); // mutual exclusion
+                if (next) setIsDrawingMode(false);
                 return next;
               });
+              return;
+            }
+
+            // I am a viewer (B) — need to request permission from presenter (A)
+            if (remoteControlPending) {
+              // Cancel the pending request
+              setRemoteControlPending(false);
+              // Find the presenter's identity to send cancellation
+              const presenterTrack = screenShareTracks[0];
+              const presenterIdentity = presenterTrack?.participant?.identity;
+              if (presenterIdentity) {
+                sendMeetingMsg(
+                  { type: 'RC_CANCELLED', requesterIdentity: room.localParticipant.identity, requesterName: room.localParticipant.name || room.localParticipant.identity },
+                );
+              }
+              return;
+            }
+
+            if (isRemoteControlMode) {
+              // Stop controlling
+              setIsRemoteControlMode(false);
+              setApprovedControllerIdentity(null);
+              return;
+            }
+
+            // Send permission request to the presenter
+            const presenterTrack = screenShareTracks[0];
+            const presenterIdentity = presenterTrack?.participant?.identity;
+            if (presenterIdentity) {
+              setRemoteControlPending(true);
+              setIsDrawingMode(false);
+              sendMeetingMsg(
+                { type: 'RC_REQUEST', requesterIdentity: room.localParticipant.identity, requesterName: room.localParticipant.name || room.localParticipant.identity },
+              );
             }
           }}
           hasScreenShare={hasScreenShare}
