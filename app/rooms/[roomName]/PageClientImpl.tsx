@@ -14,6 +14,7 @@ import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlO
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { useToolbarIsMobile } from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
+import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
   formatChatMessageLinks,
   LocalUserChoices,
@@ -95,8 +96,8 @@ export function PageClientImpl(props: {
   const [isSameTabRefresh, setIsSameTabRefresh] = React.useState(false);
   const [elapsedTime, setElapsedTime] = React.useState('');
   const [showAvatarMenu, setShowAvatarMenu] = React.useState(false);
+  const { t, locale, setLocale } = useI18n();
   const [showLangMenu, setShowLangMenu] = React.useState(false);
-  const [activeLang, setActiveLang] = React.useState('EN');
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -144,23 +145,23 @@ export function PageClientImpl(props: {
   const isActive = meetingInfo?.isActive === true;
 
   const preJoinTitle = React.useMemo(() => {
-    if (isHost && !isActive) return 'Starting Meeting';
-    if (isHost && isActive) return 'Active Meeting in Progress';
-    if (meetingInfo?.createdByMember) return `Joining ${meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username}'s meeting`;
-    return 'Joining a Meeting';
+    if (isHost && !isActive) return t('prejoin.startingMeeting');
+    if (isHost && isActive) return t('prejoin.activeMeeting');
+    if (meetingInfo?.createdByMember) return t('prejoin.joiningUser', { name: meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username });
+    return t('prejoin.joiningMeeting');
   }, [isHost, isActive, meetingInfo]);
 
   const preJoinSubtitle = React.useMemo(() => {
-    if (isHost && !isActive) return 'Please configure your device settings before the meeting begins.';
-    if (isHost && isActive) return 'You are already hosting this meeting in another session. Do you want to join?';
-    if (meetingInfo?.startedAt) return `Meeting in progress for ${elapsedTime || '00:00'}`;
-    return 'Please configure your device settings before the meeting begins.';
+    if (isHost && !isActive) return t('prejoin.configDevice');
+    if (isHost && isActive) return t('prejoin.alreadyHosting');
+    if (meetingInfo?.startedAt) return t('prejoin.inProgress', { time: elapsedTime || '00:00' });
+    return t('prejoin.configDevice');
   }, [isHost, isActive, meetingInfo, elapsedTime]);
 
   const preJoinButtonText = React.useMemo(() => {
-    if (isHost && !isActive) return 'Start Now';
-    if (isHost && isActive) return 'Join as Host';
-    return 'Join Now';
+    if (isHost && !isActive) return t('prejoin.startNow');
+    if (isHost && isActive) return t('prejoin.joinAsHost');
+    return t('prejoin.joinNow');
   }, [isHost, isActive]);
 
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
@@ -187,13 +188,13 @@ export function PageClientImpl(props: {
     } catch (error: any) {
       console.error('Failed to get connection details:', error);
       alert(
-        `Could not connect to the room. Is your LiveKit server running? Error: ${error.message}`,
+        `${t('prejoin.connectError', { error: error.message })}`,
       );
     }
   }, []);
   const handlePreJoinError = React.useCallback((error: any) => {
     console.error('PreJoin Validation Error:', error);
-    alert(`LiveKit PreJoin Error: ${error?.message || String(error)}`);
+    alert(`${t('prejoin.prejoinError', { error: error?.message || String(error) })}`);
   }, []);
 
   React.useEffect(() => {
@@ -220,15 +221,15 @@ export function PageClientImpl(props: {
             )}
           </div>
           <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: '0 0 0.5rem' }}>
-            {meetingInfo.status === 'ENDED' ? 'Meeting Concluded' : 'Meeting Canceled'}
+            {meetingInfo.status === 'ENDED' ? t('prejoin.meetingConcluded') : t('prejoin.meetingCanceled')}
           </h1>
           <p style={{ color: '#6b7280', fontSize: '1rem', margin: '0 0 2rem' }}>
             {meetingInfo.status === 'ENDED' 
-              ? 'This meeting has ended and is permanently closed.' 
-              : 'This meeting has been canceled and is no longer available.'}
+              ? t('prejoin.meetingEndedDesc') 
+              : t('prejoin.meetingCanceledDesc')}
           </p>
           <Link href="/" style={{ display: 'inline-block', padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, width: '100%' }}>
-            Return to Dashboard
+            {t('prejoin.returnDashboard')}
           </Link>
         </div>
       </div>
@@ -474,7 +475,7 @@ export function PageClientImpl(props: {
                     <circle cx="12" cy="12" r="10"/>
                     <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                   </svg>
-                  <span>{activeLang}</span>
+                  <span>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                     <path d="M6 9l6 6 6-6" />
                   </svg>
@@ -486,22 +487,22 @@ export function PageClientImpl(props: {
                         <circle cx="12" cy="12" r="10"/>
                         <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                       </svg>
-                      SELECT LANGUAGE
+                      {t('nav.selectLanguage')}
                     </div>
-                    {[{code: 'EN', label: 'English'}, {code: 'ZH', label: '中文'}, {code: 'JA', label: '日本語'}, {code: 'KO', label: '한국어'}].map(lang => (
+                    {LOCALE_OPTIONS.map(opt => (
                       <button 
-                        key={lang.code}
-                        className={`ead-menu-item ${activeLang === lang.code ? 'ead-menu-item-active' : ''}`}
-                        onClick={() => { setActiveLang(lang.code); setShowLangMenu(false); }}
+                        key={opt.code}
+                        className={`ead-menu-item ${locale === opt.code ? 'ead-menu-item-active' : ''}`}
+                        onClick={() => { setLocale(opt.code); setShowLangMenu(false); }}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
                           <circle cx="12" cy="12" r="10"/>
                           <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
                         </svg>
-                        {lang.label}
+                        {opt.label}
                         <span className="ead-menu-code">
-                          {lang.code} 
-                          {activeLang === lang.code && (
+                          {opt.shortCode} 
+                          {locale === opt.code && (
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{marginLeft:'6px'}}><path d="M20 6L9 17l-5-5"/></svg>
                           )}
                         </span>
@@ -532,15 +533,15 @@ export function PageClientImpl(props: {
                   <div className="ead-dropdown-menu">
                     <button onClick={() => alert('Profile coming soon')} className="ead-menu-item">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                      Profile
+                      {t('prejoin.profile')}
                     </button>
                     <button onClick={() => alert('System Settings coming soon')} className="ead-menu-item">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                      System Settings
+                      {t('nav.systemSettings')}
                     </button>
                     <button onClick={() => alert('AI Digital Human Setup coming soon')} className="ead-menu-item">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                      AI Digital Human Setup
+                      {t('prejoin.aiDigitalHuman')}
                     </button>
                   </div>
                 )}
@@ -566,7 +567,7 @@ export function PageClientImpl(props: {
                 onClick={() => { window.location.href = '/'; }} 
                 style={{ background: 'transparent', border: 'none', color: '#ff6352', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem', fontFamily: 'Inter, sans-serif' }}
               >
-                Or start a new meeting instead
+                {t('prejoin.orStartNew')}
               </button>
             </div>
           )}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styles from '../styles/MyProfileModal.module.css';
+import { useI18n } from './i18n';
 
 interface AuthUser {
   id: string;
@@ -20,6 +21,7 @@ export function MyProfileModal({
   toast?: { show: (m: string) => void };
 }) {
   const [loading, setLoading] = useState(true);
+  const { t } = useI18n();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -83,11 +85,11 @@ export function MyProfileModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Failed to update profile');
+        setError(data.error || t('profile.saveFailed'));
         setSaving(false);
         return;
       }
-      toast?.show('Profile saved successfully!');
+      toast?.show(t('profile.saved'));
       
       // Update local storage slightly to reflect DisplayName change
       const stored = localStorage.getItem('kloudUser');
@@ -103,7 +105,7 @@ export function MyProfileModal({
       onClose();
     } catch (err) {
       console.error(err);
-      setError('Network error saving profile.');
+      setError(t('profile.networkError'));
       setSaving(false);
     }
   };
@@ -119,14 +121,14 @@ export function MyProfileModal({
             onClick={handleSave} 
             disabled={saving || loading}
           >
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
           <button 
             className={styles.btnCancel} 
             onClick={onClose} 
             disabled={saving}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
 
@@ -157,32 +159,32 @@ export function MyProfileModal({
             <div className={styles.rightCol}>
               
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>Login Name</div>
+                <div className={styles.formLabel}>{t('profile.loginName')}</div>
                 <div className={styles.formField}>
                   <div className={styles.readOnlyText}>{username}</div>
                 </div>
               </div>
 
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>Name:</div>
+                <div className={styles.formLabel}>{t('profile.name')}</div>
                 <div className={styles.formField}>
                   <input 
                     className={styles.inputBox} 
-                    placeholder="First Name" 
+                    placeholder={t('profile.firstName')} 
                     value={firstName} 
                     onChange={e => setFirstName(e.target.value)} 
                     disabled={loading}
                   />
                   <input 
                     className={styles.inputBox} 
-                    placeholder="Middle Name" 
+                    placeholder={t('profile.middleName')} 
                     value={middleName} 
                     onChange={e => setMiddleName(e.target.value)} 
                     disabled={loading}
                   />
                   <input 
                     className={styles.inputBox} 
-                    placeholder="Last Name" 
+                    placeholder={t('profile.lastName')} 
                     value={lastName} 
                     onChange={e => setLastName(e.target.value)} 
                     disabled={loading}
@@ -191,11 +193,11 @@ export function MyProfileModal({
               </div>
 
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>My Meeting Room ID:</div>
+                <div className={styles.formLabel}>{t('profile.meetingRoomId')}</div>
                 <div className={styles.formField}>
                   <input 
                     className={styles.inputBox} 
-                    placeholder="3-12 characters and digits" 
+                    placeholder={t('profile.roomIdHint')} 
                     maxLength={12}
                     value={personalRoomId} 
                     onChange={e => setPersonalRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))} 
@@ -205,12 +207,12 @@ export function MyProfileModal({
               </div>
 
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>Email:</div>
+                <div className={styles.formLabel}>{t('profile.email')}</div>
                 <div className={styles.formField}>
                   <div className={`${styles.inputGroup} ${emailFocused ? styles.focused : ''}`}>
                     <input 
                       className={styles.inputBox} 
-                      placeholder="Please enter your email" 
+                      placeholder={t('profile.emailPlaceholder')} 
                       value={email} 
                       onFocus={() => setEmailFocused(true)}
                       onBlur={() => setEmailFocused(false)}
@@ -218,18 +220,18 @@ export function MyProfileModal({
                       disabled={loading}
                       style={{ background: 'transparent' }}
                     />
-                    <span className={styles.notVerifiedText}>Not verified</span>
+                    <span className={styles.notVerifiedText}>{t('profile.notVerified')}</span>
                   </div>
-                  <button className={styles.btnVerify} type="button" onClick={() => toast?.show('Email verification coming soon')}>Verify</button>
+                  <button className={styles.btnVerify} type="button" onClick={() => toast?.show(t('profile.verifyComingSoon'))}>{t('profile.verify')}</button>
                 </div>
               </div>
 
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>Biography</div>
+                <div className={styles.formLabel}>{t('profile.biography')}</div>
                 <div className={styles.formField}>
                   <textarea 
                     className={styles.textareaBox} 
-                    placeholder="Enter some information about yourself, up to 160 characters"
+                    placeholder={t('profile.biographyPlaceholder')}
                     maxLength={160}
                     value={biography}
                     onChange={e => setBiography(e.target.value)}
@@ -243,14 +245,14 @@ export function MyProfileModal({
 
           {/* Account Security Divider */}
           <div className={styles.dividerContainer}>
-            <div className={styles.dividerText}>Account Security</div>
+            <div className={styles.dividerText}>{t('profile.accountSecurity')}</div>
             <div className={styles.dividerLine} />
           </div>
 
           {/* Bottom Section (Security) */}
           <div className={styles.securitySection}>
             <div className={styles.formRow}>
-              <div className={styles.formLabel}>Primary Phone:</div>
+              <div className={styles.formLabel}>{t('profile.primaryPhone')}</div>
               <div className={styles.changeBtnWrapper}>
                 <input 
                   className={styles.inputBox}
@@ -260,19 +262,19 @@ export function MyProfileModal({
                 />
                 <button 
                   className={styles.btnChange} 
-                  onClick={() => toast?.show('Phone change coming soon')}
+                  onClick={() => toast?.show(t('profile.phoneComingSoon'))}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                   </svg>
-                  Change
+                  {t('common.change')}
                 </button>
               </div>
             </div>
 
             <div className={styles.formRow}>
-              <div className={styles.formLabel}>Password:</div>
+              <div className={styles.formLabel}>{t('profile.password')}</div>
               <div className={styles.changeBtnWrapper}>
                 <input 
                   className={styles.inputBox} 
@@ -283,13 +285,13 @@ export function MyProfileModal({
                 />
                 <button 
                   className={styles.btnChange} 
-                  onClick={() => toast?.show('Password change coming soon')}
+                  onClick={() => toast?.show(t('profile.passwordComingSoon'))}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
                     <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                   </svg>
-                  Change
+                  {t('common.change')}
                 </button>
               </div>
             </div>

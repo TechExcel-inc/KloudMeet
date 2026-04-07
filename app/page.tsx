@@ -6,6 +6,7 @@ import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
 import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
+import { useI18n, LOCALE_OPTIONS, type Locale } from '@/lib/i18n';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -73,11 +74,14 @@ function useToast() {
    Top Toolbar Component
    ════════════════════════════════════════════════════ */
 function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+  const { t, locale, setLocale } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
   
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const [langMenuOpen, setLangMenuOpen] = useState(false);
   const orgMenuRef = React.useRef<HTMLDivElement>(null);
+  const langMenuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -86,6 +90,9 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
       }
       if (orgMenuRef.current && !orgMenuRef.current.contains(event.target as Node)) {
         setOrgMenuOpen(false);
+      }
+      if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
+        setLangMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -96,7 +103,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
     <div className={styles.topToolbar}>
       <div className={styles.toolbarLeft}>
         {onBack && (
-          <button className={styles.iconBtn} onClick={onBack} aria-label="Go Back" title="Back" style={{ marginRight: '1rem' }}>
+          <button className={styles.iconBtn} onClick={onBack} aria-label={t('nav.goBack')} title={t('common.back')} style={{ marginRight: '1rem' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
               <line x1="19" y1="12" x2="5" y2="12"></line>
               <polyline points="12 19 5 12 12 5"></polyline>
@@ -124,7 +131,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
             {orgMenuOpen && (
               <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '1rem' }}>
                 <div className={styles.orgDropdownSection}>
-                  <div className={styles.orgDropdownTitle}>Switch Account</div>
+                  <div className={styles.orgDropdownTitle}>{t('nav.switchAccount')}</div>
                   <button className={styles.orgDropdownItemActive}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
@@ -142,12 +149,12 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
                   </button>
                 </div>
                 <div className={styles.orgDropdownSection}>
-                  <div className={styles.orgDropdownIdentity}>Signed in as {user.displayName}</div>
+                  <div className={styles.orgDropdownIdentity}>{t('nav.signedInAs', { name: user.displayName })}</div>
                   <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onOpenProfile && onOpenProfile(); }}>
-                    My Profile
+                    {t('nav.myProfile')}
                   </button>
                   <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
-                    Sign Out
+                    {t('nav.signOut')}
                   </button>
                 </div>
               </div>
@@ -155,24 +162,41 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           </div>
         )}
 
-        <button className={styles.iconBtn} aria-label="Help" title="Help">
+        <button className={styles.iconBtn} aria-label={t('nav.help')} title={t('nav.help')}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
             <line x1="12" y1="17" x2="12.01" y2="17"></line>
           </svg>
         </button>
-        <button className={styles.iconBtn} aria-label="Language Selector" style={{ paddingLeft: '0.65rem', paddingRight: '0.55rem' }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-            <circle cx="12" cy="12" r="10"></circle>
-            <line x1="2" y1="12" x2="22" y2="12"></line>
-            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
-          </svg>
-          <span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: '0.3rem' }}>EN</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '0.1rem', marginTop: '1px' }}>
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
+        <div style={{ position: 'relative' }} ref={langMenuRef}>
+          <button className={styles.iconBtn} aria-label={t('nav.langSelector')} onClick={() => setLangMenuOpen(!langMenuOpen)} style={{ paddingLeft: '0.65rem', paddingRight: '0.55rem' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="2" y1="12" x2="22" y2="12"></line>
+              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
+            </svg>
+            <span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: '0.3rem' }}>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '0.1rem', marginTop: '1px' }}>
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+          {langMenuOpen && (
+            <div className={styles.dropdownMenu} style={{ minWidth: '160px' }}>
+              {LOCALE_OPTIONS.map(opt => (
+                <button
+                  key={opt.code}
+                  className={styles.dropdownItem}
+                  onClick={() => { setLocale(opt.code); setLangMenuOpen(false); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: locale === opt.code ? 600 : 400, background: locale === opt.code ? '#f1f5f9' : undefined }}
+                >
+                  <span>{opt.label}</span>
+                  <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{opt.shortCode}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {!hideAvatar && (user ? (
           <div style={{ position: 'relative' }} ref={menuRef}>
             <button 
@@ -198,7 +222,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
                   }}
                   style={{ borderBottom: '1px solid #f1f5f9' }}
                 >
-                  My Profile
+                  {t('nav.myProfile')}
                 </button>
                 <button 
                   className={styles.dropdownItem} 
@@ -208,7 +232,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
                   }}
                   style={{ borderBottom: '1px solid #f1f5f9' }}
                 >
-                  System Settings
+                  {t('nav.systemSettings')}
                 </button>
                 <button 
                   className={styles.dropdownItem} 
@@ -217,7 +241,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
                     onSignOut && onSignOut();
                   }}
                 >
-                  Sign Out
+                  {t('nav.signOut')}
                 </button>
               </div>
             )}
@@ -247,6 +271,7 @@ function AnonymousView({
   onSignUp: () => void;
   toast: { show: (t: string) => void };
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [code, setCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
@@ -276,7 +301,7 @@ function AnonymousView({
   const handleJoin = async () => {
     const raw = code.trim();
     if (!raw) {
-      setWarningMessage('Meeting code cannot be empty. Please enter a valid code to join.');
+      setWarningMessage(t('anon.meetingCodeEmpty'));
       return;
     }
     if (isJoining) return;
@@ -289,7 +314,7 @@ function AnonymousView({
     }
 
     if (!roomId) {
-      toast.show('Please enter a valid meeting code');
+      toast.show(t('anon.enterValidCode'));
       return;
     }
     
@@ -306,7 +331,7 @@ function AnonymousView({
       
       // 1. Non-Existing
       if (!res.ok) {
-        setWarningMessage('Meeting not found. Please review the code or Sign In to schedule a new one.');
+        setWarningMessage(t('anon.meetingNotFound'));
         setIsJoining(false);
         return;
       }
@@ -315,7 +340,7 @@ function AnonymousView({
       
       // 2. Already Finished
       if (data.status === 'ENDED') {
-        setWarningMessage('This meeting has already ended and is no longer available.');
+        setWarningMessage(t('anon.meetingEnded'));
         setIsJoining(false);
         return;
       }
@@ -337,7 +362,7 @@ function AnonymousView({
           return;
         } else {
           // 3. Past Start Date (But Not Started)
-          toast.show('The scheduled start time has passed. We are waiting for the Host to begin.');
+          toast.show(t('anon.pastStartTime'));
           router.push(`/rooms/${roomId}${query}`);
           return;
         }
@@ -347,7 +372,7 @@ function AnonymousView({
       router.push(`/rooms/${roomId}${query}`);
     } catch(e) {
       console.error(e);
-      setWarningMessage('An error occurred connecting to the API. Please try again.');
+      setWarningMessage(t('anon.apiError'));
       setIsJoining(false);
     }
   };
@@ -358,39 +383,39 @@ function AnonymousView({
 
       {/* ── Central Join Container ── */}
       <div className={styles.anonContainer}>
-        <h1 className={styles.anonTitle}>Join Meeting</h1>
+        <h1 className={styles.anonTitle}>{t('anon.joinMeeting')}</h1>
         <p className={styles.anonSubtitle}>
-          To host a meeting or join with more privileges,{' '}
+          {t('anon.hostPrivilege')}{' '}
           <button 
             type="button" 
             className={styles.linkBtn} 
             onClick={onSignIn} 
             style={{ fontSize: 'inherit', fontWeight: 500, display: 'inline', color: '#5b21b6' }}
           >
-            Sign In Here
+            {t('anon.signInHere')}
           </button>
         </p>
 
         <div className={styles.joinRow}>
           <input
             className={styles.joinInput}
-            placeholder="Enter meeting code"
+            placeholder={t('anon.enterMeetingCode')}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
           />
           <button className={isJoining ? styles.joinBtnLoading : styles.joinBtn} onClick={handleJoin} disabled={isJoining} style={isJoining ? { opacity: 0.7, cursor: 'not-allowed' } : {}}>
-            {isJoining ? 'Joining...' : 'Join'}
+            {isJoining ? t('common.joining') : t('common.join')}
           </button>
         </div>
 
         <div className={styles.recentSection}>
-          <h3 className={styles.recentTitle}>Recent Meetings</h3>
+          <h3 className={styles.recentTitle}>{t('anon.recentMeetings')}</h3>
           {MOCK_RECENT.map((m, i) => (
             <div
               key={i}
               className={styles.recentCard}
-              onClick={() => toast.show('Meeting replay coming soon!')}
+              onClick={() => toast.show(t('anon.replaySoon'))}
             >
               <div style={{ minWidth: '85px' }}>
                 <div className={styles.recentCardDate}>{m.date}</div>
@@ -403,9 +428,9 @@ function AnonymousView({
         </div>
 
         <div className={styles.registerRow} style={{ marginTop: '1.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
-          <span>Don&apos;t have a Kloud account?</span>
+          <span>{t('anon.noAccount')}</span>
           <button type="button" className={styles.linkBtn} onClick={onSignUp}>
-            Sign Up
+            {t('nav.signUp')}
           </button>
         </div>
 
@@ -421,7 +446,7 @@ function AnonymousView({
             <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
               <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
             </svg>
-            <span className={styles.downloadBtnLabel}>下载桌面版</span>
+            <span className={styles.downloadBtnLabel}>{t('nav.downloadDesktop')}</span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
               <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
               <polyline points="7 10 12 15 17 10"/>
@@ -443,7 +468,7 @@ function AnonymousView({
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
               </svg>
             </div>
-            <h3 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1rem' }}>Warning</h3>
+            <h3 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1rem' }}>{t('common.warning')}</h3>
             <p style={{ color: '#4b5563', lineHeight: '1.5', marginBottom: '2rem' }}>
               {warningMessage}
             </p>
@@ -452,7 +477,7 @@ function AnonymousView({
               className={styles.dashSignOut} 
               style={{ width: '100%', padding: '0.75rem', borderRadius: '12px' }}
             >
-              Close
+              {t('common.close')}
             </button>
           </div>
         </div>
@@ -462,20 +487,20 @@ function AnonymousView({
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
           <div className={styles.dashModalContent}>
-            <h3>Scheduled Meeting</h3>
+            <h3>{t('anon.scheduledMeeting')}</h3>
             <p style={{ marginTop: '1rem', color: '#4b5563', lineHeight: '1.5' }}>
-              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
+              {t('anon.hostedBy', { title: scheduledModalData.title || scheduledModalData.roomName, host: scheduledModalData.createdByMember?.fullName || 'Host' })}
             </p>
             {(() => {
               const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
               return diffMs > 60 * 60 * 1000 ? (
                 <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  <p style={{ color: '#64748b' }}>Scheduled for: <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
-                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>This meeting is more than an hour away. Please check back closer to the start time.</p>
+                  <p style={{ color: '#64748b' }}>{t('anon.scheduledFor')} <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
+                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>{t('anon.moreThanHour')}</p>
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
-                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
+                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('anon.startingIn')}</p>
                   <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#7c3aed', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
                 </div>
               );
@@ -486,7 +511,7 @@ function AnonymousView({
                 className={styles.dashSignOut} 
                 style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
               >
-                Close
+                {t('common.close')}
               </button>
               {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
                 <button 
@@ -497,7 +522,7 @@ function AnonymousView({
                   className={styles.modalBtnSubmit} 
                   style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
                 >
-                  Join Anyway
+                  {t('anon.joinAnyway')}
                 </button>
               )}
             </div>
@@ -524,6 +549,7 @@ function LoginView({
   onForgotPassword: () => void;
   toast: { show: (t: string) => void };
 }) {
+  const { t } = useI18n();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -534,8 +560,8 @@ function LoginView({
     e.preventDefault();
     setError('');
     const id = identifier.trim();
-    if (!id) { setError('Please enter your email or login name'); return; }
-    if (!password) { setError('Please enter your password'); return; }
+    if (!id) { setError(t('login.pleaseEnterEmail')); return; }
+    if (!password) { setError(t('login.pleaseEnterPassword')); return; }
 
     setLoading(true);
     try {
@@ -546,7 +572,7 @@ function LoginView({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Login failed');
+        setError(data.error || t('login.loginFailed'));
         return;
       }
       const user: AuthUser = {
@@ -572,26 +598,26 @@ function LoginView({
       
       <div className={styles.authContainer}>
         <form className={styles.authCard} onSubmit={handleLogin}>
-          <h1 className={styles.loginTitle}>Sign In</h1>
+          <h1 className={styles.loginTitle}>{t('login.title')}</h1>
 
           {error && <div className={styles.errorBanner}>⚠ {error}</div>}
 
-          <label className={styles.fieldLabel}>Email or login name</label>
+          <label className={styles.fieldLabel}>{t('login.emailOrLogin')}</label>
           <input
             className={error ? styles.fieldInputError : styles.fieldInput}
             type="text"
-            placeholder="Email or login name"
+            placeholder={t('login.emailOrLogin')}
             value={identifier}
             onChange={(e) => { setIdentifier(e.target.value); setError(''); }}
             autoFocus
           />
 
-          <label className={styles.fieldLabel}>Password</label>
+          <label className={styles.fieldLabel}>{t('login.password')}</label>
           <div className={styles.passwordWrap}>
             <input
               className={error ? styles.fieldInputError : styles.fieldInput}
               type={showPassword ? 'text' : 'password'}
-              placeholder="Password"
+              placeholder={t('login.password')}
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(''); }}
               style={{ paddingRight: '2.5rem' }}
@@ -612,7 +638,7 @@ function LoginView({
               className={styles.linkBtn}
               onClick={onForgotPassword}
             >
-              Forgot password
+              {t('login.forgotPassword')}
             </button>
           </div>
 
@@ -626,20 +652,20 @@ function LoginView({
                 <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M21 12a9 9 0 11-6.219-8.56"></path>
                 </svg>
-                Signing in...
+                {t('login.signingIn')}
               </>
-            ) : 'Sign In'}
+            ) : t('login.title')}
           </button>
 
-          <div className={styles.ssoDivider}>or continue with</div>
+          <div className={styles.ssoDivider}>{t('login.orContinueWith')}</div>
           <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.5rem', justifyContent: 'center' }}>
             <button type="button" className={styles.anonLink} style={{ flex: 1 }} onClick={() => window.location.href = '/api/auth/google'}>Google</button>
           </div>
 
           <div className={styles.registerRow}>
-            <span>Don&apos;t have a Kloud account?</span>
+            <span>{t('anon.noAccount')}</span>
             <button type="button" className={styles.linkBtn} onClick={onSignUp}>
-              Sign Up
+              {t('nav.signUp')}
             </button>
           </div>
 
@@ -655,7 +681,7 @@ function LoginView({
               <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
               </svg>
-              <span className={styles.downloadBtnLabel}>下载桌面版</span>
+              <span className={styles.downloadBtnLabel}>{t('nav.downloadDesktop')}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
@@ -681,6 +707,7 @@ function SignupView({
   onSignupSuccess: (user: AuthUser) => void;
   toast: { show: (t: string) => void };
 }) {
+  const { t } = useI18n();
   const [step, setStep] = useState<SignupStep>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -1049,6 +1076,7 @@ function DashboardView({
   onSignOut: () => void;
   toast: { show: (t: string) => void };
 }) {
+  const { t } = useI18n();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -1152,7 +1180,7 @@ function DashboardView({
       if (diffMs <= 0) {
         setCountdown("00:00");
         const action = scheduledModalData.createdByMemberId === user.id ? 'start' : 'join';
-        toast.show('Meeting is starting! Joining automatically...');
+        toast.show(t('dash.meetingStarting'));
         router.push(`/rooms/${scheduledModalData.roomName}?action=${action}`);
         setScheduledModalData(null);
         return;
@@ -1180,12 +1208,12 @@ function DashboardView({
       });
       if (res.ok) {
         setDbMeetings(prev => prev.filter(m => m.roomName !== roomName));
-        toast.show('Meeting deleted');
+        toast.show(t('dash.meetingDeleted'));
       } else {
-        toast.show('Failed to delete meeting');
+        toast.show(t('dash.deleteFailure'));
       }
     } catch {
-      toast.show('Network error');
+      toast.show(t('dash.networkError'));
     } finally {
       setDeleteLoading(false);
       setDeletingMeeting(null);
@@ -1211,7 +1239,7 @@ function DashboardView({
   const handleJoinMeeting = async () => {
     const raw = joinCode.trim();
     if (!raw) {
-      setWarningMessage('Please enter a valid meeting code to join.');
+      setWarningMessage(t('dash.enterValidCode'));
       return;
     }
     if (isJoining) return;
@@ -1235,7 +1263,7 @@ function DashboardView({
       
       // 1. Non-Existing
       if (!res.ok) {
-        setWarningMessage("Meeting not found. Please use 'Schedule Meeting' to create a new one.");
+        setWarningMessage(t('dash.meetingNotFoundDash'));
         setIsJoining(false);
         return;
       }
@@ -1301,12 +1329,12 @@ function DashboardView({
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
             <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          New Meeting
+          {t('dash.newMeeting')}
         </button>
         <div className={styles.dashJoinRow}>
           <input
             className={styles.dashJoinInput}
-            placeholder="Enter meeting code"
+            placeholder={t('anon.enterMeetingCode')}
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
@@ -1319,19 +1347,19 @@ function DashboardView({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
               <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
-            Join Meeting
+            {t('dash.joinMeeting')}
           </button>
         </div>
       </div>
 
       {/* Search + Schedule + Title */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '2rem 0 1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: '1rem' }}>
-        <h3 style={{ fontSize: '1rem', color: '#4b5563', fontWeight: 600, margin: 0 }}>Your past and scheduled meetings</h3>
+        <h3 style={{ fontSize: '1rem', color: '#4b5563', fontWeight: 600, margin: 0 }}>{t('dash.yourMeetings')}</h3>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <input
             className={styles.dashSearchInput}
-            placeholder="Search meetings..."
-            onChange={() => toast.show('Search coming soon!')}
+            placeholder={t('dash.searchMeetings')}
+            onChange={() => toast.show(t('dash.searchSoon'))}
             style={{ width: '250px', margin: 0 }}
           />
           <button
@@ -1339,34 +1367,34 @@ function DashboardView({
             onClick={() => setShowScheduleModal(true)}
             style={{ margin: 0 }}
           >
-            + Schedule Meeting
+            {t('dash.scheduleMeeting')}
           </button>
         </div>
       </div>
       
       {loadingMeetings ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>Loading meetings...</div>
+        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>{t('dash.loadingMeetings')}</div>
       ) : dbMeetings.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>No meetings found.</div>
+        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>{t('dash.noMeetings')}</div>
       ) : (
         <div className={styles.dashTableContainer}>
           <table className={styles.dashTable}>
             <thead>
               <tr>
-                <th style={{ minWidth: '180px' }}>Meeting Title</th>
+                <th style={{ minWidth: '180px' }}>{t('dash.meetingTitle')}</th>
                 <th style={{ minWidth: '140px' }}>
-                  Created <span style={{ fontSize: '10px' }}>▼</span>
+                  {t('dash.created')} <span style={{ fontSize: '10px' }}>▼</span>
                 </th>
                 <th style={{ minWidth: '180px' }}>
-                  Scheduled <span style={{ fontSize: '10px' }}>▼</span>
+                  {t('dash.scheduled')} <span style={{ fontSize: '10px' }}>▼</span>
                 </th>
                 <th style={{ minWidth: '100px' }}>
-                  Actual
+                  {t('dash.actual')}
                 </th>
-                <th>Host</th>
-                <th>Attendees</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'left', width: '150px' }}>Action</th>
+                <th>{t('dash.host')}</th>
+                <th>{t('dash.attendees')}</th>
+                <th>{t('dash.status')}</th>
+                <th style={{ textAlign: 'left', width: '150px' }}>{t('dash.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -1852,6 +1880,7 @@ function ForgotPasswordView({
   onBack: () => void;
   toast: { show: (t: string) => void };
 }) {
+  const { t } = useI18n();
   const [step, setStep] = useState<'email' | 'verify' | 'reset'>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');

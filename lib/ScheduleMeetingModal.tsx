@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import styles from '../styles/ScheduleMeetingModal.module.css';
+import { useI18n } from './i18n';
 
 type TabType = 'general' | 'emails' | 'ai' | 'linked';
 
@@ -13,6 +14,7 @@ interface ScheduleMeetingModalProps {
 
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
+  const { t } = useI18n();
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
 
   const [title, setTitle] = useState(existingMeeting?.title || `${user?.displayName || 'User'}'s Meeting`);
@@ -48,7 +50,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const isReadOnly = isFinished || isCanceled;
 
   const handleCancelMeeting = async () => {
-    if (!confirm('Are you sure you want to cancel this meeting?')) return;
+    if (!confirm(t('schedule.cancelConfirm'))) return;
     setIsSaving(true);
     try {
       await fetch(`/api/meetings/${existingMeeting.roomName}`, {
@@ -58,19 +60,19 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       });
       onSave();
     } catch (e) {
-      alert('Failed to cancel meeting.');
+      alert(t('schedule.cancelFailed'));
       setIsSaving(false);
     }
   };
 
   const handleDeleteMeeting = async () => {
-    if (!confirm('Are you sure you want to delete this meeting? This cannot be undone.')) return;
+    if (!confirm(t('schedule.deleteConfirm'))) return;
     setIsSaving(true);
     try {
       await fetch(`/api/meetings/${existingMeeting.roomName}`, { method: 'DELETE' });
       onSave();
     } catch (e) {
-      alert('Failed to delete meeting.');
+      alert(t('schedule.deleteFailed'));
       setIsSaving(false);
     }
   };
@@ -129,7 +131,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       onSave(); 
     } catch (error) {
       console.error('Failed to schedule meeting', error);
-      alert('Failed to schedule meeting. Try again.');
+      alert(t('schedule.scheduleFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -141,7 +143,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         <div className={styles.modal}>
           {/* Header */}
           <div className={styles.header}>
-            <h2 className={styles.title}>{existingMeeting ? 'Edit Meeting' : 'New Meeting'}</h2>
+            <h2 className={styles.title}>{existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}</h2>
             <div className={styles.headerActions}>
               {existingMeeting && !isCanceled && (
                 <button 
@@ -149,7 +151,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   onClick={() => {
                     const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
                     navigator.clipboard.writeText(`Join my KloudMeet meeting:\n${existingMeeting.title || 'Untitled Meeting'}\n${url}`);
-                    alert('Invite copied to clipboard!');
+                    alert(t('schedule.inviteCopied'));
                   }}
                   type="button"
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -158,19 +160,19 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
                   </svg>
-                  Copy Invite
+                  {t('schedule.copyInvite')}
                 </button>
               )}
               {existingMeeting && !isFinished && !isCanceled && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>Cancel</button>
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>{t('common.cancel')}</button>
               )}
               {existingMeeting && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>Delete</button>
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>{t('common.delete')}</button>
               )}
               <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save'}
+                {isSaving ? t('common.saving') : t('common.save')}
               </button>
-              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>Close</button>
+              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>{t('common.close')}</button>
             </div>
           </div>
 
@@ -180,25 +182,25 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               className={activeTab === 'general' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('general')}
             >
-              General
+              {t('schedule.general')}
             </button>
             <button 
               className={activeTab === 'emails' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('emails')}
             >
-              Emails
+              {t('schedule.emails')}
             </button>
             <button 
               className={activeTab === 'ai' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('ai')}
             >
-              AI Assistant
+              {t('schedule.aiAssistant')}
             </button>
             <button 
               className={activeTab === 'linked' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('linked')}
             >
-              Linked Events
+              {t('schedule.linkedEvents')}
             </button>
           </div>
 
@@ -208,7 +210,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               {existingMeeting && (
                 <>
                   <div className={styles.formRow}>
-                    <label className={styles.label}>Status</label>
+                    <label className={styles.label}>{t('schedule.status')}</label>
                     <div className={styles.inputWrapper} style={{ paddingTop: '0.4rem' }}>
                       <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: 600, 
                         background: existingMeeting.status === 'ENDED' ? '#dcfce7' : 
@@ -228,7 +230,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     </div>
                   </div>
                   <div className={styles.formRow}>
-                    <label className={styles.label}>Meeting ID</label>
+                    <label className={styles.label}>{t('schedule.meetingId')}</label>
                     <div className={styles.inputWrapper}>
                       <input 
                         type="text" 
@@ -242,12 +244,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 </>
               )}
               <div className={styles.formRow}>
-                <label className={styles.label}>Title</label>
+                <label className={styles.label}>{t('schedule.title')}</label>
                 <div className={styles.inputWrapper}>
                   <input 
                     type="text" 
                     className={styles.input} 
-                    placeholder="Enter meeting title..." 
+                    placeholder={t('schedule.titlePlaceholder')} 
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                   />
@@ -255,11 +257,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Description</label>
+                <label className={styles.label}>{t('schedule.description')}</label>
                 <div className={styles.inputWrapper}>
                   <textarea 
                     className={styles.textarea} 
-                    placeholder="Please input meeting description..." 
+                    placeholder={t('schedule.descPlaceholder')} 
                     rows={4} 
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -268,7 +270,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Set time</label>
+                <label className={styles.label}>{t('schedule.setTime')}</label>
                 <div className={`${styles.inputWrapper} ${styles.timeRow}`}>
                   <input 
                     type="date" 
@@ -306,28 +308,28 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Time Zone</label>
+                <label className={styles.label}>{t('schedule.timeZone')}</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.7rem' }}>
                   <span style={{ color: '#4b5563', fontSize: '0.95rem' }}>{tzString}</span>
-                  <button className={styles.linkBtn}>Change</button>
+                  <button className={styles.linkBtn}>{t('common.change')}</button>
                 </div>
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Access Option</label>
+                <label className={styles.label}>{t('schedule.accessOption')}</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', paddingTop: '0.6rem' }}>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
                     <input type="radio" name="access" value="public" defaultChecked className={styles.radio} disabled={isReadOnly} />
                     <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Public</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Anybody can freely join.</div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.public')}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.publicDesc')}</div>
                     </div>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
                     <input type="radio" name="access" value="private" className={styles.radio} disabled={isReadOnly} />
                     <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Private</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Invited only or require approval to join.</div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.private')}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.privateDesc')}</div>
                     </div>
                   </label>
                 </div>
@@ -335,7 +337,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 
               {isFinished && existingMeeting?.recordings && existingMeeting.recordings.length > 0 && (
                 <div className={styles.formRow}>
-                  <label className={styles.label}>Recordings</label>
+                  <label className={styles.label}>{t('schedule.recordings')}</label>
                   <div className={styles.inputWrapper} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {existingMeeting.recordings.map((r: any) => (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -344,12 +346,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                           </svg>
                           <div>
-                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>Meeting Recording</div>
+                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>{t('schedule.meetingRecording')}</div>
                             <div style={{ color: '#64748b', fontSize: '0.8rem' }}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
                           </div>
                         </div>
                         {r.status === 'READY' && r.storageUrl && (
-                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>View</a>
+                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>{t('common.view')}</a>
                         )}
                       </div>
                     ))}

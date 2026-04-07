@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
+import { useI18n } from './i18n';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
 
@@ -89,6 +90,7 @@ export function KloudMeetToolbar({
   onStopRecording,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
+  const { t } = useI18n();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -349,7 +351,7 @@ export function KloudMeetToolbar({
   }, [desktopAnchorBubbleKind, isMobile]);
 
   const showComingSoon = (feature: string) => {
-    setToastMsg(`${feature} — Coming soon`);
+    setToastMsg(t('toolbar.comingSoon', { feature }));
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
   };
@@ -451,7 +453,7 @@ export function KloudMeetToolbar({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
-              <span>Exit</span>
+              <span>{t('toolbar.exit')}</span>
             </button>
 
             {/* 5. Chat */}
@@ -462,7 +464,7 @@ export function KloudMeetToolbar({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
               </svg>
-              <span>Chats</span>
+              <span>{t('toolbar.chats')}</span>
             </button>
 
             {/* 6. More */}
@@ -473,7 +475,7 @@ export function KloudMeetToolbar({
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
               </svg>
-              <span>More</span>
+              <span>{t('toolbar.more')}</span>
             </button>
             {isRecording && (
               <button 
@@ -484,7 +486,7 @@ export function KloudMeetToolbar({
                   <circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" />
                   <circle cx="12" cy="12" r="10" />
                 </svg>
-                <span style={{ color: '#ef4444' }}>Recording</span>
+                <span style={{ color: '#ef4444' }}>{t('toolbar.recording')}</span>
               </button>
             )}
           </>
@@ -496,7 +498,7 @@ export function KloudMeetToolbar({
             <button
               className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''}`}
               onClick={onToggleMic}
-              title={micEnabled ? 'Mute Mic' : 'Unmute Mic'}
+              title={micEnabled ? t('toolbar.muteMic') : t('toolbar.unmuteMic')}
             >
               {micEnabled ? (
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/></svg>
@@ -516,7 +518,7 @@ export function KloudMeetToolbar({
             <button
               className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
               onClick={onToggleCam}
-              title={camEnabled ? 'Turn Off Camera' : 'Turn On Camera'}
+              title={camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam')}
             >
               {camEnabled ? (
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
@@ -553,7 +555,7 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            Live Doc
+            {t('toolbar.liveDoc')}
           </button>
 
           <button
@@ -563,7 +565,7 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
-            Webcam
+            {t('toolbar.webcam')}
           </button>
 
           <button
@@ -575,7 +577,7 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
             </svg>
-            Share Screen
+            {t('toolbar.shareScreen')}
           </button>
 
           {hasScreenShare && (
@@ -588,7 +590,7 @@ export function KloudMeetToolbar({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
                 </svg>
-                Annotate
+                {t('toolbar.annotate')}
               </button>
 
               <button
@@ -611,7 +613,7 @@ export function KloudMeetToolbar({
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.042 21.672L13.684 16.6m0 0l-2.51 2.225.569-9.47 5.227 7.917-3.286-.672zm-7.518-.267A8.25 8.25 0 1120.25 10.5M8.288 14.212A5.25 5.25 0 1117.25 10.5" />
                   </svg>
                 )}
-                {remoteControlPending ? 'Requesting...' : 'Control'}
+                {remoteControlPending ? t('toolbar.requesting') : t('toolbar.control')}
               </button>
             </>
           )}
@@ -621,14 +623,14 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
-            Attendees
+            {t('toolbar.attendees')}
           </button>
 
           <button
             className={`${styles.tabBtn} ${styles.tabBtnGreen}`}
             onClick={() => {
               navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-              setToastMsg('Invite Link Copied to Clipboard!');
+              setToastMsg(t('toolbar.inviteCopied'));
               if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
               toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
             }}
@@ -636,21 +638,21 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
             </svg>
-            Invite
+            {t('toolbar.invite')}
           </button>
 
           <button ref={chatMenuBtnRef} className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleChat}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
-            Chats
+            {t('toolbar.chats')}
           </button>
 
           <button ref={moreMenuBtnRef} type="button" className={styles.tabBtn} onClick={() => openSheet('more')}>
             <svg viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
             </svg>
-            More
+            {t('toolbar.more')}
           </button>
 
           {isRecording && (
@@ -659,7 +661,7 @@ export function KloudMeetToolbar({
                 <circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" />
                 <circle cx="12" cy="12" r="10" />
               </svg>
-              Recording
+              {t('toolbar.recording')}
             </button>
           )}
         </div>
@@ -669,7 +671,7 @@ export function KloudMeetToolbar({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            Exit
+            {t('toolbar.exit')}
           </button>
         </div>
         </>
@@ -683,7 +685,7 @@ export function KloudMeetToolbar({
           <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
             <div className={styles.actionSheetHeader}>
               <span className={styles.actionSheetTitle}>
-                {activeSheet === 'views' ? 'Select View Layout' : activeSheet === 'recording' ? 'Recording Controls' : activeSheet === 'exit' ? 'Leave Meeting?' : 'More Options'}
+                {activeSheet === 'views' ? t('toolbar.selectViewLayout') : activeSheet === 'recording' ? t('toolbar.recordingControls') : activeSheet === 'exit' ? t('toolbar.leaveMeeting') : t('toolbar.moreOptions')}
               </span>
               <button type="button" className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
             </div>
@@ -716,7 +718,7 @@ export function KloudMeetToolbar({
       {activeSheet === 'views' && !isMobile && (
         <div className={styles.desktopPopupMenu}>
           <div className={styles.desktopPopupMenuHeader}>
-            <span className={styles.desktopPopupMenuTitle}>Select View Layout</span>
+            <span className={styles.desktopPopupMenuTitle}>{t('toolbar.selectViewLayout')}</span>
             <button type="button" className={styles.desktopPopupMenuClose} onClick={() => setActiveSheet(null)}>✕</button>
           </div>
           <div className={styles.desktopPopupMenuList}>
@@ -786,14 +788,14 @@ export function KloudMeetToolbar({
                   <div className={styles.toolbarBubbleHeader}>
                     <span className={styles.toolbarBubbleTitle}>
                       {desktopAnchorBubbleKind === 'exit'
-                        ? 'Leave Meeting?'
+                        ? t('toolbar.leaveMeeting')
                         : desktopAnchorBubbleKind === 'recording'
-                          ? 'Recording Controls'
+                          ? t('toolbar.recordingControls')
                           : desktopAnchorBubbleKind === 'chat'
-                            ? 'Chats'
+                            ? t('toolbar.chats')
                             : desktopAnchorBubbleKind === 'attendee'
-                              ? 'Participants'
-                              : 'More Options'}
+                              ? t('toolbar.participants')
+                              : t('toolbar.moreOptions')}
                     </span>
                     <button
                       type="button"
@@ -869,8 +871,9 @@ function ActiveSheetContent({
   onOpenRecordPopup,
   onStopRecording,
 }: any) {
+  const { t } = useI18n();
   const showComingSoon = (feature: string) => {
-    setToastMsg(`${feature} coming soon!`);
+    setToastMsg(t('toolbar.comingSoon', { feature }));
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
   };
@@ -899,16 +902,16 @@ function ActiveSheetContent({
           {!isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
-               {isRecording ? 'Stop Recording' : 'Record'}
+               {isRecording ? t('toolbar.stopRecording') : t('toolbar.record')}
             </button>
           )}
           <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            People & Attendees
+            {t('toolbar.peopleAttendees')}
           </button>
           <button className={styles.actionSheetItem} onClick={() => { 
             navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-            setToastMsg('Invite Link Copied to Clipboard!');
+            setToastMsg(t('toolbar.inviteCopied'));
             if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
             toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
             setActiveSheet(null);

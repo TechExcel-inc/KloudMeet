@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import styles from '../styles/SystemSettingsModal.module.css';
+import { useI18n } from './i18n';
 
 interface SystemSettingsModalProps {
   onClose: () => void;
@@ -10,6 +11,7 @@ type TabType = 'general' | 'aws' | 'livekit' | 'telnyx';
 
 export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
+  const { t } = useI18n();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -88,8 +90,8 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
         {/* Header */}
         <div className={styles.header}>
           <div>
-            <h2 className={styles.title}>System Settings</h2>
-            <p className={styles.subtitle}>Configure global platform connectivity and credentials.</p>
+            <h2 className={styles.title}>{t('settings.title')}</h2>
+            <p className={styles.subtitle}>{t('settings.subtitle')}</p>
           </div>
           <button className={styles.closeBtn} onClick={onClose}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
@@ -106,25 +108,25 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
               className={activeTab === 'general' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('general')}
             >
-              General
+              {t('settings.general')}
             </button>
             <button 
               className={activeTab === 'aws' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('aws')}
             >
-              AWS S3 Storage
+              {t('settings.awsStorage')}
             </button>
             <button 
               className={activeTab === 'livekit' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('livekit')}
             >
-              LiveKit Server
+              {t('settings.livekitServer')}
             </button>
             <button 
               className={activeTab === 'telnyx' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('telnyx')}
             >
-              Telnyx / Messaging
+              {t('settings.telnyxMessaging')}
             </button>
           </div>
 
@@ -132,23 +134,23 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
           <div className={styles.contentArea}>
             {isLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: '#9ca3af' }}>
-                Loading settings...
+                {t('settings.loadingSettings')}
               </div>
             ) : (
               <>
                 {activeTab === 'general' && (
                   <div className={styles.formGroup}>
-                    <h3 className={styles.sectionTitle}>General Settings</h3>
+                    <h3 className={styles.sectionTitle}>{t('settings.generalSettings')}</h3>
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>Organization Name</label>
+                      <label className={styles.label}>{t('settings.orgName')}</label>
                       <input 
                         type="text" 
                         className={styles.input} 
                         value={orgName} 
                         onChange={e => setOrgName(e.target.value)} 
-                        placeholder="e.g. Acme Corp" 
+                        placeholder={t('settings.orgNamePlaceholder')} 
                       />
-                      <p className={styles.helperText}>This name appears on the dashboard and email templates.</p>
+                      <p className={styles.helperText}>{t('settings.orgNameHelper')}</p>
                     </div>
                   </div>
                 )}
@@ -159,15 +161,15 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <svg viewBox="0 0 24 24" fill="#ff9900" width="24" height="24">
                         <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/>
                       </svg>
-                      <h3 className={styles.sectionTitle} style={{ margin: 0 }}>AWS Storage Keys</h3>
+                      <h3 className={styles.sectionTitle} style={{ margin: 0 }}>{t('settings.awsStorageKeys')}</h3>
                     </div>
                     
                     <div className={styles.alertBox}>
-                      <strong>Security Note:</strong> These credentials securely grant KloudMeet access to S3 for processing Egress recordings. They are encrypted at rest.
+                      <strong>{t('settings.securityNote')}</strong> {t('settings.securityDesc')}
                     </div>
 
                     <div className={styles.inputRow} style={{ marginTop: '1.5rem' }}>
-                      <label className={styles.label}>AWS Access Key ID</label>
+                      <label className={styles.label}>{t('settings.awsAccessKey')}</label>
                       <input 
                         type="text" 
                         className={styles.input} 
@@ -177,7 +179,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       />
                     </div>
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>AWS Secret Access Key</label>
+                      <label className={styles.label}>{t('settings.awsSecretKey')}</label>
                       <input 
                         type="password" 
                         className={styles.input} 
@@ -188,7 +190,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
                       <div className={styles.inputRow}>
-                        <label className={styles.label}>AWS Region</label>
+                        <label className={styles.label}>{t('settings.awsRegion')}</label>
                         <input 
                           type="text" 
                           className={styles.input} 
@@ -198,7 +200,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                         />
                       </div>
                       <div className={styles.inputRow}>
-                        <label className={styles.label}>S3 Bucket Name</label>
+                        <label className={styles.label}>{t('settings.s3Bucket')}</label>
                         <input 
                           type="text" 
                           className={styles.input} 
@@ -213,11 +215,11 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
 
                 {activeTab === 'livekit' && (
                   <div className={styles.formGroup}>
-                    <h3 className={styles.sectionTitle}>LiveKit Server</h3>
-                    <p className={styles.helperText} style={{ marginBottom: '1.5rem' }}>Configure connection strings for the realtime video infrastructure.</p>
+                    <h3 className={styles.sectionTitle}>{t('settings.livekitServer')}</h3>
+                    <p className={styles.helperText} style={{ marginBottom: '1.5rem' }}>{t('settings.livekitDesc')}</p>
                     
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>LiveKit URL</label>
+                      <label className={styles.label}>{t('settings.livekitUrl')}</label>
                       <input 
                         type="text" 
                         className={styles.input} 
@@ -227,7 +229,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       />
                     </div>
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>API Key</label>
+                      <label className={styles.label}>{t('settings.apiKey')}</label>
                       <input 
                         type="text" 
                         className={styles.input} 
@@ -237,7 +239,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       />
                     </div>
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>API Secret</label>
+                      <label className={styles.label}>{t('settings.apiSecret')}</label>
                       <input 
                         type="password" 
                         className={styles.input} 
@@ -251,11 +253,11 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
 
                 {activeTab === 'telnyx' && (
                   <div className={styles.formGroup}>
-                    <h3 className={styles.sectionTitle}>Telnyx / Messaging</h3>
-                    <p className={styles.helperText} style={{ marginBottom: '1.5rem' }}>Configure API access for SMS invitations and telephony.</p>
+                    <h3 className={styles.sectionTitle}>{t('settings.telnyxMessaging')}</h3>
+                    <p className={styles.helperText} style={{ marginBottom: '1.5rem' }}>{t('settings.telnyxDesc')}</p>
                     
                     <div className={styles.inputRow}>
-                      <label className={styles.label}>Telnyx App Key</label>
+                      <label className={styles.label}>{t('settings.telnyxAppKey')}</label>
                       <input 
                         type="password" 
                         className={styles.input} 
@@ -274,10 +276,10 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
         {/* Footer */}
         <div className={styles.footer}>
           <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>
-            Cancel
+            {t('common.cancel')}
           </button>
           <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving || isLoading}>
-            {isSaving ? 'Saving...' : 'Save Settings'}
+            {isSaving ? t('common.saving') : t('settings.saveSettings')}
           </button>
         </div>
       </div>
