@@ -149,20 +149,20 @@ export function PageClientImpl(props: {
     if (isHost && isActive) return t('prejoin.activeMeeting');
     if (meetingInfo?.createdByMember) return t('prejoin.joiningUser', { name: meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username });
     return t('prejoin.joiningMeeting');
-  }, [isHost, isActive, meetingInfo]);
+  }, [isHost, isActive, meetingInfo, t]);
 
   const preJoinSubtitle = React.useMemo(() => {
     if (isHost && !isActive) return t('prejoin.configDevice');
     if (isHost && isActive) return t('prejoin.alreadyHosting');
     if (meetingInfo?.startedAt) return t('prejoin.inProgress', { time: elapsedTime || '00:00' });
     return t('prejoin.configDevice');
-  }, [isHost, isActive, meetingInfo, elapsedTime]);
+  }, [isHost, isActive, meetingInfo, elapsedTime, t]);
 
   const preJoinButtonText = React.useMemo(() => {
     if (isHost && !isActive) return t('prejoin.startNow');
     if (isHost && isActive) return t('prejoin.joinAsHost');
     return t('prejoin.joinNow');
-  }, [isHost, isActive]);
+  }, [isHost, isActive, t]);
 
   const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
     try {
@@ -191,11 +191,11 @@ export function PageClientImpl(props: {
         `${t('prejoin.connectError', { error: error.message })}`,
       );
     }
-  }, []);
+  }, [props.roomName, props.region, t]);
   const handlePreJoinError = React.useCallback((error: any) => {
     console.error('PreJoin Validation Error:', error);
     alert(`${t('prejoin.prejoinError', { error: error?.message || String(error) })}`);
-  }, []);
+  }, [t]);
 
   React.useEffect(() => {
     if (isBot && !connectionDetails && preJoinChoices === undefined) {
@@ -615,6 +615,8 @@ function VideoConferenceComponent(props: {
   const [screenShareSurface, setScreenShareSurface] = React.useState<
     'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'
   >('unknown');
+  // Only activate mirror-block AFTER surface detection completes (avoids overlay flash)
+  const [surfaceDetected, setSurfaceDetected] = React.useState(false);
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
@@ -747,6 +749,8 @@ function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (hasScreenShare) {
       if (screenShareActive) {
+        // Reset detection flag — mirror-block won't activate until detection completes
+        setSurfaceDetected(false);
         setTimeout(() => {
           const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
           if (pub && pub.track) {
@@ -761,11 +765,17 @@ function VideoConferenceComponent(props: {
                 }
               }
               setScreenShareSurface(surf);
+              setSurfaceDetected(true);
+            } else {
+              setSurfaceDetected(true);
             }
+          } else {
+            setSurfaceDetected(true);
           }
         }, 500);
       } else {
         setScreenShareSurface('unknown');
+        setSurfaceDetected(false);
       }
       setActiveView('shareScreen');
       // Broadcast to all: switch to shareScreen view
@@ -776,6 +786,7 @@ function VideoConferenceComponent(props: {
       setIsDrawingMode(false);
       setIsRemoteControlMode(false);
       setScreenShareSurface('unknown');
+      setSurfaceDetected(false);
       setActiveView((prev) => {
         if (prev === 'shareScreen') {
           // Broadcast fallback to webcam
@@ -1158,8 +1169,8 @@ function VideoConferenceComponent(props: {
 
   const isPresenterScreencast = screenShareActive;
   const isPureLiveDoc = activeView === 'liveDoc';
-  // Mirror-blocked: presenter is sharing but it's NOT a safe "another tab" share
-  const isMirrorBlocked = screenShareActive && screenShareSurface !== 'browser';
+  // Mirror-blocked: presenter is sharing AND surface detected AND it's NOT a safe "browser tab" share
+  const isMirrorBlocked = screenShareActive && surfaceDetected && screenShareSurface !== 'browser';
 
   // Determine host: override (from transfer) takes precedence over join-time computation
   const [hostIdentityOverride, setHostIdentityOverride] = React.useState<string | null>(null);

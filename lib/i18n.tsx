@@ -67,7 +67,9 @@ const I18nContext = createContext<I18nContextValue>({
 
 /* ────────── Provider ────────── */
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
+  // Always start with 'en' to match SSR output and avoid hydration mismatch
+  const [locale, setLocaleState] = useState<Locale>('en');
+  const [mounted, setMounted] = useState(false);
 
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
@@ -78,12 +80,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Set html lang on mount
+  // On mount, apply the real locale from localStorage / browser detection
   useEffect(() => {
+    const real = getInitialLocale();
+    setLocaleState(real);
     if (typeof document !== 'undefined') {
-      document.documentElement.lang = locale === 'zh' ? 'zh-CN' : locale;
+      document.documentElement.lang = real === 'zh' ? 'zh-CN' : real;
     }
-  }, [locale]);
+    setMounted(true);
+  }, []);
 
   const t = useCallback(
     (key: string, params?: Record<string, string | number>): string => {

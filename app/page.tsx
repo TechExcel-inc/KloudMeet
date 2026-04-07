@@ -757,27 +757,27 @@ function SignupView({
 
   /* ── Send verification code ── */
   const sendCode = async (target?: string) => {
-    const t = (target || email).trim();
-    if (!t) { setError('Please enter your email address'); return false; }
+    const addr = (target || email).trim();
+    if (!addr) { setError(t('signup.pleaseEnterEmail')); return false; }
     setLoading(true);
     setError('');
     try {
-      const isPhone = t.startsWith('+');
+      const isPhone = addr.startsWith('+');
       const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: t, type: isPhone ? 1 : 0, intent: 'signup' }),
+        body: JSON.stringify({ target: addr, type: isPhone ? 1 : 0, intent: 'signup' }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Failed to send code');
+        setError(data.error || t('signup.failedSendCode'));
         return false;
       }
       if (data.code) setDevCode(data.code);
       startCountdown();
       return true;
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('login.networkError'));
       return false;
     } finally {
       setLoading(false);
@@ -786,18 +786,18 @@ function SignupView({
 
   /* ── Step 1: Email ── */
   const handleEmailNext = async () => {
-    const t = email.trim();
-    if (!t) { setError('Please enter your email address'); return; }
+    const tgt = email.trim();
+    if (!tgt) { setError(t('signup.pleaseEnterEmail')); return; }
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(t)) { setError('Please enter a valid email address'); return; }
-    const ok = await sendCode(t);
+    if (!emailRe.test(tgt)) { setError(t('signup.invalidEmail')); return; }
+    const ok = await sendCode(tgt);
     if (ok) setStep('verify');
   };
 
   /* ── Step 2: Verify ── */
   const handleVerifyNext = () => {
     if (verificationCode.length !== 6) {
-      setError('Please enter the 6-digit verification code');
+      setError(t('signup.enterCode'));
       return;
     }
     setError('');
@@ -809,16 +809,16 @@ function SignupView({
     setError('');
     const usernameRe = /^(?!\d+$)[a-zA-Z0-9]{2,20}$/;
     if (!usernameRe.test(username)) {
-      setError('Login name: 2-20 chars, letters & numbers, cannot be all digits');
+      setError(t('signup.loginNameError'));
       return;
     }
     const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
     if (!passwordRe.test(password)) {
-      setError('Password: 8-30 chars with both letters and numbers');
+      setError(t('signup.passwordError'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('signup.passwordMismatch'));
       return;
     }
 
@@ -836,7 +836,7 @@ function SignupView({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Signup failed');
+        setError(data.error || t('signup.signupFailed'));
         return;
       }
       const user: AuthUser = {
@@ -850,7 +850,7 @@ function SignupView({
       localStorage.setItem('kloudUser', JSON.stringify(user));
       onSignupSuccess(user);
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('login.networkError'));
     } finally {
       setLoading(false);
     }
@@ -871,7 +871,7 @@ function SignupView({
       <div className={styles.authContainer}>
         <div className={styles.authCard}>
           <h1 className={styles.loginTitle}>
-            {step === 'verify' ? 'Verify Email' : 'Sign Up'}
+            {step === 'verify' ? t('signup.verifyEmail') : t('signup.title')}
           </h1>
 
           <StepIndicator />
@@ -881,7 +881,7 @@ function SignupView({
           {/* ── Step 1: Email ── */}
           {step === 'email' && (
             <>
-              <label className={styles.fieldLabel}>Email address</label>
+              <label className={styles.fieldLabel}>{t('signup.emailAddress')}</label>
               <input
                 className={error ? styles.fieldInputError : styles.fieldInput}
                 type="email"
@@ -903,20 +903,20 @@ function SignupView({
                     <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 12a9 9 0 11-6.219-8.56"></path>
                     </svg>
-                    Sending code...
+                    {t('signup.sendingCode')}
                   </>
-                ) : 'Next'}
+                ) : t('common.next')}
               </button>
 
-              <div className={styles.ssoDivider}>or sign up with</div>
+              <div className={styles.ssoDivider}>{t('signup.orSignUpWith')}</div>
               <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
                 <button type="button" className={styles.anonLink} style={{ flex: 1 }} onClick={() => window.location.href = '/api/auth/google'}>Google</button>
               </div>
 
               <div className={styles.registerRow} style={{ marginTop: '1rem' }}>
-                <span>Already have an account?</span>
+                <span>{t('signup.alreadyHaveAccount')}</span>
                 <button type="button" className={styles.linkBtn} onClick={onBack}>
-                  Sign In
+                  {t('nav.signIn')}
                 </button>
               </div>
             </>
@@ -931,7 +931,7 @@ function SignupView({
                 </svg>
               </div>
               <p className={styles.signupSubtext}>
-                We sent a 6-digit code to <strong>{email}</strong>
+                {t('signup.codeSentTo', { email })}
               </p>
 
               <input
@@ -951,7 +951,7 @@ function SignupView({
               />
 
               {devCode && (
-               <div className={styles.devHint}>Dev mode — use code: <strong>{devCode}</strong></div>
+               <div className={styles.devHint}>{t('signup.devCode', { code: devCode })}</div>
               )}
 
               <button
@@ -960,15 +960,15 @@ function SignupView({
                 disabled={verificationCode.length !== 6}
                 onClick={handleVerifyNext}
               >
-                Continue
+                {t('signup.continue')}
               </button>
 
               <div className={styles.resendRow}>
                 {countdown > 0 ? (
-                  <span>Resend code in {countdown}s</span>
+                  <span>{t('signup.resendIn', { seconds: String(countdown) })}</span>
                 ) : (
                   <button type="button" className={styles.linkBtn} onClick={() => sendCode()}>
-                    Resend code
+                    {t('signup.resendCode')}
                   </button>
                 )}
               </div>
@@ -979,27 +979,27 @@ function SignupView({
           {step === 'create' && (
             <>
               <p className={styles.signupSubtext}>
-                Creating account for <strong>{email}</strong>
+                {t('signup.creatingFor', { email })}
               </p>
 
-              <label className={styles.fieldLabel}>Login name *</label>
+              <label className={styles.fieldLabel}>{t('signup.loginName')}</label>
               <input
                 className={styles.fieldInput}
                 type="text"
-                placeholder="2-20 characters, letters & numbers"
+                placeholder={t('signup.loginNameHint')}
                 maxLength={20}
                 value={username}
                 onChange={(e) => { setUsername(e.target.value); setError(''); }}
                 autoFocus
               />
-              <p className={styles.fieldHint}>Cannot be all digits</p>
+              <p className={styles.fieldHint}>{t('signup.cannotAllDigits')}</p>
 
-              <label className={styles.fieldLabel}>Password *</label>
+              <label className={styles.fieldLabel}>{t('signup.passwordLabel')}</label>
               <div className={styles.passwordWrap}>
                 <input
                   className={styles.fieldInput}
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="8-30 chars, letters & numbers"
+                  placeholder={t('signup.passwordHint')}
                   maxLength={30}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
@@ -1015,12 +1015,12 @@ function SignupView({
                 </button>
               </div>
 
-              <label className={styles.fieldLabel}>Confirm Password *</label>
+              <label className={styles.fieldLabel}>{t('signup.confirmPassword')}</label>
               <div className={styles.passwordWrap}>
                 <input
                   className={styles.fieldInput}
                   type={showConfirm ? 'text' : 'password'}
-                  placeholder="Enter password again"
+                  placeholder={t('signup.confirmPasswordHint')}
                   maxLength={30}
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
@@ -1048,13 +1048,13 @@ function SignupView({
                     <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M21 12a9 9 0 11-6.219-8.56"></path>
                     </svg>
-                    Creating Account...
+                    {t('signup.creatingAccount')}
                   </>
-                ) : 'Sign Up'}
+                ) : t('signup.title')}
               </button>
 
               <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.75rem' }}>
-                By signing up, you agree to our Terms of Use and Privacy Policy
+                {t('signup.termsNotice')}
               </p>
             </>
           )}
@@ -1893,26 +1893,26 @@ function ForgotPasswordView({
   const [devCode, setDevCode] = useState<string | null>(null);
 
   const sendCode = async () => {
-    const t = email.trim();
-    if (!t) { setError('Please enter your email or phone'); return false; }
+    const addr = email.trim();
+    if (!addr) { setError(t('forgot.pleaseEnterEmail')); return false; }
     setLoading(true);
     setError('');
     try {
-      const isPhone = t.startsWith('+');
+      const isPhone = addr.startsWith('+');
       const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: t, type: isPhone ? 1 : 0, intent: 'reset' }),
+        body: JSON.stringify({ target: addr, type: isPhone ? 1 : 0, intent: 'reset' }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Failed to send code');
+        setError(data.error || t('signup.failedSendCode'));
         return false;
       }
       if (data.code) setDevCode(data.code);
       return true;
     } catch {
-      setError('Network error.');
+      setError(t('login.networkError'));
       return false;
     } finally {
       setLoading(false);
@@ -1925,7 +1925,7 @@ function ForgotPasswordView({
   };
 
   const handleVerifyNext = () => {
-    if (verificationCode.length !== 6) { setError('Please enter the 6-digit code'); return; }
+    if (verificationCode.length !== 6) { setError(t('forgot.enter6Digit')); return; }
     setError('');
     setStep('reset');
   };
@@ -1934,11 +1934,11 @@ function ForgotPasswordView({
     setError('');
     const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
     if (!passwordRe.test(password)) {
-      setError('Password: 8-30 chars with both letters and numbers');
+      setError(t('signup.passwordError'));
       return;
     }
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError(t('signup.passwordMismatch'));
       return;
     }
 
@@ -1956,13 +1956,13 @@ function ForgotPasswordView({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Reset failed');
+        setError(data.error || t('forgot.resetFailed'));
         return;
       }
-      toast.show('Password reset successfully!');
+      toast.show(t('forgot.resetSuccess'));
       onBack();
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('login.networkError'));
     } finally {
       setLoading(false);
     }
@@ -1977,13 +1977,13 @@ function ForgotPasswordView({
       }} hideAvatar />
       <div className={styles.authContainer}>
         <div className={styles.authCard}>
-          <h1 className={styles.loginTitle}>Forgot Password</h1>
+          <h1 className={styles.loginTitle}>{t('forgot.title')}</h1>
           {error && <div className={styles.errorBanner}>⚠ {error}</div>}
 
           {step === 'email' && (
             <>
-              <p className={styles.signupSubtext}>Enter your email or phone to reset your password.</p>
-              <label className={styles.fieldLabel}>Email or phone</label>
+              <p className={styles.signupSubtext}>{t('forgot.description')}</p>
+              <label className={styles.fieldLabel}>{t('forgot.emailOrPhone')}</label>
               <input
                 className={error ? styles.fieldInputError : styles.fieldInput}
                 type="text"
@@ -1999,14 +1999,14 @@ function ForgotPasswordView({
                 disabled={loading}
                 onClick={handleEmailNext}
               >
-                {loading ? 'Sending code...' : 'Next'}
+                {loading ? t('signup.sendingCode') : t('common.next')}
               </button>
             </>
           )}
 
           {step === 'verify' && (
             <>
-              <p className={styles.signupSubtext}>We sent a code to <strong>{email}</strong></p>
+              <p className={styles.signupSubtext}>{t('forgot.codeSentTo', { email })}</p>
               <input
                 className={styles.verifyCodeInput}
                 type="text"
@@ -2022,26 +2022,26 @@ function ForgotPasswordView({
                 onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
                 autoFocus
               />
-              {devCode && <div className={styles.devHint}>Dev mode code: <strong>{devCode}</strong></div>}
+              {devCode && <div className={styles.devHint}>{t('forgot.devCode', { code: devCode })}</div>}
               <button
                 type="button"
                 className={verificationCode.length === 6 ? styles.loginSubmit : styles.loginSubmitLoading}
                 disabled={verificationCode.length !== 6}
                 onClick={handleVerifyNext}
               >
-                Verify Code
+                {t('forgot.verifyCode')}
               </button>
             </>
           )}
 
           {step === 'reset' && (
             <>
-              <label className={styles.fieldLabel}>New Password</label>
+              <label className={styles.fieldLabel}>{t('forgot.newPassword')}</label>
               <div className={styles.passwordWrap}>
                 <input
                   className={styles.fieldInput}
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="8-30 chars, letters & numbers"
+                  placeholder={t('signup.passwordHint')}
                   maxLength={30}
                   value={password}
                   onChange={(e) => { setPassword(e.target.value); setError(''); }}
@@ -2050,12 +2050,12 @@ function ForgotPasswordView({
                 <button type="button" className={styles.passwordToggle} onClick={() => setShowPassword(!showPassword)}>{showPassword ? '🙈' : '👁'}</button>
               </div>
 
-              <label className={styles.fieldLabel}>Confirm New Password</label>
+              <label className={styles.fieldLabel}>{t('forgot.confirmNewPassword')}</label>
               <div className={styles.passwordWrap}>
                 <input
                   className={styles.fieldInput}
                   type={showConfirm ? 'text' : 'password'}
-                  placeholder="Enter password again"
+                  placeholder={t('signup.confirmPasswordHint')}
                   maxLength={30}
                   value={confirmPassword}
                   onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
@@ -2071,7 +2071,7 @@ function ForgotPasswordView({
                 onClick={handleReset}
                 style={{ marginTop: '0.5rem' }}
               >
-                {loading ? 'Resetting...' : 'Reset Password'}
+                {loading ? t('forgot.resetting') : t('forgot.resetPassword')}
               </button>
             </>
           )}
