@@ -29,9 +29,6 @@ export const metadata: Metadata = {
     ],
     siteName: 'LiveKit Meet',
   },
-  icons: {
-    icon: { url: '/favicon.ico' },
-  },
 };
 
 export const viewport: Viewport = {

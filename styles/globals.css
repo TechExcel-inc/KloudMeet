@@ -130,14 +130,14 @@ h2 a {
 }
 
 .kloud-prejoin-logo:hover {
-  color: #5b21b6;
+  color: #5E33DD;
 }
 
 .kloud-prejoin-logo-icon {
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: linear-gradient(135deg, #7c3aed, #5b21b6);
+  background: linear-gradient(135deg, #5E33DD, #5E33DD);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -212,7 +212,7 @@ h2 a {
 }
 
 .kloud-prejoin-wrapper .lk-form-control:focus {
-  border-color: #7c3aed !important;
+  border-color: #5E33DD !important;
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1) !important;
   outline: none !important;
 }
@@ -221,7 +221,7 @@ h2 a {
 .kloud-prejoin-wrapper .lk-join-button,
 .kloud-prejoin-wrapper button[type="submit"].lk-button,
 .kloud-prejoin-wrapper .lk-prejoin>button.lk-button:last-of-type {
-  background: linear-gradient(135deg, #5b21b6, #7c3aed) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 12px !important;
@@ -248,7 +248,7 @@ h2 a {
 }
 
 .kloud-prejoin-wrapper .lk-button {
-  background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 10px 0 0 10px !important;
@@ -263,16 +263,16 @@ h2 a {
 }
 
 .kloud-prejoin-wrapper .lk-button:hover {
-  background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
 }
 
 .kloud-prejoin-wrapper .lk-button[aria-pressed="true"] {
-  background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   color: #fff !important;
 }
 
 .kloud-prejoin-wrapper .lk-button-menu {
-  background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   border: none !important;
   border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
   color: #fff !important;
@@ -285,7 +285,7 @@ h2 a {
 }
 
 .kloud-prejoin-wrapper .lk-button-menu:hover {
-  background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
+  background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
 }
 
 /* ── Mobile Adaptation for Prejoin ──────────────────────── */
