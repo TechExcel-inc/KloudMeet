@@ -7,6 +7,7 @@ import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
 import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { useI18n, LOCALE_OPTIONS, type Locale } from '@/lib/i18n';
+import { HelpModal } from '@/lib/HelpModal';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -73,7 +74,7 @@ function useToast() {
 /* ════════════════════════════════════════════════════
    Top Toolbar Component
    ════════════════════════════════════════════════════ */
-function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, onOpenHelp, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, onOpenHelp?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const { t, locale, setLocale } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -162,7 +163,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           </div>
         )}
 
-        <button className={styles.iconBtn} aria-label={t('nav.help')} title={t('nav.help')}>
+        <button className={styles.iconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
@@ -265,10 +266,12 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
 function AnonymousView({
   onSignIn,
   onSignUp,
+  onOpenHelp,
   toast,
 }: {
   onSignIn: () => void;
   onSignUp: () => void;
+  onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -379,7 +382,7 @@ function AnonymousView({
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar onSignIn={onSignIn} hideAvatar={true} />
+      <TopToolbar onSignIn={onSignIn} onOpenHelp={onOpenHelp} hideAvatar={true} />
 
       {/* ── Central Join Container ── */}
       <div className={styles.anonContainer}>
@@ -541,12 +544,14 @@ function LoginView({
   onLoginSuccess,
   onSignUp,
   onForgotPassword,
+  onOpenHelp,
   toast,
 }: {
   onBack: () => void;
   onLoginSuccess: (user: AuthUser) => void;
   onSignUp: () => void;
   onForgotPassword: () => void;
+  onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -594,7 +599,7 @@ function LoginView({
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar onBack={onBack} hideAvatar />
+      <TopToolbar onBack={onBack} onOpenHelp={onOpenHelp} hideAvatar />
       
       <div className={styles.authContainer}>
         <form className={styles.authCard} onSubmit={handleLogin}>
@@ -701,10 +706,12 @@ function LoginView({
 function SignupView({
   onBack,
   onSignupSuccess,
+  onOpenHelp,
   toast,
 }: {
   onBack: () => void;
   onSignupSuccess: (user: AuthUser) => void;
+  onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -866,7 +873,7 @@ function SignupView({
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar onBack={handleBack} hideAvatar />
+      <TopToolbar onBack={handleBack} onOpenHelp={onOpenHelp} hideAvatar />
       
       <div className={styles.authContainer}>
         <div className={styles.authCard}>
@@ -1070,10 +1077,12 @@ function SignupView({
 function DashboardView({
   user,
   onSignOut,
+  onOpenHelp,
   toast,
 }: {
   user: AuthUser;
   onSignOut: () => void;
+  onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -1318,6 +1327,7 @@ function DashboardView({
         onSignOut={onSignOut} 
         onOpenSettings={() => setShowSettingsModal(true)} 
         onOpenProfile={() => setShowProfileModal(true)}
+        onOpenHelp={onOpenHelp}
         hideAvatar={false} 
       />
       
@@ -1875,9 +1885,11 @@ function DashboardView({
    ════════════════════════════════════════════════════ */
 function ForgotPasswordView({
   onBack,
+  onOpenHelp,
   toast,
 }: {
   onBack: () => void;
+  onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -2088,6 +2100,7 @@ function HomeContent() {
   const [view, setView] = useState<PageView>('anonymous');
   const [signupSource, setSignupSource] = useState<PageView>('login');
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const toast = useToast();
   const searchParams = useSearchParams();
 
@@ -2159,7 +2172,7 @@ function HomeContent() {
       {toast.el}
       <div className={styles.bgGlow} />
       {view === 'anonymous' && (
-        <AnonymousView onSignIn={() => setView('login')} onSignUp={() => { setSignupSource('anonymous'); setView('signup'); }} toast={toast} />
+        <AnonymousView onSignIn={() => setView('login')} onSignUp={() => { setSignupSource('anonymous'); setView('signup'); }} onOpenHelp={() => setShowHelp(true)} toast={toast} />
       )}
       {view === 'login' && (
         <LoginView
@@ -2167,12 +2180,14 @@ function HomeContent() {
           onLoginSuccess={handleAuthSuccess}
           onSignUp={() => { setSignupSource('login'); setView('signup'); }}
           onForgotPassword={() => setView('forgot-password')}
+          onOpenHelp={() => setShowHelp(true)}
           toast={toast}
         />
       )}
       {view === 'forgot-password' && (
         <ForgotPasswordView
           onBack={() => setView('login')}
+          onOpenHelp={() => setShowHelp(true)}
           toast={toast}
         />
       )}
@@ -2180,12 +2195,15 @@ function HomeContent() {
         <SignupView
           onBack={() => setView(signupSource)}
           onSignupSuccess={handleAuthSuccess}
+          onOpenHelp={() => setShowHelp(true)}
           toast={toast}
         />
       )}
       {view === 'dashboard' && user && (
-        <DashboardView user={user} onSignOut={handleSignOut} toast={toast} />
+        <DashboardView user={user} onSignOut={handleSignOut} onOpenHelp={() => setShowHelp(true)} toast={toast} />
       )}
+
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </>
   );
 }

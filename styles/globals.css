@@ -25,13 +25,13 @@ body {
   padding-inline: 2rem;
 }
 
-.header > img {
+.header>img {
   display: block;
   margin: auto;
   max-width: 100%;
 }
 
-.header > h2 {
+.header>h2 {
   font-family: 'TWK Everett', sans-serif;
   font-style: normal;
   font-weight: 400;
@@ -69,7 +69,8 @@ h2 a {
 /* Prevent LiveKit Chat from extending too far down and being blocked by custom KloudMeet toolbar */
 .lk-chat {
   margin-bottom: 74px !important;
-  border-radius: 8px; /* Optional for making the floating effect look a bit nicer */
+  border-radius: 8px;
+  /* Optional for making the floating effect look a bit nicer */
   overflow: hidden;
 }
 
@@ -82,7 +83,7 @@ h2 a {
    PreJoin page — Purple/White theme overrides
    ═══════════════════════════════════════════════════ */
 .kloud-prejoin-wrapper {
-  min-height: 100vh;
+  height: 100vh;
   background: linear-gradient(180deg, #f0ecfb 0%, #f8f9fb 40%, #f8f9fb 100%);
   color: #1e1e2e;
   display: flex;
@@ -93,8 +94,10 @@ h2 a {
   position: relative;
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   padding: 2rem 1rem;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
+
 .kloud-prejoin-wrapper::before {
   content: '';
   position: absolute;
@@ -114,6 +117,7 @@ h2 a {
   position: relative;
   z-index: 1;
 }
+
 .kloud-prejoin-logo {
   display: inline-flex;
   align-items: center;
@@ -124,9 +128,11 @@ h2 a {
   text-decoration: none;
   margin-bottom: 0.6rem;
 }
+
 .kloud-prejoin-logo:hover {
   color: #5b21b6;
 }
+
 .kloud-prejoin-logo-icon {
   width: 32px;
   height: 32px;
@@ -136,12 +142,14 @@ h2 a {
   align-items: center;
   justify-content: center;
 }
+
 .kloud-prejoin-title {
   font-size: 1.6rem;
   font-weight: 700;
   margin: 0.4rem 0 0.25rem;
   color: #1e1e2e;
 }
+
 .kloud-prejoin-subtitle {
   font-size: 0.92rem;
   color: #6b7280;
@@ -153,7 +161,7 @@ h2 a {
   background: #fff;
   padding: 1.75rem 2rem 2rem;
   border-radius: 20px;
-  box-shadow: 0 8px 40px rgba(91, 33, 182, 0.08), 0 1px 3px rgba(0,0,0,0.04);
+  box-shadow: 0 8px 40px rgba(91, 33, 182, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
   max-width: 460px;
   width: 100%;
   position: relative;
@@ -169,11 +177,13 @@ h2 a {
   border: 2px solid rgba(124, 58, 237, 0.25);
   aspect-ratio: 16 / 10;
 }
+
 /* Force purple on ALL nested elements when camera is off */
 .kloud-prejoin-wrapper .lk-video-container *:not(video) {
   background-color: transparent !important;
   background: transparent !important;
 }
+
 .kloud-prejoin-wrapper .lk-video-container video {
   background: transparent !important;
 }
@@ -182,6 +192,7 @@ h2 a {
 .kloud-prejoin-wrapper .lk-camera-off-indicator {
   background: transparent !important;
 }
+
 .kloud-prejoin-wrapper .lk-camera-off-indicator svg {
   color: rgba(167, 139, 250, 0.55) !important;
   width: 80px !important;
@@ -199,6 +210,7 @@ h2 a {
   font-family: 'Inter', sans-serif !important;
   transition: border-color 0.2s !important;
 }
+
 .kloud-prejoin-wrapper .lk-form-control:focus {
   border-color: #7c3aed !important;
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1) !important;
@@ -208,7 +220,7 @@ h2 a {
 /* ── Join Room button ───────────────────────── */
 .kloud-prejoin-wrapper .lk-join-button,
 .kloud-prejoin-wrapper button[type="submit"].lk-button,
-.kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type {
+.kloud-prejoin-wrapper .lk-prejoin>button.lk-button:last-of-type {
   background: linear-gradient(135deg, #5b21b6, #7c3aed) !important;
   color: #fff !important;
   border: none !important;
@@ -221,9 +233,10 @@ h2 a {
   font-family: 'Inter', sans-serif !important;
   box-shadow: 0 4px 14px rgba(91, 33, 182, 0.25) !important;
 }
+
 .kloud-prejoin-wrapper .lk-join-button:hover,
 .kloud-prejoin-wrapper button[type="submit"].lk-button:hover,
-.kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type:hover {
+.kloud-prejoin-wrapper .lk-prejoin>button.lk-button:last-of-type:hover {
   opacity: 0.92 !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 6px 20px rgba(91, 33, 182, 0.3) !important;
@@ -233,6 +246,7 @@ h2 a {
 .kloud-prejoin-wrapper .lk-button-group {
   gap: 0 !important;
 }
+
 .kloud-prejoin-wrapper .lk-button {
   background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
   color: #fff !important;
@@ -243,12 +257,15 @@ h2 a {
   transition: all 0.2s !important;
   box-shadow: none !important;
 }
+
 .kloud-prejoin-wrapper .lk-button svg {
   color: #fff !important;
 }
+
 .kloud-prejoin-wrapper .lk-button:hover {
   background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
 }
+
 .kloud-prejoin-wrapper .lk-button[aria-pressed="true"] {
   background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
   color: #fff !important;
@@ -257,14 +274,95 @@ h2 a {
 .kloud-prejoin-wrapper .lk-button-menu {
   background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
   border: none !important;
-  border-left: 1px solid rgba(255,255,255,0.2) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.2) !important;
   color: #fff !important;
   border-radius: 0 10px 10px 0 !important;
   transition: all 0.2s !important;
 }
+
 .kloud-prejoin-wrapper .lk-button-menu svg {
   color: #fff !important;
 }
+
 .kloud-prejoin-wrapper .lk-button-menu:hover {
   background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
+}
+
+/* ── Mobile Adaptation for Prejoin ──────────────────────── */
+@media (max-width: 768px) {
+  .kloud-prejoin-wrapper {
+    /* Change from center to flex-start to prevent top clipping when content is taller than screen */
+    justify-content: flex-start !important;
+    padding: 5.5rem 1rem 2rem !important;
+    height: 100dvh;
+    /* Better mobile viewport height handling */
+  }
+
+  .kloud-prejoin-wrapper::before {
+    top: -20px;
+    width: 100vw;
+  }
+
+  .kloud-prejoin-header {
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+  }
+
+  .kloud-prejoin-title {
+    font-size: 1.35rem;
+  }
+
+  .kloud-prejoin-subtitle {
+    font-size: 0.85rem;
+  }
+
+  .kloud-prejoin-wrapper .lk-prejoin {
+    padding: 1.25rem 1rem 1.5rem !important;
+    flex-shrink: 0;
+    margin-bottom: 2rem;
+
+    /* Strict Bulletproof Grid Layout */
+    display: flex;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.85rem !important;
+    align-items: center !important;
+  }
+
+  /* Force these major elements to span BOTH columns full width */
+  .kloud-prejoin-wrapper .lk-video-container,
+  .kloud-prejoin-wrapper .lk-button-group-container,
+  .kloud-prejoin-wrapper .lk-form-control,
+  .kloud-prejoin-wrapper .lk-join-button,
+  .kloud-prejoin-wrapper button[type="submit"].lk-button,
+  .kloud-prejoin-wrapper .lk-prejoin>button.lk-button:last-of-type {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* In case LiveKit uses a wrapper for the buttons, force it to lay its children out side-by-side */
+  .kloud-prejoin-wrapper .lk-button-group-container {
+    display: flex;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.85rem !important;
+  }
+
+  /* Ensure video respects mobile bounds */
+  .kloud-prejoin-wrapper .lk-video-container {
+    max-height: 30vh !important;
+    min-height: 140px !important;
+    aspect-ratio: auto !important;
+  }
+
+  /* Protect input focus/height */
+  .kloud-prejoin-wrapper .lk-form-control {
+    min-height: 48px !important;
+    z-index: 10 !important;
+  }
+
+  /* Make sure internal buttons don't grow outrageously */
+  .kloud-prejoin-wrapper .lk-button-group {
+    min-height: 44px !important;
+    height: 44px !important;
+  }
 }

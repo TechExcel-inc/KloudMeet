@@ -8,6 +8,7 @@ import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { LiveDocView } from '@/lib/LiveDocView';
+import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
@@ -23,6 +24,10 @@ import {
   VideoConference,
   VideoTrack,
   useTracks,
+  TrackLoop,
+  ParticipantTile,
+  RoomAudioRenderer,
+  ConnectionStateToast,
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -98,17 +103,18 @@ export function PageClientImpl(props: {
   const [showAvatarMenu, setShowAvatarMenu] = React.useState(false);
   const { t, locale, setLocale } = useI18n();
   const [showLangMenu, setShowLangMenu] = React.useState(false);
+  const [showHelp, setShowHelp] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('kloudUser');
         if (stored) setCurrentUser(JSON.parse(stored));
-        
+
         if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
           setIsSameTabRefresh(true);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     fetch(`/api/meetings/${props.roomName}`)
@@ -181,7 +187,7 @@ export function PageClientImpl(props: {
       }
       const connectionDetailsData = await connectionDetailsResp.json();
       setConnectionDetails(connectionDetailsData);
-      
+
       if (typeof window !== 'undefined') {
         sessionStorage.setItem('activeKloudRoom', props.roomName);
       }
@@ -224,8 +230,8 @@ export function PageClientImpl(props: {
             {meetingInfo.status === 'ENDED' ? t('prejoin.meetingConcluded') : t('prejoin.meetingCanceled')}
           </h1>
           <p style={{ color: '#6b7280', fontSize: '1rem', margin: '0 0 2rem' }}>
-            {meetingInfo.status === 'ENDED' 
-              ? t('prejoin.meetingEndedDesc') 
+            {meetingInfo.status === 'ENDED'
+              ? t('prejoin.meetingEndedDesc')
               : t('prejoin.meetingCanceledDesc')}
           </p>
           <Link href="/" style={{ display: 'inline-block', padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, width: '100%' }}>
@@ -436,8 +442,41 @@ export function PageClientImpl(props: {
             .ead-menu-item-active .ead-menu-code {
               color: #ddd6fe;
             }
+
+            /* --- Mobile Adaptation for Toolbar --- */
+            @media (max-width: 768px) {
+              .kloud-prejoin-toolbar {
+                padding: 0 1rem;
+                height: 64px;
+              }
+              .kloud-prejoin-logo-toolbar {
+                font-size: 0; /* Hide Kloud Meet text */
+                gap: 0;
+              }
+              .kloud-prejoin-logo-icon-toolbar {
+                width: 32px;
+                height: 32px;
+              }
+              .ead-toolbar-right {
+                gap: 0.4rem;
+              }
+              .ead-btn {
+                height: 36px;
+              }
+              .ead-icon-btn, .ead-avatar-btn {
+                width: 36px;
+              }
+              .ead-pill-btn {
+                padding: 0 10px;
+                font-size: 0.85rem;
+              }
+              .ead-dropdown-menu {
+                width: 200px;
+                right: -10px; /* Prevent edge overflow */
+              }
+            }
           `}</style>
-          
+
           <header className="kloud-prejoin-toolbar">
             <div className="kloud-prejoin-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
               <Link href="/" className="ead-btn ead-icon-btn" title="Go Back" style={{ textDecoration: 'none' }}>
@@ -454,26 +493,26 @@ export function PageClientImpl(props: {
                 Kloud Meet
               </Link>
             </div>
-            
+
             <div className="ead-toolbar-right">
               {/* Help Button */}
-              <button className="ead-btn ead-icon-btn" title="Help" onClick={() => { setShowLangMenu(false); setShowAvatarMenu(false); }}>
+              <button className="ead-btn ead-icon-btn" title={t('nav.help')} onClick={() => { setShowLangMenu(false); setShowAvatarMenu(false); setShowHelp(true); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
                   <circle cx="12" cy="12" r="10"></circle>
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
                   <line x1="12" y1="17" x2="12.01" y2="17"></line>
                 </svg>
               </button>
-              
+
               {/* Language Pill Button */}
               <div className="ead-dropdown-container">
-                <button 
+                <button
                   className={`ead-btn ead-pill-btn ${showLangMenu ? 'ead-btn-active' : ''}`}
                   onClick={() => { setShowLangMenu(!showLangMenu); setShowAvatarMenu(false); }}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
-                    <circle cx="12" cy="12" r="10"/>
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                   </svg>
                   <span>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
@@ -484,26 +523,26 @@ export function PageClientImpl(props: {
                   <div className="ead-dropdown-menu">
                     <div className="ead-menu-header">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
-                        <circle cx="12" cy="12" r="10"/>
-                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                       </svg>
                       {t('nav.selectLanguage')}
                     </div>
                     {LOCALE_OPTIONS.map(opt => (
-                      <button 
+                      <button
                         key={opt.code}
                         className={`ead-menu-item ${locale === opt.code ? 'ead-menu-item-active' : ''}`}
                         onClick={() => { setLocale(opt.code); setShowLangMenu(false); }}
                       >
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
-                          <circle cx="12" cy="12" r="10"/>
-                          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
                         </svg>
                         {opt.label}
                         <span className="ead-menu-code">
-                          {opt.shortCode} 
+                          {opt.shortCode}
                           {locale === opt.code && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{marginLeft:'6px'}}><path d="M20 6L9 17l-5-5"/></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '6px' }}><path d="M20 6L9 17l-5-5" /></svg>
                           )}
                         </span>
                       </button>
@@ -511,10 +550,10 @@ export function PageClientImpl(props: {
                   </div>
                 )}
               </div>
-              
+
               {/* Avatar Button */}
               <div className="ead-dropdown-container">
-                <button 
+                <button
                   className={`ead-btn ead-avatar-btn ${showAvatarMenu ? 'ead-btn-active' : ''}`}
                   onClick={() => { setShowAvatarMenu(!showAvatarMenu); setShowLangMenu(false); }}
                 >
@@ -532,7 +571,7 @@ export function PageClientImpl(props: {
                 {showAvatarMenu && (
                   <div className="ead-dropdown-menu">
                     <button onClick={() => alert('Profile coming soon')} className="ead-menu-item">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
                       {t('prejoin.profile')}
                     </button>
                     <button onClick={() => alert('System Settings coming soon')} className="ead-menu-item">
@@ -563,8 +602,8 @@ export function PageClientImpl(props: {
           )}
           {isHost && isActive && !isSameTabRefresh && (
             <div style={{ textAlign: 'center', marginTop: '1.25rem', zIndex: 2 }}>
-              <button 
-                onClick={() => { window.location.href = '/'; }} 
+              <button
+                onClick={() => { window.location.href = '/'; }}
                 style={{ background: 'transparent', border: 'none', color: '#ff6352', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem', fontFamily: 'Inter, sans-serif' }}
               >
                 {t('prejoin.orStartNew')}
@@ -581,7 +620,43 @@ export function PageClientImpl(props: {
           />
         </div>
       )}
+
+      {/* Help Modal — always available (pre-join + in-meeting) */}
+      <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </main>
+  );
+}
+
+function MobileVideoLayout() {
+  const tracks = useTracks(
+    [
+      { source: Track.Source.Camera, withPlaceholder: true },
+      { source: Track.Source.ScreenShare, withPlaceholder: false },
+    ],
+    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+  );
+
+  return (
+    <div
+      className="lk-mobile-scroll-grid"
+      style={{
+        flex: 1,
+        height: '100%',
+        overflowY: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px',
+        background: '#0a0a0a'
+      }}
+    >
+      <TrackLoop tracks={tracks}>
+        <div style={{ width: '100%', minHeight: '30vh', aspectRatio: '16/9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, position: 'relative', background: '#1e1e2e' }}>
+          <ParticipantTile style={{ width: '100%', height: '100%' }} />
+        </div>
+      </TrackLoop>
+      <RoomAudioRenderer />
+      <ConnectionStateToast />
+    </div>
   );
 }
 
@@ -596,7 +671,7 @@ function VideoConferenceComponent(props: {
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
-  
+
   const searchParams = useSearchParams();
   const isActionStart = searchParams?.get('action') === 'start';
 
@@ -626,6 +701,7 @@ function VideoConferenceComponent(props: {
   const [isRecording, setIsRecording] = React.useState(false);
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
+  const [showHelp, setShowHelp] = React.useState(false);
 
   const handleToggleRecording = async (action: 'start' | 'stop') => {
     try {
@@ -642,7 +718,7 @@ function VideoConferenceComponent(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, teamMemberId: dbUser.id, pageUrl: pageUrlStr })
       });
-      
+
       const data = await res.json();
       if (!res.ok) {
         alert(`Recording failed: ${data.error}`);
@@ -783,6 +859,7 @@ function VideoConferenceComponent(props: {
         broadcastViewChangeRef.current?.('shareScreen');
       }
     } else {
+      setScreenShareActive(false);
       setIsDrawingMode(false);
       setIsRemoteControlMode(false);
       setScreenShareSurface('unknown');
@@ -988,7 +1065,7 @@ function VideoConferenceComponent(props: {
       cancelled = true;
       document.removeEventListener('visibilitychange', handleVisibilityForWakeLock);
       if (wakeLock) {
-        wakeLock.release().catch(() => {});
+        wakeLock.release().catch(() => { });
       }
     };
   }, []);
@@ -1088,7 +1165,7 @@ function VideoConferenceComponent(props: {
     const handleVisibilityForKeepAlive = () => {
       if (document.visibilityState === 'visible' && audio) {
         if (audio.paused) {
-          audio.play().catch(() => {});
+          audio.play().catch(() => { });
         }
       }
     };
@@ -1861,10 +1938,14 @@ function VideoConferenceComponent(props: {
               display: isPureLiveDoc && !hasScreenShare ? 'none' : 'block',
             }}
           >
-            <VideoConference
-              chatMessageFormatter={formatChatMessageLinks}
-              SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
-            />
+            {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
+              <MobileVideoLayout />
+            ) : (
+              <VideoConference
+                chatMessageFormatter={formatChatMessageLinks}
+                SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+              />
+            )}
 
             {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
             {hasScreenShare && isMirrorBlocked && (
@@ -1977,48 +2058,48 @@ function VideoConferenceComponent(props: {
                 style={
                   isToolbarMobile
                     ? {
-                        position: 'fixed',
-                        top: 'max(44px, env(safe-area-inset-top, 0px), 7vh)',
-                        left: 'max(10px, env(safe-area-inset-left, 0px))',
-                        right: 'auto',
-                        transform: 'none',
-                        zIndex: 15000,
-                        background: 'rgba(30, 41, 59, 0.96)',
-                        color: 'rgba(255,255,255,0.86)',
-                        border: '1px solid rgba(255,255,255,0.14)',
-                        borderRadius: '10px',
-                        width: '36px',
-                        height: '50px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
-                        WebkitTapHighlightColor: 'transparent',
-                        touchAction: 'manipulation',
-                      }
+                      position: 'fixed',
+                      top: 'max(44px, env(safe-area-inset-top, 0px), 7vh)',
+                      left: 'max(10px, env(safe-area-inset-left, 0px))',
+                      right: 'auto',
+                      transform: 'none',
+                      zIndex: 15000,
+                      background: 'rgba(30, 41, 59, 0.96)',
+                      color: 'rgba(255,255,255,0.86)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      borderRadius: '10px',
+                      width: '36px',
+                      height: '50px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+                      WebkitTapHighlightColor: 'transparent',
+                      touchAction: 'manipulation',
+                    }
                     : {
-                        position: 'absolute',
-                        top: '50%',
-                        left: isWebcamSidebarCollapsed ? 0 : 160,
-                        right: 'auto',
-                        transform: 'translateY(-50%)',
-                        zIndex: 2000,
-                        background: 'rgba(30, 41, 59, 0.95)',
-                        color: 'rgba(255,255,255,0.8)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderLeft: 'none',
-                        borderRadius: '0 8px 8px 0',
-                        width: '28px',
-                        height: '64px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
-                      }
+                      position: 'absolute',
+                      top: '50%',
+                      left: isWebcamSidebarCollapsed ? 0 : 160,
+                      right: 'auto',
+                      transform: 'translateY(-50%)',
+                      zIndex: 2000,
+                      background: 'rgba(30, 41, 59, 0.95)',
+                      color: 'rgba(255,255,255,0.8)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      borderLeft: 'none',
+                      borderRadius: '0 8px 8px 0',
+                      width: '28px',
+                      height: '64px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                      boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
+                    }
                 }
                 title={isWebcamSidebarCollapsed ? 'Expand Webcams' : 'Collapse Webcams'}
               >
@@ -2251,9 +2332,8 @@ function VideoConferenceComponent(props: {
 
           {/* Dynamic layout injections */}
           <style>{`
-            ${
-              hasScreenShare
-                ? `
+            ${hasScreenShare
+              ? `
               /* Clean, Native-Friendly Screenshare Layout Overrides */
               
               /* 1. Reset base containment so we can fill the window safely */
@@ -2332,14 +2412,14 @@ function VideoConferenceComponent(props: {
               }
 
               /* 4. Hide all redundant LiveKit controls (Maximize, PiP, etc.) from the screenshare tile entirely */
-              .sky-meet-video-wrapper .lk-focus-layout button,
-              .sky-meet-video-wrapper .lk-focus-layout .lk-button,
-              .sky-meet-video-wrapper .lk-focus-layout .lk-focus-toggle-button,
-              .sky-meet-video-wrapper .lk-focus-layout [class*="button"],
-              .sky-meet-video-wrapper .lk-focus-layout [class*="action"],
-              .sky-meet-video-wrapper .lk-focus-layout [class*="lk-pip"],
-              .sky-meet-video-wrapper .lk-focus-layout [class*="focus-toggle"],
-              .sky-meet-video-wrapper .lk-focus-layout [class*="lk-participant-metadata"] {
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile button,
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile .lk-button,
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile .lk-focus-toggle-button,
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="button"],
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="action"],
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="lk-pip"],
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="focus-toggle"],
+              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="lk-participant-metadata"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;
@@ -2400,7 +2480,7 @@ function VideoConferenceComponent(props: {
               }
 
             `
-                : ''
+              : ''
             }
 
             /* ═══ Always-available styles (floating panel, chat overlay) ═══ */
@@ -2719,6 +2799,7 @@ function VideoConferenceComponent(props: {
           isRecording={isRecording}
           onOpenRecordPopup={() => setShowRecordPopup(true)}
           onStopRecording={() => handleToggleRecording('stop')}
+          onOpenHelp={() => setShowHelp(true)}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
@@ -2883,9 +2964,10 @@ function VideoConferenceComponent(props: {
           .kloud-btn-text { background: none; border: none; font-size: 14px; font-weight: 500; color: #4b5563; cursor: pointer; padding: 8px 16px; border-radius: 4px; }
           .kloud-btn-text:hover { background: #f3f4f6; }
         `}</style>
-        
+
         <DebugMode />
         <RecordingIndicator />
+        <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       </RoomContext.Provider>
     </div>
   );

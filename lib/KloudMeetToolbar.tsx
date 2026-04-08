@@ -55,6 +55,8 @@ interface KloudMeetToolbarProps {
   isRecording?: boolean;
   onOpenRecordPopup?: () => void;
   onStopRecording?: () => void;
+  /** Opens the Help modal */
+  onOpenHelp?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -88,6 +90,7 @@ export function KloudMeetToolbar({
   isRecording,
   onOpenRecordPopup,
   onStopRecording,
+  onOpenHelp,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const { t } = useI18n();
@@ -709,6 +712,7 @@ export function KloudMeetToolbar({
                 isRecording={isRecording}
                 onOpenRecordPopup={onOpenRecordPopup}
                 onStopRecording={onStopRecording}
+                onOpenHelp={onOpenHelp}
               />
             </div>
           </div>
@@ -741,6 +745,7 @@ export function KloudMeetToolbar({
               isRecording={isRecording}
               onOpenRecordPopup={onOpenRecordPopup}
               onStopRecording={onStopRecording}
+              onOpenHelp={onOpenHelp}
             />
           </div>
         </div>
@@ -838,6 +843,7 @@ export function KloudMeetToolbar({
                         isRecording={isRecording}
                         onOpenRecordPopup={onOpenRecordPopup}
                         onStopRecording={onStopRecording}
+                        onOpenHelp={onOpenHelp}
                       />
                     </div>
                   )}
@@ -870,6 +876,7 @@ function ActiveSheetContent({
   isRecording,
   onOpenRecordPopup,
   onStopRecording,
+  onOpenHelp,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -931,6 +938,10 @@ function ActiveSheetContent({
           <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Setting'); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
             App & Device Settings
+          </button>
+          <button className={styles.actionSheetItem} onClick={() => { onOpenHelp?.(); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
+            {t('toolbar.help')}
           </button>
         </>
       )}
