@@ -80,6 +80,29 @@ h2 a {
 }
 
 /* ═══════════════════════════════════════════════════
+   Camera-off: hide default avatar, show name centered
+   ═══════════════════════════════════════════════════ */
+
+/* Hide the default SVG avatar figure when camera is off */
+.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder svg {
+  display: none !important;
+}
+
+/* Show participant name centered in placeholder via data attribute */
+.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
+  content: attr(data-lk-name);
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  letter-spacing: 0.03em;
+}
+
+/* Hide the name in the bottom metadata bar (it's now shown centered above) */
+.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-metadata .lk-participant-name {
+  display: none !important;
+}
+
+/* ═══════════════════════════════════════════════════
    PreJoin page — Purple/White theme overrides
    ═══════════════════════════════════════════════════ */
 .kloud-prejoin-wrapper {
