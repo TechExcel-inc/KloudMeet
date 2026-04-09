@@ -704,6 +704,8 @@ function VideoConferenceComponent(props: {
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
+  const [showWebcamSidebar, setShowWebcamSidebar] = React.useState(false);
+  const [webcamSidebarSettingsOpen, setWebcamSidebarSettingsOpen] = React.useState(false);
 
   const handleToggleRecording = async (action: 'start' | 'stop') => {
     try {
@@ -1699,6 +1701,20 @@ function VideoConferenceComponent(props: {
     return () => clearInterval(interval);
   }, []);
 
+  // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
+  React.useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (!e.data || typeof e.data !== 'object') return;
+      if (e.data.type === 'Kloud-ShowWebcamView') {
+        setShowWebcamSidebar(true);
+      } else if (e.data.type === 'Kloud-HideWebcamView') {
+        setShowWebcamSidebar(false);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   // Draggable floating webcam panel state
   const floatingRef = React.useRef<HTMLDivElement>(null);
   const [floatingPos, setFloatingPos] = React.useState({ x: 12, y: 12 });
@@ -1966,16 +1982,132 @@ function VideoConferenceComponent(props: {
         >
           {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share, OR presenter sharing) */}
           {isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) && (
-            <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-              <LiveDocView
-                meetingRoomName={meetingRoomName}
-                participantName={props.userChoices.username}
-                livedocInstanceId={livedocInstanceId}
-                hostInitError={livedocInitError}
-                hostInitInProgress={livedocInitInProgress}
-                isHost={isHost}
-              />
-            </div>
+            <>
+              <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+                <LiveDocView
+                  meetingRoomName={meetingRoomName}
+                  participantName={props.userChoices.username}
+                  livedocInstanceId={livedocInstanceId}
+                  hostInitError={livedocInitError}
+                  hostInitInProgress={livedocInitInProgress}
+                  isHost={isHost}
+                />
+              </div>
+              {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
+              {showWebcamSidebar && (() => {
+                const allP = [
+                  { id: 'local' as string, name: props.userChoices.username || 'You', participant: room.localParticipant },
+                  ...Array.from(room.remoteParticipants.values()).map((p) => ({
+                    id: p.identity,
+                    name: p.name || p.identity || '??',
+                    participant: p as any,
+                  })),
+                ];
+
+                const switchToFloating = () => {
+                  setShowWebcamSidebar(false);
+                };
+
+                const handleFileClick = () => {
+                  // Switch to floating mode
+                  setShowWebcamSidebar(false);
+                  // Send message to iframe
+                  const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+                  if (iframe?.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'Kloud-ShowFilePanel', Show: 1 }, '*');
+                  }
+                };
+
+                return (
+                  <div className="webcam-sidebar-panel">
+                    {/* Header: settings (left) + file icon (right) */}
+                    <div className="webcam-sidebar-header">
+                      <div style={{ position: 'relative' }}>
+                        <button
+                          className="webcam-sidebar-icon-btn"
+                          onClick={() => setWebcamSidebarSettingsOpen(!webcamSidebarSettingsOpen)}
+                          title="Settings"
+                        >
+                          {/* Gear icon */}
+                          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="3" />
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                          </svg>
+                        </button>
+                        {webcamSidebarSettingsOpen && (
+                          <div className="webcam-sidebar-dropdown">
+                            <button
+                              className="webcam-sidebar-dropdown-item active"
+                              onClick={() => setWebcamSidebarSettingsOpen(false)}
+                            >
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="18" rx="1" /><rect x="14" y="3" width="7" height="18" rx="1" /></svg>
+                              Sidebar
+                            </button>
+                            <button
+                              className="webcam-sidebar-dropdown-item"
+                              onClick={() => { setWebcamSidebarSettingsOpen(false); switchToFloating(); handleFileClick() }}
+                            >
+                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="3" /><rect x="10" y="4" width="10" height="10" rx="2" /></svg>
+                              Floating
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        className="webcam-sidebar-icon-btn file-btn"
+                        onClick={handleFileClick}
+                        title="Show file panel"
+                      >
+                        {/* File/document icon */}
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                          <polyline points="14 2 14 8 20 8" />
+                          <line x1="16" y1="13" x2="8" y2="13" />
+                          <line x1="16" y1="17" x2="8" y2="17" />
+                          <polyline points="10 9 9 9 8 9" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="webcam-sidebar-tiles">
+                      {allP.map((p) => {
+                        const camPub = p.participant?.getTrackPublication(Track.Source.Camera);
+                        const micPub = p.participant?.getTrackPublication(Track.Source.Microphone);
+                        const hasVideo = camPub?.track && !camPub.isMuted;
+                        const micMuted = !micPub?.track || micPub.isMuted;
+                        return (
+                          <div key={p.id} className="webcam-sidebar-tile">
+                            <div className="webcam-sidebar-video">
+                              {hasVideo && camPub?.track ? (
+                                <VideoTrack
+                                  trackRef={{
+                                    participant: p.participant,
+                                    source: Track.Source.Camera,
+                                    publication: camPub,
+                                  }}
+                                />
+                              ) : (
+                                <div className="webcam-sidebar-avatar">
+                                  {p.name.slice(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                            <div className="webcam-sidebar-meta">
+                              {micMuted && (
+                                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style={{ opacity: 0.6 }}>
+                                  <path d="M12.227 11.52a5.477 5.477 0 0 0 1.246-2.97.5.5 0 0 0-.995-.1 4.478 4.478 0 0 1-.962 2.359l-1.07-1.07C10.794 9.247 11 8.647 11 8V3a3 3 0 0 0-6 0v1.293L1.354.646a.5.5 0 1 0-.708.708l14 14a.5.5 0 0 0 .708-.708zM8 12.5c.683 0 1.33-.152 1.911-.425l.743.743c-.649.359-1.378.59-2.154.66V15h2a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1h2v-1.522a5.502 5.502 0 0 1-4.973-4.929.5.5 0 0 1 .995-.098A4.5 4.5 0 0 0 8 12.5z" />
+                                  <path d="M8.743 10.907 5 7.164V8a3 3 0 0 0 3.743 2.907z" />
+                                </svg>
+                              )}
+                              <span className="webcam-sidebar-name">{p.name}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </>
           )}
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
@@ -2175,7 +2307,7 @@ function VideoConferenceComponent(props: {
           </div>
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
-          {activeView !== 'webcam' &&
+          {activeView !== 'webcam' && !showWebcamSidebar &&
             (screenShareActive || (activeView === 'liveDoc' && !hasScreenShare)) &&
             (() => {
               const allParticipants = [
@@ -2689,6 +2821,134 @@ function VideoConferenceComponent(props: {
                text-overflow: ellipsis;
                white-space: nowrap;
                text-align: center;
+            }
+
+            /* ── Right webcam sidebar (LiveDoc + postMessage) ─── */
+            .webcam-sidebar-panel {
+               width: 200px;
+               flex-shrink: 0;
+               background: #0f172a;
+               border-left: 1px solid rgba(255,255,255,0.08);
+               display: flex;
+               flex-direction: column;
+               overflow-y: auto;
+               overflow-x: hidden;
+            }
+            .webcam-sidebar-tiles {
+               display: flex;
+               flex-direction: column;
+               gap: 8px;
+               padding: 10px 10px;
+            }
+            .webcam-sidebar-tile {
+               border-radius: 10px;
+               overflow: hidden;
+               background: #1e293b;
+            }
+            .webcam-sidebar-video {
+               width: 100%;
+               aspect-ratio: 16 / 10;
+               position: relative;
+               background: #0f172a;
+            }
+            .webcam-sidebar-video video {
+               width: 100%;
+               height: 100%;
+               object-fit: cover;
+            }
+            .webcam-sidebar-avatar {
+               width: 100%;
+               height: 100%;
+               background: linear-gradient(135deg, #3b82f6, #6366f1);
+               color: #fff;
+               font-size: 22px;
+               font-weight: 700;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+            }
+            .webcam-sidebar-meta {
+               display: flex;
+               align-items: center;
+               gap: 4px;
+               padding: 4px 8px 6px;
+               background: rgba(0,0,0,0.45);
+               color: rgba(255,255,255,0.8);
+               font-size: 11px;
+               font-weight: 500;
+            }
+            .webcam-sidebar-name {
+               overflow: hidden;
+               text-overflow: ellipsis;
+               white-space: nowrap;
+            }
+            .webcam-sidebar-header {
+               display: flex;
+               align-items: center;
+               justify-content: space-between;
+               padding: 8px 10px;
+               border-bottom: 1px solid rgba(255,255,255,0.08);
+               flex-shrink: 0;
+            }
+            .webcam-sidebar-icon-btn {
+               background: none;
+               border: none;
+               color: rgba(255,255,255,0.7);
+               cursor: pointer;
+               padding: 6px;
+               border-radius: 6px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               transition: background 0.15s, color 0.15s;
+            }
+            .webcam-sidebar-icon-btn:hover {
+               background: rgba(255,255,255,0.1);
+               color: #fff;
+            }
+            .webcam-sidebar-dropdown {
+               position: absolute;
+               top: 100%;
+               left: 0;
+               margin-top: 4px;
+               background: rgba(15, 23, 42, 0.98);
+               border: 1px solid rgba(255,255,255,0.12);
+               border-radius: 10px;
+               padding: 4px;
+               min-width: 140px;
+               box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+               z-index: 100;
+            }
+            .webcam-sidebar-dropdown-item {
+               display: flex;
+               align-items: center;
+               gap: 8px;
+               width: 100%;
+               background: none;
+               border: none;
+               color: rgba(255,255,255,0.75);
+               font-size: 12px;
+               font-weight: 500;
+               padding: 7px 10px;
+               border-radius: 7px;
+               cursor: pointer;
+               transition: background 0.15s;
+            }
+            .webcam-sidebar-dropdown-item:hover {
+               background: rgba(255,255,255,0.08);
+               color: #fff;
+            }
+            .webcam-sidebar-dropdown-item.active {
+               background: rgba(124, 58, 237, 0.25);
+               color: #a78bfa;
+            }
+            .webcam-sidebar-icon-btn.file-btn {
+               background: rgba(124, 58, 237, 0.3);
+               color: #a78bfa;
+            }
+            .webcam-sidebar-icon-btn.file-btn:hover {
+               background: rgba(124, 58, 237, 0.5);
+               color: #c4b5fd;
             }
 
             /* 8. Chat Overlay Panel — always available */
