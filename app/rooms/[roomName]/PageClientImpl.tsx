@@ -628,6 +628,7 @@ export function PageClientImpl(props: {
 }
 
 function MobileVideoLayout() {
+  const { t } = useI18n();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -668,6 +669,7 @@ function VideoConferenceComponent(props: {
     codec: VideoCodec;
   };
 }) {
+  const { t } = useI18n();
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
@@ -1977,7 +1979,12 @@ function VideoConferenceComponent(props: {
             {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !isRemoteControlMode && (
               <div className="screenshare-overlay-container">
                 <div className="screenshare-overlay-badge">
-                  {!screenShareActive ? "Viewing [Attendee]'s screen." : 'Preview: Another Tab.'}
+                  {(() => {
+                    if (screenShareActive) return t('toolbar.previewAnotherTab');
+                    const sharing = Array.from(room.remoteParticipants.values()).find(p => p.isScreenShareEnabled);
+                    const name = sharing?.name || sharing?.identity || 'Attendee';
+                    return t('toolbar.viewingAttendeeScreen', { name });
+                  })()}
                 </div>
               </div>
             )}
@@ -2027,10 +2034,10 @@ function VideoConferenceComponent(props: {
                     <polygon points="10,8 18,12 10,16" fill="white" />
                   </svg>
                   <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
-                    点击播放屏幕共享
+                    {t('toolbar.clickToPlay')}
                   </span>
                   <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
-                    点击即可观看对方的屏幕
+                    {t('toolbar.clickToWatch')}
                   </span>
                 </button>
               </div>
@@ -2101,7 +2108,7 @@ function VideoConferenceComponent(props: {
                       boxShadow: '4px 0 12px rgba(0,0,0,0.5)',
                     }
                 }
-                title={isWebcamSidebarCollapsed ? 'Expand Webcams' : 'Collapse Webcams'}
+                title={isWebcamSidebarCollapsed ? t('toolbar.expandWebcams') : t('toolbar.collapseWebcams')}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -2125,7 +2132,7 @@ function VideoConferenceComponent(props: {
             (screenShareActive || (activeView === 'liveDoc' && !hasScreenShare)) &&
             (() => {
               const allParticipants = [
-                { id: 'local', name: props.userChoices.username || 'You' },
+                { id: 'local', name: props.userChoices.username || t('toolbar.you') },
                 ...Array.from(room.remoteParticipants.values()).map((p) => ({
                   id: p.identity,
                   name: p.name || p.identity || '??',
@@ -2185,7 +2192,7 @@ function VideoConferenceComponent(props: {
                           setFloatingExpanded(true);
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
-                        title="Expand webcams"
+                        title={t('toolbar.expandWebcams')}
                       >
                         <svg
                           viewBox="0 0 24 24"
@@ -2205,7 +2212,7 @@ function VideoConferenceComponent(props: {
                         <>
                           <div className="floating-expanded-header">
                             <span className="floating-expanded-title">
-                              {allParticipants.length} Participants
+                              {t('toolbar.nParticipants', { n: allParticipants.length })}
                             </span>
                             <button
                               className="floating-chevron-btn up"
@@ -2214,7 +2221,7 @@ function VideoConferenceComponent(props: {
                                 setFloatingExpanded(false);
                               }}
                               onMouseDown={(e) => e.stopPropagation()}
-                              title="Collapse webcams"
+                              title={t('toolbar.collapseWebcams')}
                             >
                               <svg
                                 viewBox="0 0 24 24"
@@ -2268,7 +2275,7 @@ function VideoConferenceComponent(props: {
           {chatOpen && isToolbarMobile && (
             <div className="chat-overlay-panel">
               <div className="chat-overlay-header">
-                <span>Chat</span>
+                <span>{t('toolbar.chat')}</span>
                 <button className="chat-overlay-close" onClick={() => setChatOpen(false)}>
                   ✕
                 </button>
@@ -2282,7 +2289,7 @@ function VideoConferenceComponent(props: {
           {attendeeOpen && isToolbarMobile && (
             <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
               <div className="chat-overlay-header">
-                <span>Participants</span>
+                <span>{t('toolbar.participants')}</span>
                 <button className="chat-overlay-close" onClick={() => setAttendeeOpen(false)}>
                   ✕
                 </button>
@@ -2900,22 +2907,22 @@ function VideoConferenceComponent(props: {
           <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordPopup(false)}>
             <div className="kloud-modal kloud-modal-side" onMouseDown={e => e.stopPropagation()}>
               <div className="kloud-modal-header">
-                <h3>Recording</h3>
+                <h3>{t('toolbar.recordingHeader')}</h3>
                 <button className="kloud-modal-close" onClick={() => setShowRecordPopup(false)}>✕</button>
               </div>
               <div className="kloud-modal-body" style={{ textAlign: 'center' }}>
                 <div style={{ background: '#f3f4f6', borderRadius: '8px', padding: '24px', marginBottom: '24px' }}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="#6d28d9" strokeWidth="1.5" width="64" height="64"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill="#ef4444" stroke="none" /></svg>
-                  <div style={{ marginTop: '16px', fontWeight: 600, color: '#111827' }}>Record your video call</div>
+                  <div style={{ marginTop: '16px', fontWeight: 600, color: '#111827' }}>{t('toolbar.recordVideoCall')}</div>
                   <p style={{ fontSize: '13px', color: '#4b5563', marginTop: '8px' }}>
-                    The recording will be saved in your KloudMeet dashboard. When appropriate, a link will be available for you to download and share.
+                    {t('toolbar.recordingDesc')}
                   </p>
                 </div>
                 <button className="kloud-btn-primary" style={{ width: '100%' }} onClick={() => {
                   setShowRecordPopup(false);
                   setShowRecordingConsent(true);
                 }}>
-                  Start recording
+                  {t('toolbar.startRecording')}
                 </button>
               </div>
             </div>
@@ -2926,16 +2933,16 @@ function VideoConferenceComponent(props: {
           <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordingConsent(false)}>
             <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
               <div className="kloud-modal-body">
-                <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827' }}>Make sure everyone is ready</h3>
+                <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827' }}>{t('toolbar.everyoneReady')}</h3>
                 <p style={{ fontSize: '14px', color: '#4b5563', lineHeight: 1.5, margin: '0 0 24px' }}>
-                  Recording a meeting without the consent of all participants may be illegal and actionable. You should obtain consent to record this meeting from all participants, including external guests and guests who join late.
+                  {t('toolbar.consentNotice')}
                 </p>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                  <button className="kloud-btn-text" onClick={() => setShowRecordingConsent(false)}>Cancel</button>
+                  <button className="kloud-btn-text" onClick={() => setShowRecordingConsent(false)}>{t('prejoin.cancel')}</button>
                   <button className="kloud-btn-text" style={{ color: '#2563eb', fontWeight: 600 }} onClick={() => {
                     setShowRecordingConsent(false);
                     handleToggleRecording('start');
-                  }}>Start</button>
+                  }}>{t('prejoin.startNow')}</button>
                 </div>
               </div>
             </div>

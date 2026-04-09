@@ -402,7 +402,7 @@ export function KloudMeetToolbar({
                   )}
                 </svg>
               </button>
-              <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title="Microphone Settings">
+              <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
               </MediaDeviceMenu>
             </div>
@@ -425,7 +425,7 @@ export function KloudMeetToolbar({
                   )}
                 </svg>
               </button>
-              <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title="Camera Settings">
+              <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
               </MediaDeviceMenu>
             </div>
@@ -512,7 +512,7 @@ export function KloudMeetToolbar({
                 </svg>
               )}
             </button>
-            <MediaDeviceMenu kind="audioinput" className={styles.chevron} title="Microphone Settings">
+            <MediaDeviceMenu kind="audioinput" className={styles.chevron} title={t('toolbar.micSettings')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
             </MediaDeviceMenu>
           </div>
@@ -532,16 +532,16 @@ export function KloudMeetToolbar({
                 </svg>
               )}
             </button>
-            <MediaDeviceMenu kind="videoinput" className={styles.chevron} title="Camera Settings">
+            <MediaDeviceMenu kind="videoinput" className={styles.chevron} title={t('toolbar.camSettings')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
             </MediaDeviceMenu>
           </div>
 
           <div className={styles.controlGroup}>
-            <button className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title="Speaker Settings" onClick={() => showComingSoon('Speaker Settings')}>
+            <button className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title={t('toolbar.speakerSettings')} onClick={() => showComingSoon(t('toolbar.speakerSettings'))}>
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
             </button>
-            <MediaDeviceMenu kind="audiooutput" className={styles.chevron} title="Speaker Settings">
+            <MediaDeviceMenu kind="audiooutput" className={styles.chevron} title={t('toolbar.speakerSettings')}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
             </MediaDeviceMenu>
           </div>
@@ -575,7 +575,7 @@ export function KloudMeetToolbar({
             className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
             onClick={handleShareScreenClick}
             style={{ opacity: canShareScreen ? 1 : 0.5, cursor: canShareScreen ? 'pointer' : 'not-allowed' }}
-            title={!canShareScreen ? 'Someone else is already sharing' : 'Share Screen'}
+            title={!canShareScreen ? t('toolbar.shareScreenTooltip') : t('toolbar.shareScreen')}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -588,7 +588,7 @@ export function KloudMeetToolbar({
               <button
                 className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleDrawingMode}
-                title={'Annotate Screenshare'}
+                title={t('toolbar.annotateTooltip')}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
@@ -599,7 +599,7 @@ export function KloudMeetToolbar({
               <button
                 className={`${styles.tabBtn} ${isRemoteControlMode ? styles.tabBtnCheck : ''} ${remoteControlPending ? styles.tabBtnCheck : ''}`}
                 onClick={onToggleRemoteControlMode}
-                title={remoteControlPending ? 'Cancel Control Request' : isRemoteControlMode ? 'Stop Remote Control' : 'Request Remote Control'}
+                title={remoteControlPending ? t('toolbar.cancelRequest') : isRemoteControlMode ? t('toolbar.stopControl') : t('toolbar.requestControl')}
                 style={remoteControlPending ? { position: 'relative' } : undefined}
               >
                 {remoteControlPending ? (
@@ -891,15 +891,15 @@ function ActiveSheetContent({
         <>
           <button className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`} onClick={() => { onViewChange('liveDoc'); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-            Live Doc & Collaborative Canvas
+            {t('toolbar.liveDocCanvas')}
           </button>
           <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-            Webcam Grid Video
+            {t('toolbar.webcamGrid')}
           </button>
           <button className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`} onClick={() => { handleShareScreenClick(); setActiveSheet(null); }} style={{ opacity: canShareScreen ? 1 : 0.5 }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-            Screen Share Layout
+            {t('toolbar.screenShareLayout')}
           </button>
         </>
       )}
@@ -924,7 +924,7 @@ function ActiveSheetContent({
             setActiveSheet(null);
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
-            Copy Invite Link
+            {t('toolbar.copyInviteLink')}
           </button>
           <button className={styles.actionSheetItem} onClick={() => {
             const currentUrl = new URL(window.location.href);
@@ -933,11 +933,11 @@ function ActiveSheetContent({
             setActiveSheet(null);
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-            Launch in App
+            {t('toolbar.launchInApp')}
           </button>
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Setting'); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.appDeviceSettings')); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
-            App & Device Settings
+            {t('toolbar.appDeviceSettings')}
           </button>
           <button className={styles.actionSheetItem} onClick={() => { onOpenHelp?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
@@ -948,42 +948,42 @@ function ActiveSheetContent({
 
       {activeSheet === 'recording' && (
         <>
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Pause Recording'); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.pauseRecording')); setActiveSheet(null); }}>
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-             Pause Recording
+             {t('toolbar.pauseRecording')}
           </button>
           <button className={styles.actionSheetItem} style={{ color: '#ef4444' }} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-             Stop Recording
+             {t('toolbar.stopRecording')}
           </button>
 
           <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
           
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Live Transcription'); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.liveTranscript')); setActiveSheet(null); }}>
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
-             Live Transcript (Speech to Text)
+             {t('toolbar.liveTranscript')}
           </button>
 
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Cloud Recording Settings</div>
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingSettings')}</div>
           
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon('Cloud Recording Mode'); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.cloudRecordingMode')); setActiveSheet(null); }}>
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
-             Cloud Recording Mode
+             {t('toolbar.cloudRecordingMode')}
           </button>
 
           <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
-                Sync Transcript with Video
+                {t('toolbar.syncTranscript')}
              </div>
              <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
           </label>
 
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>Local Permissions</div>
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.localPermissions')}</div>
           
           <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                Only Host Can Record
+                {t('toolbar.onlyHostRecord')}
              </div>
              <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
           </label>
@@ -994,12 +994,12 @@ function ActiveSheetContent({
         <>
           <button className={styles.actionSheetItem} onClick={() => { onExit(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-            Leave the meeting
+            {t('toolbar.leaveTheMeeting')}
           </button>
           {canEndForAll && (
             <button className={styles.actionSheetItem} onClick={() => { if (onEndForAll) onEndForAll(); else onExit(); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-              End meeting for everyone
+              {t('toolbar.endForEveryone')}
             </button>
           )}
         </>
