@@ -784,6 +784,10 @@ function VideoConferenceComponent(props: {
   // Check for any active screen share tracks in the room
   const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
   const hasScreenShare = screenShareTracks.length > 0;
+  // Whether the local participant is the one sharing their screen (derived from tracks, not state)
+  const isLocalScreenShare = screenShareTracks.some(
+    (t) => t.participant?.identity === room.localParticipant.identity,
+  );
 
   // 手机端观看他人共享时默认折叠头像栏，优先看到共享画面
   React.useEffect(() => {
@@ -826,7 +830,7 @@ function VideoConferenceComponent(props: {
   // React to screen share status logic automatically
   React.useEffect(() => {
     if (hasScreenShare) {
-      if (screenShareActive) {
+      if (isLocalScreenShare) {
         // Reset detection flag — mirror-block won't activate until detection completes
         setSurfaceDetected(false);
         setTimeout(() => {
@@ -851,14 +855,14 @@ function VideoConferenceComponent(props: {
             setSurfaceDetected(true);
           }
         }, 500);
+        // Presenter: switch to liveDoc so they don't see their own screen share
+        setActiveView('liveDoc');
+        broadcastViewChangeRef.current?.('shareScreen');
       } else {
         setScreenShareSurface('unknown');
         setSurfaceDetected(false);
-      }
-      setActiveView('shareScreen');
-      // Broadcast to all: switch to shareScreen view
-      if (screenShareActive) {
-        broadcastViewChangeRef.current?.('shareScreen');
+        // Other participants: switch to shareScreen to view the shared desktop
+        setActiveView('shareScreen');
       }
     } else {
       setScreenShareActive(false);
@@ -867,15 +871,15 @@ function VideoConferenceComponent(props: {
       setScreenShareSurface('unknown');
       setSurfaceDetected(false);
       setActiveView((prev) => {
-        if (prev === 'shareScreen') {
-          // Broadcast fallback to webcam
-          broadcastViewChangeRef.current?.('webcam');
-          return 'webcam';
+        if (prev === 'shareScreen' || prev === 'liveDoc') {
+          // Screen share ended: everyone goes back to liveDoc
+          broadcastViewChangeRef.current?.('liveDoc');
+          return 'liveDoc';
         }
         return prev;
       });
     }
-  }, [hasScreenShare, screenShareActive, room.localParticipant]);
+  }, [hasScreenShare, isLocalScreenShare, room.localParticipant]);
 
   // Ref for broadcast function (defined later in DataChannel sync block)
   const broadcastViewChangeRef = React.useRef<((view: ViewMode) => void) | null>(null);
@@ -885,7 +889,9 @@ function VideoConferenceComponent(props: {
       if (view !== 'shareScreen') {
         setIsDrawingMode(false);
         setIsRemoteControlMode(false);
-        if (screenShareActive) {
+        // Stop screen share only if switching to a non-sharing view that's not liveDoc
+        // (Presenter stays in liveDoc while sharing — don't stop share for that case)
+        if (screenShareActive && view !== 'liveDoc') {
           setScreenShareActive(false);
           room.localParticipant.setScreenShareEnabled(false).catch(console.error);
         }
@@ -1233,8 +1239,19 @@ function VideoConferenceComponent(props: {
     const next = !screenShareActive;
     setScreenShareActive(next);
 
+    if (next) {
+      // Immediately switch presenter to liveDoc and broadcast shareScreen to others
+      setActiveView('liveDoc');
+      broadcastViewChangeRef.current?.('shareScreen');
+    }
+
     room.localParticipant.setScreenShareEnabled(next).catch((e) => {
       setScreenShareActive(false);
+      // Revert view to liveDoc if screen share was cancelled/failed
+      if (next) {
+        setActiveView('liveDoc');
+        broadcastViewChangeRef.current?.('liveDoc');
+      }
       console.error(e);
     });
   }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
@@ -1348,11 +1365,15 @@ function VideoConferenceComponent(props: {
   });
 
   // Keep authState in sync when host changes view locally
+  // Note: when host is the presenter (isLocalScreenShare), their local view is 'liveDoc'
+  // but other participants should be in 'shareScreen', so store 'shareScreen' as authoritative.
   React.useEffect(() => {
     if (isHost) {
-      authState.current.view = activeView;
+      authState.current.view = (activeView === 'liveDoc' && isLocalScreenShare)
+        ? 'shareScreen'
+        : activeView;
     }
-  }, [isHost, activeView]);
+  }, [isHost, activeView, isLocalScreenShare]);
 
   React.useEffect(() => {
     if (isHost) {
@@ -1475,13 +1496,19 @@ function VideoConferenceComponent(props: {
         const senderIdentity = participant?.identity;
 
         if (msg.type === 'VIEW_CHANGE') {
-          // View change from host/presenter — update immediately
-          setActiveView(msg.view as ViewMode);
+          // Skip messages from self — presenter broadcasts 'shareScreen' to others
+          // but stays in 'liveDoc' themselves
+          if (senderIdentity !== room.localParticipant.identity) {
+            setActiveView(msg.view as ViewMode);
+          }
         } else if (msg.type === 'LIVEDOC_INSTANCE' && typeof msg.livedocInstanceId === 'string') {
           setLivedocInstanceId(msg.livedocInstanceId);
         } else if (msg.type === 'CORRECTION') {
           // Correction from host — update to authoritative state
-          setActiveView(msg.view as ViewMode);
+          // But don't override presenter's liveDoc view (they intentionally diverge)
+          if (!(isLocalScreenShare && msg.view === 'shareScreen')) {
+            setActiveView(msg.view as ViewMode);
+          }
           if (msg.presenter !== undefined) {
             setCopresenterIdentities(Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : []);
           }
@@ -1640,7 +1667,7 @@ function VideoConferenceComponent(props: {
       sendMeetingMsg(
         {
           type: 'HEARTBEAT',
-          view: activeView,
+          view: (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
           presenters: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
@@ -1650,7 +1677,27 @@ function VideoConferenceComponent(props: {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [room, activeView, copresenterIdentities, livedocInstanceId, sendMeetingMsg]);
+  }, [room, activeView, isLocalScreenShare, copresenterIdentities, livedocInstanceId, sendMeetingMsg]);
+
+  // Sync participant names into placeholder elements so CSS can display name in the center
+  // when camera is off (replaces the default SVG avatar with the participant's name)
+  React.useEffect(() => {
+    const syncNames = () => {
+      document.querySelectorAll('.lk-participant-tile').forEach((tile) => {
+        const nameEl = tile.querySelector('.lk-participant-name');
+        const placeholder = tile.querySelector('.lk-participant-placeholder');
+        if (nameEl && placeholder) {
+          const name = nameEl.textContent?.trim() || '';
+          if (placeholder.getAttribute('data-lk-name') !== name) {
+            placeholder.setAttribute('data-lk-name', name);
+          }
+        }
+      });
+    };
+    syncNames();
+    const interval = setInterval(syncNames, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Draggable floating webcam panel state
   const floatingRef = React.useRef<HTMLDivElement>(null);
@@ -1917,8 +1964,8 @@ function VideoConferenceComponent(props: {
             display: 'flex',
           }}
         >
-          {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share) */}
-          {isPureLiveDoc && !hasScreenShare && (
+          {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share, OR presenter sharing) */}
+          {isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) && (
             <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
               <LiveDocView
                 meetingRoomName={meetingRoomName}
@@ -1937,7 +1984,7 @@ function VideoConferenceComponent(props: {
             style={{
               flex: 1,
               position: 'relative',
-              display: isPureLiveDoc && !hasScreenShare ? 'none' : 'block',
+              display: isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) ? 'none' : 'block',
             }}
           >
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
