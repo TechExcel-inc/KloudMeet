@@ -38,7 +38,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body data-lk-theme="default">
+      <body data-lk-theme="default" suppressHydrationWarning>
         <I18nProvider>
           <Toaster />
           {children}

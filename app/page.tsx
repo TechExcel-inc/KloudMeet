@@ -91,7 +91,8 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
   }, []);
 
   return (
-    <div className={styles.topToolbar}>
+    <nav className={styles.topNav}>
+      <div className={styles.navInner}>
       <div className={styles.toolbarLeft}>
         {onBack && (
           <button className={styles.iconBtn} onClick={onBack} aria-label={t('nav.goBack')} title={t('common.back')} style={{ marginRight: '1rem' }}>
@@ -105,7 +106,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           <KloudLogo />
         </div>
       </div>
-      <div className={styles.toolbarRight}>
+      <div className={styles.topNavRight}>
         {user && (
           <div className={styles.orgDropdownWrapper} ref={orgMenuRef} style={{ marginRight: '0.5rem' }}>
             <button 
@@ -153,7 +154,8 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           </div>
         )}
 
-        <button className={styles.iconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
+        {/* Help button */}
+        <button className={styles.topNavIconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
             <circle cx="12" cy="12" r="10"></circle>
             <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
@@ -161,7 +163,7 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           </svg>
         </button>
         <div style={{ position: 'relative' }} ref={langMenuRef}>
-          <button className={styles.iconBtn} aria-label={t('nav.langSelector')} onClick={() => setLangMenuOpen(!langMenuOpen)} style={{ paddingLeft: '0.65rem', paddingRight: '0.55rem' }}>
+          <button className={styles.topNavIconBtn} aria-label={t('nav.langSelector')} onClick={() => setLangMenuOpen(!langMenuOpen)} style={{ gap: '4px', paddingLeft: '0.75rem', paddingRight: '0.75rem' }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
               <circle cx="12" cy="12" r="10"></circle>
               <line x1="2" y1="12" x2="22" y2="12"></line>
@@ -246,7 +248,8 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
           </button>
         ))}
       </div>
-    </div>
+      </div>
+    </nav>
   );
 }
 
@@ -447,10 +450,7 @@ function AnonymousView({
             </svg>
           </a>
           
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '-12px', left: '0', background: '#f97316', color: 'white', fontSize: '0.62rem', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(249,115,22,0.3)', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              Apple Silicon Ready
-            </div>
+
             <a
               href="/api/download?os=mac"
               className={styles.downloadBtn}
@@ -469,9 +469,7 @@ function AnonymousView({
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
             </a>
-          </div>
         </div>
-
       </div>
 
       {/* ── Warning Message Overlay ── */}
@@ -708,10 +706,7 @@ function LoginView({
               </svg>
             </a>
             
-          <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', top: '-12px', left: '0', background: '#f97316', color: 'white', fontSize: '0.62rem', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', zIndex: 2, boxShadow: '0 2px 4px rgba(249,115,22,0.3)', whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
-              Apple Silicon Ready
-            </div>
+
             <a
               href="/api/download?os=mac"
               className={styles.downloadBtn}
@@ -730,7 +725,6 @@ function LoginView({
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
             </a>
-          </div>
           </div>
         </form>
       </div>
@@ -1145,6 +1139,8 @@ function DashboardView({
   const [earlyStartMeeting, setEarlyStartMeeting] = useState<any>(null);
   const [deletingMeeting, setDeletingMeeting] = useState<any>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [meetingView, setMeetingView] = useState<'upcoming' | 'past'>('upcoming');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -1358,6 +1354,46 @@ function DashboardView({
     }
   };
 
+  // Group meetings by date for Figma card layout
+  const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  const toLocalDateStr = (date: Date) =>
+    date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
+
+  const getDisplayDate = (m: any) => {
+    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+    const dateStr = toLocalDateStr(d);
+    const todayStr = toLocalDateStr(new Date());
+    const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const tomorrowStr = toLocalDateStr(tomorrowDate);
+    const yesterdayStr = toLocalDateStr(yesterdayDate);
+    if (dateStr === todayStr) return t('dash.today');
+    if (dateStr === tomorrowStr) return t('dash.tomorrow');
+    if (dateStr === yesterdayStr) return t('dash.yesterday');
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: userTZ });
+  };
+
+  const filteredMeetings = dbMeetings
+    .filter(m => {
+      if (meetingView === 'upcoming') return m.status !== 'ENDED' && m.status !== 'CANCELED';
+      return m.status === 'ENDED' || m.status === 'CANCELED';
+    })
+    .filter(m => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (m.title || '').toLowerCase().includes(q) ||
+             (m.roomName || '').toLowerCase().includes(q) ||
+             (m.createdByMember?.username || '').toLowerCase().includes(q);
+    });
+
+  const groupedMeetings = filteredMeetings.reduce((acc: Record<string, any[]>, m) => {
+    const label = getDisplayDate(m);
+    if (!acc[label]) acc[label] = [];
+    acc[label].push(m);
+    return acc;
+  }, {});
+
   return (
     <div className={styles.anonWrapper}>
       <TopToolbar 
@@ -1368,368 +1404,415 @@ function DashboardView({
         onOpenHelp={onOpenHelp}
         hideAvatar={false} 
       />
-      
 
-      <div className={styles.dashContainer}>
-      {/* New Meeting + Join Meeting row */}
-      <div className={styles.dashActions}>
-        <button className={styles.newMeetingBtn} onClick={handleNewMeeting}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-            <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          {t('dash.newMeeting')}
-        </button>
-        <div className={styles.dashJoinRow}>
-          <input
-            className={styles.dashJoinInput}
-            placeholder={t('anon.enterMeetingCode')}
-            value={joinCode}
-            onChange={(e) => setJoinCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
-          />
-          <button
-            className={styles.dashJoinBtn}
-            onClick={handleJoinMeeting}
-            disabled={!joinCode.trim()}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-              <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {t('dash.joinMeeting')}
-          </button>
-        </div>
-      </div>
+      <div className={styles.dashStickyTop}>
 
-      {/* Search + Schedule + Title */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '2rem 0 1rem', paddingBottom: '0.5rem', borderBottom: '1px solid #e5e7eb', flexWrap: 'wrap', gap: '1rem' }}>
-        <h3 style={{ fontSize: '1rem', color: '#4b5563', fontWeight: 600, margin: 0 }}>{t('dash.yourMeetings')}</h3>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <input
-            className={styles.dashSearchInput}
-            placeholder={t('dash.searchMeetings')}
-            onChange={() => toast.show(t('dash.searchSoon'))}
-            style={{ width: '250px', margin: 0 }}
-          />
-          <button
-            className={styles.scheduleBtn}
-            onClick={() => setShowScheduleModal(true)}
-            style={{ margin: 0 }}
-          >
-            {t('dash.scheduleMeeting')}
-          </button>
-        </div>
-      </div>
-      
-      {loadingMeetings ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>{t('dash.loadingMeetings')}</div>
-      ) : dbMeetings.length === 0 ? (
-        <div style={{ padding: '24px', textAlign: 'center', color: '#6b7280' }}>{t('dash.noMeetings')}</div>
-      ) : (
-        <div className={styles.dashTableContainer}>
-          <table className={styles.dashTable}>
-            <thead>
-              <tr>
-                <th style={{ minWidth: '180px' }}>{t('dash.meetingTitle')}</th>
-                <th style={{ minWidth: '140px' }}>
-                  {t('dash.created')} <span style={{ fontSize: '10px' }}>▼</span>
-                </th>
-                <th style={{ minWidth: '180px' }}>
-                  {t('dash.scheduled')} <span style={{ fontSize: '10px' }}>▼</span>
-                </th>
-                <th style={{ minWidth: '100px' }}>
-                  {t('dash.actual')}
-                </th>
-                <th>{t('dash.host')}</th>
-                <th>{t('dash.attendees')}</th>
-                <th>{t('dash.status')}</th>
-                <th style={{ textAlign: 'left', width: '150px' }}>{t('dash.action')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {dbMeetings.map((m, i) => {
-                const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
-                const cDate = new Date(m.createdAt);
-                const recording = m.recordings?.find((r: any) => r.status === 'READY');
-                const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-                const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
-
-                const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
-                const isHost = m.createdByMemberId === user.id;
-                const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
-                
-                const showCountdown = m.scheduledFor && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && diffMs <= 60 * 60 * 1000 && diffMs >= -15 * 60 * 1000;
-                let countdownText = '';
-                if (showCountdown) {
-                  const absDiff = Math.abs(diffMs);
-                  const mm = Math.floor(absDiff / 60000).toString().padStart(2, '0');
-                  const ss = Math.floor((absDiff % 60000) / 1000).toString().padStart(2, '0');
-                  countdownText = diffMs > 0 ? `Starts in ${mm}:${ss}` : `Overdue by ${mm}:${ss}`;
-                }
-
-                let displayStatusText = m.status; // 'ACTIVE', 'ENDED', 'ARCHIVED', 'CANCELED'
-                let displayStatusBadge = styles.statusFinished;
-                if (m.status === 'ACTIVE') {
-                  if (m.isActive) {
-                    displayStatusText = 'In Progress';
-                    displayStatusBadge = styles.statusInProgress;
-                  } else if (m.scheduledFor) {
-                    if (diffMs < 0) {
-                      displayStatusText = 'Past Due';
-                      displayStatusBadge = styles.statusPastDue;
-                    } else {
-                      displayStatusText = 'Scheduled';
-                      displayStatusBadge = styles.statusScheduled;
-                    }
-                  } else {
-                    displayStatusText = 'Created';
-                  }
-                } else if (m.status === 'ENDED') {
-                  displayStatusText = 'Finished';
-                } else if (m.status === 'CANCELED') {
-                  displayStatusText = 'Canceled';
-                  displayStatusBadge = styles.statusCanceled;
-                }
-
-                return (
-                  <tr key={m.id || i} className={styles.dashTableRow} onDoubleClick={() => setEditingMeeting(m)}>
-                    <td>
-                      <div className={styles.meetingNameCol}>
-                        <div className={styles.meetingAvatar}>
-                          <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14" style={{ color: '#fff' }}>
-                            <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                          </svg>
-                        </div>
-                        <span style={{ fontWeight: 500 }}>{m.title || m.roomName || 'Untitled Meeting'}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div>{cDate.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {cDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '2px' }}>By {m.createdByMember?.username}</div>
-                    </td>
-                    <td>
-                      {m.scheduledFor ? (
-                        <div>
-                          <div style={{ color: '#111827', fontWeight: 500, fontSize: '0.9rem' }}>
-                            {d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                          </div>
-                          {m.durationMinutes ? (
-                            <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '2px' }}>{m.durationMinutes} mins</div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div style={{ fontWeight: 500, color: '#4b5563', fontSize: '0.9rem' }}>Instant Meeting</div>
-                      )}
-                    </td>
-                    <td>
-                      {m.actualStartedAt ? (
-                        <>
-                          <div style={{ color: '#111827', fontSize: '0.9rem', fontWeight: 500 }}>
-                            {new Date(m.actualStartedAt).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }).replace(/\//g, '-')} {new Date(m.actualStartedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
-                          </div>
-                          {m.actualDurationMinutes ? (
-                            <div style={{ fontSize: '0.85rem', color: '#059669', marginTop: '2px', fontWeight: 600 }}>
-                              {m.actualDurationMinutes} mins
-                            </div>
-                          ) : m.isActive ? (
-                            <div style={{ fontSize: '0.85rem', color: '#ef4444', marginTop: '2px', fontWeight: 600 }}>
-                              {Math.max(1, Math.round((currentTime - new Date(m.actualStartedAt).getTime()) / 60000))} mins (ongoing)
-                            </div>
-                          ) : m.status === 'ENDED' ? (
-                            <div style={{ fontSize: '0.85rem', color: '#6b7280', marginTop: '2px' }}>
-                              —
-                            </div>
-                          ) : null}
-                        </>
-                      ) : (
-                        <div style={{ color: '#9ca3af', fontSize: '0.9rem', fontWeight: 500 }}>-</div>
-                      )}
-                    </td>
-                    <td>{m.createdByMember?.username || 'Unknown'}</td>
-                    <td>
-                      {m._count?.participants > 0 && (
-                        <div className={styles.attendeesBadge}>
-                          <div className={styles.attendeeAvatars}>
-                            <div className={styles.attendeeAvatarIcon}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                                <circle cx="12" cy="7" r="4"></circle>
-                              </svg>
-                            </div>
-                          </div>
-                          <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>{m._count.participants}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td><span className={`${styles.statusBadge} ${displayStatusBadge}`}>{displayStatusText}</span></td>
-                    <td>
-                      <div className={styles.rowActionsRight}>
-                        {isHost && (
-                          <button
-                            title="Edit Meeting"
-                            className={`${styles.iconBtn} ${styles.hoverAction}`}
-                            onClick={() => setEditingMeeting(m)}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                        )}
-                        {isHost && !m.isActive && (
-                          <button
-                            title="Delete Meeting"
-                            className={`${styles.iconBtn} ${styles.hoverAction}`}
-                            onClick={() => setDeletingMeeting(m)}
-                            style={{ color: '#ef4444' }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                              <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                              <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
-                            </svg>
-                          </button>
-                        )}
-                        {showStart && (
-                          <button
-                            title="Start Meeting"
-                            className={`${styles.startActionBtn} ${styles.hoverAction}`}
-                            onClick={() => {
-                              const diff = new Date(m.scheduledFor).getTime() - Date.now();
-                              if (Math.abs(diff) > 15 * 60 * 1000) {
-                                setEarlyStartMeeting(m);
-                              } else {
-                                router.push(`/rooms/${m.roomName}?action=start`);
-                              }
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                            Start
-                          </button>
-                        )}
-                        
-                        {recording ? (
-                          <button 
-                            onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
-                            style={{ 
-                              background: '#e8f0fe', 
-                              color: '#0b57d0', 
-                              border: 'none', 
-                              padding: '6px 12px', 
-                              borderRadius: '100px',
-                              fontSize: '13px',
-                              fontWeight: 500,
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px'
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                              <path d="M8 5v14l11-7z" />
-                            </svg>
-                            Play
-                          </button>
-                        ) : processingRecording ? (
-                          <div style={{ 
-                            padding: '8px 16px', 
-                            fontSize: '13px', 
-                            color: '#6b7280', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '6px',
-                            background: '#f3f4f6',
-                            borderRadius: '100px',
-                            fontWeight: 500
-                          }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                              <circle cx="12" cy="12" r="10"></circle>
-                              <polyline points="12 6 12 12 16 14"></polyline>
-                            </svg>
-                            Processing
-                          </div>
-                        ) : failedRecording ? (
-                          <div style={{ 
-                            padding: '8px 16px', 
-                            fontSize: '13px', 
-                            color: '#dc2626', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '6px',
-                            background: '#fef2f2',
-                            borderRadius: '100px',
-                            fontWeight: 500
-                          }}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                              <circle cx="12" cy="12" r="10"></circle>
-                              <line x1="12" y1="8" x2="12" y2="12"></line>
-                              <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                            </svg>
-                            Failed
-                          </div>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-          
-          <div className={styles.paginationFooter}>
-            <div className={styles.paginationLeft}>
-              <select 
-                className={styles.pageSizeSelect} 
-                value={pageSize} 
-                onChange={(e) => {
-                  setPageSize(Number(e.target.value));
-                  setPage(1);
-                }}
+        {/* ── QuickActions Glassmorphism Bar ── */}
+        <div className={styles.quickActionsBar}>
+          <div className={styles.quickActionsInner}>
+            {/* Join input group */}
+            <div className={styles.quickJoinGroup}>
+              <input
+                className={styles.quickJoinInput}
+                placeholder={t('anon.enterMeetingCode')}
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
+              />
+              <button
+                className={styles.quickJoinBtn}
+                onClick={handleJoinMeeting}
+                disabled={!joinCode.trim()}
               >
-                <option value={15}>15 / Page</option>
-                <option value={25}>25 / Page</option>
-                <option value={50}>50 / Page</option>
-                <option value={100}>100 / Page</option>
-              </select>
-              <span className={styles.totalFiles}>{totalMeetings} Total Files</span>
-            </div>
-            <div className={styles.paginationRight}>
-              <button 
-                className={styles.pageArrow} 
-                disabled={page <= 1} 
-                onClick={() => setPage(typeof page === 'number' ? Math.max(1, page - 1) : 1)}
-              >
-                &lt;
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                  <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                {t('dash.joinMeeting')}
               </button>
-              {(() => {
-                const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
-                const pages = [];
-                for (let i = 1; i <= Math.min(4, totalPages); i++) {
-                  pages.push(
-                    <button 
-                      key={i} 
-                      className={page === i ? styles.pageNumActive : styles.pageNum}
-                      onClick={() => setPage(i)}
-                    >
-                      {i}
-                    </button>
-                  );
-                }
-                return pages;
-              })()}
-              <button 
-                className={styles.pageArrow} 
-                disabled={page >= Math.ceil(totalMeetings / pageSize)} 
-                onClick={() => setPage(typeof page === 'number' ? Math.min(Math.ceil(totalMeetings / pageSize), page + 1) : 1)}
+            </div>
+            {/* Divider */}
+            <div className={styles.quickDivider} />
+            {/* New Meeting */}
+            <button className={styles.quickNewBtn} onClick={handleNewMeeting}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              {t('dash.newMeeting')}
+            </button>
+          </div>
+        </div>
+
+        {/* ── Meeting List Header ── */}
+        <div className={styles.meetingListHeader}>
+          {/* Title + Tabs */}
+          <div className={styles.meetingListTitleRow}>
+            <h1 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h1>
+            <div className={styles.meetingViewTabs}>
+              <button
+                className={meetingView === 'upcoming' ? styles.meetingTabActive : styles.meetingTab}
+                onClick={() => setMeetingView('upcoming')}
               >
-                &gt;
+                {t('dash.upcoming')}
+              </button>
+              <button
+                className={meetingView === 'past' ? styles.meetingTabActive : styles.meetingTab}
+                onClick={() => setMeetingView('past')}
+              >
+                {t('dash.past')}
               </button>
             </div>
           </div>
+
+          {/* Search + Schedule */}
+          <div className={styles.meetingListActions}>
+            <div className={styles.meetingSearchWrapper}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className={styles.meetingSearchIcon}>
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                className={styles.meetingSearchInput}
+                placeholder={t('dash.searchMeetings')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            {/* Filter funnel button */}
+            <button className={styles.filterBtn} title="Filter meetings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              </svg>
+            </button>
+            <button
+              className={styles.scheduleBtn}
+              onClick={() => setShowScheduleModal(true)}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                <line x1="16" y1="2" x2="16" y2="6"/>
+                <line x1="8" y1="2" x2="8" y2="6"/>
+                <line x1="3" y1="10" x2="21" y2="10"/>
+              </svg>
+              {t('dash.scheduleMeeting')}
+            </button>
+          </div>
+
         </div>
-      )}
+      </div>
+      <div className={styles.dashContainer}>
+
+        {/* ── Meeting Cards ── */}
+        {loadingMeetings ? (
+          <div className={styles.meetingEmptyState}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="40" height="40" style={{ color: '#cbd5e1', marginBottom: '0.75rem' }}>
+              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p>{t('dash.loadingMeetings')}</p>
+          </div>
+        ) : Object.keys(groupedMeetings).length === 0 ? (
+          <div className={styles.meetingEmptyState}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48" style={{ color: '#cbd5e1', marginBottom: '0.75rem' }}>
+              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <p>{t('dash.noMeetings')}</p>
+          </div>
+        ) : (
+          <div className={styles.meetingCardsList}>
+            {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => (
+              <div key={dateLabel} className={styles.meetingDateGroup}>
+                {/* Date header */}
+                <div className={styles.meetingDateHeader}>
+                  <h2 className={styles.meetingDateLabel}>{dateLabel}</h2>
+                  <div className={styles.meetingDateLine} />
+                </div>
+
+                {/* Cards */}
+                <div className={styles.meetingCardsGroup}>
+                  {(meetings as any[]).map((m, i) => {
+                    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+                    const recording = m.recordings?.find((r: any) => r.status === 'READY');
+                    const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+                    const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
+                    const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
+                    const isHost = m.createdByMemberId === user.id;
+                    const isLive = m.isActive;
+                    const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
+
+                    return (
+                      <div
+                        key={m.id || i}
+                        className={isLive ? styles.meetingCardLive : styles.meetingCard}
+                        onDoubleClick={() => setEditingMeeting(m)}
+                      >
+                        {/* Live badge */}
+                        {isLive && (
+                          <div className={styles.liveBadge}>
+                            <span className={styles.liveDot} />
+                            Live Now
+                          </div>
+                        )}
+
+                        <div className={styles.meetingCardContent}>
+                          {/* Time column — desktop only */}
+                          <div className={styles.meetingCardTime}>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ color: '#94a3b8', flexShrink: 0 }}>
+                              <circle cx="12" cy="12" r="10"/>
+                              <polyline points="12 6 12 12 16 14"/>
+                            </svg>
+                            <span>{d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}</span>
+                          </div>
+
+                          {/* Info column */}
+                          <div className={styles.meetingCardInfo}>
+                            {/* Title row — includes mobile "..." button on right */}
+                            <div className={styles.mobileCardTitleRow}>
+                              <h3 className={styles.meetingCardTitle}>{m.title || m.roomName || 'Untitled Meeting'}</h3>
+                              {/* Mobile-only three-dot menu */}
+                              <button className={styles.mobileMenuBtn} onClick={(e) => e.stopPropagation()}>
+                                <span>•••</span>
+                              </button>
+                            </div>
+
+                            <div className={styles.meetingCardMeta}>
+                              {/* Mobile: time + duration on same line */}
+                              <span className={styles.mobileTimeLine}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
+                                  <circle cx="12" cy="12" r="10"/>
+                                  <polyline points="12 6 12 12 16 14"/>
+                                </svg>
+                                {d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
+                                {m.durationMinutes ? `\u00a0•\u00a0${m.durationMinutes} min` : ''}
+                              </span>
+
+                              {/* Desktop: duration + participants */}
+                              {m.durationMinutes && <span className={styles.desktopMeta}>{m.durationMinutes} min</span>}
+                              {m._count?.participants > 0 && (
+                                <span className={`${styles.meetingCardMetaItem} ${styles.desktopMeta}`}>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                  {m._count.participants}
+                                </span>
+                              )}
+
+                              {/* Mobile: attendees + host on same line */}
+                              {m._count?.participants > 0 && (
+                                <span className={styles.mobileMetaLine}>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                  {m._count.participants}{'\u00a0\u00a0'}Host: {m.createdByMember?.username || 'Unknown'}
+                                </span>
+                              )}
+
+                              {/* Desktop: host */}
+                              <span className={styles.desktopMeta}>Host: {m.createdByMember?.username || 'Unknown'}</span>
+
+                              {/* Code — desktop inline */}
+                              {m.roomName && (
+                                <button
+                                  className={`${styles.meetingCodeBtn} ${styles.desktopMeta}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard?.writeText(m.roomName);
+                                    toast.show('Meeting code copied');
+                                  }}
+                                >
+                                  {m.roomName}
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                              )}
+
+                              {/* Code — mobile full line */}
+                              {m.roomName && (
+                                <button
+                                  className={styles.mobileCodeLine}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard?.writeText(m.roomName);
+                                    toast.show('Meeting code copied');
+                                  }}
+                                >
+                                  Code: {m.roomName}
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Action area — right side of card */}
+                          <div className={styles.meetingCardActions}>
+
+                            {/* ── Always-visible: Join Now for live meetings ── */}
+                            {isLive && (
+                              <button
+                                className={styles.joinNowBtn}
+                                onClick={() => router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
+                                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                                Join Now
+                              </button>
+                            )}
+
+                            {/* ── Recording pill (always visible if available) ── */}
+                            {recording && (
+                              <button
+                                className={styles.playRecordingBtn}
+                                onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
+                              >
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
+                                Play
+                              </button>
+                            )}
+                            {processingRecording && (
+                              <div className={styles.recordingProcessing}>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                Processing
+                              </div>
+                            )}
+
+                            {/* ── Status badge (hidden on hover to make room for actions) ── */}
+                            {!isLive && (
+                              <span className={`${styles.statusBadge} ${styles.statusBadgeHideable} ${
+                                m.status === 'ENDED' ? styles.statusFinished
+                                : m.status === 'CANCELED' ? styles.statusCanceled
+                                : diffMs < 0 && m.scheduledFor ? styles.statusPastDue
+                                : m.scheduledFor ? styles.statusScheduled
+                                : styles.statusFinished
+                              }`}>
+                                {m.status === 'ENDED' ? 'Finished'
+                                  : m.status === 'CANCELED' ? 'Canceled'
+                                  : diffMs < 0 && m.scheduledFor ? 'Past Due'
+                                  : m.scheduledFor ? 'Scheduled'
+                                  : 'Created'}
+                              </span>
+                            )}
+
+                            {/* ── Hover action bar: slides in from right on card hover ── */}
+                            <div className={styles.meetingHoverActions}>
+                              {/* Join / Start */}
+                              {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
+                                <button
+                                  className={isHost && !m.isActive && m.scheduledFor ? styles.startActionBtn : styles.cardJoinBtn}
+                                  onClick={() => {
+                                    if (isHost && m.scheduledFor) {
+                                      const diff = new Date(m.scheduledFor).getTime() - Date.now();
+                                      if (Math.abs(diff) > 15 * 60 * 1000) {
+                                        setEarlyStartMeeting(m);
+                                      } else {
+                                        router.push(`/rooms/${m.roomName}?action=start`);
+                                      }
+                                    } else {
+                                      router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`);
+                                    }
+                                  }}
+                                >
+                                  {isHost && !m.isActive ? (
+                                    <>
+                                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
+                                      Start
+                                    </>
+                                  ) : (
+                                    <>
+                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                                      </svg>
+                                      Join
+                                    </>
+                                  )}
+                                </button>
+                              )}
+
+                              {/* Copy link */}
+                              {m.roomName && (
+                                <button
+                                  title="Copy meeting link"
+                                  className={styles.iconBtn}
+                                  onClick={() => {
+                                    const link = `${window.location.origin}/?code=${m.roomName}`;
+                                    navigator.clipboard?.writeText(link);
+                                    toast.show('Meeting link copied!');
+                                  }}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+
+                              {/* Edit */}
+                              {isHost && (
+                                <button
+                                  title="Edit meeting"
+                                  className={styles.iconBtn}
+                                  onClick={() => setEditingMeeting(m)}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+
+                              {/* Delete */}
+                              {isHost && !m.isActive && (
+                                <button
+                                  title="Delete meeting"
+                                  className={styles.iconBtnDanger}
+                                  onClick={() => setDeletingMeeting(m)}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* Pagination */}
+            <div className={styles.paginationFooter}>
+              <div className={styles.paginationLeft}>
+                <select
+                  className={styles.pageSizeSelect}
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                >
+                  <option value={15}>15 / Page</option>
+                  <option value={25}>25 / Page</option>
+                  <option value={50}>50 / Page</option>
+                  <option value={100}>100 / Page</option>
+                </select>
+                <span className={styles.totalFiles}>{totalMeetings} {t('dash.totalRecords')}</span>
+              </div>
+              <div className={styles.paginationRight}>
+                <button className={styles.pageArrow} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>&lt;</button>
+                {(() => {
+                  const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
+                  const pages = [];
+                  for (let i = 1; i <= Math.min(4, totalPages); i++) {
+                    pages.push(
+                      <button key={i} className={page === i ? styles.pageNumActive : styles.pageNum} onClick={() => setPage(i)}>{i}</button>
+                    );
+                  }
+                  return pages;
+                })()}
+                <button className={styles.pageArrow} disabled={page >= Math.ceil(totalMeetings / pageSize)} onClick={() => setPage(p => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))}>&gt;</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>{/* end dashContainer */}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
@@ -1913,7 +1996,6 @@ function DashboardView({
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }

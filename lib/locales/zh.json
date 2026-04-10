@@ -15,7 +15,6 @@
   "common.processing": "处理中",
   "common.failed": "失败",
   "common.unknown": "未知",
-
   "nav.help": "帮助",
   "nav.langSelector": "语言选择",
   "nav.selectLanguage": "选择语言",
@@ -29,7 +28,6 @@
   "nav.userMenu": "用户菜单",
   "nav.goBack": "返回",
   "nav.downloadDesktop": "下载桌面版",
-
   "anon.joinMeeting": "加入会议",
   "anon.hostPrivilege": "如需主持会议或以更高权限加入，",
   "anon.signInHere": "请在此登录",
@@ -49,7 +47,6 @@
   "anon.hostedBy": "{title} 由 {host} 主持。",
   "anon.pastStartTime": "预定的开始时间已过。我们正在等待主持人开始会议。",
   "anon.enterValidCode": "请输入有效的会议代码",
-
   "login.title": "登录",
   "login.emailOrLogin": "邮箱或登录名",
   "login.password": "密码",
@@ -60,7 +57,6 @@
   "login.pleaseEnterPassword": "请输入密码",
   "login.loginFailed": "登录失败",
   "login.networkError": "网络错误，请重试。",
-
   "signup.title": "注册",
   "signup.verifyEmail": "验证邮箱",
   "signup.emailAddress": "邮箱地址",
@@ -90,7 +86,6 @@
   "signup.termsNotice": "注册即表示您同意我们的使用条款和隐私政策",
   "signup.signupFailed": "注册失败",
   "signup.failedSendCode": "发送验证码失败",
-
   "forgot.title": "忘记密码",
   "forgot.description": "请输入您的邮箱或手机号以重置密码。",
   "forgot.emailOrPhone": "邮箱或手机号",
@@ -105,15 +100,20 @@
   "forgot.resetPassword": "重置密码",
   "forgot.resetSuccess": "密码重置成功！",
   "forgot.resetFailed": "重置失败",
-
   "dash.newMeeting": "新会议",
   "dash.joinMeeting": "加入会议",
-  "dash.yourMeetings": "您的历史和预约会议",
+  "dash.yourMeetings": "会议列表",
   "dash.searchMeetings": "搜索会议...",
   "dash.searchSoon": "搜索功能即将推出！",
-  "dash.scheduleMeeting": "+ 预约会议",
+  "dash.scheduleMeeting": "预约",
   "dash.loadingMeetings": "正在加载会议...",
   "dash.noMeetings": "暂无会议。",
+  "dash.upcoming": "即将召开",
+  "dash.past": "历史会议",
+  "dash.today": "今天",
+  "dash.tomorrow": "明天",
+  "dash.yesterday": "昨天",
+  "dash.totalRecords": "条记录",
   "dash.meetingTitle": "会议名称",
   "dash.created": "创建时间",
   "dash.scheduled": "预定时间",
@@ -152,12 +152,10 @@
   "dash.enterValidCode": "请输入有效的会议代码以加入。",
   "dash.signedInGoogle": "已通过 Google 登录",
   "dash.googleLoginError": "通过 Google 登录时出现网络错误",
-
   "dash.earlyStart.title": "在窗口期外开始会议？",
   "dash.earlyStart.message": "此会议预定于 {time} 开始。当前时间不在标准的 15 分钟启动窗口内。",
   "dash.earlyStart.confirm": "确定要立即开始此会议吗？",
   "dash.earlyStart.yes": "是的，开始会议",
-
   "prejoin.startingMeeting": "即将开始会议",
   "prejoin.activeMeeting": "会议正在进行中",
   "prejoin.joiningUser": "正在加入 {name} 的会议",
@@ -178,7 +176,6 @@
   "prejoin.aiDigitalHuman": "AI 数字人设置",
   "prejoin.connectError": "无法连接到房间。请确认 LiveKit 服务器是否正在运行？错误：{error}",
   "prejoin.prejoinError": "LiveKit PreJoin 错误：{error}",
-
   "toolbar.muteMic": "静音",
   "toolbar.unmuteMic": "取消静音",
   "toolbar.micSettings": "麦克风设置",
@@ -204,13 +201,11 @@
   "toolbar.more": "更多",
   "toolbar.recording": "录制中",
   "toolbar.exit": "退出",
-
   "toolbar.selectViewLayout": "选择视图布局",
   "toolbar.recordingControls": "录制控制",
   "toolbar.leaveMeeting": "离开会议？",
   "toolbar.moreOptions": "更多选项",
   "toolbar.participants": "参会者",
-
   "toolbar.liveDocCanvas": "协作文档与画布",
   "toolbar.webcamGrid": "摄像头网格视图",
   "toolbar.screenShareLayout": "屏幕共享布局",
@@ -245,7 +240,6 @@
   "toolbar.startRecording": "开始录制",
   "toolbar.everyoneReady": "确保每个人都准备好了",
   "toolbar.consentNotice": "在未获得所有参与者同意的情况下录制会议可能是违法且可诉的。您应该获得所有参与者（包括外部访客和迟到的访客）的同意来录制此会议。",
-
   "common.saving": "保存中...",
   "common.edit": "编辑",
   "common.reset": "重置",
@@ -253,7 +247,6 @@
   "common.view": "查看",
   "common.none": "无",
   "common.add": "+ 添加",
-
   "schedule.editMeeting": "编辑会议",
   "schedule.newMeeting": "新会议",
   "schedule.copyInvite": "复制邀请",
@@ -300,7 +293,6 @@
   "schedule.workflowDesc": "此选项卡用于配置与外部工作流应用程序的关联事件。",
   "schedule.emailTitle": "邮件标题",
   "schedule.emailBody": "正文",
-
   "settings.title": "系统设置",
   "settings.subtitle": "配置全局平台连接和凭据。",
   "settings.loadingSettings": "正在加载设置...",
@@ -326,7 +318,6 @@
   "settings.telnyxDesc": "配置短信邀请和电话功能的 API 访问。",
   "settings.telnyxAppKey": "Telnyx App Key",
   "settings.saveSettings": "保存设置",
-
   "profile.loginName": "登录名",
   "profile.name": "姓名：",
   "profile.firstName": "名",
@@ -349,7 +340,6 @@
   "profile.saved": "个人资料保存成功！",
   "profile.saveFailed": "更新个人资料失败",
   "profile.networkError": "保存个人资料时网络错误。",
-
   "help.title": "帮助与支持",
   "help.subtitle": "学习如何高效使用 Kloud Meet",
   "help.quickstart": "快速入门",
