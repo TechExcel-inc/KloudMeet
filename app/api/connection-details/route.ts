@@ -35,15 +35,44 @@ export async function GET(request: NextRequest) {
     }
 
     // Strict Database Validation for Room Existence
-    const meeting = await prisma.meeting.findUnique({
+    let meeting = await prisma.meeting.findUnique({
       where: { roomName: roomName }
     });
+
+    // Personal room handling: supports creating a new session each time.
+    // Trigger when: meeting not found OR previous session has ended.
+    let isPersonalRoom = false;
+    if (!meeting || meeting.status === 'ENDED') {
+      const owner = await prisma.teamMember.findFirst({
+        where: { personalRoomId: roomName },
+      });
+      if (owner) {
+        isPersonalRoom = true;
+        // Archive the old ENDED record so history is preserved (rename its roomName)
+        if (meeting && meeting.status === 'ENDED') {
+          await prisma.meeting.update({
+            where: { id: meeting.id },
+            data: { roomName: `${roomName}_${meeting.id}` },
+          });
+        }
+        // Create a fresh session record
+        meeting = await prisma.meeting.create({
+          data: {
+            roomName,
+            createdByMemberId: owner.id,
+            title: `${owner.fullName || owner.username}'s Room`,
+            status: 'ACTIVE',
+          },
+        });
+      }
+    }
 
     if (!meeting) {
       return new NextResponse('Meeting not found', { status: 404 });
     }
 
-    if (meeting.status === 'ENDED') {
+    // Only block ENDED for regular meetings; personal rooms always start a new session above
+    if (meeting.status === 'ENDED' && !isPersonalRoom) {
       return new NextResponse('Meeting has already ended', { status: 403 });
     }
 

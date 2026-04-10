@@ -101,6 +101,7 @@
   "forgot.resetSuccess": "비밀번호가 재설정되었습니다!",
   "forgot.resetFailed": "재설정 실패",
   "dash.newMeeting": "새 회의",
+  "dash.myRoom": "내 전용 회의실",
   "dash.joinMeeting": "회의 참가",
   "dash.yourMeetings": "과거 및 예약된 회의",
   "dash.searchMeetings": "회의 검색...",
@@ -383,5 +384,11 @@
   "help.issueTitle": "문제 보고",
   "help.issueDesc": "GitHub Issues에서 버그 보고 또는 기능 요청 열기",
   "help.versionTitle": "앱 버전",
-  "toolbar.help": "도움말"
+  "toolbar.help": "도움말",
+  "toolbar.muteAll": "전체 음소거",
+  "toolbar.unmuteAll": "전체 음소거 해제",
+  "toolbar.muteAllConfirm": "모든 참가자의 마이크를 음소거합니다. 사용자는 스스로 음소거를 해제할 수 있습니다.",
+  "toolbar.muteAllDone": "모든 참가자 음소거됨",
+  "toolbar.unmuteAllDone": "모든 참가자 음소거 해제됨",
+  "toolbar.muteAllActive": "전체 음소거 중"
 }

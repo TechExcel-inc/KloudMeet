@@ -107,6 +107,7 @@
   "forgot.resetFailed": "Reset failed",
 
   "dash.newMeeting": "New Meeting",
+  "dash.myRoom": "My Room",
   "dash.joinMeeting": "Join Meeting",
   "dash.yourMeetings": "Meeting List",
   "dash.searchMeetings": "Search meetings...",
@@ -400,5 +401,11 @@
   "help.issueTitle": "Report an Issue",
   "help.issueDesc": "Open a bug report or feature request on GitHub Issues",
   "help.versionTitle": "App Version",
-  "toolbar.help": "Help"
+  "toolbar.help": "Help",
+  "toolbar.muteAll": "Mute All",
+  "toolbar.unmuteAll": "Unmute All",
+  "toolbar.muteAllConfirm": "Mute all participants. Users can unmute themselves.",
+  "toolbar.muteAllDone": "All participants muted",
+  "toolbar.unmuteAllDone": "All participants unmuted",
+  "toolbar.muteAllActive": "All Muted"
 }

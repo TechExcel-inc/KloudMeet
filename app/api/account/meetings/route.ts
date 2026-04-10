@@ -31,11 +31,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
+    const search = searchParams.get('search')?.trim() || '';
     const skip = (page - 1) * pageSize;
 
-    const whereClause = {
+    const whereClause: any = {
       createdByMemberId: member.id,
       deletedAt: null,
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search } },
+              { roomName: { contains: search } },
+            ],
+          }
+        : {}),
     };
 
     const [total, meetings] = await Promise.all([

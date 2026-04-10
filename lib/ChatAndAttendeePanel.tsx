@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRoomContext, useParticipants } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
+import { useI18n } from './i18n';
 
 // ════════════════════════════════════
 // Custom Chat Panel (uses publishData directly)
@@ -86,6 +87,12 @@ interface AttendeePanelProps {
   onSetCohost?: (identity: string) => void;
   onRemoveCohost?: (identity: string) => void;
   onSetHost?: (identity: string) => void;
+  /** Whether the local user has permission to mute/unmute all */
+  canMuteAll?: boolean;
+  /** Whether "Mute All" has been activated (controls button state) */
+  muteAllActive?: boolean;
+  onMuteAll?: () => void;
+  onUnmuteAll?: () => void;
 }
 
 export function AttendeePanel({
@@ -100,7 +107,12 @@ export function AttendeePanel({
   onSetCohost,
   onRemoveCohost,
   onSetHost,
+  canMuteAll,
+  muteAllActive,
+  onMuteAll,
+  onUnmuteAll,
 }: AttendeePanelProps) {
+  const { t } = useI18n();
   const participants = useParticipants();
   const [searchQuery, setSearchQuery] = useState('');
   const [showHostPicker, setShowHostPicker] = useState(false);
@@ -166,6 +178,35 @@ export function AttendeePanel({
     <div className="kloud-attendee-panel">
       <div className="kloud-attendee-header">
         <span className="kloud-attendee-count">{participants.length} Participant{participants.length !== 1 ? 's' : ''}</span>
+        {/* Mute All / Unmute All — only for host/co-host/presenter */}
+        {canMuteAll && (
+          <div className="kloud-attendee-mute-actions">
+            <button
+              className={`kloud-mute-all-btn ${muteAllActive ? 'kloud-mute-all-btn--active' : ''}`}
+              onClick={muteAllActive ? onUnmuteAll : onMuteAll}
+              title={muteAllActive ? t('toolbar.unmuteAll') : t('toolbar.muteAll')}
+            >
+              {muteAllActive ? (
+                <>
+                  {/* Mic with slash — unmute icon */}
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
+                    <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                  {t('toolbar.unmuteAll')}
+                </>
+              ) : (
+                <>
+                  {/* Mic icon — mute icon */}
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
+                  </svg>
+                  {t('toolbar.muteAll')}
+                </>
+              )}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Search bar — only when 5+ participants */}
@@ -545,12 +586,49 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-attendee-header {
     padding: 4px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
   .kloud-attendee-count {
     color: rgba(255,255,255,0.4);
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.3px;
+  }
+  .kloud-attendee-mute-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .kloud-mute-all-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.07);
+    color: rgba(255,255,255,0.75);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .kloud-mute-all-btn:hover {
+    background: rgba(255,255,255,0.13);
+    border-color: rgba(255,255,255,0.22);
+    color: #fff;
+  }
+  .kloud-mute-all-btn--active {
+    background: rgba(234, 88, 12, 0.18) !important;
+    border-color: rgba(234, 88, 12, 0.4) !important;
+    color: #fb923c !important;
+  }
+  .kloud-mute-all-btn--active:hover {
+    background: rgba(234, 88, 12, 0.28) !important;
   }
   .kloud-attendee-list {
     flex: 1;

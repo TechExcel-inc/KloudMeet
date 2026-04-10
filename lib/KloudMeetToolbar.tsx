@@ -57,6 +57,12 @@ interface KloudMeetToolbarProps {
   onStopRecording?: () => void;
   /** Opens the Help modal */
   onOpenHelp?: () => void;
+  /** Whether local user can mute/unmute all participants */
+  canMuteAll?: boolean;
+  /** Whether mute-all is currently active (so button shows unmute state) */
+  muteAllActive?: boolean;
+  onMuteAll?: () => void;
+  onUnmuteAll?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -91,6 +97,10 @@ export function KloudMeetToolbar({
   onOpenRecordPopup,
   onStopRecording,
   onOpenHelp,
+  canMuteAll,
+  muteAllActive,
+  onMuteAll,
+  onUnmuteAll,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const { t } = useI18n();
@@ -713,6 +723,10 @@ export function KloudMeetToolbar({
                 onOpenRecordPopup={onOpenRecordPopup}
                 onStopRecording={onStopRecording}
                 onOpenHelp={onOpenHelp}
+                canMuteAll={canMuteAll}
+                muteAllActive={muteAllActive}
+                onMuteAll={onMuteAll}
+                onUnmuteAll={onUnmuteAll}
               />
             </div>
           </div>
@@ -844,6 +858,10 @@ export function KloudMeetToolbar({
                         onOpenRecordPopup={onOpenRecordPopup}
                         onStopRecording={onStopRecording}
                         onOpenHelp={onOpenHelp}
+                        canMuteAll={canMuteAll}
+                        muteAllActive={muteAllActive}
+                        onMuteAll={onMuteAll}
+                        onUnmuteAll={onUnmuteAll}
                       />
                     </div>
                   )}
@@ -877,6 +895,10 @@ function ActiveSheetContent({
   onOpenRecordPopup,
   onStopRecording,
   onOpenHelp,
+  canMuteAll,
+  muteAllActive,
+  onMuteAll,
+  onUnmuteAll,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -910,6 +932,34 @@ function ActiveSheetContent({
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
                {isRecording ? t('toolbar.stopRecording') : t('toolbar.record')}
+            </button>
+          )}
+          {canMuteAll && (
+            <button
+              className={`${styles.actionSheetItem} ${muteAllActive ? styles.active : ''}`}
+              onClick={() => { muteAllActive ? onUnmuteAll?.() : onMuteAll?.(); setActiveSheet(null); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                {muteAllActive ? (
+                  // Mic-slash (muted state)
+                  <>
+                    <line x1="1" y1="1" x2="23" y2="23" strokeLinecap="round" />
+                    <path d="M9 9v3a3 3 0 005.12 2.12M15 9.34V4a3 3 0 00-5.94-.6" />
+                    <path d="M17 16.95A7 7 0 015 12v-2m14 0v2a7 7 0 01-.11 1.23" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </>
+                ) : (
+                  // Normal mic (unmuted state)
+                  <>
+                    <path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                    <path d="M19 10v2a7 7 0 01-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </>
+                )}
+              </svg>
+              {muteAllActive ? t('toolbar.unmuteAll') : t('toolbar.muteAll')}
             </button>
           )}
           <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>

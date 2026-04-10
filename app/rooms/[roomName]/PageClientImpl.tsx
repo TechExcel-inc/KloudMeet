@@ -680,6 +680,8 @@ function VideoConferenceComponent(props: {
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
   const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
+  // Stores the mic state BEFORE a MUTE_ALL command arrived, so UNMUTE_ALL can restore it.
+  const preMuteAllMicRef = React.useRef<boolean | null>(null);
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
@@ -1264,6 +1266,10 @@ function VideoConferenceComponent(props: {
     router.push('/');
   }, [room, router]);
 
+  // ── Mute All / Unmute All ──
+  // Track whether mute-all is active so the button can show the right state.
+  // Participants can still unmute themselves after a mute-all (non-locking).
+  const [muteAllActive, setMuteAllActive] = React.useState(false);
 
   const isPresenterScreencast = screenShareActive;
   const isPureLiveDoc = activeView === 'liveDoc';
@@ -1402,6 +1408,18 @@ function VideoConferenceComponent(props: {
     },
     [room, encoder],
   );
+
+  // Mute All / Unmute All handlers (defined after sendMeetingMsg)
+  // Only remote participants are affected — the local user (host/co-host) keeps their mic as-is.
+  const handleMuteAll = React.useCallback(() => {
+    sendMeetingMsg({ type: 'MUTE_ALL' });
+    setMuteAllActive(true);
+  }, [sendMeetingMsg]);
+
+  const handleUnmuteAll = React.useCallback(() => {
+    sendMeetingMsg({ type: 'UNMUTE_ALL' });
+    setMuteAllActive(false);
+  }, [sendMeetingMsg]);
 
   // End for All (host/co-host only): broadcast END_MEETING, mark as ended in DB, then disconnect
   const handleEndForAll = React.useCallback(async () => {
@@ -1548,6 +1566,20 @@ function VideoConferenceComponent(props: {
           // Host/Co-host ended the meeting for everyone — disconnect and redirect
           room.disconnect();
           router.push('/');
+        } else if (msg.type === 'MUTE_ALL') {
+          // Snapshot current mic state before muting (so UNMUTE_ALL can restore it).
+          // micEnabled is the React source of truth for the local mic toggle state.
+          preMuteAllMicRef.current = micEnabled;
+          room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
+          setMicEnabled(false);
+          setMuteAllActive(true);
+        } else if (msg.type === 'UNMUTE_ALL') {
+          // Restore to the state the user had BEFORE the mute-all command
+          const restoreTo = preMuteAllMicRef.current ?? true;
+          preMuteAllMicRef.current = null;
+          room.localParticipant.setMicrophoneEnabled(restoreTo).catch(console.error);
+          setMicEnabled(restoreTo);
+          setMuteAllActive(false);
         } else if (msg.type === 'RC_REQUEST') {
           // Remote Control: someone is requesting control of our screen
           if (screenShareActive) {
@@ -1609,7 +1641,7 @@ function VideoConferenceComponent(props: {
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room, isHost, decoder, sendMeetingMsg, screenShareActive, approvedControllerIdentity, remoteControlRequest]);
+  }, [room, isHost, decoder, sendMeetingMsg, screenShareActive, approvedControllerIdentity, remoteControlRequest, micEnabled]);
 
   // ═══ Remote Control Permission (uses meeting-control topic) ═══
 
@@ -2158,12 +2190,19 @@ function VideoConferenceComponent(props: {
             {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !isRemoteControlMode && (
               <div className="screenshare-overlay-container">
                 <div className="screenshare-overlay-badge">
-                  {(() => {
-                    if (screenShareActive) return t('toolbar.previewAnotherTab');
-                    const sharing = Array.from(room.remoteParticipants.values()).find(p => p.isScreenShareEnabled);
-                    const name = sharing?.name || sharing?.identity || 'Attendee';
-                    return t('toolbar.viewingAttendeeScreen', { name });
-                  })()}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                    <line x1="8" y1="21" x2="16" y2="21" />
+                    <line x1="12" y1="17" x2="12" y2="21" />
+                  </svg>
+                  <span className="badge-text">
+                    {(() => {
+                      if (screenShareActive) return t('toolbar.previewAnotherTab');
+                      const sharing = Array.from(room.remoteParticipants.values()).find(p => p.isScreenShareEnabled);
+                      const name = sharing?.name || sharing?.identity || 'Attendee';
+                      return t('toolbar.viewingAttendeeScreen', { name });
+                    })()}
+                  </span>
                 </div>
               </div>
             )}
@@ -2653,17 +2692,7 @@ function VideoConferenceComponent(props: {
               .sky-meet-video-wrapper.mirror-blocked .mirror-livedoc-overlay * {
                  visibility: visible !important;
               }
-              .screenshare-overlay-badge {
-                 background: rgba(0,0,0,0.75);
-                 color: #fff;
-                 padding: 8px 16px;
-                 border-radius: 20px;
-                 font-size: 14px;
-                 font-weight: 500;
-                 backdrop-filter: blur(8px);
-                 border: 1px solid rgba(255,255,255,0.1);
-                 box-shadow: 0 4px 12px rgba(0,0,0,0.5);
-              }
+              /* .screenshare-overlay-badge moved to static block for simpler transitions */
 
             `
               : ''
@@ -2674,17 +2703,73 @@ function VideoConferenceComponent(props: {
             /* Screenshare Overlays */
             .screenshare-overlay-container {
                position: absolute;
-               top: 60px;
-               left: 0;
-               width: 100%;
+               bottom: 80px; /* Above toolbar */
+               left: 20px;
+               width: auto;
                pointer-events: none;
                display: flex;
-               justify-content: center;
-               align-items: flex-start;
+               justify-content: flex-start;
+               align-items: flex-end;
                z-index: 100;
             }
+            .screenshare-overlay-badge {
+               pointer-events: auto;
+               background: rgba(15, 23, 42, 0.4);
+               color: rgba(255, 255, 255, 0.7);
+               padding: 6px;
+               border-radius: 8px;
+               font-size: 13px;
+               font-weight: 500;
+               backdrop-filter: blur(12px);
+               border: 1px solid rgba(255,255,255,0.08);
+               box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+               transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+               display: flex;
+               align-items: center;
+               gap: 0;
+               cursor: default;
+               max-width: 32px;
+               overflow: hidden;
+               white-space: nowrap;
+            }
+            .screenshare-overlay-badge svg {
+               flex-shrink: 0;
+               width: 18px;
+               height: 18px;
+               opacity: 0.8;
+               margin: 0 1px;
+               transition: all 0.3s ease;
+            }
+            .screenshare-overlay-badge .badge-text {
+               opacity: 0;
+               width: 0;
+               overflow: hidden;
+               transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+            
+            .screenshare-overlay-container:hover .screenshare-overlay-badge,
+            .screenshare-overlay-badge:hover,
+            .screenshare-overlay-badge:active {
+               background: rgba(15, 23, 42, 0.85);
+               color: #fff;
+               padding: 6px 14px;
+               max-width: 300px;
+               gap: 8px;
+               border-color: rgba(255,255,255,0.15);
+               box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+            }
+            .screenshare-overlay-badge:hover svg,
+            .screenshare-overlay-badge:active svg {
+               opacity: 1;
+               margin: 0;
+            }
+            .screenshare-overlay-badge:hover .badge-text,
+            .screenshare-overlay-badge:active .badge-text {
+               opacity: 1;
+               width: auto;
+            }
             @media (max-width: 768px) {
-               .screenshare-overlay-container { width: 100%; left: 0; top: 32px; }
+               .screenshare-overlay-container { bottom: auto; top: 72px; left: 10px; }
                .sky-meet-video-wrapper.hide-mirror-video { width: 100% !important; min-width: 0 !important; flex: 0 0 120px !important; }
             }
 
@@ -3114,6 +3199,10 @@ function VideoConferenceComponent(props: {
           onOpenRecordPopup={() => setShowRecordPopup(true)}
           onStopRecording={() => handleToggleRecording('stop')}
           onOpenHelp={() => setShowHelp(true)}
+          canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
+          muteAllActive={muteAllActive}
+          onMuteAll={handleMuteAll}
+          onUnmuteAll={handleUnmuteAll}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
@@ -3142,6 +3231,10 @@ function VideoConferenceComponent(props: {
                 canManageRoles={isHost || isCohost}
                 localIdentity={room.localParticipant.identity}
                 autoPresenterIdentity={autoPresenterIdentity}
+                canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
+                muteAllActive={muteAllActive}
+                onMuteAll={handleMuteAll}
+                onUnmuteAll={handleUnmuteAll}
                 onAddCopresenter={(identity) => {
                   setCopresenterIdentities((prev) =>
                     prev.includes(identity) ? prev : [...prev, identity],

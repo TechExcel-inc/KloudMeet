@@ -101,6 +101,7 @@
   "forgot.resetSuccess": "密码重置成功！",
   "forgot.resetFailed": "重置失败",
   "dash.newMeeting": "新会议",
+  "dash.myRoom": "我的专属会议室",
   "dash.joinMeeting": "加入会议",
   "dash.yourMeetings": "会议列表",
   "dash.searchMeetings": "搜索会议...",
@@ -384,5 +385,11 @@
   "help.issueTitle": "报告问题",
   "help.issueDesc": "在 GitHub Issues 上提交 Bug 报告或功能建议",
   "help.versionTitle": "应用版本",
-  "toolbar.help": "帮助"
+  "toolbar.help": "帮助",
+  "toolbar.muteAll": "全体静音",
+  "toolbar.unmuteAll": "全体解除静音",
+  "toolbar.muteAllConfirm": "将全员麦克风静音。用户可以自行解除静音。",
+  "toolbar.muteAllDone": "已静音所有参会者",
+  "toolbar.unmuteAllDone": "已解除所有参会者静音",
+  "toolbar.muteAllActive": "全员已静音"
 }

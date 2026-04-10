@@ -14,10 +14,12 @@ interface AuthUser {
 export function MyProfileModal({
   user,
   onClose,
+  onSave,
   toast,
 }: {
   user: AuthUser;
   onClose: () => void;
+  onSave?: (data: { personalRoomId: string }) => void;
   toast?: { show: (m: string) => void };
 }) {
   const [loading, setLoading] = useState(true);
@@ -90,6 +92,9 @@ export function MyProfileModal({
         return;
       }
       toast?.show(t('profile.saved'));
+      
+      // Notify parent with new personalRoomId so dashboard updates in real-time
+      onSave?.({ personalRoomId });
       
       // Update local storage slightly to reflect DisplayName change
       const stored = localStorage.getItem('kloudUser');

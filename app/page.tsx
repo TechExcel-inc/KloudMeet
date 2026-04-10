@@ -1124,6 +1124,7 @@ function DashboardView({
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
+  const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
   
   const [isJoining, setIsJoining] = useState(false);
   const [scheduledModalData, setScheduledModalData] = useState<any>(null);
@@ -1147,10 +1148,28 @@ function DashboardView({
     return () => clearInterval(timer);
   }, []);
 
-  const fetchMeetings = () => {
+  // Fetch personal room ID from profile
+  useEffect(() => {
+    if (!user?.token) return;
+    fetch('/api/account/profile', {
+      headers: { Authorization: `Bearer ${user.token}` }
+    })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.personalRoomId) setPersonalRoomId(data.personalRoomId);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const fetchMeetings = (searchTerm = searchQuery) => {
     if (!user || (!user.token && !user.id)) return;
     setLoadingMeetings(true);
-    fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
+    const qs = new URLSearchParams({
+      page: String(page),
+      pageSize: String(pageSize),
+      ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+    });
+    fetch(`/api/account/meetings?${qs.toString()}`, {
       headers: { Authorization: `Bearer ${user.token}` }
     })
       .then(res => res.json())
@@ -1172,6 +1191,20 @@ function DashboardView({
   useEffect(() => {
     fetchMeetings();
   }, [user, page, pageSize]);
+
+  // Debounced search: reset to page 1 and re-fetch when searchQuery changes
+  const isFirstSearchRender = React.useRef(true);
+  useEffect(() => {
+    if (isFirstSearchRender.current) {
+      isFirstSearchRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPage(1);
+      fetchMeetings(searchQuery);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Polling fallback to check processing recordings
   useEffect(() => {
@@ -1378,13 +1411,6 @@ function DashboardView({
     .filter(m => {
       if (meetingView === 'upcoming') return m.status !== 'ENDED' && m.status !== 'CANCELED';
       return m.status === 'ENDED' || m.status === 'CANCELED';
-    })
-    .filter(m => {
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (m.title || '').toLowerCase().includes(q) ||
-             (m.roomName || '').toLowerCase().includes(q) ||
-             (m.createdByMember?.username || '').toLowerCase().includes(q);
     });
 
   const groupedMeetings = filteredMeetings.reduce((acc: Record<string, any[]>, m) => {
@@ -1432,6 +1458,23 @@ function DashboardView({
             </div>
             {/* Divider */}
             <div className={styles.quickDivider} />
+            {/* Personal Room */}
+            {personalRoomId && (
+              <>
+                <button
+                  className={styles.quickPersonalRoomBtn}
+                  onClick={() => router.push(`/rooms/${personalRoomId}?action=start`)}
+                  title={`${t('dash.myRoom')}: ${personalRoomId}`}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points="9 22 9 12 15 12 15 22" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  {t('dash.myRoom')}
+                </button>
+                <div className={styles.quickDivider} />
+              </>
+            )}
             {/* New Meeting */}
             <button className={styles.quickNewBtn} onClick={handleNewMeeting}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
@@ -1930,6 +1973,7 @@ function DashboardView({
         <MyProfileModal 
           user={user} 
           onClose={() => setShowProfileModal(false)}
+          onSave={({ personalRoomId: newId }) => setPersonalRoomId(newId || null)}
           toast={toast}
         />
       )}

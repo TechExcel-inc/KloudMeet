@@ -19,7 +19,7 @@ export async function GET(
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
-    const meeting = await prisma.meeting.findUnique({
+    let meeting = await prisma.meeting.findUnique({
       where: {
         roomName,
       },
@@ -30,6 +30,39 @@ export async function GET(
         recordings: true,
       },
     });
+
+    // Personal room handling: supports creating a new session each time
+    // Trigger when: meeting not found OR previous session has ended
+    if (!meeting || meeting.status === 'ENDED') {
+      const owner = await prisma.teamMember.findFirst({
+        where: { personalRoomId: roomName },
+      });
+      if (owner) {
+        // Archive the old ENDED record so it stays as history (rename its roomName)
+        if (meeting && meeting.status === 'ENDED') {
+          await prisma.meeting.update({
+            where: { id: meeting.id },
+            data: { roomName: `${roomName}_${meeting.id}` },
+          });
+        }
+        // Create a fresh session record
+        const title = `${owner.fullName || owner.username}'s Room`;
+        meeting = await prisma.meeting.create({
+          data: {
+            roomName,
+            createdByMemberId: owner.id,
+            title,
+            status: 'ACTIVE',
+          },
+          include: {
+            createdByMember: {
+              select: { fullName: true, username: true },
+            },
+            recordings: true,
+          },
+        }) as any;
+      }
+    }
 
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
