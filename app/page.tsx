@@ -98,161 +98,172 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
   return (
     <nav className={styles.topNav}>
       <div className={styles.navInner}>
-      <div className={styles.toolbarLeft}>
-        {onBack && (
-          <button className={styles.iconBtn} onClick={onBack} aria-label={t('nav.goBack')} title={t('common.back')} style={{ marginRight: '1rem' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
-              <line x1="19" y1="12" x2="5" y2="12"></line>
-              <polyline points="12 19 5 12 12 5"></polyline>
+        {/* ── Left: Logo + Back btn ── */}
+        <div className={styles.toolbarLeft}>
+          {onBack && (
+            <button className={styles.iconBtn} onClick={onBack} aria-label={t('nav.goBack')} title={t('common.back')} style={{ marginRight: '1rem' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+              </svg>
+            </button>
+          )}
+          <div className={styles.navLogo} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => window.location.assign('/')}>
+            <KloudLogo />
+          </div>
+        </div>
+
+        {/* ── Right: actions ── */}
+        <div className={styles.topNavRight}>
+          {/* Org dropdown — desktop only */}
+          {user && (
+            <div className={`${styles.orgDropdownWrapper} ${styles.navOrgDesktop}`} ref={orgMenuRef} style={{ marginRight: '0.5rem' }}>
+              <button 
+                className={styles.orgDropdownBtn} 
+                onClick={() => setOrgMenuOpen(!orgMenuOpen)}
+                style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', color: '#4b5563', fontWeight: 500 }}
+              >
+                {user.displayName}@Kloud Corp
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" style={{ marginLeft: '6px', opacity: 0.6 }}>
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              {orgMenuOpen && (
+                <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '1rem' }}>
+                  <div className={styles.orgDropdownSection}>
+                    <div className={styles.orgDropdownTitle}>{t('nav.switchAccount')}</div>
+                    <button className={styles.orgDropdownItemActive}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
+                        Kloud Corp
+                      </div>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    </button>
+                    <button className={styles.orgDropdownItem} onClick={() => setOrgMenuOpen(false)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>P</div>
+                        KloudMeet Personal
+                      </div>
+                    </button>
+                  </div>
+                  <div className={styles.orgDropdownSection}>
+                    <div className={styles.orgDropdownIdentity}>{t('nav.signedInAs', { name: user.displayName })}</div>
+                    <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onOpenProfile && onOpenProfile(); }}>
+                      {t('nav.myProfile')}
+                    </button>
+                    <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
+                      {t('nav.signOut')}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Help button — desktop only */}
+          <button className={styles.topNavIconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
+              <line x1="12" y1="17" x2="12.01" y2="17"></line>
             </svg>
           </button>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => window.location.assign('/')}>
-          <KloudLogo />
-        </div>
-      </div>
-      <div className={styles.topNavRight}>
-        {user && (
-          <div className={styles.orgDropdownWrapper} ref={orgMenuRef} style={{ marginRight: '0.5rem' }}>
-            <button 
-              className={styles.orgDropdownBtn} 
-              onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-              style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', color: '#4b5563', fontWeight: 500 }}
-            >
-              {user.displayName}@Kloud Corp
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" style={{ marginLeft: '6px', opacity: 0.6 }}>
+
+          {/* Language selector — desktop only */}
+          <div style={{ position: 'relative' }} ref={langMenuRef}>
+            <button className={styles.topNavIconBtn} aria-label={t('nav.langSelector')} onClick={() => setLangMenuOpen(!langMenuOpen)} style={{ gap: '4px', paddingLeft: '0.75rem', paddingRight: '0.75rem' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
+              </svg>
+              <span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: '0.3rem' }}>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '0.1rem', marginTop: '1px' }}>
                 <polyline points="6 9 12 15 18 9"></polyline>
               </svg>
             </button>
-            
-            {orgMenuOpen && (
-              <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '1rem' }}>
-                <div className={styles.orgDropdownSection}>
-                  <div className={styles.orgDropdownTitle}>{t('nav.switchAccount')}</div>
-                  <button className={styles.orgDropdownItemActive}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
-                      Kloud Corp
-                    </div>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
+            {langMenuOpen && (
+              <div className={styles.dropdownMenu} style={{ minWidth: '160px' }}>
+                {LOCALE_OPTIONS.map(opt => (
+                  <button
+                    key={opt.code}
+                    className={styles.dropdownItem}
+                    onClick={() => { setLocale(opt.code); setLangMenuOpen(false); }}
+                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: locale === opt.code ? 600 : 400, background: locale === opt.code ? '#f1f5f9' : undefined }}
+                  >
+                    <span>{opt.label}</span>
+                    <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{opt.shortCode}</span>
                   </button>
-                  <button className={styles.orgDropdownItem} onClick={() => setOrgMenuOpen(false)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>P</div>
-                      KloudMeet Personal
-                    </div>
-                  </button>
-                </div>
-                <div className={styles.orgDropdownSection}>
-                  <div className={styles.orgDropdownIdentity}>{t('nav.signedInAs', { name: user.displayName })}</div>
-                  <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onOpenProfile && onOpenProfile(); }}>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Avatar / Sign-in */}
+          {!hideAvatar && (user ? (
+            <div style={{ position: 'relative' }} ref={menuRef}>
+              <button 
+                className={styles.avatarBtn} 
+                onClick={() => setMenuOpen(!menuOpen)} 
+                aria-label="User Menu" 
+                title="User Menu"
+                style={{ overflow: 'hidden' }}
+              >
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user.displayName.charAt(0).toUpperCase()}</span>
+                )}
+              </button>
+              {menuOpen && (
+                <div className={styles.dropdownMenu}>
+                  {/* Mobile: show org identity at top of avatar menu */}
+                  <div className={styles.navAvatarMenuMobileHeader}>
+                    <span className={styles.navAvatarMenuOrgName}>{user.displayName}@Kloud Corp</span>
+                  </div>
+                  <button 
+                    className={styles.dropdownItem} 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenProfile && onOpenProfile();
+                    }}
+                    style={{ borderBottom: '1px solid #f1f5f9' }}
+                  >
                     {t('nav.myProfile')}
                   </button>
-                  <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
+                  <button 
+                    className={styles.dropdownItem} 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenSettings && onOpenSettings();
+                    }}
+                    style={{ borderBottom: '1px solid #f1f5f9' }}
+                  >
+                    {t('nav.systemSettings')}
+                  </button>
+                  <button 
+                    className={styles.dropdownItem} 
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onSignOut && onSignOut();
+                    }}
+                  >
                     {t('nav.signOut')}
                   </button>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Help button */}
-        <button className={styles.topNavIconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-            <circle cx="12" cy="12" r="10"></circle>
-            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"></path>
-            <line x1="12" y1="17" x2="12.01" y2="17"></line>
-          </svg>
-        </button>
-        <div style={{ position: 'relative' }} ref={langMenuRef}>
-          <button className={styles.topNavIconBtn} aria-label={t('nav.langSelector')} onClick={() => setLangMenuOpen(!langMenuOpen)} style={{ gap: '4px', paddingLeft: '0.75rem', paddingRight: '0.75rem' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="2" y1="12" x2="22" y2="12"></line>
-              <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"></path>
-            </svg>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, marginLeft: '0.3rem' }}>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '0.1rem', marginTop: '1px' }}>
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </button>
-          {langMenuOpen && (
-            <div className={styles.dropdownMenu} style={{ minWidth: '160px' }}>
-              {LOCALE_OPTIONS.map(opt => (
-                <button
-                  key={opt.code}
-                  className={styles.dropdownItem}
-                  onClick={() => { setLocale(opt.code); setLangMenuOpen(false); }}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontWeight: locale === opt.code ? 600 : 400, background: locale === opt.code ? '#f1f5f9' : undefined }}
-                >
-                  <span>{opt.label}</span>
-                  <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{opt.shortCode}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {!hideAvatar && (user ? (
-          <div style={{ position: 'relative' }} ref={menuRef}>
-            <button 
-              className={styles.avatarBtn} 
-              onClick={() => setMenuOpen(!menuOpen)} 
-              aria-label="User Menu" 
-              title="User Menu"
-              style={{ overflow: 'hidden' }}
-            >
-              {user.avatarUrl ? (
-                <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              ) : (
-                <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user.displayName.charAt(0).toUpperCase()}</span>
               )}
+            </div>
+          ) : onSignIn && (
+            <button className={styles.avatarBtn} onClick={onSignIn} aria-label="Sign In via User Profile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
+                <circle cx="12" cy="7" r="4"></circle>
+              </svg>
             </button>
-            {menuOpen && (
-              <div className={styles.dropdownMenu}>
-                <button 
-                  className={styles.dropdownItem} 
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onOpenProfile && onOpenProfile();
-                  }}
-                  style={{ borderBottom: '1px solid #f1f5f9' }}
-                >
-                  {t('nav.myProfile')}
-                </button>
-                <button 
-                  className={styles.dropdownItem} 
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onOpenSettings && onOpenSettings();
-                  }}
-                  style={{ borderBottom: '1px solid #f1f5f9' }}
-                >
-                  {t('nav.systemSettings')}
-                </button>
-                <button 
-                  className={styles.dropdownItem} 
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onSignOut && onSignOut();
-                  }}
-                >
-                  {t('nav.signOut')}
-                </button>
-              </div>
-            )}
-          </div>
-        ) : onSignIn && (
-          <button className={styles.avatarBtn} onClick={onSignIn} aria-label="Sign In via User Profile">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-              <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
-              <circle cx="12" cy="7" r="4"></circle>
-            </svg>
-          </button>
-        ))}
-      </div>
+          ))}
+        </div>
       </div>
     </nav>
   );
@@ -388,8 +399,8 @@ function AnonymousView({
           {t('anon.hostPrivilege')}
         </p>
 
-        <div className={styles.joinRow} style={{ maxWidth: '640px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '20px', padding: '0.9rem 1.25rem', backdropFilter: 'blur(20px)', alignItems: 'center' }}>
-          <div style={{ flex: 1, display: 'flex', gap: '0.75rem' }}>
+        <div className={styles.joinRow} style={{ maxWidth: '640px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '20px', padding: '0.9rem 1.25rem', backdropFilter: 'blur(20px)' }}>
+          <div className={styles.joinInnerGroup}>
             <input
               className={styles.joinInput}
               placeholder={t('anon.enterMeetingCode')}
@@ -439,8 +450,8 @@ function AnonymousView({
         </button>
       </div>
 
-      {/* ── Download Desktop App ── */}
-      <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: '0 auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
+      {/* ── Download Desktop App — hidden on mobile ── */}
+      <div className={`${styles.downloadRow} ${styles.mobileHidden}`} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: '0 auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
         <a
           href="/api/download?os=win"
           className={styles.downloadBtn}
@@ -696,8 +707,8 @@ function LoginView({
         </form>
       </div>
 
-      {/* ── Download Desktop App ── */}
-      <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: 'auto auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
+      {/* ── Download Desktop App — hidden on mobile ── */}
+      <div className={`${styles.downloadRow} ${styles.mobileHidden}`} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: 'auto auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
         <a
           href="/api/download?os=win"
           className={styles.downloadBtn}
@@ -1536,14 +1547,12 @@ function DashboardView({
             <button
               className={styles.scheduleBtn}
               onClick={() => setShowScheduleModal(true)}
+              title={t('dash.scheduleMeeting')}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
-                <line x1="16" y1="2" x2="16" y2="6"/>
-                <line x1="8" y1="2" x2="8" y2="6"/>
-                <line x1="3" y1="10" x2="21" y2="10"/>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
               </svg>
-              {t('dash.scheduleMeeting')}
             </button>
           </div>
 
@@ -1819,6 +1828,74 @@ function DashboardView({
                                 </button>
                               )}
                             </div>
+                          </div>
+
+                          {/* ── Mobile-only bottom action bar ── */}
+                          <div className={styles.meetingCardMobileActions}>
+                            {/* Join / Start button */}
+                            {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
+                              <button
+                                className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
+                                onClick={() => {
+                                  if (isHost && m.scheduledFor) {
+                                    const diff = new Date(m.scheduledFor).getTime() - Date.now();
+                                    if (Math.abs(diff) > 15 * 60 * 1000) {
+                                      setEarlyStartMeeting(m);
+                                    } else {
+                                      router.push(`/rooms/${m.roomName}?action=start`);
+                                    }
+                                  } else {
+                                    router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`);
+                                  }
+                                }}
+                              >
+                                {isHost && !m.isActive ? (
+                                  <>
+                                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z" /></svg>
+                                    Start
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                      <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                    Join
+                                  </>
+                                )}
+                              </button>
+                            )}
+                            {/* Copy link */}
+                            {m.roomName && (
+                              <button
+                                className={styles.mobileCopyBtn}
+                                onClick={() => {
+                                  const link = `${window.location.origin}/?code=${m.roomName}`;
+                                  navigator.clipboard?.writeText(link);
+                                  toast.show('Meeting link copied!');
+                                }}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                Copy Link
+                              </button>
+                            )}
+                            {/* Delete */}
+                            {isHost && !m.isActive && (
+                              <button
+                                className={styles.mobileDeleteBtn}
+                                onClick={() => setDeletingMeeting(m)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                  <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                Delete
+                              </button>
+                            )}
                           </div>
 
                         </div>
