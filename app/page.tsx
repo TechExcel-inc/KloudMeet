@@ -39,10 +39,15 @@ const MOCK_SCHEDULED = [
    ════════════════════════════════════════════════════ */
 function KloudLogo({ size = 'sm', appendNode }: { size?: 'sm' | 'lg', appendNode?: React.ReactNode }) {
   // 尺寸调整：在上一次基础上减小约 20%
-  const imgHeight = size === 'lg' ? 68 : 52;
+  const imgHeight = size === 'lg' ? 61 : 47;
   return (
     <div className={styles.logoRow}>
-      <img src="/images/kloud-header-logo.svg" alt="Kloud Meet Logo" height={imgHeight} style={{ display: 'block' }} />
+      <img 
+        src="/images/kloud-header-logo.svg" 
+        alt="Kloud Meet" 
+        height={imgHeight} 
+        style={{ display: 'block', transform: 'translateY(16px)' }} 
+      />
       {appendNode}
     </div>
   );
@@ -377,31 +382,33 @@ function AnonymousView({
     <div className={styles.anonWrapper}>
       <TopToolbar onSignIn={onSignIn} onOpenHelp={onOpenHelp} hideAvatar={true} />
 
-      {/* ── Central Join Container ── */}
       <div className={styles.anonContainer}>
         <h1 className={styles.anonTitle}>{t('anon.joinMeeting')}</h1>
         <p className={styles.anonSubtitle}>
-          {t('anon.hostPrivilege')}{' '}
-          <button 
-            type="button" 
-            className={styles.linkBtn} 
-            onClick={onSignIn} 
-            style={{ fontSize: 'inherit', fontWeight: 500, display: 'inline', color: '#5E33DD' }}
-          >
-            {t('anon.signInHere')}
-          </button>
+          {t('anon.hostPrivilege')}
         </p>
 
-        <div className={styles.joinRow}>
-          <input
-            className={styles.joinInput}
-            placeholder={t('anon.enterMeetingCode')}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-          />
-          <button className={isJoining ? styles.joinBtnLoading : styles.joinBtn} onClick={handleJoin} disabled={isJoining} style={isJoining ? { opacity: 0.7, cursor: 'not-allowed' } : {}}>
-            {isJoining ? t('common.joining') : t('common.join')}
+        <div className={styles.joinRow} style={{ maxWidth: '640px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '20px', padding: '0.9rem 1.25rem', backdropFilter: 'blur(20px)', alignItems: 'center' }}>
+          <div style={{ flex: 1, display: 'flex', gap: '0.75rem' }}>
+            <input
+              className={styles.joinInput}
+              placeholder={t('anon.enterMeetingCode')}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+            />
+            <button className={isJoining ? styles.joinBtnLoading : styles.joinBtn} onClick={handleJoin} disabled={isJoining} style={isJoining ? { opacity: 0.7, cursor: 'not-allowed' } : {}}>
+              {isJoining ? t('common.joining') : t('common.join')}
+            </button>
+          </div>
+          
+          <div className={styles.quickDivider} style={{ display: 'block', height: '48px', margin: '0 0.5rem' }} />
+          
+          <button className={styles.quickNewBtn} onClick={onSignIn}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            {t('nav.signIn')}
           </button>
         </div>
 
@@ -423,53 +430,53 @@ function AnonymousView({
           ))}
         </div>
 
-        <div className={styles.registerRow} style={{ marginTop: '1.5rem', borderTop: '1px solid #f1f5f9', paddingTop: '1.5rem' }}>
-          <span>{t('anon.noAccount')}</span>
-          <button type="button" className={styles.linkBtn} onClick={onSignUp}>
-            {t('nav.signUp')}
-          </button>
-        </div>
+      </div>
 
-        {/* ── Download Desktop App ── */}
-        <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
-          <a
-            href="/api/download?os=win"
-            className={styles.downloadBtn}
-            id="download-desktop-app-btn"
-            title="Download Kloud Meet for Windows"
-          >
-            {/* Windows Logo */}
-            <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="#5E33DD">
-              <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
-            </svg>
-            <span className={styles.downloadBtnLabel}>Windows App</span>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-          </a>
-          
+      <div className={styles.registerRow} style={{ marginTop: 'auto', marginBottom: '1rem', width: '100%', textAlign: 'center' }}>
+        <span>{t('anon.noAccount')}</span>
+        <button type="button" className={styles.linkBtn} onClick={onSignUp} style={{ marginLeft: '0.5rem' }}>
+          {t('nav.signUp')}
+        </button>
+      </div>
 
-            <a
-              href="/api/download?os=mac"
-              className={styles.downloadBtn}
-              id="download-desktop-app-mac-btn"
-              title="Download Kloud Meet for Mac"
-            >
-              {/* App Store Logo */}
-              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16">
-                <circle cx="12" cy="12" r="12" fill="#5E33DD" />
-                <path d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z" fill="#fff" />
-              </svg>
-              <span className={styles.downloadBtnLabel}>macOS App</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-        </div>
+      {/* ── Download Desktop App ── */}
+      <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: '0 auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
+        <a
+          href="/api/download?os=win"
+          className={styles.downloadBtn}
+          id="download-desktop-app-btn"
+          title="Download Kloud Meet for Windows"
+        >
+          {/* Windows Logo */}
+          <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="#5227D3">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+          </svg>
+          <span className={styles.downloadBtnLabel}>Windows App</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+
+        <a
+          href="/api/download?os=mac"
+          className={styles.downloadBtn}
+          id="download-desktop-app-mac-btn"
+          title="Download Kloud Meet for Mac"
+        >
+          {/* App Store Logo */}
+          <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16">
+            <circle cx="12" cy="12" r="12" fill="#5227D3" />
+            <path d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z" fill="#fff" />
+          </svg>
+          <span className={styles.downloadBtnLabel}>macOS App</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
       </div>
 
       {/* ── Warning Message Overlay ── */}
@@ -516,7 +523,7 @@ function AnonymousView({
               ) : (
                 <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
                   <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>{t('anon.startingIn')}</p>
-                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5E33DD', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5227D3', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
                 </div>
               );
             })()}
@@ -686,47 +693,47 @@ function LoginView({
             </button>
           </div>
 
-          {/* ── Download Desktop App ── */}
-          <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
-            <a
-              href="/api/download?os=win"
-              className={styles.downloadBtn}
-              id="download-desktop-app-login-btn"
-              title="Download Kloud Meet for Windows"
-            >
-              {/* Windows Logo */}
-              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="#5E33DD">
-                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
-              </svg>
-              <span className={styles.downloadBtnLabel}>Windows App</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-            
-
-            <a
-              href="/api/download?os=mac"
-              className={styles.downloadBtn}
-              id="download-desktop-app-mac-login-btn"
-              title="Download Kloud Meet for Mac"
-            >
-              {/* App Store Logo */}
-              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16">
-                <circle cx="12" cy="12" r="12" fill="#5E33DD" />
-                <path d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z" fill="#fff" />
-              </svg>
-              <span className={styles.downloadBtnLabel}>macOS App</span>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
-          </div>
         </form>
+      </div>
+
+      {/* ── Download Desktop App ── */}
+      <div className={styles.downloadRow} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: 'auto auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
+        <a
+          href="/api/download?os=win"
+          className={styles.downloadBtn}
+          id="download-desktop-app-login-btn"
+          title="Download Kloud Meet for Windows"
+        >
+          {/* Windows Logo */}
+          <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16" fill="#5227D3">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
+          </svg>
+          <span className={styles.downloadBtnLabel}>Windows App</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
+
+        <a
+          href="/api/download?os=mac"
+          className={styles.downloadBtn}
+          id="download-desktop-app-mac-login-btn"
+          title="Download Kloud Meet for Mac"
+        >
+          {/* App Store Logo */}
+          <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="16" height="16">
+            <circle cx="12" cy="12" r="12" fill="#5227D3" />
+            <path d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z" fill="#fff" />
+          </svg>
+          <span className={styles.downloadBtnLabel}>macOS App</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" style={{ opacity: 0.5, marginLeft: 2 }}>
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </a>
       </div>
     </div>
   );
@@ -1874,7 +1881,7 @@ function DashboardView({
               ) : (
                 <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
                   <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
-                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5E33DD', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5227D3', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
                 </div>
               );
             })()}
