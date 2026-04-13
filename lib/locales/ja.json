@@ -219,7 +219,13 @@
   "toolbar.onlyHostRecord": "ホストのみ録画可能",
   "toolbar.leaveTheMeeting": "ミーティングを退出",
   "toolbar.endForEveryone": "全員のミーティングを終了",
-  "toolbar.comingSoon": "{feature} — 近日公開",
+  "toolbar.earpieceEnabled": "イヤホンに切り替えました",
+  "toolbar.earpiece": "イヤホン",
+  "toolbar.bluetoothEnabled": "Bluetoothに切り替えました",
+  "toolbar.bluetooth": "Bluetooth",
+  "toolbar.speakerEnabled": "スピーカーに切り替えました",
+  "toolbar.loudspeaker": "スピーカー",
+  "toolbar.comingSoon": "{feature} — 近日公開予定",
   "toolbar.you": "あなた",
   "toolbar.expandWebcams": "ウェブカメラを展開",
   "toolbar.collapseWebcams": "ウェブカメラを折りたたむ",
@@ -390,5 +396,8 @@
   "toolbar.muteAllConfirm": "全員のマイクをミュートします。ユーザーは自分でミュートを解除できます。",
   "toolbar.muteAllDone": "全員をミュートしました",
   "toolbar.unmuteAllDone": "全員のミュートを解除しました",
-  "toolbar.muteAllActive": "全員ミュート中"
+  "toolbar.muteAllActive": "全員ミュート中",
+  "toolbar.captions": "リアルタイム字幕",
+  "toolbar.captionsOn": "字幕をオフにする",
+  "toolbar.captionsOff": "字幕をオンにする"
 }

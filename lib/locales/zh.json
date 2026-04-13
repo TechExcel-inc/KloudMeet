@@ -225,6 +225,12 @@
   "toolbar.onlyHostRecord": "仅主持人可录制",
   "toolbar.leaveTheMeeting": "离开会议",
   "toolbar.endForEveryone": "结束所有人的会议",
+  "toolbar.earpieceEnabled": "已切换到耳机",
+  "toolbar.earpiece": "听筒 / 耳机",
+  "toolbar.bluetoothEnabled": "已切换到蓝牙",
+  "toolbar.bluetooth": "蓝牙",
+  "toolbar.speakerEnabled": "已切换到外放扬声器",
+  "toolbar.loudspeaker": "扬声器",
   "toolbar.comingSoon": "{feature} — 即将推出",
   "toolbar.you": "您",
   "toolbar.expandWebcams": "展开摄像头",
@@ -391,5 +397,8 @@
   "toolbar.muteAllConfirm": "将全员麦克风静音。用户可以自行解除静音。",
   "toolbar.muteAllDone": "已静音所有参会者",
   "toolbar.unmuteAllDone": "已解除所有参会者静音",
-  "toolbar.muteAllActive": "全员已静音"
+  "toolbar.muteAllActive": "全员已静音",
+  "toolbar.captions": "实时字幕",
+  "toolbar.captionsOn": "关闭实时字幕",
+  "toolbar.captionsOff": "开启实时字幕"
 }

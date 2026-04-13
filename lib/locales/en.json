@@ -236,7 +236,13 @@
   "toolbar.onlyHostRecord": "Only Host Can Record",
   "toolbar.leaveTheMeeting": "Leave the meeting",
   "toolbar.endForEveryone": "End meeting for everyone",
-  "toolbar.comingSoon": "{feature} — Coming soon",
+  "toolbar.earpieceEnabled": "Switched to Earpiece",
+  "toolbar.earpiece": "Earpiece",
+  "toolbar.bluetoothEnabled": "Switched to Bluetooth",
+  "toolbar.bluetooth": "Bluetooth",
+  "toolbar.speakerEnabled": "Switched to Speaker",
+  "toolbar.loudspeaker": "Speaker",
+  "toolbar.comingSoon": "{feature} is coming soon",
   "toolbar.you": "You",
   "toolbar.expandWebcams": "Expand Webcams",
   "toolbar.collapseWebcams": "Collapse Webcams",
@@ -407,5 +413,8 @@
   "toolbar.muteAllConfirm": "Mute all participants. Users can unmute themselves.",
   "toolbar.muteAllDone": "All participants muted",
   "toolbar.unmuteAllDone": "All participants unmuted",
-  "toolbar.muteAllActive": "All Muted"
+  "toolbar.muteAllActive": "All Muted",
+  "toolbar.captions": "Live Captions",
+  "toolbar.captionsOn": "Turn Off Live Captions",
+  "toolbar.captionsOff": "Turn On Live Captions"
 }

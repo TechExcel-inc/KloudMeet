@@ -219,6 +219,12 @@
   "toolbar.onlyHostRecord": "호스트만 녹화 가능",
   "toolbar.leaveTheMeeting": "회의에서 나가기",
   "toolbar.endForEveryone": "모두의 회의 종료",
+  "toolbar.earpieceEnabled": "이어폰으로 전환되었습니다",
+  "toolbar.earpiece": "이어폰",
+  "toolbar.bluetoothEnabled": "블루투스로 전환되었습니다",
+  "toolbar.bluetooth": "블루투스",
+  "toolbar.speakerEnabled": "스피커로 전환되었습니다",
+  "toolbar.loudspeaker": "스피커",
   "toolbar.comingSoon": "{feature} — 곧 출시",
   "toolbar.you": "나",
   "toolbar.expandWebcams": "웹캠 확장",
@@ -390,5 +396,8 @@
   "toolbar.muteAllConfirm": "모든 참가자의 마이크를 음소거합니다. 사용자는 스스로 음소거를 해제할 수 있습니다.",
   "toolbar.muteAllDone": "모든 참가자 음소거됨",
   "toolbar.unmuteAllDone": "모든 참가자 음소거 해제됨",
-  "toolbar.muteAllActive": "전체 음소거 중"
+  "toolbar.muteAllActive": "전체 음소거 중",
+  "toolbar.captions": "실시간 자막",
+  "toolbar.captionsOn": "자막 끄기",
+  "toolbar.captionsOff": "자막 켜기"
 }
