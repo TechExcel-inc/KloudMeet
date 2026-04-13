@@ -71,27 +71,30 @@ export function PageClientImpl(props: {
     undefined,
   );
 
-  // Force microphone to always default ON, regardless of persisted state.
-  // Camera and other choices remain persisted from localStorage.
-  if (typeof window !== 'undefined') {
+  // ── 清理 stale 设备 ID（在 mount 时执行，避免渲染期竞争）
+  const [prejoinKey, setPrejoinKey] = React.useState(0); // 用于强制重挂载 PreJoin
+
+  React.useEffect(() => {
     try {
       const key = 'lk-user-choices';
       const raw = localStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed.audioEnabled === false) {
-          parsed.audioEnabled = true;
-          localStorage.setItem(key, JSON.stringify(parsed));
-        }
-      }
+      const base: Record<string, any> = raw ? JSON.parse(raw) : {};
+      // Always reset to system defaults: clear deviceIds, ensure audio on
+      localStorage.setItem(key, JSON.stringify({
+        ...base,
+        audioEnabled: true,
+        audioDeviceId: '',   // let browser pick system default
+        videoDeviceId: '',   // let browser pick system default
+      }));
     } catch (_) { /* ignore */ }
-  }
+  }, []); // runs once on mount, before PreJoin reads localStorage
 
   const preJoinDefaults = React.useMemo(() => {
     return {
       username: '',
       videoEnabled: true,
       audioEnabled: true,
+      // Do NOT set audioDeviceId / videoDeviceId — let LiveKit pick system default
     };
   }, []);
   const [connectionDetails, setConnectionDetails] = React.useState<ConnectionDetails | undefined>(
@@ -201,8 +204,23 @@ export function PageClientImpl(props: {
     }
   }, [props.roomName, props.region, t]);
   const handlePreJoinError = React.useCallback((error: any) => {
-    console.error('PreJoin Validation Error:', error);
-    alert(`${t('prejoin.prejoinError', { error: error?.message || String(error) })}`);
+    console.error('PreJoin device error:', error);
+    const msg: string = error?.message || String(error);
+    // "Requested device not found" — clear stale IDs and silently remount PreJoin
+    // Device preview errors (NotFoundError, OverconstrainedError, NotReadableError)
+    // are non-fatal: LiveKit still renders the dropdown and the user can select manually.
+    // DO NOT remount — that causes an infinite loop since LiveKit retries preview on mount.
+    const DEVICE_ERRORS = [
+      'notfounderror', 'requested device', 'device not found',
+      'overconstrained', 'notreadableerror', 'could not start',
+    ];
+    const isDeviceError = DEVICE_ERRORS.some(k => msg.toLowerCase().includes(k));
+    if (isDeviceError) {
+      // Silently suppress — user can still pick a device from the dropdown
+      console.warn('[KloudMeet] Device preview unavailable, user may select manually:', msg);
+      return;
+    }
+    alert(`${t('prejoin.prejoinError', { error: msg })}`);
   }, [t]);
 
   React.useEffect(() => {
@@ -282,6 +300,130 @@ export function PageClientImpl(props: {
             .kloud-prejoin-wrapper .lk-button-group > div:hover {
               background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
             }
+
+            /* ── Device selection popup — single container only ── */
+            .kloud-prejoin-wrapper .lk-media-device-menu {
+              background: #ffffff !important;
+              border: 1px solid #e2e8f0 !important;
+              border-radius: 14px !important;
+              box-shadow: 0 8px 32px rgba(17,24,39,0.13) !important;
+              padding: 6px !important;
+              max-height: 260px !important;
+              overflow-y: auto !important;
+              overflow-x: hidden !important;
+              min-width: 220px !important;
+              scrollbar-width: thin;
+              scrollbar-color: #c7d2fe transparent;
+            }
+
+            /* Strip border/bg from inner ul — avoid double-box */
+            .kloud-prejoin-wrapper .lk-media-device-menu ul,
+            .kloud-prejoin-wrapper .lk-media-device-menu .lk-list {
+              background: transparent !important;
+              border: none !important;
+              box-shadow: none !important;
+              border-radius: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              max-height: none !important;
+              overflow: visible !important;
+              list-style: none !important;
+            }
+
+            /* Scrollbar webkit */
+            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar { width: 4px; }
+            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar-track { background: transparent; }
+            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar-thumb {
+              background: #c7d2fe;
+              border-radius: 4px;
+            }
+
+            /* List items */
+            .kloud-prejoin-wrapper .lk-media-device-menu li {
+              padding: 0 !important;
+              margin: 2px 0 !important;
+              list-style: none !important;
+              border-radius: 10px !important;
+              overflow: hidden !important;
+            }
+
+            /* Item buttons */
+            .kloud-prejoin-wrapper .lk-media-device-menu li button,
+            .kloud-prejoin-wrapper .lk-media-device-menu button:not([class*="lk-button-group"]) {
+              background: transparent !important;
+              color: #1e293b !important;
+              border-radius: 10px !important;
+              padding: 9px 14px 9px 36px !important;
+              font-size: 0.88rem !important;
+              font-weight: 500 !important;
+              text-align: left !important;
+              width: 100% !important;
+              border: none !important;
+              cursor: pointer !important;
+              transition: background 0.15s, color 0.15s !important;
+              position: relative !important;
+              white-space: nowrap !important;
+              overflow: hidden !important;
+              text-overflow: ellipsis !important;
+              display: block !important;
+            }
+
+            /* Hover */
+            .kloud-prejoin-wrapper .lk-media-device-menu li button:hover {
+              background: #eef2ff !important;
+              color: #5227D3 !important;
+            }
+
+            /* Selected item — #5227D3 background, white text */
+            .kloud-prejoin-wrapper .lk-media-device-menu li[aria-selected="true"] button,
+            .kloud-prejoin-wrapper .lk-media-device-menu button[aria-selected="true"],
+            .kloud-prejoin-wrapper .lk-media-device-menu li button[data-lk-active="true"],
+            .kloud-prejoin-wrapper .lk-media-device-menu li.lk-list-item--active button,
+            .kloud-prejoin-wrapper .lk-media-device-menu li button.lk-active {
+              background: #5227D3 !important;
+              color: #ffffff !important;
+              font-weight: 600 !important;
+            }
+
+            /* White checkmark before selected item via ::before */
+            .kloud-prejoin-wrapper .lk-media-device-menu li[aria-selected="true"] button::before,
+            .kloud-prejoin-wrapper .lk-media-device-menu button[aria-selected="true"]::before,
+            .kloud-prejoin-wrapper .lk-media-device-menu li button[data-lk-active="true"]::before,
+            .kloud-prejoin-wrapper .lk-media-device-menu li.lk-list-item--active button::before,
+            .kloud-prejoin-wrapper .lk-media-device-menu li button.lk-active::before {
+              content: '';
+              position: absolute !important;
+              left: 12px !important;
+              top: 50% !important;
+              transform: translateY(-50%) rotate(45deg) !important;
+              width: 5px !important;
+              height: 9px !important;
+              border-right: 2px solid #ffffff !important;
+              border-bottom: 2px solid #ffffff !important;
+              display: block !important;
+            }
+
+            /* Unselected items: placeholder indent (no checkmark) */
+            .kloud-prejoin-wrapper .lk-media-device-menu li button:not(.lk-active)::before {
+              content: '' !important;
+              display: none !important;
+            }
+
+            /* ── Microphone & Camera button group: rounded to match input field ── */
+            .kloud-prejoin-wrapper .lk-button-group {
+              border-radius: 10px !important;
+              overflow: hidden !important;
+            }
+            .kloud-prejoin-wrapper .lk-button-group > button:first-child {
+              border-radius: 10px 0 0 10px !important;
+            }
+            .kloud-prejoin-wrapper .lk-button-group > button:last-child,
+            .kloud-prejoin-wrapper .lk-button-group > div:last-child {
+              border-radius: 0 10px 10px 0 !important;
+            }
+
+
+
 
             /* Toolbar CSS - EAD-PFM Aesthetic */
             .kloud-prejoin-toolbar {
@@ -486,13 +628,13 @@ export function PageClientImpl(props: {
                   <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </Link>
-              <Link href="/" className="kloud-prejoin-logo-toolbar">
-                <span className="kloud-prejoin-logo-icon-toolbar">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" width="18" height="18">
-                    <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </span>
-                Kloud Meet
+              <Link href="/" className="kloud-prejoin-logo-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+                <img
+                  src="/images/kloud-header-logo.svg"
+                  alt="Kloud Meet"
+                  height={36}
+                  style={{ display: 'block', transform: 'translateY(4px)' }}
+                />
               </Link>
             </div>
 
@@ -596,8 +738,8 @@ export function PageClientImpl(props: {
           </div>
           {!isBot && (
             <PreJoin
+              key={prejoinKey}
               defaults={preJoinDefaults}
-
               onSubmit={handlePreJoinSubmit}
               onError={handlePreJoinError}
             />
