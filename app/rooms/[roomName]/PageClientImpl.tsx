@@ -12,6 +12,8 @@ import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
+import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
+import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { useToolbarIsMobile } from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
@@ -935,58 +937,78 @@ function VideoConferenceComponent(props: {
     };
   }, []);
 
+  const connectAttemptedRef = React.useRef(false);
+
   React.useEffect(() => {
+    // Always register event listeners (so cleanup always has something to remove)
     room.on(RoomEvent.Disconnected, handleOnLeave);
     room.on(RoomEvent.EncryptionError, handleEncryptionError);
     room.on(RoomEvent.MediaDevicesError, handleError);
 
-    if (e2eeSetupComplete) {
-      room
-        .connect(
-          props.connectionDetails.serverUrl,
-          props.connectionDetails.participantToken,
-          connectOptions,
-        )
-        .then(() => {
-          if (isActionStart) {
-            const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
-            if (!wasRefresh) setShowMeetingReadyModal(true);
-          }
-          // Auto-copy the meeting link to clipboard when joining to make it easy to invite others,
-          // especially if the app goes to the background during screen sharing.
-          if (typeof navigator !== 'undefined' && navigator.clipboard) {
-            navigator.clipboard.writeText(window.location.href).catch(console.error);
-            console.log('Meeting URL auto-copied to clipboard!');
-          }
+    if (e2eeSetupComplete && !connectAttemptedRef.current) {
+      // Check if room is already connected or connecting
+      if (room.state === ConnectionState.Connected || room.state === ConnectionState.Reconnecting) {
+        console.warn('[LiveKit] Room already connected, skipping connect()');
+      } else {
+        connectAttemptedRef.current = true;
 
-          // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
-          const rn = props.connectionDetails.roomName;
-          fetch(`/api/meetings/${rn}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
-          }).catch(e => console.warn('[meeting start fallback] failed', e));
-        })
-        .catch((error) => {
-          handleError(error);
-        });
-      if (props.userChoices.videoEnabled) {
-        room.localParticipant.setCameraEnabled(true).catch((error) => {
-          handleError(error);
-        });
-      }
-      if (props.userChoices.audioEnabled) {
-        room.localParticipant.setMicrophoneEnabled(true).catch((error) => {
-          handleError(error);
-        });
+        room
+          .connect(
+            props.connectionDetails.serverUrl,
+            props.connectionDetails.participantToken,
+            connectOptions,
+          )
+          .then(() => {
+            if (isActionStart) {
+              const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
+              if (!wasRefresh) setShowMeetingReadyModal(true);
+            }
+            if (typeof navigator !== 'undefined' && navigator.clipboard) {
+              navigator.clipboard.writeText(window.location.href).catch(console.error);
+              console.log('Meeting URL auto-copied to clipboard!');
+            }
+
+            // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
+            const rn = props.connectionDetails.roomName;
+            fetch(`/api/meetings/${rn}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
+            }).catch(e => console.warn('[meeting start fallback] failed', e));
+
+            // Enable camera/mic AFTER connection is established
+            if (props.userChoices.videoEnabled) {
+              room.localParticipant.setCameraEnabled(true).catch((error) => {
+                handleError(error);
+              });
+            }
+            if (props.userChoices.audioEnabled) {
+              room.localParticipant.setMicrophoneEnabled(true).catch((error) => {
+                handleError(error);
+              });
+            }
+          })
+          .catch((error) => {
+            connectAttemptedRef.current = false; // Allow retry on failure
+            handleError(error);
+          });
       }
     }
+
     return () => {
       room.off(RoomEvent.Disconnected, handleOnLeave);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
+      // Properly disconnect when component unmounts (fixes StrictMode double-mount)
+      if (room.state !== ConnectionState.Disconnected) {
+        room.disconnect().catch(console.error);
+        connectAttemptedRef.current = false;
+      }
     };
-  }, [e2eeSetupComplete, room, props.connectionDetails, props.userChoices]);
+    // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
+    // whose values are only needed at initial connect time, not for re-connections.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [e2eeSetupComplete, room, props.connectionDetails]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -1782,6 +1804,15 @@ function VideoConferenceComponent(props: {
   // Chat + Attendee overlay state
   const [chatOpen, setChatOpen] = React.useState(false);
   const [attendeeOpen, setAttendeeOpen] = React.useState(false);
+
+  // ─── Captions (host/co-host only can toggle, all see the overlay) ────────
+  const { captionsInfo, setCaptionsOpen, captionsRunning } = useCaptions({
+    room,
+    micEnabled,
+  });
+  const handleToggleCaptions = React.useCallback(() => {
+    setCaptionsOpen(!captionsRunning);
+  }, [captionsRunning, setCaptionsOpen]);
 
   // Chat messages — always listening (even when panel is closed)
   const CHAT_TOPIC = 'kloud-chat';
@@ -3120,6 +3151,9 @@ function VideoConferenceComponent(props: {
           `}</style>
         </div>
 
+        {/* Captions overlay — visible to all participants when host enables captions */}
+        <CaptionsOverlay captionsInfo={captionsInfo} bottomOffset={90} />
+
         {/* Custom toolbar overlay */}
         <KloudMeetToolbar
           activeView={activeView}
@@ -3203,6 +3237,9 @@ function VideoConferenceComponent(props: {
           muteAllActive={muteAllActive}
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
+          canToggleCaptions={isHost || isCohost}
+          captionsEnabled={captionsRunning}
+          onToggleCaptions={handleToggleCaptions}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
