@@ -1127,11 +1127,13 @@ function SignupView({
 function DashboardView({
   user,
   onSignOut,
+  onUpdateUser,
   onOpenHelp,
   toast,
 }: {
   user: AuthUser;
   onSignOut: () => void;
+  onUpdateUser: (u: AuthUser) => void;
   onOpenHelp: () => void;
   toast: { show: (t: string) => void };
 }) {
@@ -2057,7 +2059,20 @@ function DashboardView({
         <MyProfileModal 
           user={user} 
           onClose={() => setShowProfileModal(false)}
-          onSave={({ personalRoomId: newId }) => setPersonalRoomId(newId || null)}
+          onSave={({ personalRoomId: newId, avatarUrl: newAvatar, displayName: newName }) => {
+            setPersonalRoomId(newId || null);
+            // Update user state so top-right avatar + name refresh immediately
+            if (newAvatar || newName) {
+              const updated = {
+                ...user,
+                ...(newAvatar ? { avatarUrl: newAvatar } : {}),
+                ...(newName ? { displayName: newName } : {}),
+              };
+              // Keep localStorage in sync
+              try { localStorage.setItem('kloudUser', JSON.stringify(updated)); } catch {}
+              onUpdateUser(updated);
+            }
+          }}
           toast={toast}
         />
       )}
@@ -2448,7 +2463,7 @@ function HomeContent() {
         />
       )}
       {view === 'dashboard' && user && (
-        <DashboardView user={user} onSignOut={handleSignOut} onOpenHelp={() => setShowHelp(true)} toast={toast} />
+        <DashboardView user={user} onSignOut={handleSignOut} onUpdateUser={setUser} onOpenHelp={() => setShowHelp(true)} toast={toast} />
       )}
 
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
