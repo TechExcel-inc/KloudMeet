@@ -434,5 +434,10 @@
   "toolbar.muteAllActive": "All Muted",
   "toolbar.captions": "Live Captions",
   "toolbar.captionsOn": "Turn Off Live Captions",
-  "toolbar.captionsOff": "Turn On Live Captions"
+  "toolbar.captionsOff": "Turn On Live Captions",
+  "toolbar.moreParticipants": "More",
+  "toolbar.showLess": "Show less",
+  "toolbar.recordLoginRequired": "You must be logged in to record",
+  "toolbar.recordingFailed": "Recording failed",
+  "toolbar.recordNetworkError": "Network error while toggling recording"
 }

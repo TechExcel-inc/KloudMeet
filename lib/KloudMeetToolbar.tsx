@@ -157,7 +157,6 @@ export function KloudMeetToolbar({
   };
 
   const isMobile = useToolbarIsMobile();
-  const [mobileTopRightMenuOpen, setMobileTopRightMenuOpen] = useState(false);
   const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
   const lastMouseYRef = useRef<number>(window.innerHeight);
   const bottomAreaPriorityUntilRef = useRef<number>(0);
@@ -192,13 +191,11 @@ export function KloudMeetToolbar({
     if (isMobile) {
       // Logic for mobile: Auto-hide after 30 seconds of inactivity
       let hideTimer: ReturnType<typeof setTimeout> | null = null;
-      
+
       const startTimer = () => {
         if (hideTimer) clearTimeout(hideTimer);
         hideTimer = setTimeout(() => {
           setVisible(false);
-          // Auto close the sub-menus if hiding toolbar completely
-          if (mobileTopRightMenuOpen) setMobileTopRightMenuOpen(false);
         }, 30000); // 30 seconds
       };
 
@@ -224,13 +221,12 @@ export function KloudMeetToolbar({
         }
 
         const target = e.target as Element;
-        
+
         // If visible, check if they tapped inside a toolbar component
         const isToolbarArea = !!(
           toolbarRef.current?.contains(target) ||
-          target.closest?.('#mobileTopRightBtn') || 
-          target.closest?.('#mobileTopRightMenu') || 
-          target.closest?.('.lk-device-menu') || 
+          target.closest?.('#mobileTopRightBtn') ||
+          target.closest?.('.lk-device-menu') ||
           target.closest?.('.lk-menu') ||
           target.closest?.(`.${styles.actionSheetOverlay}`) ||
           target.closest?.(`.${styles.actionSheet}`)
@@ -244,7 +240,6 @@ export function KloudMeetToolbar({
 
         // They clicked outside, so hide it
         setVisible(false);
-        if (mobileTopRightMenuOpen) setMobileTopRightMenuOpen(false);
       };
 
       document.addEventListener('click', handleBodyClick, { capture: true });
@@ -268,9 +263,9 @@ export function KloudMeetToolbar({
       window.addEventListener('mousemove', handleMouseMove);
       return () => window.removeEventListener('mousemove', handleMouseMove);
     }
-  }, [isMobile, visible, mobileTopRightMenuOpen, chatOpen, attendeeOpen, activeSheet]);
+  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet]);
 
-  // 接收 iframe postMessage：mousemove 事件沿用同一套显示/隐藏逻辑
+  // 接收 iframe postMessage：mousemove 和点击事件沿用同一套显示/隐藏逻辑
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const payload = event.data;
@@ -278,7 +273,21 @@ export function KloudMeetToolbar({
         typeof payload === 'object' && payload !== null && 'type' in payload
           ? String((payload as { type?: unknown }).type ?? '')
           : '';
+
+      if (msgType === 'Kloud-onMouseClick' && isMobile) {
+        // iframe 内部点击，移动端 toggle 菜单显示隐藏。加一个简单的节流防止 touchstart+click 重复触发
+        const now = Date.now();
+        if (now - lastToggleTimeRef.current > 500) {
+          console.log("111");
+          lastToggleTimeRef.current = now;
+          setVisible(prev => !prev);
+        }
+        return;
+      }
+
       if (msgType === 'mousemove') {
+        if (isMobile) return; // 移动端没有鼠标悬浮逻辑，不需要处理 iframe 的 mousemove
+
         const now = Date.now();
         if (now < bottomAreaPriorityUntilRef.current) {
           // 底部热区刚触发过时，忽略主区 mousemove 的短时抖动覆盖
@@ -307,6 +316,8 @@ export function KloudMeetToolbar({
 
       // 来自 iframe 底部热区：等价鼠标在底部，显示 toolbar
       if (msgType === 'Kloud-onBottomAreaMouseMove') {
+        if (isMobile) return; // 移动端不需要 hover 热区
+
         bottomAreaPriorityUntilRef.current = Date.now() + 220;
         lastMouseYRef.current = window.innerHeight;
         applyMouseVisibility(window.innerHeight);
@@ -946,69 +957,100 @@ export function KloudMeetToolbar({
           : null)}
 
       {isMobile && (
-        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 60, opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none', transition: 'opacity 0.3s ease' }}>
-          <button 
-            id="mobileTopRightBtn"
-            onClick={(e) => { e.stopPropagation(); setMobileTopRightMenuOpen(!mobileTopRightMenuOpen); }}
-            aria-label="Control Menu"
-            style={{ 
-              background: 'rgba(17, 24, 39, 0.7)', backdropFilter: 'blur(10px)', 
-              color: '#fff', border: 'none', borderRadius: '50%', 
-              width: '40px', height: '40px', display: 'flex', 
-              alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+        <div
+          id="mobileTopRightBtn"
+          style={{
+            position: 'fixed', top: '12px', right: '12px', zIndex: 60,
+            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px',
+            opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none',
+            transition: 'opacity 0.3s ease',
+          }}
+        >
+          {/* Chat button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleToggleChat(); }}
+            aria-label="Chat"
+            title={t('toolbar.chats') || 'Chat'}
+            style={{
+              background: chatOpen
+                ? 'rgba(99, 102, 241, 0.85)'
+                : 'rgba(17, 24, 39, 0.70)',
+              backdropFilter: 'blur(10px)',
+              color: '#fff', border: 'none', borderRadius: '50%',
+              width: '40px', height: '40px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              cursor: 'pointer', flexShrink: 0,
+              transition: 'background 0.2s',
             }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+              <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </button>
-          
-          {mobileTopRightMenuOpen && (
-            <>
-              {/* Overlay to dismiss menu */}
-              <div 
-                onClick={() => setMobileTopRightMenuOpen(false)} 
-                style={{ position: 'fixed', inset: 0, zIndex: 1 }} 
-              />
-              <div id="mobileTopRightMenu" style={{ 
-                position: 'absolute', top: '48px', right: '0', 
-                background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(10px)',
-                borderRadius: '12px', boxShadow: '0 8px 32px rgba(0,0,0,0.15)', 
-                padding: '8px', minWidth: '140px', width: 'max-content', display: 'flex', flexDirection: 'column', gap: '4px',
-                animation: 'fadeIn 0.2s ease-out',
-                zIndex: 2
-              }}>
-                <button onClick={() => { setMobileTopRightMenuOpen(false); handleToggleChat(); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '8px', fontWeight: 500, color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                  {t('toolbar.chats') || 'Chat'}
-                </button>
-                <button onClick={() => { 
-                  setMobileTopRightMenuOpen(false); 
-                  navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-                  setToastMsg(t('toolbar.inviteCopied') || 'Invite link copied');
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                  toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-                }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '8px', fontWeight: 500, color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
-                  {t('toolbar.copyInviteLink') || 'Invite'}
-                </button>
-                <button onClick={() => { setMobileTopRightMenuOpen(false); openSheet('recording'); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '8px', fontWeight: 500, color: '#374151', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  {isRecording ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" /><circle cx="12" cy="12" r="10" /></svg>
-                  ) : (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="6" fill="none" /><circle cx="12" cy="12" r="10" /></svg>
-                  )}
-                  {isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
-                </button>
-                <div style={{ height: '1px', background: '#e5e7eb', margin: '4px 0' }} />
-                <button onClick={() => { setMobileTopRightMenuOpen(false); openSheet('exit'); }} style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px', border: 'none', background: 'transparent', textAlign: 'left', borderRadius: '8px', fontWeight: 500, color: '#ef4444', cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                  {t('toolbar.exit') || 'Exit'}
-                </button>
-              </div>
-            </>
-          )}
+
+          {/* Recording button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              if (isRecording) {
+                // Already recording → show stop/pause sheet
+                openSheet('recording');
+              } else {
+                // Not recording → open the same record popup as web
+                onOpenRecordPopup?.();
+              }
+            }}
+            aria-label={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
+            title={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
+            style={{
+              background: isRecording
+                ? 'rgba(239, 68, 68, 0.85)'
+                : 'rgba(17, 24, 39, 0.70)',
+              backdropFilter: 'blur(10px)',
+              color: '#fff', border: 'none', borderRadius: '50%',
+              width: '40px', height: '40px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              cursor: 'pointer', flexShrink: 0,
+              transition: 'background 0.2s',
+              // pulse animation when recording
+              animation: isRecording ? 'mobileRecordPulse 1.8s ease-in-out infinite' : 'none',
+            }}
+          >
+            {isRecording ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+                <circle cx="12" cy="12" r="5" fill="#fff" stroke="none" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+                <circle cx="12" cy="12" r="5" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
+            )}
+          </button>
+
+          {/* Exit button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); openSheet('exit'); }}
+            aria-label={t('toolbar.exit') || 'Exit'}
+            title={t('toolbar.exit') || 'Exit'}
+            style={{
+              background: 'rgba(239, 68, 68, 0.80)',
+              backdropFilter: 'blur(10px)',
+              color: '#fff', border: 'none', borderRadius: '50%',
+              width: '40px', height: '40px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              cursor: 'pointer', flexShrink: 0,
+              transition: 'background 0.2s',
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
         </div>
       )}
     </>

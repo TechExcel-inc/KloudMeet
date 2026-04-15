@@ -175,7 +175,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>{t('common.close')}</button>
             </div>
           </div>
-
+          
           {/* Tabs */}
           <div className={styles.tabContainer}>
             <button 
@@ -204,6 +204,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             </button>
           </div>
 
+          <div className={styles.bodyScroll}>
           {/* Tab Content: General Information */}
           {activeTab === 'general' && (
             <div className={styles.content}>
@@ -515,6 +516,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </p>
             </div>
           )}
+          </div>
         </div>
       </div>
 

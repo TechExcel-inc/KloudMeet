@@ -417,5 +417,10 @@
   "toolbar.muteAllActive": "전체 음소거 중",
   "toolbar.captions": "실시간 자막",
   "toolbar.captionsOn": "자막 끄기",
-  "toolbar.captionsOff": "자막 켜기"
+  "toolbar.captionsOff": "자막 켜기",
+  "toolbar.moreParticipants": "더 보기",
+  "toolbar.showLess": "접기",
+  "toolbar.recordLoginRequired": "녹화하려면 로그인해야 합니다",
+  "toolbar.recordingFailed": "녹화 실패",
+  "toolbar.recordNetworkError": "녹화 전환 중 네트워크 오류가 발생했습니다"
 }

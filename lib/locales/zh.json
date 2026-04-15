@@ -418,5 +418,10 @@
   "toolbar.muteAllActive": "全员已静音",
   "toolbar.captions": "实时字幕",
   "toolbar.captionsOn": "关闭实时字幕",
-  "toolbar.captionsOff": "开启实时字幕"
+  "toolbar.captionsOff": "开启实时字幕",
+  "toolbar.moreParticipants": "更多",
+  "toolbar.showLess": "收起",
+  "toolbar.recordLoginRequired": "您必须登录后才能录制",
+  "toolbar.recordingFailed": "录制失败",
+  "toolbar.recordNetworkError": "切换录制时发生网络错误"
 }

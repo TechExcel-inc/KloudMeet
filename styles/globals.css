@@ -88,18 +88,14 @@ h2 a {
   display: none !important;
 }
 
-/* Show participant name centered in placeholder via data attribute */
+/* Show participant initials centered in placeholder via data attribute */
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
-  content: attr(data-lk-name);
-  font-size: 1.2rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  letter-spacing: 0.03em;
-}
-
-/* Hide the name in the bottom metadata bar (it's now shown centered above) */
-.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-metadata .lk-participant-name {
-  display: none !important;
+  content: attr(data-lk-initials);
+  font-size: clamp(1rem, 4vw, 2rem);
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.90);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 /* ═══════════════════════════════════════════════════

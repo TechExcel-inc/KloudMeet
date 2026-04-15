@@ -26,7 +26,6 @@ import {
   VideoConference,
   VideoTrack,
   useTracks,
-  TrackLoop,
   ParticipantTile,
   RoomAudioRenderer,
   ConnectionStateToast,
@@ -771,6 +770,31 @@ export function PageClientImpl(props: {
   );
 }
 
+/** 从名字计算最多2个字符的缩写 */
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) {
+    // 单词：取前两个字符（兼容中文名）
+    return parts[0].slice(0, 2);
+  }
+  // 多词：首字母
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+/** 根据参与者数量计算最优网格列数 */
+function calcGridCols(count: number): number {
+  if (count <= 1) return 1;
+  if (count <= 2) return 2;
+  if (count <= 4) return 2;
+  if (count <= 6) return 3;
+  if (count <= 9) return 3;
+  if (count <= 12) return 4;
+  return 4; // 13-16
+}
+
+const MAX_VISIBLE = 16;
+
 function MobileVideoLayout() {
   const { t } = useI18n();
   const tracks = useTracks(
@@ -781,24 +805,146 @@ function MobileVideoLayout() {
     { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
   );
 
-  return (
-    <div
-      className="lk-mobile-scroll-grid"
-      style={{
-        flex: 1,
-        height: '100%',
+  const [expanded, setExpanded] = React.useState(false);
+  const gridRef = React.useRef<HTMLDivElement>(null);
+
+  const totalCount = tracks.length;
+  const isOver = totalCount > MAX_VISIBLE;
+  // 收起时只显示 MAX_VISIBLE 个
+  const visibleTracks = (!isOver || expanded) ? tracks : tracks.slice(0, MAX_VISIBLE);
+  const hiddenCount = totalCount - MAX_VISIBLE;
+
+  const cols = calcGridCols(Math.min(totalCount, MAX_VISIBLE));
+
+  // 注入 data-lk-initials 到每个 placeholder 元素
+  React.useEffect(() => {
+    const container = gridRef.current;
+    if (!container) return;
+
+    const applyInitials = () => {
+      container.querySelectorAll<HTMLElement>('.lk-participant-tile').forEach((tile) => {
+        const placeholder = tile.querySelector<HTMLElement>('.lk-participant-placeholder');
+        if (!placeholder) return;
+        // 获取名字：先尝试 data-lk-name，再找 .lk-participant-name 文字
+        const name =
+          placeholder.getAttribute('data-lk-name') ||
+          tile.querySelector('.lk-participant-name')?.textContent ||
+          '';
+        placeholder.setAttribute('data-lk-initials', getInitials(name));
+      });
+    };
+
+    applyInitials();
+    // MutationObserver 监听 DOM 变化（新人加入/摄像头切换）
+    const observer = new MutationObserver(applyInitials);
+    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-lk-name', 'data-lk-video-muted'] });
+    return () => observer.disconnect();
+  }, [visibleTracks.length]);
+
+  // 不滚动模式：用 CSS Grid 填满父容器高度
+  const gridStyle: React.CSSProperties = isOver && expanded
+    ? {
+        // 展开后允许滚动
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gap: '6px',
+        padding: '6px',
         overflowY: 'auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px',
-        background: '#0a0a0a'
-      }}
-    >
-      <TrackLoop tracks={tracks}>
-        <div style={{ width: '100%', minHeight: '30vh', aspectRatio: '16/9', borderRadius: '16px', overflow: 'hidden', flexShrink: 0, position: 'relative', background: '#1e1e2e' }}>
-          <ParticipantTile style={{ width: '100%', height: '100%' }} />
-        </div>
-      </TrackLoop>
+        height: '100%',
+        background: '#0a0a0a',
+        boxSizing: 'border-box',
+      }
+    : {
+        // 不超16人 or 收起时：填满高度，不滚动
+        display: 'grid',
+        gridTemplateColumns: `repeat(${cols}, 1fr)`,
+        gridAutoRows: '1fr',
+        gap: '6px',
+        padding: '6px',
+        height: '100%',
+        overflow: 'hidden',
+        background: '#0a0a0a',
+        boxSizing: 'border-box',
+      };
+
+  return (
+    <div className="lk-mobile-scroll-grid" style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
+      <div ref={gridRef} style={gridStyle}>
+        {visibleTracks.map((track, i) => (
+          <div
+            key={track.participant?.identity ?? i}
+            style={{
+              borderRadius: '12px',
+              overflow: 'hidden',
+              position: 'relative',
+              background: '#1e1e2e',
+              minHeight: 0,
+            }}
+          >
+            <ParticipantTile
+              trackRef={track}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+        ))}
+
+        {/* More 按钮 —— 占据一个格子 */}
+        {isOver && !expanded && (
+          <button
+            onClick={() => setExpanded(true)}
+            style={{
+              borderRadius: '12px',
+              border: 'none',
+              background: 'rgba(99, 102, 241, 0.25)',
+              backdropFilter: 'blur(8px)',
+              color: '#fff',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              fontSize: '0.85rem',
+              fontWeight: 600,
+              fontFamily: 'Inter, sans-serif',
+              minHeight: 0,
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="28" height="28">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            {`+${hiddenCount} ${t('toolbar.moreParticipants')}`}
+          </button>
+        )}
+      </div>
+
+      {/* 展开后收起按钮 */}
+      {isOver && expanded && (
+        <button
+          onClick={() => setExpanded(false)}
+          style={{
+            flexShrink: 0,
+            background: 'rgba(30,30,46,0.95)',
+            border: 'none',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+            color: 'rgba(255,255,255,0.6)',
+            padding: '10px',
+            fontSize: '0.8rem',
+            cursor: 'pointer',
+            fontFamily: 'Inter, sans-serif',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+            <path d="M18 15l-6-6-6 6" />
+          </svg>
+          {t('toolbar.showLess')}
+        </button>
+      )}
+
       <RoomAudioRenderer />
       <ConnectionStateToast />
     </div>
@@ -854,16 +1000,34 @@ function VideoConferenceComponent(props: {
   const [webcamSidebarSettingsOpen, setWebcamSidebarSettingsOpen] = React.useState(false);
 
   const handleToggleRecording = async (action: 'start' | 'stop') => {
+    // Get user from localStorage → fallback sessionStorage → fallback cookie
+    let dbUser: { id?: string } = {};
+    try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch {}
+    if (!dbUser.id) {
+      try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch {}
+    }
+    if (!dbUser.id) {
+      // Try cookie
+      const match = document.cookie.match(/(?:^|;\s*)kloudUser=([^;]*)/);
+      if (match) { try { dbUser = JSON.parse(decodeURIComponent(match[1])); } catch {} }
+    }
+
+    if (!dbUser.id) {
+      // Use toolbar toast instead of browser alert
+      const toastEl = document.createElement('div');
+      toastEl.textContent = t('toolbar.recordLoginRequired') || 'You must be logged in to record';
+      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      document.body.appendChild(toastEl);
+      setTimeout(() => toastEl.remove(), 3000);
+      return;
+    }
+
     try {
-      const dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}');
-      if (!dbUser.id) {
-        alert('You must be logged in to record');
-        return;
-      }
       setIsRecording(action === 'start');
       const pageUrlStr = window.location.href;
+      const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
 
-      const res = await fetch(`/api/meetings/${window.location.pathname.split('/').filter(Boolean).pop()}/record`, {
+      const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, teamMemberId: dbUser.id, pageUrl: pageUrlStr })
@@ -871,15 +1035,23 @@ function VideoConferenceComponent(props: {
 
       const data = await res.json();
       if (!res.ok) {
-        alert(`Recording failed: ${data.error}`);
         setIsRecording(action === 'stop'); // revert
+        const toastEl = document.createElement('div');
+        toastEl.textContent = `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
+        toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
+        document.body.appendChild(toastEl);
+        setTimeout(() => toastEl.remove(), 4000);
       } else {
         console.log(`Recording ${action} successful`, data);
       }
     } catch (e) {
       console.error(e);
-      alert('Network error while toggling recording');
-      setIsRecording(action === 'stop'); // revert
+      setIsRecording(action === 'stop');
+      const toastEl = document.createElement('div');
+      toastEl.textContent = t('toolbar.recordNetworkError') || 'Network error while toggling recording';
+      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      document.body.appendChild(toastEl);
+      setTimeout(() => toastEl.remove(), 3000);
     }
   };
 
@@ -1878,7 +2050,7 @@ function VideoConferenceComponent(props: {
   }, [room, activeView, isLocalScreenShare, copresenterIdentities, livedocInstanceId, sendMeetingMsg]);
 
   // Sync participant names into placeholder elements so CSS can display name in the center
-  // when camera is off (replaces the default SVG avatar with the participant's name)
+  // when camera is off (replaces the default SVG avatar with the participant's initials)
   React.useEffect(() => {
     const syncNames = () => {
       document.querySelectorAll('.lk-participant-tile').forEach((tile) => {
@@ -1888,6 +2060,11 @@ function VideoConferenceComponent(props: {
           const name = nameEl.textContent?.trim() || '';
           if (placeholder.getAttribute('data-lk-name') !== name) {
             placeholder.setAttribute('data-lk-name', name);
+          }
+          // Also write initials for the ::after CSS display
+          const initials = getInitials(name);
+          if (placeholder.getAttribute('data-lk-initials') !== initials) {
+            placeholder.setAttribute('data-lk-initials', initials);
           }
         }
       });
@@ -3482,55 +3659,39 @@ function VideoConferenceComponent(props: {
           </div>
         )}
 
+        {/* Recording: unified consent dialog — no intermediate page */}
         {showRecordPopup && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordPopup(false)}>
-            <div className="kloud-modal kloud-modal-side" onMouseDown={e => e.stopPropagation()}>
-              <div className="kloud-modal-header">
-                <h3>{t('toolbar.recordingHeader')}</h3>
-                <button className="kloud-modal-close" onClick={() => setShowRecordPopup(false)}>✕</button>
-              </div>
-              <div className="kloud-modal-body" style={{ textAlign: 'center' }}>
-                <div style={{ background: '#f3f4f6', borderRadius: '8px', padding: '24px', marginBottom: '24px' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#6d28d9" strokeWidth="1.5" width="64" height="64"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" fill="#ef4444" stroke="none" /></svg>
-                  <div style={{ marginTop: '16px', fontWeight: 600, color: '#111827' }}>{t('toolbar.recordVideoCall')}</div>
-                  <p style={{ fontSize: '13px', color: '#4b5563', marginTop: '8px' }}>
-                    {t('toolbar.recordingDesc')}
-                  </p>
+            <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
+              <div className="kloud-modal-body">
+                {/* Icon + title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#6d28d9" strokeWidth="1.5" width="32" height="32">
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="3" fill="#ef4444" stroke="none" />
+                  </svg>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#111827' }}>{t('toolbar.everyoneReady')}</h3>
                 </div>
-                <button className="kloud-btn-primary" style={{ width: '100%' }} onClick={() => {
-                  setShowRecordPopup(false);
-                  setShowRecordingConsent(true);
-                }}>
-                  {t('toolbar.startRecording')}
-                </button>
+                <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, margin: '0 0 20px' }}>
+                  {t('toolbar.consentNotice')}
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                  <button className="kloud-btn-text" onClick={() => setShowRecordPopup(false)}>{t('common.cancel')}</button>
+                  <button className="kloud-btn-primary" onClick={() => {
+                    setShowRecordPopup(false);
+                    handleToggleRecording('start');
+                  }}>{t('toolbar.startRecording')}</button>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {showRecordingConsent && (
-          <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordingConsent(false)}>
-            <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
-              <div className="kloud-modal-body">
-                <h3 style={{ margin: '0 0 16px', fontSize: '18px', fontWeight: 600, color: '#111827' }}>{t('toolbar.everyoneReady')}</h3>
-                <p style={{ fontSize: '14px', color: '#4b5563', lineHeight: 1.5, margin: '0 0 24px' }}>
-                  {t('toolbar.consentNotice')}
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                  <button className="kloud-btn-text" onClick={() => setShowRecordingConsent(false)}>{t('prejoin.cancel')}</button>
-                  <button className="kloud-btn-text" style={{ color: '#2563eb', fontWeight: 600 }} onClick={() => {
-                    setShowRecordingConsent(false);
-                    handleToggleRecording('start');
-                  }}>{t('prejoin.startNow')}</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         <style>{`
           .kloud-modal-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+            position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000;
           }
           .kloud-modal {
             background: #fff; border-radius: 8px; width: 400px; max-width: 90vw; color: #111827; font-family: 'Inter', sans-serif; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
@@ -3549,6 +3710,20 @@ function VideoConferenceComponent(props: {
           .kloud-meeting-link-box button:hover { background: #e5e7eb; color: #111827; }
           .kloud-btn-text { background: none; border: none; font-size: 14px; font-weight: 500; color: #4b5563; cursor: pointer; padding: 8px 16px; border-radius: 4px; }
           .kloud-btn-text:hover { background: #f3f4f6; }
+          /* Mobile: recording/meeting modals go centered, not side-panel */
+          @media (max-width: 768px) {
+            .kloud-modal-side {
+              position: relative !important;
+              right: auto !important; top: auto !important; bottom: auto !important;
+              width: 90vw !important; max-width: 380px;
+              height: auto !important; max-height: 85vh;
+              border-radius: 16px !important;
+            }
+            .kloud-modal-overlay {
+              align-items: center !important;
+              padding: 16px;
+            }
+          }
         `}</style>
 
         <DebugMode />

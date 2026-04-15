@@ -417,5 +417,10 @@
   "toolbar.muteAllActive": "全員ミュート中",
   "toolbar.captions": "リアルタイム字幕",
   "toolbar.captionsOn": "字幕をオフにする",
-  "toolbar.captionsOff": "字幕をオンにする"
+  "toolbar.captionsOff": "字幕をオンにする",
+  "toolbar.moreParticipants": "もっと見る",
+  "toolbar.showLess": "折りたたむ",
+  "toolbar.recordLoginRequired": "録画にはサインインが必要です",
+  "toolbar.recordingFailed": "録画に失敗しました",
+  "toolbar.recordNetworkError": "録画の切り替え中にネットワークエラーが発生しました"
 }
