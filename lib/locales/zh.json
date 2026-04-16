@@ -423,5 +423,8 @@
   "toolbar.showLess": "收起",
   "toolbar.recordLoginRequired": "您必须登录后才能录制",
   "toolbar.recordingFailed": "录制失败",
-  "toolbar.recordNetworkError": "切换录制时发生网络错误"
+  "toolbar.recordNetworkError": "切换录制时发生网络错误",
+  "toolbar.savingRecording": "正在保存录制...",
+  "toolbar.recordingSaved": "录制已保存 ✓",
+  "toolbar.leavingMeeting": "正在退出会议..."
 }

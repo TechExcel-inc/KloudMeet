@@ -73,24 +73,57 @@ export function PageClientImpl(props: {
   // ── 清理 stale 设备 ID（在 mount 时执行，避免渲染期竞争）
   const [prejoinKey, setPrejoinKey] = React.useState(0); // 用于强制重挂载 PreJoin
 
+  const [prejoinReady, setPrejoinReady] = React.useState(false);
+
   React.useEffect(() => {
     try {
       const key = 'lk-user-choices';
       const raw = localStorage.getItem(key);
       const base: Record<string, any> = raw ? JSON.parse(raw) : {};
+
+      let username = base.username || '';
+      const storedKloud = localStorage.getItem('kloudUser');
+      if (storedKloud) {
+        const user = JSON.parse(storedKloud);
+        if (user && (user.fullName || user.username)) {
+          username = user.fullName || user.username;
+        }
+      }
+
       // Always reset to system defaults: clear deviceIds, ensure audio on
       localStorage.setItem(key, JSON.stringify({
         ...base,
+        username,
         audioEnabled: true,
         audioDeviceId: '',   // let browser pick system default
         videoDeviceId: '',   // let browser pick system default
       }));
     } catch (_) { /* ignore */ }
+    setPrejoinReady(true);
   }, []); // runs once on mount, before PreJoin reads localStorage
 
   const preJoinDefaults = React.useMemo(() => {
+    let defaultUsername = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const storedKloud = localStorage.getItem('kloudUser');
+        if (storedKloud) {
+          const user = JSON.parse(storedKloud);
+          if (user && (user.fullName || user.username)) {
+            defaultUsername = user.fullName || user.username;
+          }
+        } else {
+          const key = 'lk-user-choices';
+          const raw = localStorage.getItem(key);
+          const base: Record<string, any> = raw ? JSON.parse(raw) : {};
+          if (base.username) {
+            defaultUsername = base.username;
+          }
+        }
+      } catch (_) { /* ignore */ }
+    }
     return {
-      username: '',
+      username: defaultUsername,
       videoEnabled: true,
       audioEnabled: true,
       // Do NOT set audioDeviceId / videoDeviceId — let LiveKit pick system default
@@ -735,7 +768,7 @@ export function PageClientImpl(props: {
             <h2 className="kloud-prejoin-title">{preJoinTitle}</h2>
             <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
-          {!isBot && (
+          {!isBot && prejoinReady && (
             <PreJoin
               key={prejoinKey}
               defaults={preJoinDefaults}
@@ -770,16 +803,63 @@ export function PageClientImpl(props: {
   );
 }
 
-/** 从名字计算最多2个字符的缩写 */
+/** 从名字计算最多2个字符的缩写
+ *  规则优先级：
+ *  1. 多词空格      → 首词首字母 + 尾词首字母（"Xiao Yu"  → XY）
+ *  2. snake/kebab  → 同上           （"xiao_yu"  → XY）
+ *  3. PascalCase   → 提取大写字母    （"XiaoYu"   → XY）
+ *  4. 纯英文单词    → 音节边界首字母  （"xiaoyu"   → XY）
+ *  5. 中文 / 其他  → 前两个字符      （"张三"     → 张三）
+ *
+ *  音节规则：扫描字符串，每当遇到"元音组之后紧跟辅音"时，
+ *  认为该辅音是新音节的开头（如 xia-o|y-u → x, y）
+ */
 function getInitials(name: string): string {
   if (!name) return '?';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) {
-    // 单词：取前两个字符（兼容中文名）
-    return parts[0].slice(0, 2);
+  const trimmed = name.trim();
+
+  // 1. 多词（空格分隔）
+  const spaceWords = trimmed.split(/\s+/);
+  if (spaceWords.length >= 2) {
+    return (spaceWords[0][0] + spaceWords[spaceWords.length - 1][0]).toUpperCase();
   }
-  // 多词：首字母
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+
+  // 2. snake_case 或 kebab-case
+  const separatorWords = trimmed.split(/[_\-]+/).filter(Boolean);
+  if (separatorWords.length >= 2) {
+    return (separatorWords[0][0] + separatorWords[separatorWords.length - 1][0]).toUpperCase();
+  }
+
+  // 3. camelCase / PascalCase：提取所有大写字母取前两个
+  const upperLetters = trimmed.replace(/[^A-Z]/g, '');
+  if (upperLetters.length >= 2) {
+    return upperLetters.slice(0, 2);
+  }
+
+  // 4. 纯英文单词：按音节边界提取首字母
+  //    规则：第一个字符 + "元音之后首个辅音"（新音节起始）
+  //    xiaoyu: x(辅)iao(元)y(辅)u → starters=[x,y] → XY
+  //    zhangsan: zh(辅)a(元)ng(辅)sa(元)n → starters=[z,s] → ZS (取首辅音)
+  if (/^[a-zA-Z]+$/.test(trimmed)) {
+    const VOWEL = /[aeiou]/i;
+    const starters: string[] = [trimmed[0]];
+    for (let i = 1; i < trimmed.length - 1; i++) {
+      // 当前字符是元音 且 下一个字符是辅音 → 下一个字符是新音节起始
+      if (VOWEL.test(trimmed[i]) && !VOWEL.test(trimmed[i + 1])) {
+        starters.push(trimmed[i + 1]);
+      }
+    }
+    if (starters.length >= 2) {
+      return (starters[0] + starters[1]).toUpperCase();
+    }
+    // 单音节兜底：首字母 + 尾字母
+    return trimmed.length >= 2
+      ? (trimmed[0] + trimmed[trimmed.length - 1]).toUpperCase()
+      : trimmed[0].toUpperCase();
+  }
+
+  // 5. 中文 / 其他：取前两个字符
+  return trimmed.slice(0, 2);
 }
 
 /** 根据参与者数量计算最优网格列数 */
@@ -1602,6 +1682,59 @@ function VideoConferenceComponent(props: {
     router.push('/');
   }, [room, router]);
 
+  // ── Recording-aware exit phase ──
+  // null = no overlay | 'saving' = spinner | 'saved' = success tick
+  type RecordSavePhase = null | 'saving' | 'saved';
+  const [recordSavePhase, setRecordSavePhase] = React.useState<RecordSavePhase>(null);
+
+  /**
+   * If recording is active, stops it (with saving overlay), then calls afterFn.
+   * If not recording, calls afterFn immediately.
+   */
+  const stopRecordingAndThen = React.useCallback(
+    async (afterFn: () => void) => {
+      if (!isRecording) {
+        afterFn();
+        return;
+      }
+
+      setRecordSavePhase('saving');
+
+      // Call the stop-recording API
+      try {
+        let dbUser: { id?: string } = {};
+        try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch {}
+        if (!dbUser.id) {
+          try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch {}
+        }
+
+        const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
+        if (dbUser.id && roomSeg) {
+          const pageUrlStr = window.location.href;
+          await fetch(`/api/meetings/${roomSeg}/record`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'stop', teamMemberId: dbUser.id, pageUrl: pageUrlStr }),
+          }).catch(() => { /* best effort */ });
+        }
+      } catch { /* best effort */ }
+
+      // Show success for 1.5s then exit
+      setRecordSavePhase('saved');
+      await new Promise((r) => setTimeout(r, 1500));
+      afterFn();
+    },
+    [isRecording],
+  );
+
+  // Wrapped leave: stop recording then leave
+  const handleLeaveWithSave = React.useCallback(() => {
+    stopRecordingAndThen(() => {
+      room.disconnect();
+      router.push('/');
+    });
+  }, [stopRecordingAndThen, room, router]);
+
   // ── Mute All / Unmute All ──
   // Track whether mute-all is active so the button can show the right state.
   // Participants can still unmute themselves after a mute-all (non-locking).
@@ -1759,24 +1892,26 @@ function VideoConferenceComponent(props: {
 
   // End for All (host/co-host only): broadcast END_MEETING, mark as ended in DB, then disconnect
   const handleEndForAll = React.useCallback(async () => {
-    // Notify all participants to leave via DataChannel
-    sendMeetingMsg({ type: 'END_MEETING' });
+    await stopRecordingAndThen(async () => {
+      // Notify all participants to leave via DataChannel
+      sendMeetingMsg({ type: 'END_MEETING' });
 
-    const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
-    try {
-      await fetch(`/api/meetings/${rn}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ endedAt: new Date().toISOString() }),
-      });
-    } catch (e) {
-      console.warn('[meeting end] failed', e);
-    }
-    // Small delay to allow the DataChannel message to propagate
-    await new Promise((r) => setTimeout(r, 300));
-    room.disconnect();
-    router.push('/');
-  }, [room, router, sendMeetingMsg]);
+      const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
+      try {
+        await fetch(`/api/meetings/${rn}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ endedAt: new Date().toISOString() }),
+        });
+      } catch (e) {
+        console.warn('[meeting end] failed', e);
+      }
+      // Small delay to allow the DataChannel message to propagate
+      await new Promise((r) => setTimeout(r, 300));
+      room.disconnect();
+      router.push('/');
+    });
+  }, [room, router, sendMeetingMsg, stopRecordingAndThen]);
 
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
@@ -2209,6 +2344,95 @@ function VideoConferenceComponent(props: {
     <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
+
+        {/* ── Recording Save Overlay ── */}
+        {recordSavePhase !== null && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(10, 10, 20, 0.88)',
+              backdropFilter: 'blur(12px)',
+              WebkitBackdropFilter: 'blur(12px)',
+              fontFamily: "'Inter', sans-serif",
+              gap: '20px',
+              animation: 'recordSaveOverlayIn 0.25s ease',
+            }}
+          >
+            <style>{`
+              @keyframes recordSaveOverlayIn {
+                from { opacity: 0; }
+                to   { opacity: 1; }
+              }
+              @keyframes recordSaveSpin {
+                to { transform: rotate(360deg); }
+              }
+              @keyframes recordSaveCheckIn {
+                from { opacity: 0; transform: scale(0.6); }
+                to   { opacity: 1; transform: scale(1); }
+              }
+            `}</style>
+
+            {recordSavePhase === 'saving' ? (
+              <>
+                {/* Spinner */}
+                <div style={{
+                  width: '64px',
+                  height: '64px',
+                  borderRadius: '50%',
+                  border: '4px solid rgba(255,255,255,0.12)',
+                  borderTopColor: '#a78bfa',
+                  animation: 'recordSaveSpin 0.9s linear infinite',
+                }} />
+                {/* Recording dot pulse */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '10px',
+                    height: '10px',
+                    borderRadius: '50%',
+                    background: '#ef4444',
+                  }} />
+                  <span style={{ color: '#e2e8f0', fontSize: '16px', fontWeight: 600 }}>
+                    {t('toolbar.savingRecording')}
+                  </span>
+                </div>
+                <span style={{ color: '#9ca3af', fontSize: '13px' }}>
+                  {t('toolbar.leavingMeeting')}
+                </span>
+              </>
+            ) : (
+              /* Saved state */
+              <div style={{ animation: 'recordSaveCheckIn 0.3s ease', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '16px' }}>
+                <div style={{
+                  width: '72px',
+                  height: '72px',
+                  borderRadius: '50%',
+                  background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 0 28px rgba(34,197,94,0.4)',
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" width="36" height="36">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+                <span style={{ color: '#e2e8f0', fontSize: '17px', fontWeight: 700 }}>
+                  {t('toolbar.recordingSaved')}
+                </span>
+                <span style={{ color: '#9ca3af', fontSize: '13px' }}>
+                  {t('toolbar.leavingMeeting')}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Remote Control approval dialog — rendered at top level to avoid overflow clipping */}
         {remoteControlRequest && screenShareActive && (
@@ -2823,7 +3047,7 @@ function VideoConferenceComponent(props: {
                                       />
                                     ) : (
                                       <div className="floating-grid-avatar">
-                                        {p.name.slice(0, 2).toUpperCase()}
+                                        {getInitials(p.name)}
                                       </div>
                                     )}
                                   </div>
@@ -3477,7 +3701,7 @@ function VideoConferenceComponent(props: {
         <KloudMeetToolbar
           activeView={activeView}
           onViewChange={handleViewChange}
-          onExit={handleLeave}
+          onExit={handleLeaveWithSave}
           onEndForAll={handleEndForAll}
           micEnabled={micEnabled}
           camEnabled={camEnabled}

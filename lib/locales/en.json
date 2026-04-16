@@ -439,5 +439,8 @@
   "toolbar.showLess": "Show less",
   "toolbar.recordLoginRequired": "You must be logged in to record",
   "toolbar.recordingFailed": "Recording failed",
-  "toolbar.recordNetworkError": "Network error while toggling recording"
+  "toolbar.recordNetworkError": "Network error while toggling recording",
+  "toolbar.savingRecording": "Saving recording...",
+  "toolbar.recordingSaved": "Recording saved ✓",
+  "toolbar.leavingMeeting": "Leaving meeting..."
 }

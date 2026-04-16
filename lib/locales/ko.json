@@ -422,5 +422,8 @@
   "toolbar.showLess": "접기",
   "toolbar.recordLoginRequired": "녹화하려면 로그인해야 합니다",
   "toolbar.recordingFailed": "녹화 실패",
-  "toolbar.recordNetworkError": "녹화 전환 중 네트워크 오류가 발생했습니다"
+  "toolbar.recordNetworkError": "녹화 전환 중 네트워크 오류가 발생했습니다",
+  "toolbar.savingRecording": "녹화 저장 중...",
+  "toolbar.recordingSaved": "녹화가 저장되었습니다 ✓",
+  "toolbar.leavingMeeting": "회의에서 나가는 중..."
 }

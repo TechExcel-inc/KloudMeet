@@ -385,3 +385,15 @@ h2 a {
     height: 44px !important;
   }
 }
+
+
+.lk-participant-name {
+  display: none;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+.lk-participant-tile:hover .lk-participant-name {
+  display: block;
+  pointer-events: auto;
+}
