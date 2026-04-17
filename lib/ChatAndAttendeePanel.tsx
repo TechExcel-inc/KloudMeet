@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRoomContext, useParticipants } from '@livekit/components-react';
 import { RoomEvent } from 'livekit-client';
 import { useI18n } from './i18n';
+import { getInitials } from './getInitials';
 
 // ════════════════════════════════════
 // Custom Chat Panel (uses publishData directly)
@@ -232,7 +233,7 @@ export function AttendeePanel({
         {filtered.map((p) => {
           const roles = getRoles(p.identity);
           const name = p.name || p.identity || '??';
-          const initials = name.slice(0, 2).toUpperCase();
+          const initials = getInitials(name);
           const isLocalParticipant = p.identity === localIdentity;
           const isThisHost = p.identity === hostIdentity;
           const isThisCohost = cohostIdentities.includes(p.identity);
@@ -394,7 +395,7 @@ export function AttendeePanel({
                 <div className="kloud-host-picker-list">
                   {hostCandidates.map((p) => {
                     const name = p.name || p.identity || '??';
-                    const initials = name.slice(0, 2).toUpperCase();
+                    const initials = getInitials(name);
                     const roles = getRoles(p.identity);
                     return (
                       <button

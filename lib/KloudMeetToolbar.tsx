@@ -662,13 +662,40 @@ export function KloudMeetToolbar({
                   <button
                     className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
                     onClick={handleShareScreenClick}
-                    style={{ opacity: canShareScreen ? 1 : 0.5, cursor: canShareScreen ? 'pointer' : 'not-allowed' }}
-                    title={!canShareScreen ? t('toolbar.shareScreenTooltip') : t('toolbar.shareScreen')}
+                    title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
+                    style={{ position: 'relative' }}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    {/* Amber "live" pulse dot: another participant is sharing */}
+                    {hasScreenShare && !screenShareActive && (
+                      <span style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        background: '#f97316',
+                        boxShadow: '0 0 0 0 rgba(249,115,22,0.5)',
+                        animation: 'shareConflictPing 1.4s ease infinite',
+                        pointerEvents: 'none',
+                      }} />
+                    )}
+                    <style>{`
+                      @keyframes shareConflictPing {
+                        0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
+                        60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
+                        100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+                      }
+                    `}</style>
+                    <svg viewBox="0 0 24 24" fill="none"
+                      stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                      strokeWidth="1.5"
+                    >
                       <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                     </svg>
-                    {t('toolbar.shareScreen')}
+                    <span style={hasScreenShare && !screenShareActive ? { color: '#fb923c' } : undefined}>
+                      {t('toolbar.shareScreen')}
+                    </span>
                   </button>
 
                   {hasScreenShare && (
@@ -1124,9 +1151,24 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
             {t('toolbar.webcamGrid')}
           </button>
-          <button className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`} onClick={() => { handleShareScreenClick(); setActiveSheet(null); }} style={{ opacity: canShareScreen ? 1 : 0.5 }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-            {t('toolbar.screenShareLayout')}
+          <button
+            className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`}
+            onClick={() => { handleShareScreenClick(); setActiveSheet(null); }}
+          >
+            <svg viewBox="0 0 24 24" fill="none"
+              stroke={canShareScreen ? 'currentColor' : '#fb923c'}
+              strokeWidth="1.5"
+            >
+              <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            <span style={canShareScreen ? undefined : { color: '#fb923c' }}>
+              {t('toolbar.screenShareLayout')}
+              {!canShareScreen && (
+                <span style={{ fontSize: '11px', marginLeft: '6px', color: '#fb923c', fontWeight: 400 }}>
+                  ({t('toolbar.shareConflictTitle')})
+                </span>
+              )}
+            </span>
           </button>
         </>
       )}

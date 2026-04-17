@@ -51,6 +51,7 @@ import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
+import { getInitials } from '@/lib/getInitials';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -803,64 +804,8 @@ export function PageClientImpl(props: {
   );
 }
 
-/** 从名字计算最多2个字符的缩写
- *  规则优先级：
- *  1. 多词空格      → 首词首字母 + 尾词首字母（"Xiao Yu"  → XY）
- *  2. snake/kebab  → 同上           （"xiao_yu"  → XY）
- *  3. PascalCase   → 提取大写字母    （"XiaoYu"   → XY）
- *  4. 纯英文单词    → 音节边界首字母  （"xiaoyu"   → XY）
- *  5. 中文 / 其他  → 前两个字符      （"张三"     → 张三）
- *
- *  音节规则：扫描字符串，每当遇到"元音组之后紧跟辅音"时，
- *  认为该辅音是新音节的开头（如 xia-o|y-u → x, y）
- */
-function getInitials(name: string): string {
-  if (!name) return '?';
-  const trimmed = name.trim();
-
-  // 1. 多词（空格分隔）
-  const spaceWords = trimmed.split(/\s+/);
-  if (spaceWords.length >= 2) {
-    return (spaceWords[0][0] + spaceWords[spaceWords.length - 1][0]).toUpperCase();
-  }
-
-  // 2. snake_case 或 kebab-case
-  const separatorWords = trimmed.split(/[_\-]+/).filter(Boolean);
-  if (separatorWords.length >= 2) {
-    return (separatorWords[0][0] + separatorWords[separatorWords.length - 1][0]).toUpperCase();
-  }
-
-  // 3. camelCase / PascalCase：提取所有大写字母取前两个
-  const upperLetters = trimmed.replace(/[^A-Z]/g, '');
-  if (upperLetters.length >= 2) {
-    return upperLetters.slice(0, 2);
-  }
-
-  // 4. 纯英文单词：按音节边界提取首字母
-  //    规则：第一个字符 + "元音之后首个辅音"（新音节起始）
-  //    xiaoyu: x(辅)iao(元)y(辅)u → starters=[x,y] → XY
-  //    zhangsan: zh(辅)a(元)ng(辅)sa(元)n → starters=[z,s] → ZS (取首辅音)
-  if (/^[a-zA-Z]+$/.test(trimmed)) {
-    const VOWEL = /[aeiou]/i;
-    const starters: string[] = [trimmed[0]];
-    for (let i = 1; i < trimmed.length - 1; i++) {
-      // 当前字符是元音 且 下一个字符是辅音 → 下一个字符是新音节起始
-      if (VOWEL.test(trimmed[i]) && !VOWEL.test(trimmed[i + 1])) {
-        starters.push(trimmed[i + 1]);
-      }
-    }
-    if (starters.length >= 2) {
-      return (starters[0] + starters[1]).toUpperCase();
-    }
-    // 单音节兜底：首字母 + 尾字母
-    return trimmed.length >= 2
-      ? (trimmed[0] + trimmed[trimmed.length - 1]).toUpperCase()
-      : trimmed[0].toUpperCase();
-  }
-
-  // 5. 中文 / 其他：取前两个字符
-  return trimmed.slice(0, 2);
-}
+// getInitials — 已迁移到 @/lib/getInitials，此处保留空行占位，避免重新定义。
+// 在文件顶部通过 import { getInitials } from '@/lib/getInitials' 引入。
 
 /** 根据参与者数量计算最优网格列数 */
 function calcGridCols(count: number): number {
@@ -1078,6 +1023,8 @@ function VideoConferenceComponent(props: {
   const [showHelp, setShowHelp] = React.useState(false);
   const [showWebcamSidebar, setShowWebcamSidebar] = React.useState(false);
   const [webcamSidebarSettingsOpen, setWebcamSidebarSettingsOpen] = React.useState(false);
+  // Screen-share takeover dialog
+  const [showShareTakeoverDialog, setShowShareTakeoverDialog] = React.useState(false);
 
   const handleToggleRecording = async (action: 'start' | 'stop') => {
     // Get user from localStorage → fallback sessionStorage → fallback cookie
@@ -1332,6 +1279,32 @@ function VideoConferenceComponent(props: {
   }, []);
 
   const connectAttemptedRef = React.useRef(false);
+  const connectRetryCountRef = React.useRef(0);
+  const MAX_CONNECT_RETRIES = 3;
+  // Tracks the pending retry setTimeout so we can cancel on unmount
+  const connectRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Connection error state — drives the inline error UI instead of alert()
+  const [connectError, setConnectError] = React.useState<string | null>(null);
+  // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
+  const connectRetryDisplayRef = React.useRef(0);
+
+  // ─── isRetryableConnectError ─────────────────────────────────────────────
+  // MUST be declared BEFORE the useEffect that references it.
+  // Arrow functions are NOT hoisted; placing them after the effect causes
+  // "isRetryableConnectError is not a function" at runtime.
+  const isRetryableConnectError = React.useCallback((err: Error): boolean => {
+    const msg = err.message?.toLowerCase() ?? '';
+    return (
+      msg.includes('signal connection') ||
+      msg.includes('abort handler') ||
+      msg.includes('abort') ||
+      msg.includes('websocket') ||
+      msg.includes('network') ||
+      msg.includes('failed to fetch') ||
+      msg.includes('timed out') ||
+      err.name === 'AbortError'
+    );
+  }, []);
 
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
@@ -1346,46 +1319,81 @@ function VideoConferenceComponent(props: {
       } else {
         connectAttemptedRef.current = true;
 
-        room
-          .connect(
-            props.connectionDetails.serverUrl,
-            props.connectionDetails.participantToken,
-            connectOptions,
-          )
-          .then(() => {
-            if (isActionStart) {
-              const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
-              if (!wasRefresh) setShowMeetingReadyModal(true);
-            }
-            if (typeof navigator !== 'undefined' && navigator.clipboard) {
-              navigator.clipboard.writeText(window.location.href).catch(console.error);
-              console.log('Meeting URL auto-copied to clipboard!');
-            }
+        // ─── doConnect: self-contained recursive retry with exponential backoff ───────
+        // All retry rounds go through this single function so the backoff counters
+        // are always correct regardless of which attempt fails.
+        const doConnect = () => {
+          room
+            .connect(
+              props.connectionDetails.serverUrl,
+              props.connectionDetails.participantToken,
+              connectOptions,
+            )
+            .then(() => {
+              if (isActionStart) {
+                const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
+                if (!wasRefresh) setShowMeetingReadyModal(true);
+              }
+              if (typeof navigator !== 'undefined' && navigator.clipboard) {
+                navigator.clipboard.writeText(window.location.href).catch(console.error);
+                console.log('Meeting URL auto-copied to clipboard!');
+              }
 
-            // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
-            const rn = props.connectionDetails.roomName;
-            fetch(`/api/meetings/${rn}`, {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
-            }).catch(e => console.warn('[meeting start fallback] failed', e));
+              // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
+              const rn = props.connectionDetails.roomName;
+              fetch(`/api/meetings/${rn}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
+              }).catch(e => console.warn('[meeting start fallback] failed', e));
 
-            // Enable camera/mic AFTER connection is established
-            if (props.userChoices.videoEnabled) {
-              room.localParticipant.setCameraEnabled(true).catch((error) => {
+              // Reset retry counters on success
+              connectRetryCountRef.current = 0;
+              connectRetryDisplayRef.current = 0;
+              setConnectError(null);
+
+              // Enable camera/mic AFTER connection is established
+              if (props.userChoices.videoEnabled) {
+                room.localParticipant.setCameraEnabled(true).catch(handleError);
+              }
+              if (props.userChoices.audioEnabled) {
+                room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+              }
+            })
+            .catch((error) => {
+              connectAttemptedRef.current = false;
+
+              if (isRetryableConnectError(error)) {
+                const attempt = connectRetryCountRef.current + 1;
+                if (attempt <= MAX_CONNECT_RETRIES) {
+                  const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                  console.warn(
+                    `[KloudMeet] Signal connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
+                    error.message,
+                  );
+                  connectRetryCountRef.current = attempt;
+                  connectRetryDisplayRef.current = attempt;
+                  connectRetryTimerRef.current = setTimeout(() => {
+                    connectRetryTimerRef.current = null;
+                    if (room.state === ConnectionState.Disconnected) {
+                      connectAttemptedRef.current = true;
+                      doConnect(); // ← same function, carries full retry logic
+                    }
+                  }, delay);
+                  return;
+                }
+                // All retries exhausted — show inline error UI
+                console.error('[KloudMeet] All connection retries exhausted:', error);
+                connectRetryDisplayRef.current = MAX_CONNECT_RETRIES;
+                connectRetryCountRef.current = 0;
+                setConnectError(error.message);
+              } else {
                 handleError(error);
-              });
-            }
-            if (props.userChoices.audioEnabled) {
-              room.localParticipant.setMicrophoneEnabled(true).catch((error) => {
-                handleError(error);
-              });
-            }
-          })
-          .catch((error) => {
-            connectAttemptedRef.current = false; // Allow retry on failure
-            handleError(error);
-          });
+              }
+            });
+        };
+
+        doConnect();
       }
     }
 
@@ -1393,6 +1401,8 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, handleOnLeave);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
+      // Cancel any pending retry
+      if (connectRetryTimerRef.current) clearTimeout(connectRetryTimerRef.current);
       // Properly disconnect when component unmounts (fixes StrictMode double-mount)
       if (room.state !== ConnectionState.Disconnected) {
         room.disconnect().catch(console.error);
@@ -1402,7 +1412,7 @@ function VideoConferenceComponent(props: {
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails]);
+  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -1410,6 +1420,7 @@ function VideoConferenceComponent(props: {
   const handleOnLeave = React.useCallback(() => {
     router.push('/');
   }, [router]);
+
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
     if (
@@ -1420,10 +1431,17 @@ function VideoConferenceComponent(props: {
       console.warn('User cancelled or denied media request:', error);
       return;
     }
-
+    // Signal/network errors after all retries are shown via inline UI
+    if (isRetryableConnectError(error)) {
+      console.error('[KloudMeet] Connection error (surfacing to UI):', error);
+      setConnectError(error.message);
+      return;
+    }
+    // Unrecoverable errors: still use alert as last resort
     console.error(error);
     alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
-  }, []);
+  }, [isRetryableConnectError]);
+
   const handleEncryptionError = React.useCallback((error: Error) => {
     console.error(error);
     alert(
@@ -1650,9 +1668,9 @@ function VideoConferenceComponent(props: {
       return;
     }
 
-    // If someone else is actively sharing, we cannot share
+    // If someone else is actively sharing, show takeover confirmation dialog
     if (hasScreenShare && !screenShareActive) {
-      alert('Only one person can share their screen at a time.');
+      setShowShareTakeoverDialog(true);
       return;
     }
 
@@ -1675,6 +1693,7 @@ function VideoConferenceComponent(props: {
       console.error(e);
     });
   }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
+
 
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
@@ -1890,6 +1909,31 @@ function VideoConferenceComponent(props: {
     setMuteAllActive(false);
   }, [sendMeetingMsg]);
 
+  // Takeover: force the current presenter to stop their screen share, then start ours
+  const handleConfirmShareTakeover = React.useCallback(() => {
+    setShowShareTakeoverDialog(false);
+    // Tell the current presenter to stop — identify them via screenShareTracks
+    const presenterIdentity = screenShareTracks[0]?.participant?.identity;
+    if (presenterIdentity && presenterIdentity !== room.localParticipant.identity) {
+      sendMeetingMsg(
+        { type: 'FORCE_STOP_SHARE', requesterIdentity: room.localParticipant.identity },
+        [presenterIdentity],
+      );
+    }
+    // Start sharing ourselves after a brief delay so the previous share can tear down
+    setTimeout(() => {
+      setScreenShareActive(true);
+      setActiveView('liveDoc');
+      broadcastViewChangeRef.current?.('shareScreen');
+      room.localParticipant.setScreenShareEnabled(true).catch((e) => {
+        setScreenShareActive(false);
+        setActiveView('liveDoc');
+        broadcastViewChangeRef.current?.('liveDoc');
+        console.error(e);
+      });
+    }, 600);
+  }, [room, screenShareTracks, sendMeetingMsg]);
+
   // End for All (host/co-host only): broadcast END_MEETING, mark as ended in DB, then disconnect
   const handleEndForAll = React.useCallback(async () => {
     await stopRecordingAndThen(async () => {
@@ -1951,10 +1995,18 @@ function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (!isHost) return;
     const handler = (participant: RemoteParticipant) => {
-      const id = authState.current.livedocInstanceId;
-      if (id) {
-        sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id }, [participant.identity]);
-      }
+      const auth = authState.current;
+      // Send full meeting state (view + livedocInstanceId + presenter) to new joiner
+      // so they immediately adopt the current meeting mode (e.g. liveDoc)
+      sendMeetingMsg(
+        {
+          type: 'CORRECTION',
+          view: auth.view,
+          presenter: auth.presenter,
+          livedocInstanceId: auth.livedocInstanceId,
+        },
+        [participant.identity],
+      );
     };
     room.on(RoomEvent.ParticipantConnected, handler);
     return () => {
@@ -1962,15 +2014,15 @@ function VideoConferenceComponent(props: {
     };
   }, [room, isHost, sendMeetingMsg]);
 
-  // Host/Presenter: broadcast VIEW_CHANGE to all participants
+  // Host/Presenter/Co-host: broadcast VIEW_CHANGE to all participants
+  // Always update authState so the latest view is available for late-joining correction.
   const broadcastViewChange = React.useCallback(
     (view: ViewMode) => {
-      if (isHost) {
-        authState.current.view = view;
-      }
+      // All privileged roles update authState so new-joiner CORRECTION has the right view.
+      authState.current.view = view;
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
     },
-    [isHost, sendMeetingMsg],
+    [sendMeetingMsg],
   );
 
   // Keep the ref in sync for handleViewChange
@@ -2079,6 +2131,20 @@ function VideoConferenceComponent(props: {
         } else if (msg.type === 'RC_CANCELLED') {
           if (remoteControlRequest?.requesterIdentity === msg.requesterIdentity) {
             setRemoteControlRequest(null);
+          }
+        } else if (msg.type === 'FORCE_STOP_SHARE') {
+          // Someone is taking over screen share — stop our share and remove presenter role
+          if (screenShareActive) {
+            setScreenShareActive(false);
+            room.localParticipant.setScreenShareEnabled(false).catch(console.error);
+            // Revert our own view to liveDoc
+            setActiveView('liveDoc');
+          }
+          // If we were a co-presenter, remove ourselves
+          setCopresenterIdentities((prev) => prev.filter((id) => id !== room.localParticipant.identity));
+          // Let the host know our presenter role is gone
+          if (!isHost) {
+            sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity: room.localParticipant.identity });
           }
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
@@ -2345,6 +2411,183 @@ function VideoConferenceComponent(props: {
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
 
+        {/* ── Connection Error / Retry Overlay ── */}
+        {connectError !== null && (
+          <div
+            id="connect-error-overlay"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99998,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(8, 8, 18, 0.82)',
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            <style>{`
+              @keyframes connErrPulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.45; }
+              }
+              @keyframes connErrIn {
+                from { opacity: 0; transform: scale(0.9) translateY(12px); }
+                to { opacity: 1; transform: scale(1) translateY(0); }
+              }
+            `}</style>
+            <div
+              style={{
+                background: 'linear-gradient(145deg, #1a1a2e, #16213e)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                borderRadius: '20px',
+                padding: '36px 40px',
+                maxWidth: '420px',
+                width: '90vw',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.6), 0 0 0 1px rgba(239,68,68,0.12)',
+                animation: 'connErrIn 0.3s ease',
+                textAlign: 'center',
+              }}
+            >
+              {/* Animated signal icon */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '20px' }}>
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '50%',
+                  background: 'rgba(239,68,68,0.12)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  animation: 'connErrPulse 2s ease infinite',
+                }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="1.8" width="28" height="28">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 14.212A5.25 5.25 0 0117.25 10.5M5.106 17.394A9 9 0 0117.25 10.5M1.924 20.576A13.5 13.5 0 0117.25 10.5M12 18.75h.008v.008H12v-.008z" />
+                  </svg>
+                </div>
+              </div>
+
+              <div style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px' }}>
+                {t('prejoin.connectError', { error: '' }).split(':')[0] || '连接失败'}
+              </div>
+              <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px', lineHeight: 1.6 }}>
+                {connectRetryDisplayRef.current > 0
+                  ? `已尝试 ${connectRetryDisplayRef.current}/${MAX_CONNECT_RETRIES} 次自动重连，均失败。请检查网络后手动重试。`
+                  : '无法建立信令连接，请检查您的网络后重试。'}
+              </div>
+
+              {/* Error detail (collapsible) */}
+              <details style={{ marginBottom: '24px', textAlign: 'left' }}>
+                <summary style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
+                  错误详情
+                </summary>
+                <div style={{
+                  marginTop: '8px',
+                  padding: '10px 12px',
+                  background: 'rgba(239,68,68,0.06)',
+                  border: '1px solid rgba(239,68,68,0.15)',
+                  borderRadius: '8px',
+                  fontSize: '11px',
+                  color: '#f87171',
+                  fontFamily: 'monospace',
+                  wordBreak: 'break-all',
+                  lineHeight: 1.5,
+                }}>
+                  {connectError}
+                </div>
+              </details>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <button
+                  onClick={() => {
+                    // Go back to dashboard
+                    setConnectError(null);
+                    connectAttemptedRef.current = false;
+                    connectRetryCountRef.current = 0;
+                    connectRetryDisplayRef.current = 0;
+                    if (connectRetryTimerRef.current) {
+                      clearTimeout(connectRetryTimerRef.current);
+                      connectRetryTimerRef.current = null;
+                    }
+                    room.disconnect().catch(console.error);
+                    router.push('/');
+                  }}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '10px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#94a3b8',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: "'Inter', sans-serif",
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.09)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={() => {
+                    // Manual retry — fully reset and re-attempt with fresh retry budget
+                    setConnectError(null);
+                    connectAttemptedRef.current = false;
+                    connectRetryCountRef.current = 0;
+                    connectRetryDisplayRef.current = 0;
+                    if (connectRetryTimerRef.current) {
+                      clearTimeout(connectRetryTimerRef.current);
+                      connectRetryTimerRef.current = null;
+                    }
+                    // Re-connect and give a fresh retry budget via doConnect-equivalent inline
+                    if (room.state === ConnectionState.Disconnected) {
+                      connectAttemptedRef.current = true;
+                      room
+                        .connect(
+                          props.connectionDetails.serverUrl,
+                          props.connectionDetails.participantToken,
+                          connectOptions,
+                        )
+                        .then(() => {
+                          connectRetryCountRef.current = 0;
+                          connectRetryDisplayRef.current = 0;
+                          setConnectError(null);
+                          if (props.userChoices.videoEnabled) {
+                            room.localParticipant.setCameraEnabled(true).catch(handleError);
+                          }
+                          if (props.userChoices.audioEnabled) {
+                            room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                          }
+                        })
+                        .catch((err) => {
+                          connectAttemptedRef.current = false;
+                          connectRetryDisplayRef.current = 1;
+                          setConnectError(err.message);
+                        });
+                    }
+                  }}
+                  style={{
+                    padding: '10px 24px',
+                    borderRadius: '10px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    fontFamily: "'Inter', sans-serif",
+                    transition: 'all 0.15s',
+                    boxShadow: '0 2px 10px rgba(59,130,246,0.3)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)'; }}
+                >
+                  重新连接
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Recording Save Overlay ── */}
         {recordSavePhase !== null && (
           <div
@@ -2573,6 +2816,154 @@ function VideoConferenceComponent(props: {
           </div>
         )}
 
+        {/* ── Screen Share Takeover Dialog ── */}
+        {showShareTakeoverDialog && (
+          <div
+            id="share-takeover-dialog"
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              width: '100vw',
+              height: '100vh',
+              zIndex: 9999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'auto',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background: 'rgba(0,0,0,0.45)',
+                backdropFilter: 'blur(3px)',
+                WebkitBackdropFilter: 'blur(3px)',
+              }}
+              onClick={() => setShowShareTakeoverDialog(false)}
+            />
+            <div
+              style={{
+                position: 'relative',
+                zIndex: 1,
+                background: 'linear-gradient(145deg, #1e1e2e, #252538)',
+                borderRadius: '16px',
+                padding: '28px 32px',
+                minWidth: '360px',
+                maxWidth: '440px',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(251,146,60,0.18)',
+                border: '1px solid rgba(255,255,255,0.08)',
+                fontFamily: "'Inter', sans-serif",
+                animation: 'shareDialogIn 0.25s ease',
+              }}
+            >
+              <style>{`
+                @keyframes shareDialogIn {
+                  from { opacity: 0; transform: scale(0.92) translateY(8px); }
+                  to { opacity: 1; transform: scale(1) translateY(0); }
+                }
+                @keyframes shareDialogPulse {
+                  0%, 100% { box-shadow: 0 0 0 0 rgba(251,146,60,0.4); }
+                  50% { box-shadow: 0 0 0 8px rgba(251,146,60,0); }
+                }
+              `}</style>
+
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                <div
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '12px',
+                    background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    animation: 'shareDialogPulse 2.2s ease infinite',
+                  }}
+                >
+                  {/* Monitor / Share icon */}
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" width="22" height="22">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path strokeLinecap="round" d="M8 21h8M12 17v4" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 9l-3-3-3 3M12 6v6" />
+                  </svg>
+                </div>
+                <div>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: '#f1f1f4' }}>
+                    {t('toolbar.shareConflictTitle')}
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '2px' }}>
+                    {t('toolbar.shareConflictSubtitle')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={{ fontSize: '14px', color: '#d1d5db', lineHeight: 1.65, marginBottom: '24px' }}>
+                {(() => {
+                  const presenterName =
+                    screenShareTracks[0]?.participant?.name ||
+                    screenShareTracks[0]?.participant?.identity ||
+                    t('toolbar.shareConflictSomeone');
+                  return (
+                    <>
+                      <strong style={{ color: '#fb923c' }}>{presenterName}</strong>
+                      {' '}
+                      {t('toolbar.shareConflictBody')}
+                    </>
+                  );
+                })()}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowShareTakeoverDialog(false)}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    background: 'rgba(255,255,255,0.06)',
+                    color: '#d1d5db',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    fontFamily: "'Inter', sans-serif",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleConfirmShareTakeover}
+                  style={{
+                    padding: '8px 20px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: 'linear-gradient(135deg, #f97316, #ea580c)',
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
+                    fontFamily: "'Inter', sans-serif",
+                    boxShadow: '0 2px 10px rgba(249,115,22,0.35)',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #ea580c, #c2410c)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #f97316, #ea580c)'; }}
+                >
+                  {t('toolbar.shareConflictConfirm')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* View content area */}
         <div
           className="main-meeting-area"
@@ -2693,7 +3084,7 @@ function VideoConferenceComponent(props: {
                                 />
                               ) : (
                                 <div className="webcam-sidebar-avatar">
-                                  {p.name.slice(0, 2).toUpperCase()}
+                                  {getInitials(p.name || p.id || '?')}
                                 </div>
                               )}
                             </div>
@@ -2968,7 +3359,7 @@ function VideoConferenceComponent(props: {
                             title={p.name}
                             style={{ zIndex: maxVisible - i }}
                           >
-                            {p.name.slice(0, 2).toUpperCase()}
+                            {getInitials(p.name || p.id || '?')}
                           </div>
                         ))}
                         {overflow > 0 && (

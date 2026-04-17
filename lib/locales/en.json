@@ -442,5 +442,10 @@
   "toolbar.recordNetworkError": "Network error while toggling recording",
   "toolbar.savingRecording": "Saving recording...",
   "toolbar.recordingSaved": "Recording saved ✓",
-  "toolbar.leavingMeeting": "Leaving meeting..."
+  "toolbar.leavingMeeting": "Leaving meeting...",
+  "toolbar.shareConflictTitle": "Screen Share In Progress",
+  "toolbar.shareConflictSubtitle": "Someone else is currently presenting",
+  "toolbar.shareConflictSomeone": "Someone",
+  "toolbar.shareConflictBody": "is currently sharing their screen. Do you want to take over and start sharing your screen instead? Their share will be stopped.",
+  "toolbar.shareConflictConfirm": "Take Over"
 }

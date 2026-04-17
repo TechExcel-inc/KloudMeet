@@ -425,5 +425,10 @@
   "toolbar.recordNetworkError": "녹화 전환 중 네트워크 오류가 발생했습니다",
   "toolbar.savingRecording": "녹화 저장 중...",
   "toolbar.recordingSaved": "녹화가 저장되었습니다 ✓",
-  "toolbar.leavingMeeting": "회의에서 나가는 중..."
+  "toolbar.leavingMeeting": "회의에서 나가는 중...",
+  "toolbar.shareConflictTitle": "화면 공유 진행 중",
+  "toolbar.shareConflictSubtitle": "다른 참가자가 공유 중입니다",
+  "toolbar.shareConflictSomeone": "한 참가자",
+  "toolbar.shareConflictBody": "가 화면을 공유하고 있습니다. 인수하여 본인의 화면을 공유하시겠습니까? 상대방의 공유가 종료됩니다.",
+  "toolbar.shareConflictConfirm": "인수하기"
 }

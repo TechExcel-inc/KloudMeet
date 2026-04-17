@@ -425,5 +425,10 @@
   "toolbar.recordNetworkError": "録画の切り替え中にネットワークエラーが発生しました",
   "toolbar.savingRecording": "録画を保存中...",
   "toolbar.recordingSaved": "録画が保存されました ✓",
-  "toolbar.leavingMeeting": "ミーティングを退出中..."
+  "toolbar.leavingMeeting": "ミーティングを退出中...",
+  "toolbar.shareConflictTitle": "画面共有中",
+  "toolbar.shareConflictSubtitle": "他の参加者が共有中です",
+  "toolbar.shareConflictSomeone": "参加者",
+  "toolbar.shareConflictBody": "が画面を共有中です。引き継いで自分の画面を共有しますか？相手の共有は停止されます。",
+  "toolbar.shareConflictConfirm": "引き継ぐ"
 }

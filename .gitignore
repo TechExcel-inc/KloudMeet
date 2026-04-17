@@ -52,3 +52,6 @@ mysql.txt
 
 # figma design prototypes (not production code)
 figma-design/
+
+# local environment config folder (secrets, never commit)
+KloudMeet.env/
