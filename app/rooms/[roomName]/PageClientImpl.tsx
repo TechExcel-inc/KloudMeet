@@ -2284,8 +2284,8 @@ function VideoConferenceComponent(props: {
       handleMuteParticipant(identity, !isAudioMuted);
     };
 
-    document.addEventListener('click', handleTileMicClick, true);
-    return () => document.removeEventListener('click', handleTileMicClick, true);
+    document.addEventListener('pointerdown', handleTileMicClick, true);
+    return () => document.removeEventListener('pointerdown', handleTileMicClick, true);
   }, [room, isHost, isCohost, handleMuteParticipant]);
 
   // ══════════════════════════════════════════════════════════════════════
@@ -4359,11 +4359,19 @@ function VideoConferenceComponent(props: {
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive {
               cursor: pointer;
               border-radius: 50%;
-              padding: 2px;
+              padding: 4px;          /* larger hit area */
+              min-width: 1.6rem;
+              min-height: 1.6rem;
+              margin: -2px;          /* compensate for extra padding */
+            }
+            /* SVG inside mic indicator must not steal pointer events */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg,
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg * {
+              pointer-events: none;
             }
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover {
-              background: rgba(255, 255, 255, 0.15);
-              transform: scale(1.15);
+              background: rgba(255, 255, 255, 0.18);
+              transform: scale(1.2);
             }
           `}</style>
         </div>
