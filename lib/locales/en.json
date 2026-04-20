@@ -33,7 +33,7 @@
   "anon.joinMeeting": "Join Meeting",
   "anon.hostPrivilege": "To host a meeting or join with more privileges",
   "anon.signInHere": "Sign In Here",
-  "anon.enterMeetingCode": "Enter meeting code or link",
+  "anon.enterMeetingCode": "Enter meeting code",
   "anon.recentMeetings": "Recent Meetings",
   "anon.replaySoon": "Meeting replay coming soon!",
   "anon.noAccount": "Don't have a Kloud account?",
@@ -447,5 +447,8 @@
   "toolbar.shareConflictSubtitle": "Someone else is currently presenting",
   "toolbar.shareConflictSomeone": "Someone",
   "toolbar.shareConflictBody": "is currently sharing their screen. Do you want to take over and start sharing your screen instead? Their share will be stopped.",
-  "toolbar.shareConflictConfirm": "Take Over"
+  "toolbar.shareConflictConfirm": "Take Over",
+  "chat.noMessages": "No messages yet. Say hello! 👋",
+  "chat.you": "You",
+  "chat.typeMessage": "Type a message..."
 }

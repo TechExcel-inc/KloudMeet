@@ -31,7 +31,7 @@
   "anon.joinMeeting": "加入会议",
   "anon.hostPrivilege": "如需主持会议或以更高权限加入，",
   "anon.signInHere": "请在此登录",
-  "anon.enterMeetingCode": "输入会议代码或链接",
+  "anon.enterMeetingCode": "输入会议代码",
   "anon.recentMeetings": "最近的会议",
   "anon.replaySoon": "会议回放即将推出！",
   "anon.noAccount": "还没有 Kloud 账户？",
@@ -431,5 +431,8 @@
   "toolbar.shareConflictSubtitle": "当前有其他人正在共享",
   "toolbar.shareConflictSomeone": "某位参会者",
   "toolbar.shareConflictBody": "正在共享屏幕。是否要接管并开始您自己的共享？对方的共享将被终止。",
-  "toolbar.shareConflictConfirm": "接管共享"
+  "toolbar.shareConflictConfirm": "接管共享",
+  "chat.noMessages": "暂无消息。打个招呼吧！👋",
+  "chat.you": "你",
+  "chat.typeMessage": "输入消息..."
 }

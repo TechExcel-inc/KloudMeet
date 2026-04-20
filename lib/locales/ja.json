@@ -430,5 +430,8 @@
   "toolbar.shareConflictSubtitle": "他の参加者が共有中です",
   "toolbar.shareConflictSomeone": "参加者",
   "toolbar.shareConflictBody": "が画面を共有中です。引き継いで自分の画面を共有しますか？相手の共有は停止されます。",
-  "toolbar.shareConflictConfirm": "引き継ぐ"
+  "toolbar.shareConflictConfirm": "引き継ぐ",
+  "chat.noMessages": "まだメッセージはありません。挨拶してみましょう！ 👋",
+  "chat.you": "あなた",
+  "chat.typeMessage": "メッセージを入力..."
 }

@@ -114,6 +114,21 @@
   background: #6b6b7a;
 }
 
+/* When muted by host: red pulsing background instead of grey */
+.controlBtnMutedByHost {
+  background: rgba(239, 68, 68, 0.85) !important;
+  animation: mutedByHostPulse 2s ease-in-out infinite;
+}
+
+.controlBtnMutedByHost:hover {
+  background: rgba(220, 38, 38, 0.92) !important;
+}
+
+@keyframes mutedByHostPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
 .controlBtnSpeaker {
   color: #ffffff;
   background: #565666;

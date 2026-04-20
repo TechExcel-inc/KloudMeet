@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useRoomContext, useParticipants } from '@livekit/components-react';
-import { RoomEvent } from 'livekit-client';
+import { RoomEvent, Track } from 'livekit-client';
 import { useI18n } from './i18n';
 import { getInitials } from './getInitials';
 
@@ -23,6 +23,7 @@ export interface ChatPanelProps {
 export function ChatPanel({ messages, onSend }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,12 +42,12 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
     <div className="kloud-chat-panel">
       <div className="kloud-chat-messages">
         {messages.length === 0 && (
-          <div className="kloud-chat-empty">No messages yet. Say hello! 👋</div>
+          <div className="kloud-chat-empty">{t('chat.noMessages') || 'No messages yet. Say hello! 👋'}</div>
         )}
         {messages.map((msg, i) => (
           <div key={i} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
             <div className="kloud-chat-meta">
-              <span className="kloud-chat-sender">{msg.isLocal ? 'You' : msg.senderName}</span>
+              <span className="kloud-chat-sender">{msg.isLocal ? (t('chat.you') || 'You') : msg.senderName}</span>
               <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
             <div className="kloud-chat-text">{msg.message}</div>
@@ -59,7 +60,7 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Type a message..."
+          placeholder={t('chat.typeMessage') || 'Type a message...'}
           className="kloud-chat-input"
           disabled={false}
         />
@@ -94,6 +95,8 @@ interface AttendeePanelProps {
   muteAllActive?: boolean;
   onMuteAll?: () => void;
   onUnmuteAll?: () => void;
+  /** Callback to individually mute/unmute a specific participant (host/co-host only) */
+  onMuteParticipant?: (identity: string, mute: boolean) => void;
 }
 
 export function AttendeePanel({
@@ -112,6 +115,7 @@ export function AttendeePanel({
   muteAllActive,
   onMuteAll,
   onUnmuteAll,
+  onMuteParticipant,
 }: AttendeePanelProps) {
   const { t } = useI18n();
   const participants = useParticipants();
@@ -238,6 +242,12 @@ export function AttendeePanel({
           const isThisHost = p.identity === hostIdentity;
           const isThisCohost = cohostIdentities.includes(p.identity);
           const isThisCopresenter = copresenterIdentities.includes(p.identity);
+          const isThisAutoPresenter = p.identity === autoPresenterIdentity;
+          // Force-muted: muteAll is active AND this participant is NOT someone who can initiate mute-all
+          // (host, co-host, and auto-presenter are all exempt — they are the operators, not the subjects)
+          const isOperator = isThisHost || isThisCohost || isThisAutoPresenter;
+          // Also: the LOCAL user who has canMuteAll never shows the red badge for themselves
+          const isForceMuted = !!(muteAllActive && !isOperator && !(isLocalParticipant && canMuteAll));
 
           return (
             <div key={p.identity} className="kloud-attendee-row">
@@ -254,6 +264,45 @@ export function AttendeePanel({
                   ))}
                 </div>
               </div>
+
+              {/* Per-participant mic toggle button (visible on row hover, clickable for operators) */}
+              {(() => {
+                // Get real-time mic state from LiveKit participant
+                const lkParticipant = participants.find(lkp => lkp.identity === p.identity);
+                const micPub = lkParticipant?.getTrackPublication(Track.Source.Microphone);
+                // isMuted: true if publication exists and is muted, or if no publication at all
+                const isMicMuted = micPub ? micPub.isMuted : true;
+                const canToggleThisMic = !!(canMuteAll && !isLocalParticipant);
+                return (
+                  <button
+                    className={`kloud-participant-mic-btn${isMicMuted ? ' muted' : ' active'}${canToggleThisMic ? ' clickable' : ''}`}
+                    onClick={canToggleThisMic ? () => onMuteParticipant?.(p.identity, !isMicMuted) : undefined}
+                    title={canToggleThisMic ? (isMicMuted ? 'Unmute participant' : 'Mute participant') : (isMicMuted ? 'Muted' : 'Mic on')}
+                    disabled={!canToggleThisMic}
+                  >
+                    {isMicMuted ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                        <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
+                        <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                        <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })()}
+
+              {/* Force-muted badge: shown when muteAll is active for non-host/co-host participants */}
+              {isForceMuted && (
+                <div className="kloud-force-muted-badge" title="Muted by host">
+                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                    <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
+                    <line x1="4" y1="4" x2="20" y2="20" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+              )}
 
               {/* Host row: presenter toggle + ⋯ for transfer host */}
               {isThisHost && canManageRoles && (
@@ -710,6 +759,75 @@ export const chatAndAttendeeStyles = `
   .role-attendee {
     color: rgba(255,255,255,0.4);
     background: rgba(255,255,255,0.05);
+  }
+
+  /* Force-muted badge (shown when host has muted all) */
+  .kloud-force-muted-badge {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #ef4444;
+    flex-shrink: 0;
+    animation: kloud-mic-muted-pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes kloud-mic-muted-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
+    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+  }
+
+  /* Per-participant mic toggle button */
+  .kloud-participant-mic-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    background: transparent;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+    opacity: 0;
+    cursor: default;
+  }
+  /* Show mic button when hovering the row */
+  .kloud-attendee-row:hover .kloud-participant-mic-btn {
+    opacity: 1;
+  }
+  /* Always visible when muted */
+  .kloud-participant-mic-btn.muted {
+    opacity: 1;
+    color: #f87171;
+  }
+  /* Active (unmuted) state */
+  .kloud-participant-mic-btn.active {
+    color: rgba(255,255,255,0.45);
+  }
+  /* Clickable (operator) states */
+  .kloud-participant-mic-btn.clickable {
+    cursor: pointer;
+  }
+  .kloud-participant-mic-btn.clickable.muted {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+  }
+  .kloud-participant-mic-btn.clickable.muted:hover {
+    background: rgba(239, 68, 68, 0.22);
+    border-color: rgba(239, 68, 68, 0.45);
+    color: #ef4444;
+    transform: scale(1.1);
+  }
+  .kloud-participant-mic-btn.clickable.active:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.2);
+    color: #fff;
+    transform: scale(1.1);
   }
 
   /* Action buttons */

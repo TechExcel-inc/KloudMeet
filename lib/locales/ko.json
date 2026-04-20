@@ -430,5 +430,8 @@
   "toolbar.shareConflictSubtitle": "다른 참가자가 공유 중입니다",
   "toolbar.shareConflictSomeone": "한 참가자",
   "toolbar.shareConflictBody": "가 화면을 공유하고 있습니다. 인수하여 본인의 화면을 공유하시겠습니까? 상대방의 공유가 종료됩니다.",
-  "toolbar.shareConflictConfirm": "인수하기"
+  "toolbar.shareConflictConfirm": "인수하기",
+  "chat.noMessages": "아직 메시지가 없습니다. 인사해 보세요! 👋",
+  "chat.you": "나",
+  "chat.typeMessage": "메시지 입력..."
 }

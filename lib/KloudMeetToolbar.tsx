@@ -63,6 +63,8 @@ interface KloudMeetToolbarProps {
   muteAllActive?: boolean;
   onMuteAll?: () => void;
   onUnmuteAll?: () => void;
+  /** Whether this local user has been force-muted by the host (distinct from voluntary self-mute) */
+  isMutedByHost?: boolean;
   /** Only host/co-host can toggle captions */
   canToggleCaptions?: boolean;
   /** Whether captions are currently active */
@@ -106,6 +108,7 @@ export function KloudMeetToolbar({
   muteAllActive,
   onMuteAll,
   onUnmuteAll,
+  isMutedByHost,
   canToggleCaptions,
   captionsEnabled,
   onToggleCaptions,
@@ -587,16 +590,16 @@ export function KloudMeetToolbar({
             <div className={styles.leftControls}>
               <div className={styles.controlGroup}>
                 <button
-                  className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''}`}
+                  className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''} ${isMutedByHost && !micEnabled ? styles.controlBtnMutedByHost : ''}`}
                   onClick={onToggleMic}
-                  title={micEnabled ? t('toolbar.muteMic') : t('toolbar.unmuteMic')}
+                  title={isMutedByHost ? 'Muted by host' : (micEnabled ? t('toolbar.muteMic') : t('toolbar.unmuteMic'))}
                 >
                   {micEnabled ? (
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" /></svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="currentColor">
                       <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" />
+                      <line x1="4" y1="4" x2="20" y2="20" stroke={isMutedByHost ? '#ef4444' : '#f87171'} strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                   )}
                 </button>
@@ -835,6 +838,7 @@ export function KloudMeetToolbar({
                 canToggleCaptions={canToggleCaptions}
                 captionsEnabled={captionsEnabled}
                 onToggleCaptions={onToggleCaptions}
+                handleToggleChat={handleToggleChat}
               />
             </div>
           </div>
@@ -868,6 +872,7 @@ export function KloudMeetToolbar({
               onOpenRecordPopup={onOpenRecordPopup}
               onStopRecording={onStopRecording}
               onOpenHelp={onOpenHelp}
+              handleToggleChat={handleToggleChat}
             />
           </div>
         </div>
@@ -974,6 +979,7 @@ export function KloudMeetToolbar({
                       onToggleCaptions={onToggleCaptions}
                       mobileAudioState={mobileAudioState}
                       setMobileAudioState={setMobileAudioState}
+                      handleToggleChat={handleToggleChat}
                     />
                   </div>
                 )}
@@ -1114,6 +1120,7 @@ function ActiveSheetContent({
   onToggleCaptions,
   mobileAudioState,
   setMobileAudioState,
+  handleToggleChat,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1175,11 +1182,7 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
-          <button className={styles.actionSheetItem} onClick={() => {
-            const chatBtn = document.querySelector('[ref="chatMenuBtnRef"]') as HTMLButtonElement;
-            if (chatBtn) chatBtn.click();
-            setActiveSheet('chat_redirect');
-          }}>
+          <button className={styles.actionSheetItem} onClick={() => handleToggleChat()}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>

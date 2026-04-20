@@ -869,28 +869,28 @@ function MobileVideoLayout() {
   // 不滚动模式：用 CSS Grid 填满父容器高度
   const gridStyle: React.CSSProperties = isOver && expanded
     ? {
-        // 展开后允许滚动
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gap: '6px',
-        padding: '6px',
-        overflowY: 'auto',
-        height: '100%',
-        background: '#0a0a0a',
-        boxSizing: 'border-box',
-      }
+      // 展开后允许滚动
+      display: 'grid',
+      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gap: '6px',
+      padding: '6px',
+      overflowY: 'auto',
+      height: '100%',
+      background: '#0a0a0a',
+      boxSizing: 'border-box',
+    }
     : {
-        // 不超16人 or 收起时：填满高度，不滚动
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gridAutoRows: '1fr',
-        gap: '6px',
-        padding: '6px',
-        height: '100%',
-        overflow: 'hidden',
-        background: '#0a0a0a',
-        boxSizing: 'border-box',
-      };
+      // 不超16人 or 收起时：填满高度，不滚动
+      display: 'grid',
+      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gridAutoRows: '1fr',
+      gap: '6px',
+      padding: '6px',
+      height: '100%',
+      overflow: 'hidden',
+      background: '#0a0a0a',
+      boxSizing: 'border-box',
+    };
 
   return (
     <div className="lk-mobile-scroll-grid" style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
@@ -1029,14 +1029,14 @@ function VideoConferenceComponent(props: {
   const handleToggleRecording = async (action: 'start' | 'stop') => {
     // Get user from localStorage → fallback sessionStorage → fallback cookie
     let dbUser: { id?: string } = {};
-    try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch {}
+    try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch { }
     if (!dbUser.id) {
-      try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch {}
+      try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch { }
     }
     if (!dbUser.id) {
       // Try cookie
       const match = document.cookie.match(/(?:^|;\s*)kloudUser=([^;]*)/);
-      if (match) { try { dbUser = JSON.parse(decodeURIComponent(match[1])); } catch {} }
+      if (match) { try { dbUser = JSON.parse(decodeURIComponent(match[1])); } catch { } }
     }
 
     if (!dbUser.id) {
@@ -1722,9 +1722,9 @@ function VideoConferenceComponent(props: {
       // Call the stop-recording API
       try {
         let dbUser: { id?: string } = {};
-        try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch {}
+        try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch { }
         if (!dbUser.id) {
-          try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch {}
+          try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch { }
         }
 
         const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
@@ -1811,6 +1811,8 @@ function VideoConferenceComponent(props: {
   const [copresenterIdentities, setCopresenterIdentities] = React.useState<string[]>([]);
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
+  const [hostMutedIdentities, setHostMutedIdentities] = React.useState<string[]>([]);
+  const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>([]);
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
   // Auto-assign Presenter: whoever owns the active screen share track
   const autoPresenterIdentity = screenShareTracks.length > 0
@@ -1854,10 +1856,14 @@ function VideoConferenceComponent(props: {
     view: ViewMode;
     presenter: string | null;
     livedocInstanceId: string | null;
+    muteAllActive: boolean;
+    hostMutedIdentities: string[];
   }>({
     view: activeView,
     presenter: null,
     livedocInstanceId: null,
+    muteAllActive: false,
+    hostMutedIdentities: [],
   });
 
   // Keep authState in sync when host changes view locally
@@ -1876,6 +1882,14 @@ function VideoConferenceComponent(props: {
       authState.current.livedocInstanceId = livedocInstanceId;
     }
   }, [isHost, livedocInstanceId]);
+
+  // Keep mute state in authState so late-joining participants receive it via CORRECTION
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.muteAllActive = muteAllActive;
+      authState.current.hostMutedIdentities = hostMutedIdentities;
+    }
+  }, [isHost, muteAllActive, hostMutedIdentities]);
 
   // Helper: send a meeting control message
   const sendMeetingMsg = React.useCallback(
@@ -1902,12 +1916,35 @@ function VideoConferenceComponent(props: {
   const handleMuteAll = React.useCallback(() => {
     sendMeetingMsg({ type: 'MUTE_ALL' });
     setMuteAllActive(true);
+    setHostMutedIdentities([]);
+    setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
 
   const handleUnmuteAll = React.useCallback(() => {
     sendMeetingMsg({ type: 'UNMUTE_ALL' });
     setMuteAllActive(false);
+    setHostMutedIdentities([]);
+    setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
+
+  // Send a targeted mute/unmute to a single participant (host/co-host only)
+  const handleMuteParticipant = React.useCallback(
+    (identity: string, mute: boolean) => {
+      // Broadcast to ALL participants so everyone can update their hostMutedIdentities
+      // and show the correct red/gray color on the mic indicator.
+      // The targetIdentity field tells each client which participant is being acted on.
+      sendMeetingMsg({ type: mute ? 'MUTE_PARTICIPANT' : 'UNMUTE_PARTICIPANT', targetIdentity: identity });
+      // Track this locally so the host sees them as forced-muted (RED)
+      setHostMutedIdentities(prev =>
+        mute ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+      );
+      // Track exemptions if they are individually unmuted during a global Mute All
+      setExemptFromMuteAllIdentities(prev =>
+        !mute ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+      );
+    },
+    [sendMeetingMsg],
+  );
 
   // Takeover: force the current presenter to stop their screen share, then start ours
   const handleConfirmShareTakeover = React.useCallback(() => {
@@ -1996,14 +2033,16 @@ function VideoConferenceComponent(props: {
     if (!isHost) return;
     const handler = (participant: RemoteParticipant) => {
       const auth = authState.current;
-      // Send full meeting state (view + livedocInstanceId + presenter) to new joiner
-      // so they immediately adopt the current meeting mode (e.g. liveDoc)
+      // Send full meeting state to new joiner so they immediately adopt the
+      // current meeting mode and see correct mute indicators.
       sendMeetingMsg(
         {
           type: 'CORRECTION',
           view: auth.view,
           presenter: auth.presenter,
           livedocInstanceId: auth.livedocInstanceId,
+          muteAllActive: auth.muteAllActive,
+          hostMutedIdentities: auth.hostMutedIdentities,
         },
         [participant.identity],
       );
@@ -2058,6 +2097,13 @@ function VideoConferenceComponent(props: {
           if (typeof (msg as { livedocInstanceId?: string }).livedocInstanceId === 'string') {
             setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
           }
+          // Restore mute state for late joiners
+          if (typeof msg.muteAllActive === 'boolean') {
+            setMuteAllActive(msg.muteAllActive);
+          }
+          if (Array.isArray(msg.hostMutedIdentities)) {
+            setHostMutedIdentities(msg.hostMutedIdentities);
+          }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
             setCopresenterIdentities((prev) =>
@@ -2096,6 +2142,8 @@ function VideoConferenceComponent(props: {
           room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
           setMicEnabled(false);
           setMuteAllActive(true);
+          setHostMutedIdentities([]);
+          setExemptFromMuteAllIdentities([]);
         } else if (msg.type === 'UNMUTE_ALL') {
           // Restore to the state the user had BEFORE the mute-all command
           const restoreTo = preMuteAllMicRef.current ?? true;
@@ -2103,6 +2151,31 @@ function VideoConferenceComponent(props: {
           room.localParticipant.setMicrophoneEnabled(restoreTo).catch(console.error);
           setMicEnabled(restoreTo);
           setMuteAllActive(false);
+          setHostMutedIdentities([]);
+          setExemptFromMuteAllIdentities([]);
+        } else if (msg.type === 'MUTE_PARTICIPANT') {
+          // If this is the targeted participant, mute their mic
+          if (msg.targetIdentity === room.localParticipant.identity) {
+            room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
+            setMicEnabled(false);
+          }
+          // ALL clients track that this participant was force-muted by the host
+          // This ensures every viewer sees the red indicator.
+          if (msg.targetIdentity) {
+            setHostMutedIdentities(prev =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            );
+          }
+        } else if (msg.type === 'UNMUTE_PARTICIPANT') {
+          // If this is the targeted participant, restore their mic
+          if (msg.targetIdentity === room.localParticipant.identity) {
+            room.localParticipant.setMicrophoneEnabled(true).catch(console.error);
+            setMicEnabled(true);
+          }
+          // ALL clients clear the force-muted state for this identity
+          if (msg.targetIdentity) {
+            setHostMutedIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
+          }
         } else if (msg.type === 'RC_REQUEST') {
           // Remote Control: someone is requesting control of our screen
           if (screenShareActive) {
@@ -2180,7 +2253,166 @@ function VideoConferenceComponent(props: {
     };
   }, [room, isHost, decoder, sendMeetingMsg, screenShareActive, approvedControllerIdentity, remoteControlRequest, micEnabled]);
 
-  // ═══ Remote Control Permission (uses meeting-control topic) ═══
+  // ═══ Grid tile click-to-mute (host / co-host only) ═══
+  // Event delegation on document (capture phase) so it fires before LiveKit's own handlers.
+  // Detects clicks on the mic-indicator region of a remote participant tile,
+  // matches the participant by display name, and sends MUTE/UNMUTE_PARTICIPANT.
+  React.useEffect(() => {
+    if (!room || (!isHost && !isCohost)) return;
+
+    const handleTileMicClick = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+
+      // Only fire if click is on/inside the custom mic indicator
+      const micArea = target.closest('.kloud-custom-mic-indicator');
+      if (!micArea) return;
+
+      const tile = target.closest('.lk-participant-tile');
+      if (!tile) return;
+      // Skip local participant's own tile
+      if (tile.getAttribute('data-lk-local-participant') === 'true') return;
+
+      // Extract identity from the custom data attribute
+      const identity = micArea.getAttribute('data-kloud-identity');
+      if (!identity) return;
+
+      const isAudioMuted = micArea.getAttribute('data-kloud-muted') === 'true';
+
+      e.preventDefault();
+      e.stopPropagation();
+      handleMuteParticipant(identity, !isAudioMuted);
+    };
+
+    document.addEventListener('click', handleTileMicClick, true);
+    return () => document.removeEventListener('click', handleTileMicClick, true);
+  }, [room, isHost, isCohost, handleMuteParticipant]);
+
+  // ══════════════════════════════════════════════════════════════════════
+  // Custom DOM-injected Microphone Indicator (Bypassing LiveKit default)
+  // Ensures the mic indicator is ALWAYS visible and supports 3 states:
+  // Green (active), Gray (voluntarily muted), Red (force-muted by host)
+  // ══════════════════════════════════════════════════════════════════════
+  React.useEffect(() => {
+    if (!room) return;
+
+    // SVG templates for the mic icon
+    const micSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/></svg>`;
+    const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
+
+    const updateCustomMics = () => {
+      // Find all tiles inside the wrapper
+      const tiles = document.querySelectorAll('.lk-grid-layout-wrapper .lk-participant-tile');
+      const muteAllApplied = muteAllActive;
+
+      tiles.forEach((tile) => {
+        const metadata = tile.querySelector('.lk-participant-metadata');
+        if (!metadata) return;
+
+        // Determine participant identity from the tile's data-lk-participant or fallback to name matching
+        let identity = tile.getAttribute('data-lk-participant');
+        let participant = identity === room.localParticipant.identity ? room.localParticipant : (identity ? room.remoteParticipants.get(identity) : null);
+
+        // Fallback to name matching if data attribute doesn't contain identity
+        if (!participant) {
+          const nameEl = tile.querySelector('.lk-participant-name');
+          const displayName = nameEl?.textContent?.trim();
+          const matched = Array.from(room.remoteParticipants.values()).find(p => (p.name || p.identity) === displayName);
+          participant = matched || (room.localParticipant.name === displayName ? room.localParticipant : null);
+        }
+        if (!participant) return;
+        identity = participant.identity;
+
+        const isLocal = participant.identity === room.localParticipant.identity;
+        const micPub = participant.getTrackPublication(Track.Source.Microphone);
+        const isMuted = !micPub?.track || micPub.isMuted;
+
+        // Is this participant force-muted? (Hosts, co-hosts, auto-presenters are exempt)
+        const targetIsHost = identity === hostIdentity;
+        const targetIsCohost = cohostIdentities.includes(identity);
+        const targetIsAutoPresenter = autoPresenterIdentity === identity;
+        const targetIsCopresenter = copresenterIdentities.includes(identity);
+        const targetIsOperator = targetIsHost || targetIsCohost || targetIsAutoPresenter || targetIsCopresenter;
+
+        // Force muted is true if either muted globally (and not exempt) or by the host explicitly.
+        // Note: !isLocal was intentionally removed — the muted participant should see red on their own tile.
+        // Operator exemption (!targetIsOperator) already handles preventing hosts/cohosts from being marked red.
+        const isForceMuted = ((muteAllApplied && !exemptFromMuteAllIdentities.includes(identity)) || hostMutedIdentities.includes(identity)) && !targetIsOperator && isMuted;
+        // Look for our custom icon container, or create it if missing
+        let customMic = metadata.querySelector('.kloud-custom-mic-indicator');
+        if (!customMic) {
+          customMic = document.createElement('div');
+          customMic.className = 'kloud-custom-mic-indicator';
+
+          // Place it inside the left-side metadata item, BEFORE the name
+          const itemContainer = metadata.querySelector('.lk-participant-metadata-item');
+          if (itemContainer) {
+            itemContainer.insertBefore(customMic, itemContainer.firstChild);
+          } else {
+            metadata.insertBefore(customMic, metadata.firstChild);
+          }
+        }
+
+        // Apply state data attributes (useful for the click handler and CSS)
+        customMic.setAttribute('data-kloud-identity', identity);
+        customMic.setAttribute('data-kloud-muted', isMuted ? 'true' : 'false');
+        customMic.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
+
+        // Apply Icon + Color
+        if (!isMuted) {
+          customMic.innerHTML = micSvg;
+          (customMic as HTMLElement).style.color = '#22c55e'; // Green
+        } else if (isForceMuted) {
+          customMic.innerHTML = micOffSvg;
+          (customMic as HTMLElement).style.color = '#ff2020'; // Red
+        } else {
+          customMic.innerHTML = micOffSvg;
+          (customMic as HTMLElement).style.color = 'rgba(255,255,255,0.75)'; // Gray
+        }
+
+        // If I am a host/co-host viewing a remote tile, show pointer and tooltip styles
+        if (!isLocal && (isHost || isCohost)) {
+          customMic.classList.add('operator-interactive');
+          customMic.setAttribute('title', isMuted ? 'Click to unmute' : 'Click to mute');
+        } else {
+          customMic.classList.remove('operator-interactive');
+          customMic.removeAttribute('title');
+        }
+      });
+    };
+
+    // Run the update immediately
+    updateCustomMics();
+
+    // Listen to all relevant LiveKit events to update the DOM reactively
+    room.on(RoomEvent.TrackMuted, updateCustomMics);
+    room.on(RoomEvent.TrackPublished, updateCustomMics);
+    room.on(RoomEvent.TrackUnpublished, updateCustomMics);
+    room.on(RoomEvent.ParticipantConnected, updateCustomMics);
+    room.on(RoomEvent.ParticipantDisconnected, updateCustomMics);
+
+    // Track unmuting by the user to clear host-muted state
+    const handleTrackUnmuted = (pub: any, p: any) => {
+      updateCustomMics();
+      if (pub && pub.source === Track.Source.Microphone && p) {
+        setHostMutedIdentities(prev => prev.filter(id => id !== p.identity));
+      }
+    };
+    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
+
+    // Also run on an interval as a fail-safe against delayed DOM renders by LiveKit
+    const intervalId = setInterval(updateCustomMics, 500);
+
+    return () => {
+      room.off(RoomEvent.TrackMuted, updateCustomMics);
+      room.off(RoomEvent.TrackUnmuted, handleTrackUnmuted);
+      room.off(RoomEvent.TrackPublished, updateCustomMics);
+      room.off(RoomEvent.TrackUnpublished, updateCustomMics);
+      room.off(RoomEvent.ParticipantConnected, updateCustomMics);
+      room.off(RoomEvent.ParticipantDisconnected, updateCustomMics);
+      clearInterval(intervalId);
+    };
+  }, [room, muteAllActive, hostIdentity, cohostIdentities, autoPresenterIdentity, copresenterIdentities, hostMutedIdentities, exemptFromMuteAllIdentities]);
 
   // Clear all remote control permission state when screen share ends
   React.useEffect(() => {
@@ -3485,6 +3717,11 @@ function VideoConferenceComponent(props: {
                   canManageRoles={isHost || isCohost}
                   localIdentity={room.localParticipant.identity}
                   autoPresenterIdentity={autoPresenterIdentity}
+                  canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
+                  muteAllActive={muteAllActive}
+                  onMuteAll={handleMuteAll}
+                  onUnmuteAll={handleUnmuteAll}
+                  onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
                   onAddCopresenter={(identity) => {
                     setCopresenterIdentities((prev) =>
                       prev.includes(identity) ? prev : [...prev, identity],
@@ -4082,6 +4319,52 @@ function VideoConferenceComponent(props: {
             }
 
             ${chatAndAttendeeStyles}
+
+            /* ══════════════════════════════════════════════════════
+               Custom Microphone Indicator DOM Injection
+               Replaces LiveKit's missing "mic on" DOM states
+               ══════════════════════════════════════════════════════ */
+
+            /* Completely hide LiveKit's default microphone indicator */
+            .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone {
+              display: none !important;
+            }
+
+            /* Our custom injected microphone indicator styling */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              position: relative;
+              width: 1.15rem;
+              height: 1.15rem;
+              flex-shrink: 0;
+              transition: all 0.2s ease;
+            }
+
+            /* Add red drop-shadow pulsing just for the force-muted state */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+              width: 1.4rem;
+              height: 1.4rem;
+              filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
+              animation: kloud-mic-alert-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+
+            @keyframes kloud-mic-alert-pulse {
+              0%, 100% { opacity: 1; transform: scale(1); }
+              50% { opacity: 0.7; transform: scale(0.9); }
+            }
+
+            /* Host hover interactions */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive {
+              cursor: pointer;
+              border-radius: 50%;
+              padding: 2px;
+            }
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover {
+              background: rgba(255, 255, 255, 0.15);
+              transform: scale(1.15);
+            }
           `}</style>
         </div>
 
@@ -4171,6 +4454,7 @@ function VideoConferenceComponent(props: {
           muteAllActive={muteAllActive}
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
+          isMutedByHost={(muteAllActive || hostMutedIdentities.includes(room.localParticipant.identity)) && !micEnabled && !(isHost || isCohost)}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
           onToggleCaptions={handleToggleCaptions}
@@ -4206,6 +4490,7 @@ function VideoConferenceComponent(props: {
                 muteAllActive={muteAllActive}
                 onMuteAll={handleMuteAll}
                 onUnmuteAll={handleUnmuteAll}
+                onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
                 onAddCopresenter={(identity) => {
                   setCopresenterIdentities((prev) =>
                     prev.includes(identity) ? prev : [...prev, identity],
