@@ -86,8 +86,8 @@ export function PageClientImpl(props: {
       const storedKloud = localStorage.getItem('kloudUser');
       if (storedKloud) {
         const user = JSON.parse(storedKloud);
-        if (user && (user.fullName || user.username)) {
-          username = user.fullName || user.username;
+        if (user && (user.displayName || user.username)) {
+          username = user.displayName || user.username;
         }
       }
 
@@ -110,8 +110,8 @@ export function PageClientImpl(props: {
         const storedKloud = localStorage.getItem('kloudUser');
         if (storedKloud) {
           const user = JSON.parse(storedKloud);
-          if (user && (user.fullName || user.username)) {
-            defaultUsername = user.fullName || user.username;
+          if (user && (user.displayName || user.username)) {
+            defaultUsername = user.displayName || user.username;
           }
         } else {
           const key = 'lk-user-choices';
