@@ -1718,15 +1718,16 @@ function DashboardView({
                               <button
                                 className={styles.playRecordingBtn}
                                 onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
+                                title={t('dash.replayTitle')}
                               >
                                 <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
-                                Play
+                                {t('dash.replay')}
                               </button>
                             )}
                             {processingRecording && (
                               <div className={styles.recordingProcessing}>
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                Processing
+                                {t('common.processing')}
                               </div>
                             )}
 
@@ -1796,6 +1797,21 @@ function DashboardView({
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                                     <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
                                     <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+
+                              {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
+                              {recording && m.status === 'ENDED' && (
+                                <button
+                                  title={t('dash.replaySummaryTitle')}
+                                  className={styles.iconBtn}
+                                  style={{ color: '#818cf8' }}
+                                  onClick={() => window.open(`/recordings/${recording.id}`, '_blank')}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    <polyline points="10 8 16 12 10 16"/>
                                   </svg>
                                 </button>
                               )}

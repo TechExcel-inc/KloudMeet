@@ -45,6 +45,7 @@ yarn-error.log*
 prisma/*.db
 prisma/*.db-journal
 prisma/create_tables.sql
+prisma/add_replay_tables.sql
 \n.env.production\n*.tar.gz
 
 # local db / scratch files

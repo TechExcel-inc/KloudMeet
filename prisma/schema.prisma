@@ -188,6 +188,7 @@ model Meeting {
   description           String?
   maxParticipants   Int       @default(0)
   status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
+  kloudMeetingId    Int?      // 对应 Kloud Java Server 的 meetingId（用于字幕/摘要关联）
   createdAt         DateTime  @default(now())
   createdBy         String?
   modifiedAt        DateTime?
@@ -199,6 +200,8 @@ model Meeting {
   participants MeetingParticipant[]
   recordings   Recording[]
   recordingAccessRequests RecordingAccessRequest[]
+  transcripts  MeetingTranscript[]
+  summaryItems MeetingSummaryItem[]
 }
 
 // ============================================================
@@ -322,4 +325,40 @@ model SystemSetting {
   value      String    @db.Text
   createdAt  DateTime  @default(now())
   modifiedAt DateTime? @updatedAt
+}
+
+// ============================================================
+// 15. MeetingTranscript — 同步存储字幕（来自 Kloud Java Server）
+// ============================================================
+model MeetingTranscript {
+  id              Int      @id @default(autoincrement())
+  meetingId       Int
+  speakerName     String   // 发言人显示名
+  speakerMemberId Int?     // 对应本地 TeamMember.id（可选）
+  content         String   @db.Text // 字幕内容
+  captionTime     DateTime // 字幕时间戳
+  offsetSeconds   Int?     // 相对会议开始的秒数（用于视频跳转）
+  sourceId        String?  // Java Server 端的 captionId（去重用）
+  createdAt       DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+
+  @@index([meetingId, captionTime])
+}
+
+// ============================================================
+// 16. MeetingSummaryItem — AI摘要章节（来自 Kloud Java Server）
+// ============================================================
+model MeetingSummaryItem {
+  id          Int      @id @default(autoincrement())
+  meetingId   Int
+  title       String   // 章节标题
+  content     String   @db.Text // 章节摘要正文
+  timeOffset  String   // HH:mm:ss 格式（相对会议开始）
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  meeting Meeting @relation(fields: [meetingId], references: [id])
+
+  @@index([meetingId, sortOrder])
 }
