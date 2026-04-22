@@ -158,7 +158,13 @@ export function PageClientImpl(props: {
     fetch(`/api/meetings/${props.roomName}`)
       .then(res => res.json())
       .then(data => {
-        if (!data.error) setMeetingInfo(data);
+        if (!data.error) {
+          setMeetingInfo(data);
+          // 供 useCaptions 读取，用于字幕持久化和时间偏移计算
+          if (data.id) localStorage.setItem('activeMeetingId', String(data.id));
+          if (data.actualStartedAt) localStorage.setItem('activeMeetingStartedAt', data.actualStartedAt);
+          else if (data.startedAt) localStorage.setItem('activeMeetingStartedAt', data.startedAt);
+        }
       })
       .catch(console.error);
   }, [props.roomName]);

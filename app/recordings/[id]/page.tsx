@@ -93,6 +93,161 @@ function speakerColor(name: string): string {
   return COLORS[Math.abs(h) % COLORS.length];
 }
 
+/* ─── Chapter Cards + Speaker Timeline types ─────────────── */
+
+interface ChapterCard {
+  id: number;
+  startSec: number;
+  endSec: number;
+  timeRange: string;
+  speaker: string;
+  topic: string;
+}
+
+interface SpeakerSegment {
+  name: string;
+  color: string;
+  segments: [number, number][];
+}
+
+/* ─── ChapterCardsCarousel ────────────────────────────────── */
+function ChapterCardsCarousel({
+  chapters,
+  currentTime,
+  selectedId,
+  onSelect,
+}: {
+  chapters: ChapterCard[];
+  currentTime: number;
+  selectedId: number | null;
+  onSelect: (ch: ChapterCard) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(true);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+
+  const check = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    setCanLeft(el.scrollLeft > 4);
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 4);
+  };
+  const scroll = (dir: 'l' | 'r') => {
+    scrollRef.current?.scrollBy({ left: dir === 'l' ? -220 : 220, behavior: 'smooth' });
+    setTimeout(check, 350);
+  };
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', check, { passive: true });
+    check();
+    return () => el.removeEventListener('scroll', check);
+  }, []);
+
+  // 自动高亮：基于播放时间
+  const autoIdx = chapters.reduce((acc, c, i) =>
+    currentTime >= c.startSec && currentTime < c.endSec ? i : acc, -1);
+
+  return (
+    <div style={stx.carouselWrap}>
+      {canLeft && (
+        <button style={{ ...stx.arrowBtn, left: 6 }} onClick={() => scroll('l')}>‹</button>
+      )}
+      <div ref={scrollRef} style={stx.carouselTrack}>
+        {chapters.map((ch, idx) => {
+          const isSelected = ch.id === selectedId;
+          const isAuto = idx === autoIdx && selectedId === null;
+          const isActive = isSelected || isAuto;
+          const isHovered = idx === hoverIdx;
+          return (
+            <div
+              key={ch.id}
+              onClick={() => onSelect(ch)}
+              onMouseEnter={() => setHoverIdx(idx)}
+              onMouseLeave={() => setHoverIdx(null)}
+              style={{
+                ...stx.chapterCard,
+                background: isActive
+                  ? 'rgba(99,102,241,0.22)'
+                  : isHovered ? 'rgba(255,255,255,0.06)' : '#1a2235',
+                borderColor: isActive ? '#6366f1' : 'rgba(255,255,255,0.07)',
+                boxShadow: isActive ? '0 0 0 1.5px rgba(99,102,241,0.5)' : 'none',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ ...stx.cardAvatar, background: speakerColor(ch.speaker) }}>
+                {getInitials(ch.speaker)}
+              </div>
+              <div style={stx.cardName}>{ch.speaker}</div>
+              <div style={stx.cardTimeRange}>{ch.timeRange}</div>
+              <div style={stx.cardTopic} title={ch.topic}>{ch.topic}</div>
+            </div>
+          );
+        })}
+      </div>
+      {canRight && (
+        <button style={{ ...stx.arrowBtn, right: 6 }} onClick={() => scroll('r')}>›</button>
+      )}
+    </div>
+  );
+}
+
+/* ─── SpeakerSegmentTimeline ──────────────────────────────── */
+function SpeakerSegmentTimeline({
+  speakers,
+  duration,
+  onSeek,
+}: {
+  speakers: SpeakerSegment[];
+  duration: number;
+  onSeek: (s: number) => void;
+}) {
+  if (!speakers.length || !duration) return null;
+  const pct = (s: number) => `${((s / duration) * 100).toFixed(2)}%`;
+  return (
+    <div style={stx.segTimeline}>
+      {speakers.map((sp) => (
+        <div key={sp.name} style={stx.segRow}>
+          <div style={stx.segLabel}>
+            <div style={{ ...stx.segAvatar, background: sp.color }}>{getInitials(sp.name)}</div>
+            <span style={stx.segName}>{sp.name}</span>
+          </div>
+          <div
+            style={stx.segBar}
+            onClick={(e) => {
+              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+              onSeek(((e.clientX - rect.left) / rect.width) * duration);
+            }}
+          >
+            {sp.segments.map(([s, e], i) => (
+              <div
+                key={i}
+                title={`${fmtTime(s)} – ${fmtTime(e)}  点击跳转`}
+                style={{
+                  position: 'absolute',
+                  left: pct(s),
+                  width: pct(e - s),
+                  top: 0,
+                  height: '100%',
+                  background: sp.color,
+                  borderRadius: 3,
+                  opacity: 0.88,
+                  cursor: 'pointer',
+                  transition: 'opacity 0.15s',
+                }}
+                onClick={(ev) => { ev.stopPropagation(); onSeek(s); }}
+                onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.opacity = '1'; }}
+                onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.opacity = '0.88'; }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ─── Sub-components ─────────────────────────────────────── */
 
 /** 章节摘要面板 */
@@ -103,6 +258,7 @@ function SummaryPanel({
   onSeek,
   meetingId,
   kloudMeetingId,
+  forceExpandId,
 }: {
   items: SummaryItem[];
   currentTime: number;
@@ -110,6 +266,7 @@ function SummaryPanel({
   onSeek: (secs: number) => void;
   meetingId: number;
   kloudMeetingId: number | null;
+  forceExpandId?: number | null;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
@@ -117,6 +274,13 @@ function SummaryPanel({
   const [expanded, setExpanded] = useState<number | null>(null);
 
   useEffect(() => setLocalItems(items), [items]);
+
+  // 外部点击章节卡片时强制展开对应摘要
+  useEffect(() => {
+    if (forceExpandId !== undefined && forceExpandId !== null) {
+      setExpanded(forceExpandId);
+    }
+  }, [forceExpandId]);
 
   // 高亮当前所在章节
   const activeIdx = localItems.reduce((acc, item, idx) => {
@@ -499,6 +663,8 @@ export default function ReplayPage() {
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info'>('summary');
+  // 为 null 表示未手动选中，高亮跟随播放时间自动
+  const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -541,6 +707,13 @@ export default function ReplayPage() {
     }
   }, []);
 
+  // 点击章节卡片：跳转视频 + 切换右侧摘要面板 + 展开对应项
+  const handleChapterSelect = useCallback((ch: ChapterCard) => {
+    seekTo(ch.startSec);
+    setActiveTab('summary');
+    setSelectedChapterId(ch.id);
+  }, [seekTo]);
+
   /* ── Loading ── */
   if (loading) {
     return (
@@ -572,8 +745,69 @@ export default function ReplayPage() {
   const participants = meeting?.participants || [];
   const meetingTitle = meeting?.title || meeting?.roomName || t('replay.loading');
 
+  // ── Demo 假数据：当会议没有真实摘要时展示样式预览 ────────────────────────
+  const DEMO_SUMMARY_ITEMS: SummaryItem[] = [
+    {
+      id: -1, sortOrder: 0, timeOffset: '00:00:00',
+      title: '📋 会议开场与议程确认',
+      content: '主持人吴孝宇宣布会议开始，介绍了本次季度产品评审会的主要议程，共分为五个议题：Q1销售数据回顾、新功能规划讨论、技术方案评审、市场推广策略和行动计划分配。所有参会成员完成自我介绍，确认无缺席情况。',
+    },
+    {
+      id: -2, sortOrder: 1, timeOffset: '00:05:00',
+      title: '📊 Q1 销售数据回顾',
+      content: '销售负责人陈晓雨汇报了Q1整体业绩：总营收同比增长 23.4%，企业客户签约数量达到 68 家，较目标超额完成 12%。重点市场华东和华南区表现亮眼，但西北区有所落后，需在Q2加强渠道建设。客户续费率维持在 87%，略低于目标的 90%，需重点关注流失风险客户。',
+    },
+    {
+      id: -3, sortOrder: 2, timeOffset: '00:10:00',
+      title: '🚀 新功能规划讨论',
+      content: '产品经理李明远演示了 KloudMeet 2.0 的核心功能规划：① AI 实时语音字幕（当前正在落地）② 智能会议摘要生成 ③ 多语言实时翻译 ④ 虚拟背景增强。团队讨论后决定将 AI 摘要功能列为本季度 P0 优先级，预计 6 周内上线内测版本。多语言翻译推迟到 Q3。',
+    },
+    {
+      id: -4, sortOrder: 3, timeOffset: '00:15:00',
+      title: '🔧 技术方案评审',
+      content: '技术负责人张伟鹏介绍了 AssemblyAI Whisper-RT 接入方案：采用服务端临时 Token 代理保障 API Key 安全性，浏览器通过 WebSocket 直连 AssemblyAI，支持中英文混合识别，延迟控制在 800ms 以内。方案整体获团队认可，需重点关注并发会话成本控制，建议设置每用户每日使用上限。',
+    },
+    {
+      id: -5, sortOrder: 4, timeOffset: '00:20:00',
+      title: '📣 市场推广策略',
+      content: '市场总监赵思思提出Q2推广三步走：① 5月邀请 20 家标杆企业客户内测并收集反馈 ② 6月在 SaaS 行业展会进行产品发布 ③ 配合 KOL 内容营销扩大品牌声量。预算申请 45 万，其中线上投放 25 万，线下活动 20 万。CFO 表示原则上同意，但需提交详细 ROI 预测表。',
+    },
+    {
+      id: -6, sortOrder: 5, timeOffset: '00:25:00',
+      title: '✅ 行动计划与任务分配',
+      content: '会议最终确定以下行动项：① 产品团队（李明远）— 2 周内完成 AI 摘要功能原型，提交评审；② 技术团队（张伟鹏）— 本周内完成 AssemblyAI 生产环境接入并通过压测；③ 销售团队（陈晓雨）— 制定西北区 Q2 拓展计划，5 月 1 日前提交；④ 市场团队（赵思思）— 3 天内提交 ROI 预测报告。下次例会定于两周后，同一时间。',
+    },
+  ];
+
+  // 无真实摘要时用 Demo 数据预览样式（真实数据入库后自动替换）
+  const displaySummaryItems = summaryItems.length > 0 ? summaryItems : DEMO_SUMMARY_ITEMS;
+
+  // ── Demo 章节卡片数据（每5分钟一个章节，含说话人信息）────────────────────
+  const DEMO_CHAPTERS: ChapterCard[] = [
+    { id: -1, startSec: 0,    endSec: 300,  timeRange: '00:00:00-00:05:00', speaker: '吴孝宇', topic: '会议开场与议程确认' },
+    { id: -2, startSec: 300,  endSec: 600,  timeRange: '00:05:01-00:10:00', speaker: '陈晓雨', topic: 'Q1 销售数据回顾' },
+    { id: -3, startSec: 600,  endSec: 900,  timeRange: '00:10:01-00:15:00', speaker: '李明远', topic: '新功能规划讨论' },
+    { id: -4, startSec: 900,  endSec: 1200, timeRange: '00:15:01-00:20:00', speaker: '张伟鹏', topic: '技术方案评审' },
+    { id: -5, startSec: 1200, endSec: 1500, timeRange: '00:20:01-00:25:00', speaker: '赵思思', topic: '市场推广策略' },
+    { id: -6, startSec: 1500, endSec: 1800, timeRange: '00:25:01-00:30:00', speaker: '吴孝宇', topic: '行动计划与任务分配' },
+  ];
+
+  // ── Demo 说话人时间段数据（[startSec, endSec] 数组）─────────────────────
+  const DEMO_SPEAKER_SEGMENTS: SpeakerSegment[] = [
+    { name: '吴孝宇', color: '#6366f1', segments: [[0,290],[340,360],[1498,1795]] },
+    { name: '陈晓雨', color: '#ec4899', segments: [[298,595],[648,680],[910,940]] },
+    { name: '李明远', color: '#14b8a6', segments: [[240,280],[598,892],[1290,1320]] },
+    { name: '张伟鹏', color: '#f59e0b', segments: [[470,510],[895,1193],[1440,1470]] },
+    { name: '赵思思', color: '#10b981', segments: [[750,780],[1198,1492],[1630,1660]] },
+  ];
+
+  // Demo 假数据按 30 分钟（1800s）写的，轨道总长固定为 1800s
+  // 不能用 duration（真实视频时长可能只有几分钟），否则 > duration 的时间段
+  // 会被 overflow:hidden 裁掉，颜色就"消失"了
+  const segDuration = 1800;
+
   const tabs = [
-    { key: 'summary', label: t('replay.tabSummary'), count: summaryItems.length },
+    { key: 'summary', label: t('replay.tabSummary'), count: displaySummaryItems.length },
     { key: 'transcript', label: t('replay.tabTranscript'), count: transcripts.length },
     { key: 'info', label: t('replay.tabInfo'), count: null },
   ] as const;
@@ -616,9 +850,10 @@ export default function ReplayPage() {
 
       {/* ── Main Layout ── */}
       <div style={styles.mainLayout}>
-        {/* Left: Video + Timeline */}
+        {/* Left: Video → Chapter Cards → Speaker Timeline */}
         <div style={styles.leftPanel}>
-          {/* Video Player */}
+
+          {/* ① 视频播放器（最顶部） */}
           <div style={styles.videoWrap}>
             <video
               ref={videoRef}
@@ -632,71 +867,21 @@ export default function ReplayPage() {
             />
           </div>
 
-          {/* 章节进度条（若有摘要） */}
-          {summaryItems.length > 0 && duration > 0 && (
-            <div style={styles.chapterBar}>
-              {summaryItems.map((item, idx) => {
-                const s = offsetToSecs(item.timeOffset);
-                const nextS = idx < summaryItems.length - 1 ? offsetToSecs(summaryItems[idx + 1].timeOffset) : duration;
-                const left = `${(s / duration) * 100}%`;
-                const width = `${((nextS - s) / duration) * 100}%`;
-                const isActive = currentTime >= s && currentTime < nextS;
-                return (
-                  <div
-                    key={item.id}
-                    title={`${item.timeOffset} ${item.title}`}
-                    style={{
-                      position: 'absolute',
-                      left,
-                      width,
-                      top: 0,
-                      height: '100%',
-                      background: isActive ? 'rgba(99,102,241,0.5)' : 'rgba(255,255,255,0.08)',
-                      borderRight: '1px solid rgba(255,255,255,0.15)',
-                      cursor: 'pointer',
-                      boxSizing: 'border-box',
-                      transition: 'background 0.2s',
-                    }}
-                    onClick={() => seekTo(s)}
-                  />
-                );
-              })}
-              {/* 播放位置游标 */}
-              {duration > 0 && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: `${(currentTime / duration) * 100}%`,
-                    top: 0,
-                    width: 2,
-                    height: '100%',
-                    background: '#818cf8',
-                    pointerEvents: 'none',
-                  }}
-                />
-              )}
-            </div>
-          )}
-
-          {/* 参与者发言时间轴 */}
-          <ParticipantTimeline
-            transcripts={transcripts}
-            participants={participants}
-            duration={duration}
+          {/* ② 章节卡片横向轮播（紧接视频下方） */}
+          <ChapterCardsCarousel
+            chapters={DEMO_CHAPTERS}
             currentTime={currentTime}
+            selectedId={selectedChapterId}
+            onSelect={handleChapterSelect}
+          />
+
+          {/* ③ 说话人发言时间段时间轴（底部） */}
+          <SpeakerSegmentTimeline
+            speakers={DEMO_SPEAKER_SEGMENTS}
+            duration={segDuration}
             onSeek={seekTo}
           />
 
-          {/* 当前播放时间 */}
-          <div style={styles.timeInfo}>
-            <span style={{ color: '#818cf8' }}>{fmtTime(currentTime)}</span>
-            <span style={{ color: '#475569' }}> / {fmtTime(duration)}</span>
-            {participants.length > 0 && (
-              <span style={{ marginLeft: 'auto', color: '#64748b', fontSize: 12 }}>
-                👥 {participants.length} 位参与者
-              </span>
-            )}
-          </div>
         </div>
 
         {/* Right: Tab Panel */}
@@ -724,12 +909,13 @@ export default function ReplayPage() {
           <div style={styles.tabContent}>
             {activeTab === 'summary' && (
               <SummaryPanel
-                items={summaryItems}
+                items={displaySummaryItems}
                 currentTime={currentTime}
                 duration={duration}
                 onSeek={seekTo}
                 meetingId={meeting?.id ?? 0}
                 kloudMeetingId={meeting?.kloudMeetingId ?? null}
+                forceExpandId={selectedChapterId}
               />
             )}
             {activeTab === 'transcript' && (
@@ -878,6 +1064,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 0,
     background: '#0b1120',
     borderRight: '1px solid #1e293b',
+    overflowY: 'auto',   /* 内容超出时可滚动 */
   },
   videoWrap: {
     width: '100%',
@@ -887,7 +1074,7 @@ const styles: Record<string, React.CSSProperties> = {
   video: {
     width: '100%',
     display: 'block',
-    maxHeight: '55vh',
+    maxHeight: '40vh',   /* 缩小：留出空间给下方组件 */
     outline: 'none',
   },
   chapterBar: {
@@ -1146,4 +1333,22 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     padding: '6px 0',
   },
+};
+
+/* --- stx: ChapterCardsCarousel + SpeakerSegmentTimeline --- */
+const stx: Record<string, React.CSSProperties> = {
+  carouselWrap: { position: 'relative', height: 155, flexShrink: 0, background: '#111827', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', overflow: 'hidden' },
+  carouselTrack: { display: 'flex', gap: 10, overflowX: 'auto', padding: '10px 36px', height: '100%', alignItems: 'center', scrollbarWidth: 'none' } as React.CSSProperties,
+  chapterCard: { flexShrink: 0, width: 160, minHeight: 128, borderRadius: 10, border: '1px solid', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 8px 8px', gap: 3, cursor: 'pointer', transition: 'all 0.2s ease' },
+  cardAvatar: { width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: '#fff', flexShrink: 0, marginBottom: 4, boxShadow: '0 3px 10px rgba(0,0,0,0.4)' },
+  cardName: { fontSize: 13, fontWeight: 600, color: '#e2e8f0', textAlign: 'center' },
+  cardTimeRange: { fontSize: 10, color: '#818cf8', fontFamily: 'monospace', cursor: 'pointer', marginTop: 2 },
+  cardTopic: { fontSize: 12, color: '#60a5fa', textAlign: 'center', lineHeight: 1.4, cursor: 'pointer', marginTop: 4, padding: '0 4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties,
+  arrowBtn: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', zIndex: 10, background: 'rgba(15,23,42,0.90)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 22, padding: 0 } as React.CSSProperties,
+  segTimeline: { padding: '12px 16px 6px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', flexShrink: 0 },
+  segRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, height: 32 },
+  segLabel: { width: 120, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, overflow: 'hidden' },
+  segAvatar: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 },
+  segName: { fontSize: 12, fontWeight: 500, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  segBar: { flex: 1, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 6, position: 'relative', cursor: 'pointer', overflow: 'hidden' },
 };

@@ -257,9 +257,11 @@ export function KloudMeetToolbar({
       const handleMouseMove = (e: MouseEvent) => {
         lastMouseYRef.current = e.clientY;
         const target = e.target as Element;
+        // forceVisible 只在鼠标直接悬浮在 toolbar 本身或其弹出菜单上时为 true
+        // 注意：不能用 [class*="lk-"]，那会匹配参与者视频卡片等所有 LiveKit 元素
         const isHoveringMenu = !!(
           toolbarRef.current?.contains(target) ||
-          target?.closest?.('.lk-device-menu, .lk-menu, [class*="lk-"]')
+          target?.closest?.('.lk-device-menu, .lk-menu')
         );
         applyMouseVisibility(e.clientY, isHoveringMenu);
       };
@@ -466,13 +468,21 @@ export function KloudMeetToolbar({
       {/* Toast */}
       {toastMsg && <div className={styles.toast}>{toastMsg}</div>}
 
-      {/* Chevron handle when hidden */}
+      {/* Hover zone + chevron handle when toolbar is hidden (desktop only) */}
       {!visible && !isMobile && (
-        <div className={styles.chevronHandle}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 15l-6-6-6 6" />
-          </svg>
-        </div>
+        <>
+          {/* Invisible trigger area covering the toolbar's natural position */}
+          <div
+            className={styles.hoverZone}
+            onMouseEnter={() => setVisible(true)}
+          />
+          {/* Small visual arrow hint at center bottom */}
+          <div className={styles.chevronHandle}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+          </div>
+        </>
       )}
 
       {/* Main toolbar */}

@@ -3,14 +3,15 @@
    Auto-hiding toolbar with view tab switching
    ============================================ */
 
-/* Hover trigger zone at bottom of viewport */
+/* Hover trigger zone at bottom of viewport — desktop only, shows toolbar on hover */
 .hoverZone {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 24px;
-  z-index: 999;
+  height: 80px;   /* Matches toolbar height + buffer */
+  z-index: 999;   /* Below toolbar (1001) but above content */
+  cursor: default;
 }
 
 /* Chevron handle when toolbar is hidden */

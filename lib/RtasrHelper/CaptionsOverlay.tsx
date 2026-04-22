@@ -3,8 +3,8 @@
 /**
  * CaptionsOverlay.tsx — 会议字幕显示组件
  *
- * 在会议界面底部渲染浮动字幕条（类似 Zoom / Google Meet 风格）。
- * 由 useCaptions hook 驱动，无需额外状态。
+ * 布局："发言人: 字幕内容▊" — 同行 inline 显示，类似 YouTube / Google Meet 字幕。
+ * isPartial=true 时显示闪烁光标（表示识别进行中）。
  *
  * 用法：
  *   <CaptionsOverlay captionsInfo={captionsInfo} />
@@ -29,46 +29,66 @@ export function CaptionsOverlay({
     <>
       <style>{`
         @keyframes kloud-caption-in {
-          from { opacity: 0; transform: translateY(8px); }
+          from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes kloud-cursor-blink {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0; }
         }
         .kloud-caption-bar {
           position: fixed;
           left: 50%;
           transform: translateX(-50%);
           z-index: 9000;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 2px;
           pointer-events: none;
-          animation: kloud-caption-in 0.2s ease;
-          max-width: min(700px, 92vw);
-          width: 100%;
+          animation: kloud-caption-in 0.18s ease;
+          max-width: min(800px, 94vw);
+          width: max-content;
+        }
+        .kloud-caption-bubble {
+          display: inline-flex;
+          align-items: baseline;
+          background: rgba(0, 0, 0, 0.80);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,255,255,0.10);
+          box-shadow: 0 4px 24px rgba(0,0,0,0.45);
+          border-radius: 10px;
+          padding: 7px 18px 9px;
+          line-height: 1.6;
+          word-break: break-word;
+          font-family: 'Inter', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
         }
         .kloud-caption-name {
-          font-size: 0.72rem;
-          font-weight: 600;
-          letter-spacing: 0.03em;
-          color: rgba(255, 255, 255, 0.75);
-          text-shadow: 0 1px 3px rgba(0,0,0,0.5);
-          font-family: 'Inter', -apple-system, sans-serif;
+          font-size: 0.9rem;
+          font-weight: 700;
+          color: #5bbcff;
+          white-space: nowrap;
+          flex-shrink: 0;
+        }
+        .kloud-caption-colon {
+          font-size: 0.9rem;
+          font-weight: 700;
+          color: #5bbcff;
+          margin-right: 7px;
+          flex-shrink: 0;
         }
         .kloud-caption-text {
-          background: rgba(0, 0, 0, 0.72);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          color: #ffffff;
+          color: #f5f5f5;
           font-size: 1rem;
-          font-weight: 500;
-          line-height: 1.5;
-          padding: 6px 16px 8px;
-          border-radius: 8px;
-          text-align: center;
-          font-family: 'Inter', -apple-system, sans-serif;
-          border: 1px solid rgba(255,255,255,0.08);
-          box-shadow: 0 4px 20px rgba(0,0,0,0.35);
-          word-break: break-word;
+          font-weight: 400;
+          letter-spacing: 0.01em;
+        }
+        .kloud-caption-cursor {
+          display: inline-block;
+          width: 2px;
+          height: 1em;
+          background: #5bbcff;
+          margin-left: 2px;
+          vertical-align: text-bottom;
+          border-radius: 1px;
+          animation: kloud-cursor-blink 0.9s step-end infinite;
         }
       `}</style>
 
@@ -79,10 +99,20 @@ export function CaptionsOverlay({
         aria-atomic="true"
         role="status"
       >
-        {captionsInfo.userName && (
-          <span className="kloud-caption-name">{captionsInfo.userName}</span>
-        )}
-        <div className="kloud-caption-text">{captionsInfo.text}</div>
+        <div className="kloud-caption-bubble">
+          {captionsInfo.userName && (
+            <>
+              <span className="kloud-caption-name">{captionsInfo.userName}</span>
+              <span className="kloud-caption-colon">:</span>
+            </>
+          )}
+          <span className="kloud-caption-text">
+            {captionsInfo.text}
+            {captionsInfo.isPartial && (
+              <span className="kloud-caption-cursor" aria-hidden="true" />
+            )}
+          </span>
+        </div>
       </div>
     </>
   );
