@@ -8,8 +8,10 @@
   backdrop-filter: blur(4px);
   display: flex;
   justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  align-items: flex-start;
+  padding-top: 80px;
+  overflow-y: auto;
+  z-index: 9999;
   animation: fadeIn 0.2s ease-out forwards;
 }
 
@@ -27,7 +29,8 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 90vh;
+  max-height: calc(100vh - 96px);
+  flex-shrink: 0;
 }
 
 .header {

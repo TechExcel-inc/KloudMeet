@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { sendEmailVerification } from '@/lib/brevo';
 
 const CODE_LENGTH = 6;
 const CODE_EXPIRY_MINUTES = 10;
@@ -72,9 +73,17 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // In development/test mode, log the code to console
-    // In production, integrate with an email/SMS service
-    console.log(`[send-code] ${isPhone ? 'SMS' : 'Email'} code for ${decodedTarget}: ${code}`);
+    // Send the actual verification email via Brevo
+    if (!isPhone) {
+      const emailResult = await sendEmailVerification(decodedTarget, code);
+      if (!emailResult.success) {
+        console.error('Failed to send email:', emailResult.error);
+        return NextResponse.json({ error: 'Mail delivery failed. Please try again.' }, { status: 500 });
+      }
+    } else {
+      // In production, integrate with SMS service here
+      console.log(`[send-code] SMS code for ${decodedTarget}: ${code}`);
+    }
 
     return NextResponse.json({
       message: 'Verification code sent',

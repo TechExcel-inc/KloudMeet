@@ -3,9 +3,14 @@ const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
 const fs = require('fs');
+const { autoUpdater } = require('electron-updater');
 
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
+
+// In packaged builds, load the remote server directly (no local Next.js needed).
+// In dev mode, APP_ORIGIN (local Next.js) is used as usual.
+const REMOTE_ORIGIN = 'https://meet.kloud.cn';
 
 let nextServerProcess;
 
@@ -85,18 +90,21 @@ function navigateMainToDeepLink(rawUrl) {
 }
 
 function getInitialMainWindowUrl() {
+  // In packaged builds, always load the remote server directly.
+  const origin = app.isPackaged ? REMOTE_ORIGIN : APP_ORIGIN;
+
   if (pendingDeepLink) {
     const raw = pendingDeepLink;
     pendingDeepLink = null;
     const p = parseKloudMeetDeepLink(raw);
-    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+    if (p) return `${origin}/rooms/${encodeURIComponent(p.room)}${p.search}`;
   }
   const argvDeep = getDeepLinkFromArgv(process.argv);
   if (argvDeep) {
     const p = parseKloudMeetDeepLink(argvDeep);
-    if (p) return `${APP_ORIGIN}/rooms/${encodeURIComponent(p.room)}${p.search}`;
+    if (p) return `${origin}/rooms/${encodeURIComponent(p.room)}${p.search}`;
   }
-  return APP_ORIGIN;
+  return origin;
 }
 
 function getDeepLinkFromArgv(argv) {
@@ -171,9 +179,23 @@ function installSessionAndIpcOnce() {
   ipcMain.on('remote-control-message', async (event, data) => {
     try {
       const { mouse, Point, Button } = getNutTree();
+
+      let targetX, targetY;
+
+      // Controller sends content-normalized (0-1) coordinates corrected for
+      // object-fit:contain letterboxing. Map to physical screen pixels using
+      // our own display bounds (avoids DPI scaling issues across machines).
       const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
-      const targetX = Math.round(data.x * w);
-      const targetY = Math.round(data.y * h);
+
+      if (data.absX !== undefined && data.absY !== undefined) {
+        // Legacy: controller sent pre-computed absolute coords
+        targetX = Math.round(data.absX);
+        targetY = Math.round(data.absY);
+      } else {
+        // Standard: normalized 0-1 mapped to primary display physical pixels
+        targetX = Math.round(data.x * w);
+        targetY = Math.round(data.y * h);
+      }
 
       if (data.type === 'mousemove') {
         await mouse.setPosition(new Point(targetX, targetY));
@@ -185,11 +207,19 @@ function installSessionAndIpcOnce() {
         const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
         await mouse.setPosition(new Point(targetX, targetY));
         await mouse.releaseButton(btn);
+      } else if (data.type === 'dblclick') {
+        await mouse.setPosition(new Point(targetX, targetY));
+        await mouse.pressButton(Button.LEFT);
+        await mouse.releaseButton(Button.LEFT);
+        await new Promise((r) => setTimeout(r, 30));
+        await mouse.pressButton(Button.LEFT);
+        await mouse.releaseButton(Button.LEFT);
       }
     } catch (err) {
       console.error('Remote control error:', err);
     }
   });
+
 }
 
 function createWindows() {
@@ -389,6 +419,43 @@ if (!gotLock) {
       showFatal('创建窗口失败', e instanceof Error ? e.message : String(e));
       app.quit();
       return;
+    }
+
+    // ── 自动更新 ──────────────────────────────────────────────
+    if (app.isPackaged) {
+      autoUpdater.logger = {
+        info:  (msg) => appendStartupLog(`[updater] ${msg}`),
+        warn:  (msg) => appendStartupLog(`[updater][warn] ${msg}`),
+        error: (msg) => appendStartupLog(`[updater][error] ${msg}`),
+      };
+
+      autoUpdater.on('update-available', (info) => {
+        dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: '发现新版本',
+          message: `Kloud Meet ${info.version} 已发布，正在后台下载…`,
+          buttons: ['好的'],
+        });
+      });
+
+      autoUpdater.on('update-downloaded', (info) => {
+        dialog.showMessageBox(mainWindow, {
+          type: 'question',
+          title: '更新已就绪',
+          message: `Kloud Meet ${info.version} 下载完成，立即重启安装？`,
+          buttons: ['立即重启', '稍后'],
+          defaultId: 0,
+        }).then(({ response }) => {
+          if (response === 0) autoUpdater.quitAndInstall();
+        });
+      });
+
+      autoUpdater.on('error', (err) => {
+        appendStartupLog(`autoUpdater error: ${err.message}`);
+      });
+
+      // 启动后延迟 5 秒检查，避免影响启动速度
+      setTimeout(() => autoUpdater.checkForUpdates(), 5000);
     }
 
     app.on('activate', () => {

@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest) {
     if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
-    const { firstName, middleName, lastName, biography, personalRoomId } = body;
+    const { firstName, middleName, lastName, biography, personalRoomId, phone, email, avatarUrl } = body;
     
     // Validate personalRoomId
     if (personalRoomId) {
@@ -47,9 +47,32 @@ export async function PUT(request: NextRequest) {
       }
     }
 
+    // Validate email if provided
+    if (email !== undefined && email !== '') {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+      }
+      const existingEmail = await prisma.teamMember.findFirst({
+        where: { email, id: { not: member.id } }
+      });
+      if (existingEmail) {
+        return NextResponse.json({ error: 'This email is already in use.' }, { status: 400 });
+      }
+    }
+
+    // Validate phone if provided
+    if (phone !== undefined && phone !== '') {
+      if (!/^[+]?[\d\s()-]{6,20}$/.test(phone)) {
+        return NextResponse.json({ error: 'Invalid phone format' }, { status: 400 });
+      }
+    }
+
     // Auto-generate fullName
     const pieces = [firstName, middleName, lastName].filter(Boolean);
     const fullName = pieces.length > 0 ? pieces.join(' ') : member.fullName;
+
+    // Detect email change → reset verification
+    const emailChanged = email !== undefined && email !== member.email;
 
     const updated = await prisma.teamMember.update({
       where: { id: member.id },
@@ -60,6 +83,10 @@ export async function PUT(request: NextRequest) {
         fullName,
         biography: biography !== undefined ? biography : undefined,
         personalRoomId: personalRoomId !== undefined ? personalRoomId : undefined,
+        phone: phone !== undefined ? (phone || null) : undefined,
+        email: email !== undefined ? (email || null) : undefined,
+        avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
+        ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
         modifiedAt: new Date()
       }
     });

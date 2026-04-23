@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import styles from '../styles/ScheduleMeetingModal.module.css';
+import { useI18n } from './i18n';
 
 type TabType = 'general' | 'emails' | 'ai' | 'linked';
 
@@ -13,6 +14,7 @@ interface ScheduleMeetingModalProps {
 
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
+  const { t } = useI18n();
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
 
   const [title, setTitle] = useState(existingMeeting?.title || `${user?.displayName || 'User'}'s Meeting`);
@@ -48,7 +50,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const isReadOnly = isFinished || isCanceled;
 
   const handleCancelMeeting = async () => {
-    if (!confirm('Are you sure you want to cancel this meeting?')) return;
+    if (!confirm(t('schedule.cancelConfirm'))) return;
     setIsSaving(true);
     try {
       await fetch(`/api/meetings/${existingMeeting.roomName}`, {
@@ -58,19 +60,19 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       });
       onSave();
     } catch (e) {
-      alert('Failed to cancel meeting.');
+      alert(t('schedule.cancelFailed'));
       setIsSaving(false);
     }
   };
 
   const handleDeleteMeeting = async () => {
-    if (!confirm('Are you sure you want to delete this meeting? This cannot be undone.')) return;
+    if (!confirm(t('schedule.deleteConfirm'))) return;
     setIsSaving(true);
     try {
       await fetch(`/api/meetings/${existingMeeting.roomName}`, { method: 'DELETE' });
       onSave();
     } catch (e) {
-      alert('Failed to delete meeting.');
+      alert(t('schedule.deleteFailed'));
       setIsSaving(false);
     }
   };
@@ -129,7 +131,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       onSave(); 
     } catch (error) {
       console.error('Failed to schedule meeting', error);
-      alert('Failed to schedule meeting. Try again.');
+      alert(t('schedule.scheduleFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -141,7 +143,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         <div className={styles.modal}>
           {/* Header */}
           <div className={styles.header}>
-            <h2 className={styles.title}>{existingMeeting ? 'Edit Meeting' : 'New Meeting'}</h2>
+            <h2 className={styles.title}>{existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}</h2>
             <div className={styles.headerActions}>
               {existingMeeting && !isCanceled && (
                 <button 
@@ -149,7 +151,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   onClick={() => {
                     const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
                     navigator.clipboard.writeText(`Join my KloudMeet meeting:\n${existingMeeting.title || 'Untitled Meeting'}\n${url}`);
-                    alert('Invite copied to clipboard!');
+                    alert(t('schedule.inviteCopied'));
                   }}
                   type="button"
                   style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -158,57 +160,58 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
                   </svg>
-                  Copy Invite
+                  {t('schedule.copyInvite')}
                 </button>
               )}
               {existingMeeting && !isFinished && !isCanceled && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>Cancel</button>
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>{t('common.cancel')}</button>
               )}
               {existingMeeting && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>Delete</button>
+                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>{t('common.delete')}</button>
               )}
               <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
-                {isSaving ? 'Saving...' : 'Save'}
+                {isSaving ? t('common.saving') : t('common.save')}
               </button>
-              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>Close</button>
+              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>{t('common.close')}</button>
             </div>
           </div>
-
+          
           {/* Tabs */}
           <div className={styles.tabContainer}>
             <button 
               className={activeTab === 'general' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('general')}
             >
-              General
+              {t('schedule.general')}
             </button>
             <button 
               className={activeTab === 'emails' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('emails')}
             >
-              Emails
+              {t('schedule.emails')}
             </button>
             <button 
               className={activeTab === 'ai' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('ai')}
             >
-              AI Assistant
+              {t('schedule.aiAssistant')}
             </button>
             <button 
               className={activeTab === 'linked' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('linked')}
             >
-              Linked Events
+              {t('schedule.linkedEvents')}
             </button>
           </div>
 
+          <div className={styles.bodyScroll}>
           {/* Tab Content: General Information */}
           {activeTab === 'general' && (
             <div className={styles.content}>
               {existingMeeting && (
                 <>
                   <div className={styles.formRow}>
-                    <label className={styles.label}>Status</label>
+                    <label className={styles.label}>{t('schedule.status')}</label>
                     <div className={styles.inputWrapper} style={{ paddingTop: '0.4rem' }}>
                       <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: 600, 
                         background: existingMeeting.status === 'ENDED' ? '#dcfce7' : 
@@ -228,7 +231,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     </div>
                   </div>
                   <div className={styles.formRow}>
-                    <label className={styles.label}>Meeting ID</label>
+                    <label className={styles.label}>{t('schedule.meetingId')}</label>
                     <div className={styles.inputWrapper}>
                       <input 
                         type="text" 
@@ -242,12 +245,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 </>
               )}
               <div className={styles.formRow}>
-                <label className={styles.label}>Title</label>
+                <label className={styles.label}>{t('schedule.title')}</label>
                 <div className={styles.inputWrapper}>
                   <input 
                     type="text" 
                     className={styles.input} 
-                    placeholder="Enter meeting title..." 
+                    placeholder={t('schedule.titlePlaceholder')} 
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
                   />
@@ -255,11 +258,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Description</label>
+                <label className={styles.label}>{t('schedule.description')}</label>
                 <div className={styles.inputWrapper}>
                   <textarea 
                     className={styles.textarea} 
-                    placeholder="Please input meeting description..." 
+                    placeholder={t('schedule.descPlaceholder')} 
                     rows={4} 
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
@@ -268,7 +271,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Set time</label>
+                <label className={styles.label}>{t('schedule.setTime')}</label>
                 <div className={`${styles.inputWrapper} ${styles.timeRow}`}>
                   <input 
                     type="date" 
@@ -306,28 +309,28 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Time Zone</label>
+                <label className={styles.label}>{t('schedule.timeZone')}</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.7rem' }}>
                   <span style={{ color: '#4b5563', fontSize: '0.95rem' }}>{tzString}</span>
-                  <button className={styles.linkBtn}>Change</button>
+                  <button className={styles.linkBtn}>{t('common.change')}</button>
                 </div>
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Access Option</label>
+                <label className={styles.label}>{t('schedule.accessOption')}</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', paddingTop: '0.6rem' }}>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
                     <input type="radio" name="access" value="public" defaultChecked className={styles.radio} disabled={isReadOnly} />
                     <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Public</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Anybody can freely join.</div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.public')}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.publicDesc')}</div>
                     </div>
                   </label>
                   <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
                     <input type="radio" name="access" value="private" className={styles.radio} disabled={isReadOnly} />
                     <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>Private</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>Invited only or require approval to join.</div>
+                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.private')}</div>
+                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.privateDesc')}</div>
                     </div>
                   </label>
                 </div>
@@ -335,7 +338,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 
               {isFinished && existingMeeting?.recordings && existingMeeting.recordings.length > 0 && (
                 <div className={styles.formRow}>
-                  <label className={styles.label}>Recordings</label>
+                  <label className={styles.label}>{t('schedule.recordings')}</label>
                   <div className={styles.inputWrapper} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {existingMeeting.recordings.map((r: any) => (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
@@ -344,12 +347,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                             <polygon points="5 3 19 12 5 21 5 3"></polygon>
                           </svg>
                           <div>
-                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>Meeting Recording</div>
+                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>{t('schedule.meetingRecording')}</div>
                             <div style={{ color: '#64748b', fontSize: '0.8rem' }}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
                           </div>
                         </div>
                         {r.status === 'READY' && r.storageUrl && (
-                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>View</a>
+                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>{t('common.view')}</a>
                         )}
                       </div>
                     ))}
@@ -366,27 +369,27 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                 </svg>
-                Enterprise Edition Only Feature
+                {t('schedule.enterpriseOnly')}
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 
                 {/* Invitation Email */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                   <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }} />
-                  <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>Invitation Email</span>
-                  <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '2rem' }} onClick={() => setSubModal('invite')}>View</button>
+                  <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.invitationEmail')}</span>
+                  <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '2rem' }} onClick={() => setSubModal('invite')}>{t('common.view')}</button>
                 </div>
 
                 {/* Reminder Email */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }} />
-                    <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>Reminder Email</span>
-                    <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '1.9rem' }} onClick={() => setSubModal('reminder')}>View</button>
+                    <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.reminderEmail')}</span>
+                    <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '1.9rem' }} onClick={() => setSubModal('reminder')}>{t('common.view')}</button>
                   </div>
                   
                   <div style={{ marginLeft: '2.25rem', marginTop: '1rem' }}>
-                    <p style={{ fontSize: '0.95rem', color: '#374151', margin: '0 0 1rem 0', fontWeight: 600 }}>Send emails before the event</p>
+                    <p style={{ fontSize: '0.95rem', color: '#374151', margin: '0 0 1rem 0', fontWeight: 600 }}>{t('schedule.sendBefore')}</p>
                     
                     {/* Reminder 1: 1 Days */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
@@ -396,8 +399,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                         <option value="8">8</option>
                       </select>
                       <select className={`${styles.input} ${styles.select}`} style={{ width: '130px', padding: '0.5rem' }} defaultValue="Days">
-                        <option value="Hours">Hours</option>
-                        <option value="Days">Days</option>
+                        <option value="Hours">{t('schedule.hours')}</option>
+                        <option value="Days">{t('schedule.days')}</option>
                       </select>
                       <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}>×</button>
                     </div>
@@ -410,8 +413,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                         <option value="8">8</option>
                       </select>
                       <select className={`${styles.input} ${styles.select}`} style={{ width: '130px', padding: '0.5rem' }} defaultValue="Hours">
-                        <option value="Hours">Hours</option>
-                        <option value="Days">Days</option>
+                        <option value="Hours">{t('schedule.hours')}</option>
+                        <option value="Days">{t('schedule.days')}</option>
                       </select>
                       <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}>×</button>
                     </div>
@@ -421,7 +424,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                         <line x1="12" y1="5" x2="12" y2="19"></line>
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                       </svg>
-                      Add more reminder email
+                      {t('schedule.addReminder')}
                     </button>
                   </div>
                 </div>
@@ -437,18 +440,18 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                 </svg>
-                Enterprise Edition Only Feature
+                {t('schedule.enterpriseOnly')}
               </div>
               
               <div className={styles.formRow}>
-                <label className={styles.label}>AI Assistant</label>
+                <label className={styles.label}>{t('schedule.aiAssistant')}</label>
                 <div className={styles.inputWrapper}>
-                  <button className={styles.addBtn}>+ Add</button>
+                  <button className={styles.addBtn}>{t('common.add')}</button>
                 </div>
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Attendee</label>
+                <label className={styles.label}>{t('schedule.attendee')}</label>
                 <div className={styles.inputWrapper}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
                     {/* Host User block */}
@@ -459,7 +462,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                         </svg>
                       </div>
                       <div style={{ fontSize: '0.85rem', lineHeight: '1.2' }}>
-                        <strong style={{ color: '#111827' }}>Host User</strong>
+                        <strong style={{ color: '#111827' }}>{t('schedule.hostUser')}</strong>
                       </div>
                     </div>
                     
@@ -467,7 +470,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     <button 
                       className={styles.addBtn} 
                       style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title="Add Attendee"
+                      title={t('schedule.addAttendee')}
                     >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
                         <line x1="12" y1="5" x2="12" y2="19"></line>
@@ -479,12 +482,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
 
               <div className={styles.formRow}>
-                <label className={styles.label}>Occurrence</label>
+                <label className={styles.label}>{t('schedule.occurrence')}</label>
                 <div className={styles.inputWrapper}>
                   <select className={`${styles.input} ${styles.select}`} style={{ maxWidth: '300px' }}>
-                    <option>One Time</option>
-                    <option>Daily</option>
-                    <option>Weekly</option>
+                    <option>{t('schedule.oneTime')}</option>
+                    <option>{t('schedule.daily')}</option>
+                    <option>{t('schedule.weekly')}</option>
                   </select>
                 </div>
               </div>
@@ -499,7 +502,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                   <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
                 </svg>
-                Enterprise Edition Only Feature
+                {t('schedule.enterpriseOnly')}
               </div>
               <div style={{ width: '72px', height: '72px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" width="36" height="36">
@@ -507,19 +510,20 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
-              <h3 style={{ fontSize: '1.25rem', color: '#111827', margin: '0 0 1rem 0' }}>Workflow Integrations</h3>
+              <h3 style={{ fontSize: '1.25rem', color: '#111827', margin: '0 0 1rem 0' }}>{t('schedule.workflowTitle')}</h3>
               <p style={{ color: '#4b5563', fontSize: '1rem', maxWidth: '500px', lineHeight: '1.6' }}>
-                This tab will be used to configure linked events with external workflow applications including <strong>ServiceWise</strong>, <strong>CustomerWise</strong>, <strong>ProjectOne</strong>, and <strong>*other software*</strong> integrations.
+                {t('schedule.workflowDesc')}
               </p>
             </div>
           )}
+          </div>
         </div>
       </div>
 
       {/* Sub Modals for Emails */}
       {subModal === 'invite' && (
         <EmailPreviewModal 
-          type="Invitation Email" 
+          type={t('schedule.invitationEmail')} 
           title="Join us for KloudMeeting" 
           body={<>
             Welcome, Please start registration process by entering your name and email.<br/><br/>
@@ -533,7 +537,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 
       {subModal === 'reminder' && (
         <EmailPreviewModal 
-          type="Reminder Email" 
+          type={t('schedule.reminderEmail')} 
           title="Reminder: KloudMeeting is starting soon" 
           body={<>
             <strong>To join the conference</strong><br/>
@@ -552,27 +556,28 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 }
 
 function EmailPreviewModal({ type, title, body, onClose }: any) {
+  const { t } = useI18n();
   return (
     <div className={styles.overlay} style={{ zIndex: 110 }}>
       <div className={styles.modal} style={{ maxWidth: '650px', padding: '2.5rem' }}>
         <h2 style={{ margin: '0 0 2rem 0', color: '#1e1e2e', fontSize: '1.5rem', fontWeight: 600 }}>{type}</h2>
         
         <div style={{ marginBottom: '2rem' }}>
-          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>Email Title</h4>
+          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>{t('schedule.emailTitle')}</h4>
           <p style={{ margin: 0, color: '#4b5563', fontSize: '1rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>{title}</p>
         </div>
 
         <div style={{ marginBottom: '3rem' }}>
-          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>Body</h4>
+          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>{t('schedule.emailBody')}</h4>
           <div style={{ color: '#4b5563', fontSize: '1rem', lineHeight: '1.7', padding: '1rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
             {body}
           </div>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-          <button className={styles.btnSolid} style={{ background: '#4f46e5' }}>Reset</button>
-          <button className={styles.btnSolid} style={{ background: '#4338ca' }}>Edit</button>
-          <button className={styles.btnOutline} onClick={onClose}>Close</button>
+          <button className={styles.btnSolid} style={{ background: '#4f46e5' }}>{t('common.reset')}</button>
+          <button className={styles.btnSolid} style={{ background: '#4338ca' }}>{t('common.edit')}</button>
+          <button className={styles.btnOutline} onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>

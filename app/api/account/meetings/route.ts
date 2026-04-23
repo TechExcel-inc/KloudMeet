@@ -31,10 +31,20 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
+    const search = searchParams.get('search')?.trim() || '';
     const skip = (page - 1) * pageSize;
 
-    const whereClause = {
+    const whereClause: any = {
       createdByMemberId: member.id,
+      deletedAt: null,
+      ...(search
+        ? {
+            OR: [
+              { title: { contains: search } },
+              { roomName: { contains: search } },
+            ],
+          }
+        : {}),
     };
 
     const [total, meetings] = await Promise.all([
@@ -76,11 +86,15 @@ export async function GET(request: NextRequest) {
     }
 
     const enhancedMeetings = meetings.map(m => {
+      const mx = m as any;
       const isLive = activeRooms.includes(m.roomName);
+      // If DB says ENDED, don't override with LiveKit active status
+      // (LiveKit rooms may take seconds to be reclaimed after last participant leaves)
+      const isActive = m.status === 'ENDED' ? false : isLive;
       return {
-        ...m,
-        isActive: isLive,
-        actualStartedAt: isLive && !m.actualStartedAt ? new Date(m.startedAt) : m.actualStartedAt
+        ...mx,
+        isActive,
+        actualStartedAt: isActive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
       };
     });
 

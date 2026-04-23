@@ -1,4 +1,9 @@
 /** @type {import('next').NextConfig} */
+
+// Read remote API URL from .env.local — set it locally for dev proxy, leave empty on server.
+const REMOTE_API = (process.env.NEXT_PUBLIC_REMOTE_API || '').trim();
+if (REMOTE_API) console.log(`[next.config] API proxy → ${REMOTE_API}`);
+
 const nextConfig = {
   reactStrictMode: false,
   // Disable Next.js Dev Tools indicator (bottom-left "N" / Turbopack menu) in development.
@@ -33,7 +38,29 @@ const nextConfig = {
           // requires their CORP headers or omitting COEP on the parent; we omit COEP for compatibility.
         ],
       },
+      {
+        // HTML 页面不缓存，每次部署后浏览器立即拿到新版本
+        source: '/:path((?!_next/|api/).*)',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
     ];
+  },
+  // Proxy /api/* to remote server — beforeFiles ensures this runs BEFORE local API routes
+  rewrites: async () => {
+    if (!REMOTE_API) return [];
+    return {
+      beforeFiles: [
+        {
+          source: '/api/:path*',
+          destination: `${REMOTE_API}/api/:path*`,
+        },
+      ],
+    };
   },
 };
 
