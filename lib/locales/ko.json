@@ -1,4 +1,4 @@
-{
+﻿{
   "common.close": "닫기",
   "common.cancel": "취소",
   "common.join": "참가",
@@ -463,6 +463,14 @@
   "replay.participants": "참가자",
   "replay.online": "{time} 온라인",
   "replay.minutes": "{n}분",
+  "replay.generateSummary": "✨ 요약 생성",
+  "replay.regenerateSummary": "요약 재생성",
+  "replay.regenerateSummaryHint": "AI로 자막을 다시 분석하여 요약을 업데이트합니다",
+  "replay.generating": "AI가 자막을 분석하여 회의 요약을 생성하고 있습니다. 잠시만 기다려 주세요...（{pct}%）",
+  "replay.noSummaryYet": "아직 요약이 생성되지 않았습니다",
+  "replay.noSummaryHint": "자막 {count}개가 있습니다. 아래 버튼을 클릭하여 AI로 자동 생성하세요.",
+  "replay.noTranscriptForSummary": "자막 데이터 없음",
+  "replay.noTranscriptForSummaryHint": "이 회의에서 자막이 활성화되지 않았기 때문에 자동으로 요약을 생성할 수 없습니다.",
 
   "dash.replay": "🎬 다시보기",
   "dash.replayTitle": "회의 녹화 재생",

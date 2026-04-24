@@ -1263,10 +1263,8 @@ function VideoConferenceComponent(props: {
         .then(() => {
           room.setE2EEEnabled(true).catch((e) => {
             if (e instanceof DeviceUnsupportedError) {
-              alert(
-                `You're trying to join an encrypted meeting, but your browser does not support it. Please update it to the latest version and try again.`,
-              );
-              console.error(e);
+              console.error('[KloudMeet] E2EE not supported by browser:', e);
+              setConnectError('您的浏览器不支持加密会议，请更新到最新版本后重试。');
             } else {
               throw e;
             }
@@ -1293,6 +1291,9 @@ function VideoConferenceComponent(props: {
   const [connectError, setConnectError] = React.useState<string | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
   const connectRetryDisplayRef = React.useRef(0);
+  // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
+  const unexpectedErrorRetryCountRef = React.useRef(0);
+  const MAX_UNEXPECTED_RETRIES = 3;
 
   // ─── isRetryableConnectError ─────────────────────────────────────────────
   // MUST be declared BEFORE the useEffect that references it.
@@ -1308,6 +1309,7 @@ function VideoConferenceComponent(props: {
       msg.includes('network') ||
       msg.includes('failed to fetch') ||
       msg.includes('timed out') ||
+      msg.includes('client initiated disconnect') ||
       err.name === 'AbortError'
     );
   }, []);
@@ -1358,13 +1360,44 @@ function VideoConferenceComponent(props: {
               connectRetryDisplayRef.current = 0;
               setConnectError(null);
 
-              // Enable camera/mic AFTER connection is established
-              if (props.userChoices.videoEnabled) {
-                room.localParticipant.setCameraEnabled(true).catch(handleError);
-              }
-              if (props.userChoices.audioEnabled) {
-                room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
-              }
+              // Enable camera/mic AFTER connection is established.
+              // Validate device IDs first — if the selected device has disappeared
+              // (unplugged, virtual device gone, stale ID), clear it so the browser
+              // falls back to the system default instead of throwing NotFoundError.
+              const enableDevices = async () => {
+                try {
+                  const devices = await navigator.mediaDevices.enumerateDevices();
+                  const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
+                  const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
+
+                  const wantedVideo = props.userChoices.videoDeviceId;
+                  if (wantedVideo && !videoIds.has(wantedVideo)) {
+                    console.warn('[KloudMeet] Saved video device not found, falling back to default');
+                    room.options.videoCaptureDefaults = {
+                      ...room.options.videoCaptureDefaults,
+                      deviceId: undefined,
+                    };
+                  }
+                  const wantedAudio = props.userChoices.audioDeviceId;
+                  if (wantedAudio && !audioIds.has(wantedAudio)) {
+                    console.warn('[KloudMeet] Saved audio device not found, falling back to default');
+                    room.options.audioCaptureDefaults = {
+                      ...room.options.audioCaptureDefaults,
+                      deviceId: undefined,
+                    };
+                  }
+                } catch (e) {
+                  console.warn('[KloudMeet] Could not enumerate devices, proceeding with defaults:', e);
+                }
+
+                if (props.userChoices.videoEnabled) {
+                  room.localParticipant.setCameraEnabled(true).catch(handleError);
+                }
+                if (props.userChoices.audioEnabled) {
+                  room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                }
+              };
+              enableDevices();
             })
             .catch((error) => {
               connectAttemptedRef.current = false;
@@ -1427,6 +1460,13 @@ function VideoConferenceComponent(props: {
     router.push('/');
   }, [router]);
 
+  // Keep a stable ref to connectionDetails so handleError doesn't need it as a
+  // useCallback dep (which would cause stale MediaDevicesError listener issues).
+  const connectionDetailsRef = React.useRef(props.connectionDetails);
+  React.useEffect(() => { connectionDetailsRef.current = props.connectionDetails; }, [props.connectionDetails]);
+  const connectOptionsRef = React.useRef(connectOptions);
+  React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
+
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
     if (
@@ -1437,22 +1477,62 @@ function VideoConferenceComponent(props: {
       console.warn('User cancelled or denied media request:', error);
       return;
     }
-    // Signal/network errors after all retries are shown via inline UI
+    // Device errors (unplugged, stale ID, busy) are non-fatal — user can
+    // switch devices from the in-room settings dropdown.
+    const DEVICE_ERRORS = [
+      'notfounderror', 'requested device', 'device not found',
+      'overconstrained', 'notreadableerror', 'could not start',
+    ];
+    const msg = error?.message?.toLowerCase() ?? '';
+    const name = error?.name?.toLowerCase() ?? '';
+    if (DEVICE_ERRORS.some(k => msg.includes(k) || name.includes(k))) {
+      console.warn('[KloudMeet] Media device unavailable, user may switch in settings:', error.message);
+      return;
+    }
+    // Signal/network errors & "client initiated disconnect" — auto-retry then inline UI
     if (isRetryableConnectError(error)) {
-      console.error('[KloudMeet] Connection error (surfacing to UI):', error);
+      const attempt = unexpectedErrorRetryCountRef.current + 1;
+      if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
+        unexpectedErrorRetryCountRef.current = attempt;
+        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.warn(
+          `[KloudMeet] Unexpected disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
+          error.message,
+        );
+        setTimeout(() => {
+          if (room.state === ConnectionState.Disconnected) {
+            const cd = connectionDetailsRef.current;
+            const co = connectOptionsRef.current;
+            room
+              .connect(cd.serverUrl, cd.participantToken, co)
+              .then(() => {
+                console.log('[KloudMeet] Auto-reconnect succeeded');
+                unexpectedErrorRetryCountRef.current = 0;
+              })
+              .catch((retryErr) => {
+                handleError(retryErr); // recurse — counts up until MAX then falls to UI
+              });
+          }
+        }, delay);
+        return;
+      }
+      // All retries exhausted — show inline UI, never alert()
+      console.error('[KloudMeet] All unexpected-error retries exhausted:', error);
+      connectRetryDisplayRef.current = MAX_UNEXPECTED_RETRIES;
+      unexpectedErrorRetryCountRef.current = 0;
       setConnectError(error.message);
       return;
     }
-    // Unrecoverable errors: still use alert as last resort
-    console.error(error);
-    alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
-  }, [isRetryableConnectError]);
+    // Any other error: surface via inline UI instead of alert()
+    console.error('[KloudMeet] Unhandled error:', error);
+    setConnectError(error.message);
+  // room is stable (useMemo []), connectionDetails/connectOptions accessed via refs
+  }, [isRetryableConnectError, room]);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
-    console.error(error);
-    alert(
-      `Encountered an unexpected encryption error, check the console logs for details: ${error.message}`,
-    );
+    // Route encryption errors through the same inline UI — no alert()
+    console.error('[KloudMeet] Encryption error:', error);
+    setConnectError(`加密错误: ${error.message}`);
   }, []);
 
   React.useEffect(() => {
@@ -1670,7 +1750,11 @@ function VideoConferenceComponent(props: {
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
     if (isToolbarMobile) {
-      alert('Use Kloud Meet App to be able to do screenshare.');
+      const toastEl = document.createElement('div');
+      toastEl.textContent = '请使用 Kloud Meet App 进行屏幕共享';
+      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      document.body.appendChild(toastEl);
+      setTimeout(() => toastEl.remove(), 3000);
       return;
     }
 
@@ -1864,12 +1948,14 @@ function VideoConferenceComponent(props: {
     livedocInstanceId: string | null;
     muteAllActive: boolean;
     hostMutedIdentities: string[];
+    captionsOn: boolean;
   }>({
     view: activeView,
     presenter: null,
     livedocInstanceId: null,
     muteAllActive: false,
     hostMutedIdentities: [],
+    captionsOn: false,
   });
 
   // Keep authState in sync when host changes view locally
@@ -1896,6 +1982,11 @@ function VideoConferenceComponent(props: {
       authState.current.hostMutedIdentities = hostMutedIdentities;
     }
   }, [isHost, muteAllActive, hostMutedIdentities]);
+
+  // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
+  // so we use a ref to allow handleData to call it without block-scope issues.
+  const setCaptionsOpenRef = React.useRef<((open: boolean) => Promise<void>) | null>(null);
+  const captionsRunningRef = React.useRef<boolean>(false);
 
   // Helper: send a meeting control message
   const sendMeetingMsg = React.useCallback(
@@ -2049,6 +2140,7 @@ function VideoConferenceComponent(props: {
           livedocInstanceId: auth.livedocInstanceId,
           muteAllActive: auth.muteAllActive,
           hostMutedIdentities: auth.hostMutedIdentities,
+          captionsOn: auth.captionsOn,
         },
         [participant.identity],
       );
@@ -2109,6 +2201,9 @@ function VideoConferenceComponent(props: {
           }
           if (Array.isArray(msg.hostMutedIdentities)) {
             setHostMutedIdentities(msg.hostMutedIdentities);
+          }
+          if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
+            setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
           }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
@@ -2232,10 +2327,15 @@ function VideoConferenceComponent(props: {
           const authDoc = auth.livedocInstanceId ?? null;
           const livedocMismatch =
             (authDoc !== null && guestDoc !== authDoc) || (authDoc !== null && guestDoc === null);
+          const guestCaptionsOn = (msg as { captionsOn?: boolean }).captionsOn ?? false;
+          const authCaptionsOn = auth.captionsOn;
+          const captionsMismatch = guestCaptionsOn !== authCaptionsOn;
+
           if (
             msg.view !== auth.view ||
             msg.presenter !== (auth.presenter || null) ||
-            livedocMismatch
+            livedocMismatch ||
+            captionsMismatch
           ) {
             sendMeetingMsg(
               {
@@ -2243,10 +2343,19 @@ function VideoConferenceComponent(props: {
                 view: auth.view,
                 presenter: auth.presenter,
                 livedocInstanceId: auth.livedocInstanceId,
+                muteAllActive: auth.muteAllActive,
+                hostMutedIdentities: auth.hostMutedIdentities,
+                captionsOn: auth.captionsOn,
               },
               [senderIdentity],
             );
           }
+        } else if (msg.type === 'CAPTIONS_ON') {
+          // Host/Co-host 开启了全局字幕 — 本地启动识别
+          setCaptionsOpenRef.current?.(true);
+        } else if (msg.type === 'CAPTIONS_OFF') {
+          // Host/Co-host 关闭了全局字幕 — 本地停止识别
+          setCaptionsOpenRef.current?.(false);
         }
       } catch (e) {
         console.error('Meeting control message error:', e);
@@ -2480,6 +2589,7 @@ function VideoConferenceComponent(props: {
           presenters: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
+          captionsOn: captionsRunningRef.current,
         },
         [hostId],
       );
@@ -2568,9 +2678,23 @@ function VideoConferenceComponent(props: {
     room,
     micEnabled,
   });
+  // 赋值给 ref，让上面 handleData 里能访问到
+  setCaptionsOpenRef.current = setCaptionsOpen;
+  captionsRunningRef.current = captionsRunning;
+
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.captionsOn = captionsRunning;
+    }
+  }, [isHost, captionsRunning]);
+
   const handleToggleCaptions = React.useCallback(() => {
-    setCaptionsOpen(!captionsRunning);
-  }, [captionsRunning, setCaptionsOpen]);
+    const newState = !captionsRunning;
+    // 广播给所有参与者：全局开启/关闭字幕
+    sendMeetingMsg({ type: newState ? 'CAPTIONS_ON' : 'CAPTIONS_OFF' });
+    // 本地也执行
+    setCaptionsOpen(newState);
+  }, [captionsRunning, setCaptionsOpen, sendMeetingMsg]);
 
   // Chat messages — always listening (even when panel is closed)
   const CHAT_TOPIC = 'kloud-chat';
@@ -2704,12 +2828,15 @@ function VideoConferenceComponent(props: {
               </div>
 
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px' }}>
-                {t('prejoin.connectError', { error: '' }).split(':')[0] || '连接失败'}
+                {connectError?.startsWith('加密错误') ? '加密错误' :
+                  connectError?.toLowerCase().includes('disconnect') ? '连接已中断' : '连接失败'}
               </div>
               <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px', lineHeight: 1.6 }}>
                 {connectRetryDisplayRef.current > 0
-                  ? `已尝试 ${connectRetryDisplayRef.current}/${MAX_CONNECT_RETRIES} 次自动重连，均失败。请检查网络后手动重试。`
-                  : '无法建立信令连接，请检查您的网络后重试。'}
+                  ? `已自动重试 ${connectRetryDisplayRef.current} 次，仍无法恢复连接。请检查网络后手动重试，或退出会议。`
+                  : connectError?.toLowerCase().includes('disconnect')
+                    ? '网络波动导致连接中断，可以尝试手动重新连接。'
+                    : '无法建立信令连接，请检查您的网络后重试。'}
               </div>
 
               {/* Error detail (collapsible) */}
@@ -2741,6 +2868,7 @@ function VideoConferenceComponent(props: {
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
                     connectRetryDisplayRef.current = 0;
+                    unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
                       connectRetryTimerRef.current = null;
@@ -2772,6 +2900,7 @@ function VideoConferenceComponent(props: {
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
                     connectRetryDisplayRef.current = 0;
+                    unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
                       connectRetryTimerRef.current = null;
@@ -2789,12 +2918,29 @@ function VideoConferenceComponent(props: {
                           connectRetryCountRef.current = 0;
                           connectRetryDisplayRef.current = 0;
                           setConnectError(null);
-                          if (props.userChoices.videoEnabled) {
-                            room.localParticipant.setCameraEnabled(true).catch(handleError);
-                          }
-                          if (props.userChoices.audioEnabled) {
-                            room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
-                          }
+                          // Validate device IDs before enabling (same as primary connect path)
+                          const enableRetryDevices = async () => {
+                            try {
+                              const devices = await navigator.mediaDevices.enumerateDevices();
+                              const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
+                              const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
+                              const wantedVideo = props.userChoices.videoDeviceId;
+                              if (wantedVideo && !videoIds.has(wantedVideo)) {
+                                room.options.videoCaptureDefaults = { ...room.options.videoCaptureDefaults, deviceId: undefined };
+                              }
+                              const wantedAudio = props.userChoices.audioDeviceId;
+                              if (wantedAudio && !audioIds.has(wantedAudio)) {
+                                room.options.audioCaptureDefaults = { ...room.options.audioCaptureDefaults, deviceId: undefined };
+                              }
+                            } catch (_) { /* proceed with whatever defaults exist */ }
+                            if (props.userChoices.videoEnabled) {
+                              room.localParticipant.setCameraEnabled(true).catch(handleError);
+                            }
+                            if (props.userChoices.audioEnabled) {
+                              room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                            }
+                          };
+                          enableRetryDevices();
                         })
                         .catch((err) => {
                           connectAttemptedRef.current = false;
@@ -3215,19 +3361,26 @@ function VideoConferenceComponent(props: {
             display: 'flex',
           }}
         >
-          {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share, OR presenter sharing) */}
-          {isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) && (
-            <>
-              <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-                <LiveDocView
-                  meetingRoomName={meetingRoomName}
-                  participantName={props.userChoices.username}
-                  livedocInstanceId={livedocInstanceId}
-                  hostInitError={livedocInitError}
-                  hostInitInProgress={livedocInitInProgress}
-                  isHost={isHost}
-                />
-              </div>
+          {/* Standalone LiveDoc — always mounted to prevent iframe reload on tab switch.
+               Visibility is controlled via CSS display instead of conditional rendering. */}
+          <div
+            style={{
+              display: isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) ? 'flex' : 'none',
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+              <LiveDocView
+                meetingRoomName={meetingRoomName}
+                participantName={props.userChoices.username}
+                livedocInstanceId={livedocInstanceId}
+                hostInitError={livedocInitError}
+                hostInitInProgress={livedocInitInProgress}
+                isHost={isHost}
+              />
+            </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
                 const allP = [
@@ -3342,8 +3495,7 @@ function VideoConferenceComponent(props: {
                   </div>
                 );
               })()}
-            </>
-          )}
+          </div>
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div

@@ -1,4 +1,4 @@
-{
+﻿{
   "common.close": "閉じる",
   "common.cancel": "キャンセル",
   "common.join": "参加",
@@ -463,6 +463,14 @@
   "replay.participants": "参加者",
   "replay.online": "{time}「オンライン」",
   "replay.minutes": "{n}分",
+  "replay.generateSummary": "✨ 要約を生成",
+  "replay.regenerateSummary": "要約を再生成",
+  "replay.regenerateSummaryHint": "AIで字幕を再分析して要約を更新します",
+  "replay.generating": "AIが字幕を分析して会議の要約を生成中です。お待ちください...（{pct}%）",
+  "replay.noSummaryYet": "まだ要約が生成されていません",
+  "replay.noSummaryHint": "字幕が {count} 件あります。下のボタンをクリックしてAIで自動生成してください。",
+  "replay.noTranscriptForSummary": "字幕データなし",
+  "replay.noTranscriptForSummaryHint": "この会議では字幕が有効になっていなかったため、要約を自動生成できません。",
 
   "dash.replay": "🎬 再生",
   "dash.replayTitle": "ミーティング録画を再生",

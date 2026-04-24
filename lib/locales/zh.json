@@ -1,4 +1,4 @@
-{
+﻿{
   "common.close": "关闭",
   "common.cancel": "取消",
   "common.join": "加入",
@@ -463,7 +463,15 @@
   "replay.host": "主持人",
   "replay.participants": "参与者",
   "replay.online": "在线 {time}",
-  "replay.minutes": "{n} 分钟",
+  "replay.minutes": "{n} 分钟",
+  "replay.generateSummary": "✨ 生成会议摘要",
+  "replay.regenerateSummary": "重新生成摘要",
+  "replay.regenerateSummaryHint": "使用 AI 重新分析字幕并更新摘要",
+  "replay.generating": "AI 正在分析字幕并生成会议摘要，请稍候...（{pct}%）",
+  "replay.noSummaryYet": "该会议尚未生成摘要",
+  "replay.noSummaryHint": "已有 {count} 条字幕记录，点击下方按钮使用 AI 自动分析并生成章节摘要",
+  "replay.noTranscriptForSummary": "暂无字幕数据",
+  "replay.noTranscriptForSummaryHint": "该会议未开启字幕功能，无法自动生成摘要",
 
   "dash.replay": "🎬 回放",
   "dash.replayTitle": "播放会议录制",

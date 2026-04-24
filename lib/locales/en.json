@@ -1,4 +1,4 @@
-{
+﻿{
   "common.close": "Close",
   "common.cancel": "Cancel",
   "common.join": "Join",
@@ -479,7 +479,15 @@
   "replay.host": "Host",
   "replay.participants": "Participants",
   "replay.online": "Online for {time}",
-  "replay.minutes": "{n} min",
+  "replay.minutes": "{n} min",
+  "replay.generateSummary": "✨ Generate Summary",
+  "replay.regenerateSummary": "Regenerate Summary",
+  "replay.regenerateSummaryHint": "Re-analyze captions with AI to update summary",
+  "replay.generating": "AI is analyzing captions and generating meeting summary, please wait... ({pct}%)",
+  "replay.noSummaryYet": "No summary generated yet",
+  "replay.noSummaryHint": "{count} caption records available. Click below to auto-generate chapters using AI.",
+  "replay.noTranscriptForSummary": "No caption data",
+  "replay.noTranscriptForSummaryHint": "Captions were not enabled for this meeting. Unable to auto-generate summary.",
 
   "dash.replay": "🎬 Replay",
   "dash.replayTitle": "Play meeting recording",

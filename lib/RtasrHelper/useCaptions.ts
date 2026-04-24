@@ -207,14 +207,25 @@ export function useCaptions({
     };
   }, [room, decoder, showCaptionsToGUI]);
 
-  // ── 当 mic 关闭时自动停止识别 ──────────────────────────────────────────
+  // ── 当 mic 关闭时停止本地识别（但保持字幕功能开启，仍能看到别人的字幕）──
+  // ── 当 mic 重新开启时自动恢复本地识别 ──────────────────────────────────
 
   React.useEffect(() => {
+    if (!captionsRunning) return; // 字幕功能没开，不需要做什么
+
     if (!micEnabled && rtasrRef.current) {
+      // 闭麦：只停止本地语音识别引擎，不关闭字幕功能
+      console.log('[useCaptions] Mic off — stopping local recognition, captions stay ON');
       rtasrRef.current.Stop();
-      setCaptionsRunning(false);
+    } else if (micEnabled && rtasrRef.current) {
+      // 开麦：自动恢复本地语音识别
+      console.log('[useCaptions] Mic on — restarting local recognition');
+      const defaultMic = localStorage.getItem('DefaultMic') || '';
+      rtasrRef.current.Start(defaultMic).catch((err: unknown) => {
+        console.warn('[useCaptions] Failed to restart recognition:', err);
+      });
     }
-  }, [micEnabled]);
+  }, [micEnabled, captionsRunning]);
 
   // ── 开启/关闭字幕 ──────────────────────────────────────────────────────
 
@@ -226,28 +237,9 @@ export function useCaptions({
           helper.languageCode = languageCode;
 
           helper.OnMessage = async (d: RtasrMessage) => {
-            if (!micEnabledRef.current) {
-              rtasrRef.current?.Stop();
-              setCaptionsRunning(false);
-              return;
-            }
-
-            // 读取当前用户信息
-            let userId = '';
-            let userName = '';
-            try {
-              const stored = localStorage.getItem('kloudUser');
-              if (stored) {
-                const u = JSON.parse(stored);
-                userId = u.id || u.username || '';
-                userName = u.displayName || u.fullName || u.username || '';
-              }
-            } catch (_) {}
-
-            if (!userId) {
-              userId = room.localParticipant.identity;
-              userName = room.localParticipant.name || userId;
-            }
+            // 使用 LiveKit 的 localParticipant（每个连接独立，不受同浏览器多 Tab 共享 localStorage 影响）
+            const userId = room.localParticipant.identity;
+            const userName = room.localParticipant.name || userId;
 
             const offsetSeconds = getMeetingOffsetSeconds();
 
