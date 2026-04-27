@@ -2674,9 +2674,11 @@ function VideoConferenceComponent(props: {
   const [attendeeOpen, setAttendeeOpen] = React.useState(false);
 
   // ─── Captions (host/co-host only can toggle, all see the overlay) ────────
+  const { locale } = useI18n();
   const { captionsInfo, setCaptionsOpen, captionsRunning } = useCaptions({
     room,
     micEnabled,
+    languageCode: locale,
   });
   // 赋值给 ref，让上面 handleData 里能访问到
   setCaptionsOpenRef.current = setCaptionsOpen;

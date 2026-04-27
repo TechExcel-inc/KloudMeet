@@ -6,6 +6,8 @@ import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
 import { useI18n } from './i18n';
+import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
+import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
 
@@ -140,6 +142,32 @@ export function KloudMeetToolbar({
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
   const activeSheetRef = useRef<ActionSheetType>(null);
   activeSheetRef.current = activeSheet;
+  const [showSTTSettings, setShowSTTSettings] = useState(false);
+  const [showCCSettings, setShowCCSettings] = useState(false);
+  const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('kloud-stt-settings');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.subtitleVisible === 'boolean') {
+          setLocalSubtitleVisible(parsed.subtitleVisible);
+        }
+      } else {
+        setLocalSubtitleVisible(true);
+      }
+    } catch (e) {}
+
+    const handleSettingsChange = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && typeof customEvent.detail.subtitleVisible === 'boolean') {
+        setLocalSubtitleVisible(customEvent.detail.subtitleVisible);
+      }
+    };
+    window.addEventListener('kloud-stt-settings-changed', handleSettingsChange);
+    return () => window.removeEventListener('kloud-stt-settings-changed', handleSettingsChange);
+  }, []);
 
   // Synchronous wrapper: close Chat/Attendee BEFORE opening a sheet
   const openSheet = (sheet: ActionSheetType) => {
@@ -849,6 +877,9 @@ export function KloudMeetToolbar({
                 captionsEnabled={captionsEnabled}
                 onToggleCaptions={onToggleCaptions}
                 handleToggleChat={handleToggleChat}
+                onOpenSTTSettings={() => setShowSTTSettings(true)}
+                onOpenCCSettings={() => setShowCCSettings(true)}
+                localSubtitleVisible={localSubtitleVisible}
               />
             </div>
           </div>
@@ -990,6 +1021,9 @@ export function KloudMeetToolbar({
                       mobileAudioState={mobileAudioState}
                       setMobileAudioState={setMobileAudioState}
                       handleToggleChat={handleToggleChat}
+                      onOpenSTTSettings={() => setShowSTTSettings(true)}
+                      onOpenCCSettings={() => setShowCCSettings(true)}
+                      localSubtitleVisible={localSubtitleVisible}
                     />
                   </div>
                 )}
@@ -1096,6 +1130,20 @@ export function KloudMeetToolbar({
           </button>
         </div>
       )}
+      
+      <STTSettingsDialog
+        isOpen={showSTTSettings}
+        onClose={() => setShowSTTSettings(false)}
+        captionsEnabled={captionsEnabled}
+        onToggleCaptions={onToggleCaptions}
+        canToggleCaptions={canToggleCaptions}
+      />
+      
+      <CCSettingsDialog
+        isOpen={showCCSettings}
+        onClose={() => setShowCCSettings(false)}
+        subtitleVisible={localSubtitleVisible}
+      />
     </>
   );
 }
@@ -1131,6 +1179,9 @@ function ActiveSheetContent({
   mobileAudioState,
   setMobileAudioState,
   handleToggleChat,
+  onOpenSTTSettings,
+  onOpenCCSettings,
+  localSubtitleVisible,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1234,7 +1285,7 @@ function ActiveSheetContent({
           {canToggleCaptions && (
             <button
               className={`${styles.actionSheetItem} ${captionsEnabled ? styles.active : ''}`}
-              onClick={() => { onToggleCaptions?.(); setActiveSheet(null); }}
+              onClick={() => { onOpenSTTSettings?.(); setActiveSheet(null); }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -1244,6 +1295,18 @@ function ActiveSheetContent({
                 )}
               </svg>
               {captionsEnabled ? t('toolbar.captionsOn') : t('toolbar.captionsOff')}
+            </button>
+          )}
+          {captionsEnabled && (
+            <button
+              className={styles.actionSheetItem}
+              onClick={() => { onOpenCCSettings?.(); setActiveSheet(null); }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <path d="M6 12h4M6 16h8" strokeLinecap="round" />
+              </svg>
+              {localSubtitleVisible ? t('toolbar.ccShow') || 'Closed Caption - Show' : t('toolbar.ccHide') || 'Closed Caption - Hide'}
             </button>
           )}
           <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>

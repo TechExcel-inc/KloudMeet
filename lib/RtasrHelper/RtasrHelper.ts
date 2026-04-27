@@ -36,7 +36,7 @@ export class RtasrHelper {
    */
   public speechModel: string = 'whisper-rt';
 
-  /** @deprecated v3 u3-rt-pro 自动多语言，保留兼容 */
+  /** 识别语言代码 (zh, en, ja, ko) */
   public languageCode: string = 'zh';
 
   private _ws: WebSocket | null = null;
@@ -80,15 +80,24 @@ export class RtasrHelper {
       this.log(`AudioContext sampleRate = ${actualSampleRate}`);
 
       // ── Step 3: 用真实 sampleRate 连接 AssemblyAI v3 WS ──────────────
-      const wsUrl =
+      let wsUrl =
         `wss://streaming.assemblyai.com/v3/ws` +
         `?speech_model=${encodeURIComponent(this.speechModel)}` +
         `&sample_rate=${Math.round(actualSampleRate)}` +
-        `&format_turns=true` +             // 加标点符号（中文同样适用）
-        `&language_detection=true` +       // 返回检测到的语言代码
-        `&end_of_turn_silence_threshold=500` +  // 500ms 静音即触发 end_of_turn（默认 700ms）
+        `&format_turns=true` +             // 加标点符号
+        `&end_of_turn_silence_threshold=500` +  // 500ms 静音即触发 end_of_turn
         `&token=${encodeURIComponent(token)}`;
-        // ⚠️ whisper-rt 不支持 language 参数，模型自动识别语言
+
+      // AssemblyAI v3 对 language_code 有严格枚举限制。
+      // 当前产品语言可能是 zh/ja/ko，需映射为 multi 才能被服务端接受。
+      const normalizedLanguage = this._normalizeAssemblyLanguageCode(this.languageCode);
+      if (normalizedLanguage && normalizedLanguage !== 'auto') {
+        wsUrl += `&language_code=${encodeURIComponent(normalizedLanguage)}`;
+        this.log(`Language fixed to: ${normalizedLanguage} (from ${this.languageCode || 'empty'})`);
+      } else {
+        wsUrl += `&language_detection=true`;
+        this.log('Language detection enabled (auto)');
+      }
 
       this.log(`Connecting: model=${this.speechModel} sampleRate=${Math.round(actualSampleRate)}`);
       this._ws = new WebSocket(wsUrl);
@@ -196,6 +205,21 @@ export class RtasrHelper {
       out[i] = n < 0 ? n * 32768 : n * 32767;
     }
     return out.buffer;
+  }
+
+  private _normalizeAssemblyLanguageCode(languageCode?: string): string {
+    const code = (languageCode || '').trim().toLowerCase();
+    if (!code || code === 'auto') return 'auto';
+
+    // AssemblyAI v3 当前可接受值（按报错枚举）：
+    // en/fr/de/es/it/pt/multi
+    const passthrough = new Set(['en', 'fr', 'de', 'es', 'it', 'pt', 'multi']);
+    if (passthrough.has(code)) return code;
+
+    // 现有产品里常用的东亚语种（以及其他非上述枚举）不强行指定 language_code，
+    // 交给服务端自动检测，避免“可连接但无结果”的情况。
+    if (code === 'zh' || code === 'ja' || code === 'ko') return 'auto';
+    return 'auto';
   }
 
   private log(txt: string) {
