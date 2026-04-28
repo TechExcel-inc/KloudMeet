@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { buildLiveDocIframeSrc, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
+import { useI18n } from '@/lib/i18n';
 import styles from '../styles/LiveDocView.module.css';
 
 interface LiveDocViewProps {
@@ -21,9 +22,11 @@ export function LiveDocView({
   hostInitInProgress,
   isHost,
 }: LiveDocViewProps) {
+  const { t } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
+  const [pluginLoaded, setPluginLoaded] = React.useState(false);
 
   React.useEffect(() => {
     const name = participantName?.trim() || 'Guest';
@@ -52,11 +55,26 @@ export function LiveDocView({
     };
   }, [participantName]);
 
+  React.useEffect(() => {
+    setPluginLoaded(false);
+  }, [livedocInstanceId]);
+
+  React.useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const data = e.data as { type?: unknown } | null;
+      if (data && typeof data === 'object' && data.type === 'onkloudloaded') {
+        setPluginLoaded(true);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
   if (isHost && hostInitError) {
     return (
       <div className={styles.container}>
         <div className={styles.message}>
-          <p className={styles.messageTitle}>无法创建文档会话</p>
+          <p className={styles.messageTitle}>{t('livedoc.errorTitle')}</p>
           <p className={styles.messageDetail}>{hostInitError}</p>
         </div>
       </div>
@@ -69,12 +87,12 @@ export function LiveDocView({
         <div className={styles.message}>
           <p className={styles.messageTitle}>
             {isHost && hostInitInProgress
-              ? '正在创建文档会话…'
+              ? t('livedoc.creating')
               : isHost
-                ? '正在准备文档会话…'
-                : '等待主持人开启文档…'}
+                ? t('livedoc.preparing')
+                : t('livedoc.waitingHost')}
           </p>
-          <p className={styles.messageDetail}>会议室：{meetingRoomName}</p>
+          <p className={styles.messageDetail}>{t('livedoc.room', { room: meetingRoomName })}</p>
         </div>
       </div>
     );
@@ -84,7 +102,7 @@ export function LiveDocView({
     return (
       <div className={styles.container}>
         <div className={styles.message}>
-          <p className={styles.messageTitle}>正在获取访问令牌…</p>
+          <p className={styles.messageTitle}>{t('livedoc.fetchingToken')}</p>
         </div>
       </div>
     );
@@ -94,8 +112,8 @@ export function LiveDocView({
     return (
       <div className={styles.container}>
         <div className={styles.message}>
-          <p className={styles.messageTitle}>无法加载 LiveDoc</p>
-          <p className={styles.messageDetail}>{tokenError ?? '缺少访问令牌'}</p>
+          <p className={styles.messageTitle}>{t('livedoc.loadFailed')}</p>
+          <p className={styles.messageDetail}>{tokenError ?? t('livedoc.missingToken')}</p>
         </div>
       </div>
     );
@@ -113,6 +131,13 @@ export function LiveDocView({
         allow="clipboard-read; clipboard-write;fullscreen *; autoplay *"
         sandbox="allow-scripts allow-forms allow-popups allow-pointer-lock allow-same-origin allow-modals"
       />
+      {!pluginLoaded && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.message}>
+            <p className={styles.messageTitle}>{t('livedoc.loading')}</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

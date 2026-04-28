@@ -494,5 +494,15 @@
 
   "dash.replay": "🎬 再生",
   "dash.replayTitle": "ミーティング録画を再生",
-  "dash.replaySummaryTitle": "再生と概要を表示"
+  "dash.replaySummaryTitle": "再生と概要を表示",
+
+  "livedoc.errorTitle": "ドキュメントセッションを作成できません",
+  "livedoc.creating": "ドキュメントセッションを作成中…",
+  "livedoc.preparing": "ドキュメントセッションを準備中…",
+  "livedoc.waitingHost": "ホストがドキュメントを開くのを待っています…",
+  "livedoc.room": "ミーティングルーム：{room}",
+  "livedoc.fetchingToken": "アクセストークンを取得中…",
+  "livedoc.loadFailed": "LiveDoc を読み込めません",
+  "livedoc.missingToken": "アクセストークンがありません",
+  "livedoc.loading": "ドキュメントを読み込んでいます…"
 }

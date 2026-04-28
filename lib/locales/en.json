@@ -499,7 +499,7 @@
   "replay.host": "Host",
   "replay.participants": "Participants",
   "replay.online": "Online for {time}",
-  "replay.minutes": "{n} min",
+  "replay.minutes": "{n} min",
   "replay.generateSummary": "✨ Generate Summary",
   "replay.regenerateSummary": "Regenerate Summary",
   "replay.regenerateSummaryHint": "Re-analyze captions with AI to update summary",
@@ -511,5 +511,15 @@
 
   "dash.replay": "🎬 Replay",
   "dash.replayTitle": "Play meeting recording",
-  "dash.replaySummaryTitle": "View replay & summary"
+  "dash.replaySummaryTitle": "View replay & summary",
+
+  "livedoc.errorTitle": "Failed to create document session",
+  "livedoc.creating": "Creating document session…",
+  "livedoc.preparing": "Preparing document session…",
+  "livedoc.waitingHost": "Waiting for host to open document…",
+  "livedoc.room": "Meeting room: {room}",
+  "livedoc.fetchingToken": "Fetching access token…",
+  "livedoc.loadFailed": "Failed to load LiveDoc",
+  "livedoc.missingToken": "Missing access token",
+  "livedoc.loading": "Loading document…"
 }

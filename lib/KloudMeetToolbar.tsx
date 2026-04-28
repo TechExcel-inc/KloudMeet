@@ -116,6 +116,8 @@ export function KloudMeetToolbar({
   onToggleCaptions,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
+  const [iframeMouseActive, setIframeMouseActive] = useState(false);
+  const iframeMouseInactiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { t } = useI18n();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -190,8 +192,10 @@ export function KloudMeetToolbar({
   const isMobile = useToolbarIsMobile();
   const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
   const lastMouseYRef = useRef<number>(window.innerHeight);
-  const bottomAreaPriorityUntilRef = useRef<number>(0);
   const lastToggleTimeRef = useRef<number>(0);
+  const iframeMouseSuppressUntilRef = useRef<number>(0);
+  // 记录插件最后一次告知是否允许显示 SkyMeet 底栏，用于阻止 hoverZone 在 suppress 期间重新激活。
+  const lastIframeShowRef = useRef<boolean>(true);
 
   type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee' | 'recording';
   const desktopAnchorBubbleKind: DesktopAnchorKind | null =
@@ -283,6 +287,10 @@ export function KloudMeetToolbar({
     } else {
       // Desktop mousemove logic
       const handleMouseMove = (e: MouseEvent) => {
+        // 鼠标在 iframe 内移动时，由 iframe 主导显示/隐藏；父页面 mousemove 暂停一小段时间。
+        if (Date.now() < iframeMouseSuppressUntilRef.current) {
+          return;
+        }
         lastMouseYRef.current = e.clientY;
         const target = e.target as Element;
         // forceVisible 只在鼠标直接悬浮在 toolbar 本身或其弹出菜单上时为 true
@@ -311,49 +319,42 @@ export function KloudMeetToolbar({
         // iframe 内部点击，移动端 toggle 菜单显示隐藏。加一个简单的节流防止 touchstart+click 重复触发
         const now = Date.now();
         if (now - lastToggleTimeRef.current > 500) {
-          console.log("111");
           lastToggleTimeRef.current = now;
           setVisible(prev => !prev);
         }
         return;
       }
 
+      // 由 iframe 决定是否显示 SkyMeet 底栏：plugin 侧已综合判断 liveToolbar 区与底部区域。
       if (msgType === 'mousemove') {
-        if (isMobile) return; // 移动端没有鼠标悬浮逻辑，不需要处理 iframe 的 mousemove
+        if (isMobile) return;
 
-        const now = Date.now();
-        if (now < bottomAreaPriorityUntilRef.current) {
-          // 底部热区刚触发过时，忽略主区 mousemove 的短时抖动覆盖
-          return;
-        }
         const data =
           typeof payload === 'object' && payload !== null && 'data' in payload
             ? (payload as { data?: unknown }).data
             : null;
-        const yFromData =
-          typeof data === 'object' && data !== null && 'clientY' in data
-            ? Number((data as { clientY?: unknown }).clientY)
-            : typeof data === 'object' && data !== null && 'y' in data
-              ? Number((data as { y?: unknown }).y)
-              : NaN;
+        const show =
+          typeof data === 'object' &&
+          data !== null &&
+          'showBottomToolbar' in data &&
+          !!(data as { showBottomToolbar?: unknown }).showBottomToolbar;
 
-        if (Number.isFinite(yFromData)) {
-          lastMouseYRef.current = yFromData;
-          applyMouseVisibility(yFromData);
-        } else {
-          // data 为空时，按“主区域移动”处理（等价于靠上区域）
-          applyMouseVisibility(0);
-        }
+        // 鼠标在 iframe 内的每次 mousemove 都暂停父页面 mousemove handler 一小段时间，
+        // 避免父页面 mousemove 反复把 toolbar 顶回显示。
+        iframeMouseSuppressUntilRef.current = Date.now() + 200;
+        // 同步给 hoverZone：iframe 内有鼠标移动时，让 hoverZone 不接收事件，
+        // 避免遮挡 iframe 内 liveToolbar 上的按钮和拖拽。
+        if (!iframeMouseActive) setIframeMouseActive(true);
+        if (iframeMouseInactiveTimerRef.current) clearTimeout(iframeMouseInactiveTimerRef.current);
+        iframeMouseInactiveTimerRef.current = setTimeout(() => {
+          setIframeMouseActive(false);
+        }, 250);
+
+        lastIframeShowRef.current = show;
+        const clientY = show ? window.innerHeight : 0;
+        lastMouseYRef.current = clientY;
+        applyMouseVisibility(clientY);
         return;
-      }
-
-      // 来自 iframe 底部热区：等价鼠标在底部，显示 toolbar
-      if (msgType === 'Kloud-onBottomAreaMouseMove') {
-        if (isMobile) return; // 移动端不需要 hover 热区
-
-        bottomAreaPriorityUntilRef.current = Date.now() + 220;
-        lastMouseYRef.current = window.innerHeight;
-        applyMouseVisibility(window.innerHeight);
       }
     };
 
@@ -502,7 +503,14 @@ export function KloudMeetToolbar({
           {/* Invisible trigger area covering the toolbar's natural position */}
           <div
             className={styles.hoverZone}
-            onMouseEnter={() => setVisible(true)}
+            // iframe 内持续有鼠标移动时，让 hoverZone 不吃事件，鼠标直接命中 iframe（liveToolbar 等）。
+            style={iframeMouseActive ? { pointerEvents: 'none' } : undefined}
+            onMouseEnter={() => {
+              if (Date.now() < iframeMouseSuppressUntilRef.current) return;
+              // 插件最后一次告知不显示时（如鼠标在 liveToolbar 区停留后点击），不触发显示。
+              if (!lastIframeShowRef.current) return;
+              setVisible(true);
+            }}
           />
           {/* Small visual arrow hint at center bottom */}
           <div className={styles.chevronHandle}>

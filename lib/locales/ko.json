@@ -494,5 +494,15 @@
 
   "dash.replay": "🎬 다시보기",
   "dash.replayTitle": "회의 녹화 재생",
-  "dash.replaySummaryTitle": "다시보기 및 요약 보기"
+  "dash.replaySummaryTitle": "다시보기 및 요약 보기",
+
+  "livedoc.errorTitle": "문서 세션을 만들 수 없습니다",
+  "livedoc.creating": "문서 세션을 만드는 중…",
+  "livedoc.preparing": "문서 세션을 준비하는 중…",
+  "livedoc.waitingHost": "호스트가 문서를 열기를 기다리는 중…",
+  "livedoc.room": "회의실: {room}",
+  "livedoc.fetchingToken": "액세스 토큰 가져오는 중…",
+  "livedoc.loadFailed": "LiveDoc 을 불러올 수 없습니다",
+  "livedoc.missingToken": "액세스 토큰이 없습니다",
+  "livedoc.loading": "문서를 불러오는 중…"
 }
