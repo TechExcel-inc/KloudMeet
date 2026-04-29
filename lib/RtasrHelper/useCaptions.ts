@@ -244,11 +244,9 @@ export function useCaptions({
 
     if (!micEnabled && rtasrRef.current) {
       // 闭麦：只停止本地语音识别引擎，不关闭字幕功能
-      console.log('[useCaptions] Mic off — stopping local recognition, captions stay ON');
       rtasrRef.current.Stop();
     } else if (micEnabled && rtasrRef.current) {
       // 开麦：自动恢复本地语音识别
-      console.log('[useCaptions] Mic on — restarting local recognition');
       const defaultMic = localStorage.getItem('DefaultMic') || '';
       rtasrRef.current.Start(defaultMic).catch((err: unknown) => {
         console.warn('[useCaptions] Failed to restart recognition:', err);
@@ -298,7 +296,8 @@ export function useCaptions({
               if (raw) Object.assign(settings, JSON.parse(raw));
             } catch(e) {}
             
-            const speakLanguage = settings.speakLanguage || languageCode || 'zh';
+            // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
+            const speakLanguage = d.detectedLanguage || settings.speakLanguage || languageCode || 'zh';
             const defaultTargetLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
 
             const payload: CaptionPayload = {
@@ -352,10 +351,6 @@ export function useCaptions({
                 });
               }
             }
-          };
-
-          helper.OnLog = (txt: string) => {
-            console.log('[RtasrHelper]', txt);
           };
 
           rtasrRef.current = helper;

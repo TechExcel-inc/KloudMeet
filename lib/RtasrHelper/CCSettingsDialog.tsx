@@ -14,7 +14,7 @@ const LANGUAGES = [
   { id: 'zh', label: '中文' },
   { id: 'en', label: '英语' },
   { id: 'ja', label: '日语' },
-  { id: 'ko', label: '韩语' }
+  { id: 'ko', label: '韩语' },
 ];
 
 export function CCSettingsDialog({ isOpen, onClose, subtitleVisible = true }: CCSettingsDialogProps) {

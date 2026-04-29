@@ -7,7 +7,6 @@ import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
-import { LiveDocView } from '@/lib/LiveDocView';
 import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
@@ -47,11 +46,17 @@ import {
   DataPacket_Kind,
 } from 'livekit-client';
 import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+
+const LiveDocView = dynamic(
+  () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
+  { ssr: false },
+);
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -1916,8 +1921,17 @@ function VideoConferenceComponent(props: {
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
+  const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
+  const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
   const livedocHostBootstrappedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (shouldDisplayLiveDoc || isMirrorBlocked) {
+      setLivedocHasBeenActivated(true);
+    }
+  }, [shouldDisplayLiveDoc, isMirrorBlocked]);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -2093,6 +2107,7 @@ function VideoConferenceComponent(props: {
 
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
+    if (!shouldMountLiveDoc) return;
     if (!livekitConnected || !isHost) return;
     if (livedocHostBootstrappedRef.current) return;
     let cancelled = false;
@@ -2124,7 +2139,7 @@ function VideoConferenceComponent(props: {
     return () => {
       cancelled = true;
     };
-  }, [livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
+  }, [shouldMountLiveDoc, livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
 
   React.useEffect(() => {
     if (!isHost) return;
@@ -3363,25 +3378,26 @@ function VideoConferenceComponent(props: {
             display: 'flex',
           }}
         >
-          {/* Standalone LiveDoc — always mounted to prevent iframe reload on tab switch.
-               Visibility is controlled via CSS display instead of conditional rendering. */}
+          {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
           <div
             style={{
-              display: isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) ? 'flex' : 'none',
+              display: shouldDisplayLiveDoc ? 'flex' : 'none',
               flex: 1,
               minWidth: 0,
               overflow: 'hidden',
             }}
           >
             <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-              <LiveDocView
-                meetingRoomName={meetingRoomName}
-                participantName={props.userChoices.username}
-                livedocInstanceId={livedocInstanceId}
-                hostInitError={livedocInitError}
-                hostInitInProgress={livedocInitInProgress}
-                isHost={isHost}
-              />
+              {shouldMountLiveDoc && (
+                <LiveDocView
+                  meetingRoomName={meetingRoomName}
+                  participantName={props.userChoices.username}
+                  livedocInstanceId={livedocInstanceId}
+                  hostInitError={livedocInitError}
+                  hostInitInProgress={livedocInitInProgress}
+                  isHost={isHost}
+                />
+              )}
             </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
@@ -3505,7 +3521,7 @@ function VideoConferenceComponent(props: {
             style={{
               flex: 1,
               position: 'relative',
-              display: isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) ? 'none' : 'block',
+              display: shouldDisplayLiveDoc ? 'none' : 'block',
             }}
           >
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
@@ -3518,7 +3534,7 @@ function VideoConferenceComponent(props: {
             )}
 
             {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
-            {hasScreenShare && isMirrorBlocked && (
+            {hasScreenShare && isMirrorBlocked && shouldMountLiveDoc && (
               <div
                 className="mirror-livedoc-overlay"
                 style={{

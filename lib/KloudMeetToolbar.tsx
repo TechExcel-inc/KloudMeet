@@ -1251,12 +1251,14 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
+          {/*
           <button className={styles.actionSheetItem} onClick={() => handleToggleChat()}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
             {t('toolbar.chats')}
           </button>
+          */}
 
           {!isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
@@ -1317,10 +1319,12 @@ function ActiveSheetContent({
               {localSubtitleVisible ? t('toolbar.ccShow') || 'Closed Caption - Show' : t('toolbar.ccHide') || 'Closed Caption - Hide'}
             </button>
           )}
+          {/*
           <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
             {t('toolbar.peopleAttendees')}
           </button>
+          */}
           <button className={styles.actionSheetItem} onClick={() => {
             navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
             setToastMsg(t('toolbar.inviteCopied'));

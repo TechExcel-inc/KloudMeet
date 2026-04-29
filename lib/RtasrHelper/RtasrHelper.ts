@@ -1,43 +1,41 @@
 /**
- * RtasrHelper.ts — AssemblyAI v3 实时语音转写
- *
- * 修复：先启动麦克风/AudioContext，获取实际采样率后再连接 WebSocket，
- *       避免 sampleRate 写死导致音频数据与声明不符。
+ * RtasrHelper.ts — OpenAI Realtime Transcription API (gpt-4o-transcribe)
  *
  * 流程：
- *   1. GET /api/transcripts/realtime-token  →  获取短期 token
+ *   1. GET /api/transcripts/realtime-token  →  获取 ephemeral key (ek_xxx)
  *   2. navigator.mediaDevices.getUserMedia  →  获取麦克风流
- *   3. new AudioContext()                   →  读取真实 sampleRate
- *   4. 连接 wss://streaming.assemblyai.com/v3/ws
- *        ?speech_model=u3-rt-pro&sample_rate={实际值}&token={token}
- *   5. WS onopen → 开始发送 PCM 数据
+ *   3. new AudioContext({ sampleRate: 24000 }) → 使用 OpenAI 要求的 PCM 采样率
+ *   4. 连接 wss://api.openai.com/v1/realtime
+ *      鉴权：WebSocket subprotocol ["realtime", "openai-insecure-api-key.{ek_xxx}"]
+ *   5. ScriptProcessor → base64 PCM16 → input_audio_buffer.append
  *
- * v3 消息类型：
- *   { type: "Begin" }
- *   { type: "Turn", transcript: string, end_of_turn: boolean }
- *   { type: "Termination" }
+ * 服务端 VAD 自动检测句子边界，转写事件：
+ *   conversation.item.input_audio_transcription.delta      → 中间结果（增量文字）
+ *   conversation.item.input_audio_transcription.completed  → 最终结果
  *
- * 关闭：发送 { type: "Terminate" }
+ * 语言：支持 ISO-639-1 标准代码（zh/en/ja/ko…）
+ *       传入空字符串或 'auto' 时由 OpenAI 自动检测语言
  */
 
 export interface RtasrMessage {
   id: string | number;
   src: string;
   type: 0 | 1; // 0 = final, 1 = intermediate
+  /** OpenAI 返回的实际识别语言（ISO-639-1），用于翻译 from 参数 */
+  detectedLanguage?: string;
 }
+
+const TARGET_SAMPLE_RATE = 24000;
 
 export class RtasrHelper {
   public OnMessage?: (msg: RtasrMessage) => void;
-  public OnLog?: (txt: string) => void;
 
-  /** AssemblyAI speech_model
-   *  - 'whisper-rt' : Whisper-Streaming，支持 99+ 语言（含中文/日/韩），自动识别语言
-   *  - 'u3-rt-pro'  : Universal-3 Pro，仅限英语及少数欧洲语言
-   */
-  public speechModel: string = 'whisper-rt';
-
-  /** 识别语言代码 (zh, en, ja, ko) */
+  /** ISO-639-1 语言代码（zh/en/ja/ko/fr/de/es/pt/ru/ar/hi/vi 等）
+   *  空字符串或 'auto' 表示自动检测 */
   public languageCode: string = 'zh';
+
+  /** 转写模型，可选 gpt-4o-transcribe / gpt-4o-mini-transcribe / whisper-1 */
+  public speechModel: string = 'gpt-4o-transcribe';
 
   private _ws: WebSocket | null = null;
   private _context: AudioContext | null = null;
@@ -45,6 +43,9 @@ export class RtasrHelper {
   private _processor: ScriptProcessorNode | null = null;
   private _source: MediaStreamAudioSourceNode | null = null;
   private _running = false;
+
+  /** 累积每个 item_id 的增量文字，用于 partial 显示 */
+  private _partialTexts = new Map<string, string>();
 
   SetServerID(_id: number) {}
   SetSpeakingLanguageID(_id: number) {}
@@ -54,58 +55,51 @@ export class RtasrHelper {
     this._running = true;
 
     try {
-      // ── Step 1: 获取临时 token ────────────────────────────────────────
-      this.log('Fetching AssemblyAI v3 token...');
-      const tokenRes = await fetch('/api/transcripts/realtime-token');
+      // ── Step 1: 拿 ephemeral key（语言写到服务端 transcription session）──
+      const lang0 = (this.languageCode || '').trim().toLowerCase();
+      const tokenUrl = lang0 && lang0 !== 'auto'
+        ? `/api/transcripts/realtime-token?lang=${encodeURIComponent(lang0)}`
+        : '/api/transcripts/realtime-token';
+      const tokenRes = await fetch(tokenUrl);
       if (!tokenRes.ok) {
         throw new Error(`Token fetch failed: ${tokenRes.status} ${await tokenRes.text()}`);
       }
       const { token, error: tokenErr } = await tokenRes.json();
       if (tokenErr || !token) throw new Error(`Token error: ${tokenErr || 'empty'}`);
-      this.log('Token acquired.');
-
-      // ── Step 2: 先打开麦克风，获取真实 sampleRate ─────────────────────
+      // ── Step 2: 打开麦克风 ──────────────────────────────────────────────
+      const baseConstraints: MediaTrackConstraints = {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      };
       const audioConstraints: MediaTrackConstraints = deviceId
-        ? { deviceId: { exact: deviceId }, channelCount: 1 }
-        : { channelCount: 1, echoCancellation: true, noiseSuppression: true };
+        ? { ...baseConstraints, deviceId: { exact: deviceId } }
+        : baseConstraints;
 
       this._stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: false,
       });
 
-      // 让浏览器使用其默认（或设备端）采样率，然后读取真实值
-      this._context = new AudioContext();
-      const actualSampleRate = this._context.sampleRate;
-      this.log(`AudioContext sampleRate = ${actualSampleRate}`);
-
-      // ── Step 3: 用真实 sampleRate 连接 AssemblyAI v3 WS ──────────────
-      let wsUrl =
-        `wss://streaming.assemblyai.com/v3/ws` +
-        `?speech_model=${encodeURIComponent(this.speechModel)}` +
-        `&sample_rate=${Math.round(actualSampleRate)}` +
-        `&format_turns=true` +             // 加标点符号
-        `&end_of_turn_silence_threshold=500` +  // 500ms 静音即触发 end_of_turn
-        `&token=${encodeURIComponent(token)}`;
-
-      // AssemblyAI v3 对 language_code 有严格枚举限制。
-      // 当前产品语言可能是 zh/ja/ko，需映射为 multi 才能被服务端接受。
-      const normalizedLanguage = this._normalizeAssemblyLanguageCode(this.languageCode);
-      if (normalizedLanguage && normalizedLanguage !== 'auto') {
-        wsUrl += `&language_code=${encodeURIComponent(normalizedLanguage)}`;
-        this.log(`Language fixed to: ${normalizedLanguage} (from ${this.languageCode || 'empty'})`);
-      } else {
-        wsUrl += `&language_detection=true`;
-        this.log('Language detection enabled (auto)');
+      // 直接以 24kHz 创建 AudioContext，由浏览器做高质量重采样
+      // 大多数浏览器会接受这个 hint；若不接受会自己挑就近采样率
+      try {
+        this._context = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
+      } catch {
+        this._context = new AudioContext();
       }
-
-      this.log(`Connecting: model=${this.speechModel} sampleRate=${Math.round(actualSampleRate)}`);
-      this._ws = new WebSocket(wsUrl);
-      this._ws.binaryType = 'arraybuffer';
+      const srcSampleRate = this._context.sampleRate;
+      // ── Step 3: 用 ephemeral key 连 OpenAI Realtime ─────────────────────
+      // URL 不带 model，session 配置在服务端创建 ek 时已锁死为 transcription
+      const wsUrl = 'wss://api.openai.com/v1/realtime';
+      this._ws = new WebSocket(wsUrl, [
+        'realtime',
+        `openai-insecure-api-key.${token}`,
+      ]);
 
       this._ws.onopen = () => {
-        this.log('WS connected — starting PCM streaming');
-        this._startProcessor(actualSampleRate);
+        this._startProcessor(srcSampleRate);
       };
 
       this._ws.onmessage = (e) => {
@@ -113,40 +107,72 @@ export class RtasrHelper {
           const msg = JSON.parse(e.data as string);
           const type: string = msg.type || '';
 
-          if (type === 'Begin') {
-            this.log(`Session started: id=${msg.id}`);
-            return;
-          }
-
-          if (type === 'Turn') {
-            const text: string = msg.transcript || '';
-            if (!text.trim()) return;
-            const isFinal: boolean = msg.end_of_turn === true;
-            // whisper-rt 在 end_of_turn 时的 utterance 字段有完整标点版本
-            const display = isFinal && msg.utterance ? msg.utterance : text;
-            if (isFinal && msg.language_code) {
-              this.log(`Detected language: ${msg.language_code} (${(msg.language_confidence * 100).toFixed(0)}%)`);
+          // 增量转写（gpt-4o-transcribe 才有；whisper-1 不发 delta）
+          if (type === 'conversation.item.input_audio_transcription.delta') {
+            const itemId: string = msg.item_id || 'default';
+            const accumulated = (this._partialTexts.get(itemId) ?? '') + (msg.delta ?? '');
+            this._partialTexts.set(itemId, accumulated);
+            if (accumulated.trim()) {
+              this.OnMessage?.({ id: itemId, src: accumulated, type: 1 });
             }
-            this.log(`[${isFinal ? 'FINAL' : 'PARTIAL'}] ${display}`);
-            this.OnMessage?.({ id: Date.now(), src: display, type: isFinal ? 0 : 1 });
             return;
           }
 
-          if (type === 'Termination') {
-            this.log(`Session terminated (audio=${msg.audio_duration_seconds}s)`);
+          // 最终转写结果
+          if (type === 'conversation.item.input_audio_transcription.completed') {
+            const itemId: string = msg.item_id || 'default';
+            const text: string = msg.transcript ?? this._partialTexts.get(itemId) ?? '';
+            const detectedLanguage: string = msg.language || this.languageCode || '';
+            this._partialTexts.delete(itemId);
+            if (text.trim()) {
+              this.OnMessage?.({ id: itemId, src: text, type: 0, detectedLanguage });
+            }
+            return;
           }
-        } catch (err) {
-          this.log('Parse error: ' + err);
-        }
+
+          if (type === 'input_audio_buffer.speech_started') {
+            return;
+          }
+
+          if (type === 'input_audio_buffer.speech_stopped') {
+            return;
+          }
+
+          if (type === 'input_audio_buffer.committed') {
+            return;
+          }
+
+          if (type === 'conversation.item.input_audio_transcription.failed') {
+            return;
+          }
+
+          if (type === 'error') {
+            return;
+          }
+
+          if (type === 'session.created' || type === 'session.updated') {
+            return;
+          }
+          if (type === 'conversation.item.added' || type === 'conversation.item.done') {
+            const transcript = msg.item?.content?.find((c: { type?: string; transcript?: string }) => c.type === 'input_audio')?.transcript;
+            if (type === 'conversation.item.done' && typeof transcript === 'string' && transcript.trim()) {
+              this.OnMessage?.({
+                id: msg.item?.id || Date.now(),
+                src: transcript,
+                type: 0,
+                detectedLanguage: this.languageCode || undefined,
+              });
+            }
+            return;
+          }
+        } catch (_) {}
       };
 
-      this._ws.onerror = (e) => this.log('WS error: ' + JSON.stringify(e));
-      this._ws.onclose = (e) => {
-        this.log(`WS closed: code=${e.code} ${e.reason}`);
+      this._ws.onerror = () => {};
+      this._ws.onclose = () => {
         this._running = false;
       };
-    } catch (err) {
-      this.log('Start failed: ' + err);
+    } catch (_) {
       this._stopMic();
       this._running = false;
     }
@@ -154,39 +180,36 @@ export class RtasrHelper {
 
   Stop() {
     this._running = false;
-    this.log('Stopping...');
-
-    if (this._ws && this._ws.readyState === WebSocket.OPEN) {
-      try { this._ws.send(JSON.stringify({ type: 'Terminate' })); } catch (_) {}
-      setTimeout(() => { this._ws?.close(); this._ws = null; }, 150);
-    } else {
+    if (this._ws) {
+      this._ws.close();
       this._ws = null;
     }
-
+    this._partialTexts.clear();
     this._stopMic();
   }
 
-  // ── ScriptProcessor：在 WS 打开后才启动 ─────────────────────────────
+  // ── ScriptProcessor：采集麦克风 PCM，重采样后 base64 发送 ───────────────
 
-  private _startProcessor(sampleRate: number) {
+  private _startProcessor(srcRate: number) {
     if (!this._context || !this._stream) return;
 
     this._source = this._context.createMediaStreamSource(this._stream);
 
-    // 800 samples @ 任意 sampleRate ≈ 50ms（AssemblyAI 推荐帧长）
-    // 注意：WebAudio API 只允许 256/512/1024/2048/4096/8192/16384
-    const bufferSize = 4096; // ~85ms@48kHz，稳定不丢包
-    this._processor = this._context.createScriptProcessor(bufferSize, 1, 1);
+    this._processor = this._context.createScriptProcessor(4096, 1, 1);
     this._source.connect(this._processor);
     this._processor.connect(this._context.destination);
 
     this._processor.onaudioprocess = (e) => {
       if (!this._ws || this._ws.readyState !== WebSocket.OPEN) return;
       const float32 = e.inputBuffer.getChannelData(0);
-      this._ws.send(this._float32ToInt16(float32));
+      const resampled =
+        srcRate !== TARGET_SAMPLE_RATE
+          ? this._resample(float32, srcRate, TARGET_SAMPLE_RATE)
+          : float32;
+      const pcm16Buffer = this._float32ToInt16(resampled);
+      const b64 = this._arrayBufferToBase64(pcm16Buffer);
+      this._ws.send(JSON.stringify({ type: 'input_audio_buffer.append', audio: b64 }));
     };
-
-    this.log(`ScriptProcessor started (bufferSize=${bufferSize}, sampleRate=${sampleRate})`);
   }
 
   private _stopMic() {
@@ -196,7 +219,23 @@ export class RtasrHelper {
     if (this._context)   { this._context.close().catch(() => {}); this._context = null; }
   }
 
-  // ── Float32 → Int16 PCM ──────────────────────────────────────────────
+  // ── 线性插值重采样 Float32 srcRate → TARGET_RATE ──────────────────────
+
+  private _resample(input: Float32Array, srcRate: number, dstRate: number): Float32Array {
+    const ratio = srcRate / dstRate;
+    const outLength = Math.round(input.length / ratio);
+    const output = new Float32Array(outLength);
+    for (let i = 0; i < outLength; i++) {
+      const srcIdx = i * ratio;
+      const lo = Math.floor(srcIdx);
+      const hi = Math.min(lo + 1, input.length - 1);
+      const frac = srcIdx - lo;
+      output[i] = input[lo] * (1 - frac) + input[hi] * frac;
+    }
+    return output;
+  }
+
+  // ── Float32 [-1,1] → Int16 PCM ───────────────────────────────────────
 
   private _float32ToInt16(input: Float32Array): ArrayBuffer {
     const out = new Int16Array(input.length);
@@ -207,23 +246,15 @@ export class RtasrHelper {
     return out.buffer;
   }
 
-  private _normalizeAssemblyLanguageCode(languageCode?: string): string {
-    const code = (languageCode || '').trim().toLowerCase();
-    if (!code || code === 'auto') return 'auto';
+  // ── ArrayBuffer → base64 ─────────────────────────────────────────────
 
-    // AssemblyAI v3 当前可接受值（按报错枚举）：
-    // en/fr/de/es/it/pt/multi
-    const passthrough = new Set(['en', 'fr', 'de', 'es', 'it', 'pt', 'multi']);
-    if (passthrough.has(code)) return code;
-
-    // 现有产品里常用的东亚语种（以及其他非上述枚举）不强行指定 language_code，
-    // 交给服务端自动检测，避免“可连接但无结果”的情况。
-    if (code === 'zh' || code === 'ja' || code === 'ko') return 'auto';
-    return 'auto';
-  }
-
-  private log(txt: string) {
-    console.log('[AssemblyAI-v3]', txt);
-    this.OnLog?.(txt);
+  private _arrayBufferToBase64(buffer: ArrayBuffer): string {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < bytes.byteLength; i += CHUNK) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    }
+    return btoa(binary);
   }
 }
