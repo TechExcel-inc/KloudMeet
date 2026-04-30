@@ -22,7 +22,7 @@ export function LiveDocView({
   hostInitInProgress,
   isHost,
 }: LiveDocViewProps) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
@@ -119,12 +119,14 @@ export function LiveDocView({
     );
   }
 
-  const src = buildLiveDocIframeSrc(livedocInstanceId, userToken);
+  const languageId = locale === 'zh' ? 0 : 1;
+  const src = buildLiveDocIframeSrc(livedocInstanceId, userToken, languageId);
 
   return (
     <div className={styles.container}>
       <iframe
         key={livedocInstanceId}
+        id="sharedIframePlayer"
         title="LiveDoc"
         src={src}
         className={styles.iframe}

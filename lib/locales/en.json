@@ -194,6 +194,7 @@
   "toolbar.camSettings": "Camera Settings",
   "toolbar.speakerSettings": "Speaker Settings",
   "toolbar.liveDoc": "Live Doc",
+  "toolbar.liveDocMenu": "Live Doc Menu",
   "toolbar.webcam": "Webcam",
   "toolbar.shareScreen": "Share Screen",
   "toolbar.shareScreenTooltip": "Someone else is already sharing",

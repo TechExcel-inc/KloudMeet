@@ -804,6 +804,7 @@ export function PageClientImpl(props: {
           <VideoConferenceComponent
             connectionDetails={connectionDetails}
             userChoices={preJoinChoices}
+            region={props.region}
             options={{ codec: props.codec, hq: props.hq }}
           />
         </div>
@@ -990,6 +991,7 @@ function MobileVideoLayout() {
 function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
   connectionDetails: ConnectionDetails;
+  region?: string;
   options: {
     hq: boolean;
     codec: VideoCodec;
@@ -1289,16 +1291,60 @@ function VideoConferenceComponent(props: {
 
   const connectAttemptedRef = React.useRef(false);
   const connectRetryCountRef = React.useRef(0);
-  const MAX_CONNECT_RETRIES = 3;
+  const MAX_CONNECT_RETRIES = 6;
   // Tracks the pending retry setTimeout so we can cancel on unmount
   const connectRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalDisconnectRef = React.useRef(false);
+  const hasConnectedOnceRef = React.useRef(false);
+  const connectionDetailsRef = React.useRef(props.connectionDetails);
+  React.useEffect(() => { connectionDetailsRef.current = props.connectionDetails; }, [props.connectionDetails]);
+  const connectOptionsRef = React.useRef(connectOptions);
+  React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
   // Connection error state — drives the inline error UI instead of alert()
   const [connectError, setConnectError] = React.useState<string | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
   const connectRetryDisplayRef = React.useRef(0);
   // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
   const unexpectedErrorRetryCountRef = React.useRef(0);
-  const MAX_UNEXPECTED_RETRIES = 3;
+  const MAX_UNEXPECTED_RETRIES = 6;
+
+  const refreshConnectionDetails = React.useCallback(async (): Promise<ConnectionDetails> => {
+    const participantName =
+      connectionDetailsRef.current.participantName || props.userChoices.username || 'Guest';
+    const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
+    url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
+    url.searchParams.append('participantName', participantName);
+    if (props.region) {
+      url.searchParams.append('region', props.region);
+    }
+
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
+    }
+
+    const fresh = (await response.json()) as ConnectionDetails;
+    connectionDetailsRef.current = fresh;
+    return fresh;
+  }, [props.region, props.userChoices.username]);
+
+  const connectWithFreshDetails = React.useCallback(async () => {
+    const cd = await refreshConnectionDetails();
+    return room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
+  }, [refreshConnectionDetails, room]);
+
+  const markIntentionalDisconnect = React.useCallback(() => {
+    intentionalDisconnectRef.current = true;
+    if (connectRetryTimerRef.current) {
+      clearTimeout(connectRetryTimerRef.current);
+      connectRetryTimerRef.current = null;
+    }
+  }, []);
+
+  // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
+  const computeBackoffMs = React.useCallback((attempt: number): number => {
+    return Math.min(8000, Math.pow(2, attempt - 1) * 1000);
+  }, []);
 
   // ─── isRetryableConnectError ─────────────────────────────────────────────
   // MUST be declared BEFORE the useEffect that references it.
@@ -1314,6 +1360,8 @@ function VideoConferenceComponent(props: {
       msg.includes('network') ||
       msg.includes('failed to fetch') ||
       msg.includes('timed out') ||
+      msg.includes('disconnect') ||
+      msg.includes('disconnected') ||
       msg.includes('client initiated disconnect') ||
       err.name === 'AbortError'
     );
@@ -1321,7 +1369,12 @@ function VideoConferenceComponent(props: {
 
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
-    room.on(RoomEvent.Disconnected, handleOnLeave);
+    const handleUnexpectedDisconnected = () => {
+      if (intentionalDisconnectRef.current) return;
+      if (!hasConnectedOnceRef.current) return;
+      handleError(new Error('LiveKit connection disconnected unexpectedly'));
+    };
+    room.on(RoomEvent.Disconnected, handleUnexpectedDisconnected);
     room.on(RoomEvent.EncryptionError, handleEncryptionError);
     room.on(RoomEvent.MediaDevicesError, handleError);
 
@@ -1336,13 +1389,16 @@ function VideoConferenceComponent(props: {
         // All retry rounds go through this single function so the backoff counters
         // are always correct regardless of which attempt fails.
         const doConnect = () => {
+          const cd = connectionDetailsRef.current;
           room
             .connect(
-              props.connectionDetails.serverUrl,
-              props.connectionDetails.participantToken,
+              cd.serverUrl,
+              cd.participantToken,
               connectOptions,
             )
             .then(() => {
+              hasConnectedOnceRef.current = true;
+              intentionalDisconnectRef.current = false;
               if (isActionStart) {
                 const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
                 if (!wasRefresh) setShowMeetingReadyModal(true);
@@ -1410,7 +1466,7 @@ function VideoConferenceComponent(props: {
               if (isRetryableConnectError(error)) {
                 const attempt = connectRetryCountRef.current + 1;
                 if (attempt <= MAX_CONNECT_RETRIES) {
-                  const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                  const delay = computeBackoffMs(attempt);
                   console.warn(
                     `[KloudMeet] Signal connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
                     error.message,
@@ -1442,7 +1498,7 @@ function VideoConferenceComponent(props: {
     }
 
     return () => {
-      room.off(RoomEvent.Disconnected, handleOnLeave);
+      room.off(RoomEvent.Disconnected, handleUnexpectedDisconnected);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
       // Cancel any pending retry
@@ -1461,16 +1517,6 @@ function VideoConferenceComponent(props: {
   const lowPowerMode = useLowCPUOptimizer(room);
 
   const router = useRouter();
-  const handleOnLeave = React.useCallback(() => {
-    router.push('/');
-  }, [router]);
-
-  // Keep a stable ref to connectionDetails so handleError doesn't need it as a
-  // useCallback dep (which would cause stale MediaDevicesError listener issues).
-  const connectionDetailsRef = React.useRef(props.connectionDetails);
-  React.useEffect(() => { connectionDetailsRef.current = props.connectionDetails; }, [props.connectionDetails]);
-  const connectOptionsRef = React.useRef(connectOptions);
-  React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
 
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
@@ -1499,20 +1545,21 @@ function VideoConferenceComponent(props: {
       const attempt = unexpectedErrorRetryCountRef.current + 1;
       if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
         unexpectedErrorRetryCountRef.current = attempt;
-        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        const delay = computeBackoffMs(attempt);
         console.warn(
           `[KloudMeet] Unexpected disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
           error.message,
         );
-        setTimeout(() => {
+        connectRetryTimerRef.current = setTimeout(() => {
+          connectRetryTimerRef.current = null;
           if (room.state === ConnectionState.Disconnected) {
-            const cd = connectionDetailsRef.current;
-            const co = connectOptionsRef.current;
-            room
-              .connect(cd.serverUrl, cd.participantToken, co)
+            connectWithFreshDetails()
               .then(() => {
                 console.log('[KloudMeet] Auto-reconnect succeeded');
                 unexpectedErrorRetryCountRef.current = 0;
+                hasConnectedOnceRef.current = true;
+                intentionalDisconnectRef.current = false;
+                setConnectError(null);
               })
               .catch((retryErr) => {
                 handleError(retryErr); // recurse — counts up until MAX then falls to UI
@@ -1532,13 +1579,72 @@ function VideoConferenceComponent(props: {
     console.error('[KloudMeet] Unhandled error:', error);
     setConnectError(error.message);
   // room is stable (useMemo []), connectionDetails/connectOptions accessed via refs
-  }, [isRetryableConnectError, room]);
+  }, [computeBackoffMs, connectWithFreshDetails, isRetryableConnectError, room]);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
     // Route encryption errors through the same inline UI — no alert()
     console.error('[KloudMeet] Encryption error:', error);
     setConnectError(`加密错误: ${error.message}`);
   }, []);
+
+  // ── Network/visibility-driven recovery ──
+  // When the device regains connectivity or the tab becomes visible again
+  // (e.g. after laptop sleep / phone backgrounding), proactively recover the
+  // LiveKit session instead of waiting for the next exponential-backoff tick.
+  // This also rescues the user from the "All retries exhausted" error UI when
+  // the network comes back later.
+  React.useEffect(() => {
+    const recover = (reason: string) => {
+      if (intentionalDisconnectRef.current) return;
+      if (!hasConnectedOnceRef.current) return;
+      if (
+        room.state === ConnectionState.Connected ||
+        room.state === ConnectionState.Reconnecting ||
+        room.state === ConnectionState.Connecting
+      ) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+      console.log(`[KloudMeet] Recovery triggered (${reason})`);
+
+      if (connectRetryTimerRef.current) {
+        clearTimeout(connectRetryTimerRef.current);
+        connectRetryTimerRef.current = null;
+      }
+      // Give the user a fresh retry budget — they actively did something
+      // (network came back, tab became visible) so we should try hard again.
+      connectRetryCountRef.current = 0;
+      unexpectedErrorRetryCountRef.current = 0;
+      connectAttemptedRef.current = true;
+
+      connectWithFreshDetails()
+        .then(() => {
+          hasConnectedOnceRef.current = true;
+          intentionalDisconnectRef.current = false;
+          connectRetryDisplayRef.current = 0;
+          setConnectError(null);
+        })
+        .catch((err) => {
+          connectAttemptedRef.current = false;
+          console.warn('[KloudMeet] Recovery reconnect failed, falling back to backoff:', err?.message);
+          handleError(err as Error);
+        });
+    };
+
+    const handleOnline = () => recover('online');
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      recover('visibility');
+    };
+
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [room, connectWithFreshDetails, handleError]);
 
   React.useEffect(() => {
     if (lowPowerMode) {
@@ -1792,9 +1898,10 @@ function VideoConferenceComponent(props: {
 
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
+    markIntentionalDisconnect();
     room.disconnect();
     router.push('/');
-  }, [room, router]);
+  }, [markIntentionalDisconnect, room, router]);
 
   // ── Recording-aware exit phase ──
   // null = no overlay | 'saving' = spinner | 'saved' = success tick
@@ -1844,10 +1951,11 @@ function VideoConferenceComponent(props: {
   // Wrapped leave: stop recording then leave
   const handleLeaveWithSave = React.useCallback(() => {
     stopRecordingAndThen(() => {
+      markIntentionalDisconnect();
       room.disconnect();
       router.push('/');
     });
-  }, [stopRecordingAndThen, room, router]);
+  }, [stopRecordingAndThen, markIntentionalDisconnect, room, router]);
 
   // ── Mute All / Unmute All ──
   // Track whether mute-all is active so the button can show the right state.
@@ -2100,10 +2208,11 @@ function VideoConferenceComponent(props: {
       }
       // Small delay to allow the DataChannel message to propagate
       await new Promise((r) => setTimeout(r, 300));
+      markIntentionalDisconnect();
       room.disconnect();
       router.push('/');
     });
-  }, [room, router, sendMeetingMsg, stopRecordingAndThen]);
+  }, [markIntentionalDisconnect, room, router, sendMeetingMsg, stopRecordingAndThen]);
 
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
@@ -2249,6 +2358,7 @@ function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'END_MEETING') {
           // Host/Co-host ended the meeting for everyone — disconnect and redirect
+          markIntentionalDisconnect();
           room.disconnect();
           router.push('/');
         } else if (msg.type === 'MUTE_ALL') {
@@ -2881,6 +2991,7 @@ function VideoConferenceComponent(props: {
                 <button
                   onClick={() => {
                     // Go back to dashboard
+                    markIntentionalDisconnect();
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
@@ -2925,13 +3036,10 @@ function VideoConferenceComponent(props: {
                     // Re-connect and give a fresh retry budget via doConnect-equivalent inline
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      room
-                        .connect(
-                          props.connectionDetails.serverUrl,
-                          props.connectionDetails.participantToken,
-                          connectOptions,
-                        )
+                      connectWithFreshDetails()
                         .then(() => {
+                          hasConnectedOnceRef.current = true;
+                          intentionalDisconnectRef.current = false;
                           connectRetryCountRef.current = 0;
                           connectRetryDisplayRef.current = 0;
                           setConnectError(null);

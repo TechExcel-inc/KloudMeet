@@ -25,11 +25,15 @@ function getLiveDocBaseUrl(): string {
   return (process.env.NEXT_PUBLIC_LIVEDOC_BASE_URL ?? 'https://kloud.cn').replace(/\/$/, '');
 }
 
-export function buildLiveDocIframeSrc(livedocInstanceId: string, userToken: string): string {
+export function buildLiveDocIframeSrc(
+  livedocInstanceId: string,
+  userToken: string,
+  languageId: 0 | 1,
+): string {
   const base = getLiveDocBaseUrl();
   const id = encodeURIComponent(livedocInstanceId);
   const token = encodeURIComponent(userToken);
-  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1`;
+  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}`;
 }
 
 /** MeetingServer `create_meeting_instance` 成功响应：`data` 为数字型 livedoc 实例 ID */
