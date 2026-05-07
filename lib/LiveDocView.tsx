@@ -27,6 +27,7 @@ export function LiveDocView({
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
   const [pluginLoaded, setPluginLoaded] = React.useState(false);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
     const name = participantName?.trim() || 'Guest';
@@ -62,9 +63,11 @@ export function LiveDocView({
   React.useEffect(() => {
     const handler = (e: MessageEvent) => {
       const data = e.data as { type?: unknown } | null;
-      if (data && typeof data === 'object' && data.type === 'onkloudloaded') {
-        setPluginLoaded(true);
-      }
+      if (!data || typeof data !== 'object' || data.type !== 'onkloudloaded') return;
+      const cw = iframeRef.current?.contentWindow;
+      if (!cw || e.source !== cw) return;
+      setPluginLoaded(true);
+      cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: 0 }, '*');
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
@@ -125,6 +128,7 @@ export function LiveDocView({
   return (
     <div className={styles.container}>
       <iframe
+        ref={iframeRef}
         key={livedocInstanceId}
         id="sharedIframePlayer"
         title="LiveDoc"

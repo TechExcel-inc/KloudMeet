@@ -22,6 +22,7 @@ export function getOrCreateKloudAnonymousSyncroomID(): string {
 }
 
 function getLiveDocBaseUrl(): string {
+  // return 'https://localhost:8082/'.replace(/\/$/, '');//本地调试模式
   return (process.env.NEXT_PUBLIC_LIVEDOC_BASE_URL ?? 'https://kloud.cn').replace(/\/$/, '');
 }
 

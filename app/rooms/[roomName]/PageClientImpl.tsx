@@ -28,6 +28,8 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   ConnectionStateToast,
+  TrackMutedIndicator,
+  useIsSpeaking,
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -40,6 +42,7 @@ import {
   RoomEvent,
   ConnectionState,
   RemoteParticipant,
+  Participant,
   TrackPublishDefaults,
   VideoCaptureOptions,
   Track,
@@ -52,6 +55,9 @@ import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+
+/** 浮窗头像条默认距主会议区右侧的间距（px）；默认 top 仍为 12 */
+const FLOATING_WEBCAM_RIGHT_INSET = 350;
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -984,6 +990,126 @@ function MobileVideoLayout() {
 
       <RoomAudioRenderer />
       <ConnectionStateToast />
+    </div>
+  );
+}
+
+/** LiveDoc 右侧栏 / 浮窗：与 ParticipantTile 一致的说话高亮 + 名字左侧麦克风指示 */
+function LiveDocWebcamSidebarTile({ participant, name }: { participant: Participant; name: string }) {
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const hasVideo = !!(camPub?.track && !camPub.isMuted);
+  const micMuted = !micPub?.track || micPub.isMuted;
+  const isSpeaking = useIsSpeaking(participant);
+  const micTrackRef = React.useMemo(
+    () => ({
+      participant,
+      source: Track.Source.Microphone as const,
+      publication: micPub,
+    }),
+    [participant, micPub],
+  );
+  return (
+    <div
+      className="webcam-sidebar-tile lk-participant-tile"
+      data-lk-participant={participant.identity}
+      data-lk-speaking={isSpeaking}
+      data-lk-audio-muted={micMuted}
+      data-lk-video-muted={!hasVideo}
+      data-lk-local-participant={participant.isLocal}
+      data-lk-source={Track.Source.Camera}
+    >
+      <div className="webcam-sidebar-video">
+        {hasVideo && camPub?.track ? (
+          <VideoTrack
+            trackRef={{
+              participant,
+              source: Track.Source.Camera,
+              publication: camPub,
+            }}
+          />
+        ) : (
+          <div className="webcam-sidebar-avatar">{getInitials(name || participant.identity || '?')}</div>
+        )}
+      </div>
+      <div className="lk-participant-metadata webcam-sidebar-participant-metadata">
+        <div className="webcam-sidebar-meta lk-participant-metadata-item">
+          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <span className="webcam-sidebar-name">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDocFloatingGridTile({ participant, name }: { participant: Participant; name: string }) {
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const hasVideo = !!(camPub?.track && !camPub.isMuted);
+  const micMuted = !micPub?.track || micPub.isMuted;
+  const isSpeaking = useIsSpeaking(participant);
+  const micTrackRef = React.useMemo(
+    () => ({
+      participant,
+      source: Track.Source.Microphone as const,
+      publication: micPub,
+    }),
+    [participant, micPub],
+  );
+  return (
+    <div
+      className="floating-grid-tile lk-participant-tile"
+      data-lk-participant={participant.identity}
+      data-lk-speaking={isSpeaking}
+      data-lk-audio-muted={micMuted}
+      data-lk-video-muted={!hasVideo}
+      data-lk-local-participant={participant.isLocal}
+      data-lk-source={Track.Source.Camera}
+    >
+      <div className="floating-grid-video">
+        {hasVideo && camPub?.track ? (
+          <VideoTrack
+            trackRef={{
+              participant,
+              source: Track.Source.Camera,
+              publication: camPub,
+            }}
+          />
+        ) : (
+          <div className="floating-grid-avatar">{getInitials(name)}</div>
+        )}
+      </div>
+      <div className="lk-participant-metadata webcam-floating-participant-metadata">
+        <div className="floating-grid-name-row lk-participant-metadata-item">
+          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <span className="floating-grid-name">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDocFloatingCollapsedAvatar({
+  participant,
+  name,
+  style,
+}: {
+  participant: Participant;
+  name: string;
+  style: React.CSSProperties;
+}) {
+  const isSpeaking = useIsSpeaking(participant);
+  return (
+    <div
+      className="floating-avatar-shell lk-participant-tile"
+      data-lk-speaking={isSpeaking}
+      data-lk-source={Track.Source.Camera}
+      data-lk-local-participant={participant.isLocal}
+      style={style}
+    >
+      <div className="floating-avatar" title={name}>
+        {getInitials(name || participant.identity || '?')}
+      </div>
     </div>
   );
 }
@@ -2541,8 +2667,10 @@ function VideoConferenceComponent(props: {
     const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
 
     const updateCustomMics = () => {
-      // Find all tiles inside the wrapper
-      const tiles = document.querySelectorAll('.lk-grid-layout-wrapper .lk-participant-tile');
+      // 主网格 + 活文档右侧栏 + 浮窗展开网格（与主会议相同的自定义麦与主持点按静音）
+      const tiles = document.querySelectorAll(
+        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .floating-webcam-panel .floating-grid-tile.lk-participant-tile',
+      );
       const muteAllApplied = muteAllActive;
 
       tiles.forEach((tile) => {
@@ -2652,7 +2780,18 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.ParticipantDisconnected, updateCustomMics);
       clearInterval(intervalId);
     };
-  }, [room, muteAllActive, hostIdentity, cohostIdentities, autoPresenterIdentity, copresenterIdentities, hostMutedIdentities, exemptFromMuteAllIdentities]);
+  }, [
+    room,
+    muteAllActive,
+    hostIdentity,
+    cohostIdentities,
+    autoPresenterIdentity,
+    copresenterIdentities,
+    hostMutedIdentities,
+    exemptFromMuteAllIdentities,
+    isHost,
+    isCohost,
+  ]);
 
   // Clear all remote control permission state when screen share ends
   React.useEffect(() => {
@@ -2762,9 +2901,21 @@ function VideoConferenceComponent(props: {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // Draggable floating webcam panel state
+  // 活文档主区域显示时默认右侧 webcam 栏（非浮窗）；离开该布局时关闭，避免挡住投屏等场景的浮窗头像
+  React.useEffect(() => {
+    if (shouldDisplayLiveDoc) {
+      setShowWebcamSidebar(true);
+    } else {
+      setShowWebcamSidebar(false);
+    }
+  }, [shouldDisplayLiveDoc]);
+
+  // Draggable floating webcam panel state（默认用 right 贴距右侧，拖拽后改为 left/top 坐标）
   const floatingRef = React.useRef<HTMLDivElement>(null);
   const [floatingPos, setFloatingPos] = React.useState({ x: 12, y: 12 });
+  const [floatingPosLayout, setFloatingPosLayout] = React.useState<'right-inset' | 'coordinates'>(
+    'right-inset',
+  );
   const [floatingExpanded, setFloatingExpanded] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
@@ -2772,10 +2923,27 @@ function VideoConferenceComponent(props: {
   const handleFloatingMouseDown = React.useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true;
-      dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+      if (floatingPosLayout === 'right-inset' && floatingRef.current) {
+        const el = floatingRef.current;
+        const parent = el.offsetParent as HTMLElement | null;
+        if (parent) {
+          const rect = el.getBoundingClientRect();
+          const pRect = parent.getBoundingClientRect();
+          const x = rect.left - pRect.left;
+          const y = rect.top - pRect.top;
+          setFloatingPosLayout('coordinates');
+          setFloatingPos({ x, y });
+          dragOffset.current = { x: e.clientX - x, y: e.clientY - y };
+        } else {
+          dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+          setFloatingPosLayout('coordinates');
+        }
+      } else {
+        dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+      }
       e.preventDefault();
     },
-    [floatingPos],
+    [floatingPos, floatingPosLayout],
   );
 
   React.useEffect(() => {
@@ -3583,40 +3751,9 @@ function VideoConferenceComponent(props: {
                       </button>
                     </div>
                     <div className="webcam-sidebar-tiles">
-                      {allP.map((p) => {
-                        const camPub = p.participant?.getTrackPublication(Track.Source.Camera);
-                        const micPub = p.participant?.getTrackPublication(Track.Source.Microphone);
-                        const hasVideo = camPub?.track && !camPub.isMuted;
-                        const micMuted = !micPub?.track || micPub.isMuted;
-                        return (
-                          <div key={p.id} className="webcam-sidebar-tile">
-                            <div className="webcam-sidebar-video">
-                              {hasVideo && camPub?.track ? (
-                                <VideoTrack
-                                  trackRef={{
-                                    participant: p.participant,
-                                    source: Track.Source.Camera,
-                                    publication: camPub,
-                                  }}
-                                />
-                              ) : (
-                                <div className="webcam-sidebar-avatar">
-                                  {getInitials(p.name || p.id || '?')}
-                                </div>
-                              )}
-                            </div>
-                            <div className="webcam-sidebar-meta">
-                              {micMuted && (
-                                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style={{ opacity: 0.6 }}>
-                                  <path d="M12.227 11.52a5.477 5.477 0 0 0 1.246-2.97.5.5 0 0 0-.995-.1 4.478 4.478 0 0 1-.962 2.359l-1.07-1.07C10.794 9.247 11 8.647 11 8V3a3 3 0 0 0-6 0v1.293L1.354.646a.5.5 0 1 0-.708.708l14 14a.5.5 0 0 0 .708-.708zM8 12.5c.683 0 1.33-.152 1.911-.425l.743.743c-.649.359-1.378.59-2.154.66V15h2a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1h2v-1.522a5.502 5.502 0 0 1-4.973-4.929.5.5 0 0 1 .995-.098A4.5 4.5 0 0 0 8 12.5z" />
-                                  <path d="M8.743 10.907 5 7.164V8a3 3 0 0 0 3.743 2.907z" />
-                                </svg>
-                              )}
-                              <span className="webcam-sidebar-name">{p.name}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {allP.map((p) => (
+                        <LiveDocWebcamSidebarTile key={p.id} participant={p.participant} name={p.name} />
+                      ))}
                     </div>
                   </div>
                 );
@@ -3859,7 +3996,9 @@ function VideoConferenceComponent(props: {
                   style={{
                     position: 'absolute',
                     top: floatingPos.y,
-                    left: floatingPos.x,
+                    ...(floatingPosLayout === 'right-inset'
+                      ? { right: FLOATING_WEBCAM_RIGHT_INSET, left: 'auto' as const }
+                      : { left: floatingPos.x, right: 'auto' as const }),
                     zIndex: 200,
                     cursor: isDragging.current ? 'grabbing' : 'grab',
                     userSelect: 'none',
@@ -3868,16 +4007,32 @@ function VideoConferenceComponent(props: {
                   {!floatingExpanded && (
                     <div className="floating-collapsed-row">
                       <div className="floating-stacked-avatars">
-                        {allParticipants.slice(0, maxVisible).map((p, i) => (
-                          <div
-                            key={p.id}
-                            className="floating-avatar"
-                            title={p.name}
-                            style={{ zIndex: maxVisible - i }}
-                          >
-                            {getInitials(p.name || p.id || '?')}
-                          </div>
-                        ))}
+                        {allParticipants.slice(0, maxVisible).map((p, i) => {
+                          const participant =
+                            p.id === 'local'
+                              ? room.localParticipant
+                              : room.remoteParticipants.get(p.id);
+                          if (!participant) {
+                            return (
+                              <div
+                                key={p.id}
+                                className="floating-avatar"
+                                title={p.name}
+                                style={{ zIndex: maxVisible - i }}
+                              >
+                                {getInitials(p.name || p.id || '?')}
+                              </div>
+                            );
+                          }
+                          return (
+                            <LiveDocFloatingCollapsedAvatar
+                              key={p.id}
+                              participant={participant}
+                              name={p.name}
+                              style={{ zIndex: maxVisible - i }}
+                            />
+                          );
+                        })}
                         {overflow > 0 && (
                           <div className="floating-avatar overflow-badge" style={{ zIndex: 0 }}>
                             +{overflow}
@@ -3939,27 +4094,11 @@ function VideoConferenceComponent(props: {
                                 p.id === 'local'
                                   ? room.localParticipant
                                   : room.remoteParticipants.get(p.id);
-                              const camPub = participant?.getTrackPublication(Track.Source.Camera);
-                              const hasVideo = camPub?.track && !camPub.isMuted;
+                              if (!participant) {
+                                return <React.Fragment key={p.id} />;
+                              }
                               return (
-                                <div key={p.id} className="floating-grid-tile">
-                                  <div className="floating-grid-video">
-                                    {hasVideo && camPub?.track ? (
-                                      <VideoTrack
-                                        trackRef={{
-                                          participant: participant!,
-                                          source: Track.Source.Camera,
-                                          publication: camPub,
-                                        }}
-                                      />
-                                    ) : (
-                                      <div className="floating-grid-avatar">
-                                        {getInitials(p.name)}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className="floating-grid-name">{p.name}</span>
-                                </div>
+                                <LiveDocFloatingGridTile key={p.id} participant={participant} name={p.name} />
                               );
                             })}
                           </div>
@@ -4281,15 +4420,36 @@ function VideoConferenceComponent(props: {
                display: flex;
                align-items: center;
             }
-            .floating-stacked-avatars .floating-avatar {
+            .floating-stacked-avatars .floating-avatar,
+            .floating-stacked-avatars .floating-avatar-shell {
                margin-left: -8px;
                transition: transform 0.15s ease;
             }
-            .floating-stacked-avatars .floating-avatar:first-child {
+            .floating-stacked-avatars .floating-avatar:first-child,
+            .floating-stacked-avatars .floating-avatar-shell:first-child {
                margin-left: 0;
             }
-            .floating-stacked-avatars .floating-avatar:hover {
+            .floating-stacked-avatars .floating-avatar:hover,
+            .floating-stacked-avatars .floating-avatar-shell:hover {
                transform: scale(1.15);
+            }
+            .floating-avatar-shell.lk-participant-tile {
+               width: 30px;
+               height: 30px;
+               flex-shrink: 0;
+               border-radius: 50%;
+               --lk-border-radius: 50%;
+               padding: 0 !important;
+               display: flex !important;
+               align-items: center;
+               justify-content: center;
+               gap: 0 !important;
+               flex-direction: row !important;
+            }
+            .floating-avatar-shell .floating-avatar {
+               border: none !important;
+               width: 100%;
+               height: 100%;
             }
             .floating-avatar {
                width: 30px;
@@ -4356,6 +4516,12 @@ function VideoConferenceComponent(props: {
                align-items: center;
                gap: 3px;
             }
+            .floating-grid-tile.lk-participant-tile {
+               gap: 3px !important;
+               flex-direction: column !important;
+               align-items: center !important;
+               background: transparent !important;
+            }
             .floating-grid-video {
                width: 64px;
                height: 64px;
@@ -4363,6 +4529,30 @@ function VideoConferenceComponent(props: {
                overflow: hidden;
                background: #1e293b;
                position: relative;
+            }
+            .floating-webcam-panel .webcam-floating-participant-metadata {
+               position: static !important;
+               inset: auto !important;
+               left: auto !important;
+               right: auto !important;
+               bottom: auto !important;
+               width: 100%;
+               justify-content: center;
+            }
+            .floating-grid-name-row {
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               gap: 2px;
+               max-width: 78px;
+               min-width: 0;
+               padding: 2px 4px;
+               line-height: 1;
+            }
+            .floating-grid-name-row .lk-track-muted-indicator-microphone {
+               flex-shrink: 0;
+               width: 0.75rem;
+               height: 0.75rem;
             }
             .floating-grid-video video {
                width: 100%;
@@ -4372,7 +4562,7 @@ function VideoConferenceComponent(props: {
             .floating-grid-avatar {
                width: 100%;
                height: 100%;
-               background: linear-gradient(135deg, #3b82f6, #6366f1);
+               background: linear-gradient(135deg, #8882d0, #e5e7eb);
                color: #fff;
                font-size: 16px;
                font-weight: 700;
@@ -4380,14 +4570,15 @@ function VideoConferenceComponent(props: {
                align-items: center;
                justify-content: center;
             }
-            .floating-grid-tile:hover .floating-grid-video {
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-video {
                box-shadow: 0 0 0 2px #3b82f6;
             }
             .floating-grid-name {
                color: rgba(255,255,255,0.6);
                font-size: 9px;
                font-weight: 500;
-               max-width: 72px;
+               min-width: 0;
+               max-width: 58px;
                overflow: hidden;
                text-overflow: ellipsis;
                white-space: nowrap;
@@ -4416,6 +4607,31 @@ function VideoConferenceComponent(props: {
                overflow: hidden;
                background: #1e293b;
             }
+            .webcam-sidebar-tile.lk-participant-tile {
+               gap: 0 !important;
+               flex-direction: column !important;
+            }
+            .webcam-sidebar-panel .webcam-sidebar-participant-metadata {
+               position: static !important;
+               inset: auto !important;
+               left: auto !important;
+               right: auto !important;
+               bottom: auto !important;
+               width: 100%;
+               flex-direction: column;
+               align-items: stretch;
+               gap: 0;
+            }
+            .webcam-sidebar-panel .webcam-sidebar-participant-metadata .webcam-sidebar-meta {
+               width: 100%;
+            }
+            .webcam-sidebar-meta.lk-participant-metadata-item {
+               min-width: 0;
+               flex-wrap: nowrap;
+            }
+            .webcam-sidebar-meta .lk-track-muted-indicator-microphone {
+               flex-shrink: 0;
+            }
             .webcam-sidebar-video {
                width: 100%;
                aspect-ratio: 16 / 10;
@@ -4430,7 +4646,7 @@ function VideoConferenceComponent(props: {
             .webcam-sidebar-avatar {
                width: 100%;
                height: 100%;
-               background: linear-gradient(135deg, #3b82f6, #6366f1);
+               background: linear-gradient(135deg, #8882d0, #e5e7eb);
                color: #fff;
                font-size: 22px;
                font-weight: 700;
@@ -4609,13 +4825,17 @@ function VideoConferenceComponent(props: {
                Replaces LiveKit's missing "mic on" DOM states
                ══════════════════════════════════════════════════════ */
 
-            /* Completely hide LiveKit's default microphone indicator */
-            .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone {
+            /* Completely hide LiveKit's default microphone indicator（主网格 + 活文档侧栏 + 浮窗） */
+            .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone,
+            .webcam-sidebar-panel .lk-track-muted-indicator-microphone,
+            .floating-webcam-panel .lk-track-muted-indicator-microphone {
               display: none !important;
             }
 
             /* Our custom injected microphone indicator styling */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator,
+            .floating-webcam-panel .kloud-custom-mic-indicator {
               display: flex;
               align-items: center;
               justify-content: center;
@@ -4627,7 +4847,9 @@ function VideoConferenceComponent(props: {
             }
 
             /* Add red drop-shadow pulsing just for the force-muted state */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
               width: 1.4rem;
               height: 1.4rem;
               filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
@@ -4640,7 +4862,9 @@ function VideoConferenceComponent(props: {
             }
 
             /* Host hover interactions */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive {
               cursor: pointer;
               border-radius: 50%;
               padding: 4px;          /* larger hit area */
@@ -4650,10 +4874,16 @@ function VideoConferenceComponent(props: {
             }
             /* SVG inside mic indicator must not steal pointer events */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg,
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg * {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg *,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator svg,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator svg *,
+            .floating-webcam-panel .kloud-custom-mic-indicator svg,
+            .floating-webcam-panel .kloud-custom-mic-indicator svg * {
               pointer-events: none;
             }
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:hover,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:hover {
               background: rgba(255, 255, 255, 0.18);
               transform: scale(1.2);
             }
