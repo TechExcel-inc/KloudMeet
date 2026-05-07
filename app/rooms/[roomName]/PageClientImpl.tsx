@@ -7,7 +7,6 @@ import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
-import { LiveDocView } from '@/lib/LiveDocView';
 import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
@@ -29,6 +28,8 @@ import {
   ParticipantTile,
   RoomAudioRenderer,
   ConnectionStateToast,
+  TrackMutedIndicator,
+  useIsSpeaking,
 } from '@livekit/components-react';
 import {
   ExternalE2EEKeyProvider,
@@ -41,17 +42,27 @@ import {
   RoomEvent,
   ConnectionState,
   RemoteParticipant,
+  Participant,
   TrackPublishDefaults,
   VideoCaptureOptions,
   Track,
   DataPacket_Kind,
 } from 'livekit-client';
 import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+
+/** 浮窗头像条默认距主会议区右侧的间距（px）；默认 top 仍为 12 */
+const FLOATING_WEBCAM_RIGHT_INSET = 350;
+
+const LiveDocView = dynamic(
+  () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
+  { ssr: false },
+);
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -799,6 +810,7 @@ export function PageClientImpl(props: {
           <VideoConferenceComponent
             connectionDetails={connectionDetails}
             userChoices={preJoinChoices}
+            region={props.region}
             options={{ codec: props.codec, hq: props.hq }}
           />
         </div>
@@ -982,9 +994,130 @@ function MobileVideoLayout() {
   );
 }
 
+/** LiveDoc 右侧栏 / 浮窗：与 ParticipantTile 一致的说话高亮 + 名字左侧麦克风指示 */
+function LiveDocWebcamSidebarTile({ participant, name }: { participant: Participant; name: string }) {
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const hasVideo = !!(camPub?.track && !camPub.isMuted);
+  const micMuted = !micPub?.track || micPub.isMuted;
+  const isSpeaking = useIsSpeaking(participant);
+  const micTrackRef = React.useMemo(
+    () => ({
+      participant,
+      source: Track.Source.Microphone as const,
+      publication: micPub,
+    }),
+    [participant, micPub],
+  );
+  return (
+    <div
+      className="webcam-sidebar-tile lk-participant-tile"
+      data-lk-participant={participant.identity}
+      data-lk-speaking={isSpeaking}
+      data-lk-audio-muted={micMuted}
+      data-lk-video-muted={!hasVideo}
+      data-lk-local-participant={participant.isLocal}
+      data-lk-source={Track.Source.Camera}
+    >
+      <div className="webcam-sidebar-video">
+        {hasVideo && camPub?.track ? (
+          <VideoTrack
+            trackRef={{
+              participant,
+              source: Track.Source.Camera,
+              publication: camPub,
+            }}
+          />
+        ) : (
+          <div className="webcam-sidebar-avatar">{getInitials(name || participant.identity || '?')}</div>
+        )}
+      </div>
+      <div className="lk-participant-metadata webcam-sidebar-participant-metadata">
+        <div className="webcam-sidebar-meta lk-participant-metadata-item">
+          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <span className="webcam-sidebar-name">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDocFloatingGridTile({ participant, name }: { participant: Participant; name: string }) {
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const hasVideo = !!(camPub?.track && !camPub.isMuted);
+  const micMuted = !micPub?.track || micPub.isMuted;
+  const isSpeaking = useIsSpeaking(participant);
+  const micTrackRef = React.useMemo(
+    () => ({
+      participant,
+      source: Track.Source.Microphone as const,
+      publication: micPub,
+    }),
+    [participant, micPub],
+  );
+  return (
+    <div
+      className="floating-grid-tile lk-participant-tile"
+      data-lk-participant={participant.identity}
+      data-lk-speaking={isSpeaking}
+      data-lk-audio-muted={micMuted}
+      data-lk-video-muted={!hasVideo}
+      data-lk-local-participant={participant.isLocal}
+      data-lk-source={Track.Source.Camera}
+    >
+      <div className="floating-grid-video">
+        {hasVideo && camPub?.track ? (
+          <VideoTrack
+            trackRef={{
+              participant,
+              source: Track.Source.Camera,
+              publication: camPub,
+            }}
+          />
+        ) : (
+          <div className="floating-grid-avatar">{getInitials(name)}</div>
+        )}
+      </div>
+      <div className="lk-participant-metadata webcam-floating-participant-metadata">
+        <div className="floating-grid-name-row lk-participant-metadata-item">
+          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <span className="floating-grid-name">{name}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LiveDocFloatingCollapsedAvatar({
+  participant,
+  name,
+  style,
+}: {
+  participant: Participant;
+  name: string;
+  style: React.CSSProperties;
+}) {
+  const isSpeaking = useIsSpeaking(participant);
+  return (
+    <div
+      className="floating-avatar-shell lk-participant-tile"
+      data-lk-speaking={isSpeaking}
+      data-lk-source={Track.Source.Camera}
+      data-lk-local-participant={participant.isLocal}
+      style={style}
+    >
+      <div className="floating-avatar" title={name}>
+        {getInitials(name || participant.identity || '?')}
+      </div>
+    </div>
+  );
+}
+
 function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
   connectionDetails: ConnectionDetails;
+  region?: string;
   options: {
     hq: boolean;
     codec: VideoCodec;
@@ -1263,10 +1396,8 @@ function VideoConferenceComponent(props: {
         .then(() => {
           room.setE2EEEnabled(true).catch((e) => {
             if (e instanceof DeviceUnsupportedError) {
-              alert(
-                `You're trying to join an encrypted meeting, but your browser does not support it. Please update it to the latest version and try again.`,
-              );
-              console.error(e);
+              console.error('[KloudMeet] E2EE not supported by browser:', e);
+              setConnectError('您的浏览器不支持加密会议，请更新到最新版本后重试。');
             } else {
               throw e;
             }
@@ -1286,13 +1417,60 @@ function VideoConferenceComponent(props: {
 
   const connectAttemptedRef = React.useRef(false);
   const connectRetryCountRef = React.useRef(0);
-  const MAX_CONNECT_RETRIES = 3;
+  const MAX_CONNECT_RETRIES = 6;
   // Tracks the pending retry setTimeout so we can cancel on unmount
   const connectRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalDisconnectRef = React.useRef(false);
+  const hasConnectedOnceRef = React.useRef(false);
+  const connectionDetailsRef = React.useRef(props.connectionDetails);
+  React.useEffect(() => { connectionDetailsRef.current = props.connectionDetails; }, [props.connectionDetails]);
+  const connectOptionsRef = React.useRef(connectOptions);
+  React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
   // Connection error state — drives the inline error UI instead of alert()
   const [connectError, setConnectError] = React.useState<string | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
   const connectRetryDisplayRef = React.useRef(0);
+  // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
+  const unexpectedErrorRetryCountRef = React.useRef(0);
+  const MAX_UNEXPECTED_RETRIES = 6;
+
+  const refreshConnectionDetails = React.useCallback(async (): Promise<ConnectionDetails> => {
+    const participantName =
+      connectionDetailsRef.current.participantName || props.userChoices.username || 'Guest';
+    const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
+    url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
+    url.searchParams.append('participantName', participantName);
+    if (props.region) {
+      url.searchParams.append('region', props.region);
+    }
+
+    const response = await fetch(url.toString(), { cache: 'no-store' });
+    if (!response.ok) {
+      throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
+    }
+
+    const fresh = (await response.json()) as ConnectionDetails;
+    connectionDetailsRef.current = fresh;
+    return fresh;
+  }, [props.region, props.userChoices.username]);
+
+  const connectWithFreshDetails = React.useCallback(async () => {
+    const cd = await refreshConnectionDetails();
+    return room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
+  }, [refreshConnectionDetails, room]);
+
+  const markIntentionalDisconnect = React.useCallback(() => {
+    intentionalDisconnectRef.current = true;
+    if (connectRetryTimerRef.current) {
+      clearTimeout(connectRetryTimerRef.current);
+      connectRetryTimerRef.current = null;
+    }
+  }, []);
+
+  // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
+  const computeBackoffMs = React.useCallback((attempt: number): number => {
+    return Math.min(8000, Math.pow(2, attempt - 1) * 1000);
+  }, []);
 
   // ─── isRetryableConnectError ─────────────────────────────────────────────
   // MUST be declared BEFORE the useEffect that references it.
@@ -1308,13 +1486,21 @@ function VideoConferenceComponent(props: {
       msg.includes('network') ||
       msg.includes('failed to fetch') ||
       msg.includes('timed out') ||
+      msg.includes('disconnect') ||
+      msg.includes('disconnected') ||
+      msg.includes('client initiated disconnect') ||
       err.name === 'AbortError'
     );
   }, []);
 
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
-    room.on(RoomEvent.Disconnected, handleOnLeave);
+    const handleUnexpectedDisconnected = () => {
+      if (intentionalDisconnectRef.current) return;
+      if (!hasConnectedOnceRef.current) return;
+      handleError(new Error('LiveKit connection disconnected unexpectedly'));
+    };
+    room.on(RoomEvent.Disconnected, handleUnexpectedDisconnected);
     room.on(RoomEvent.EncryptionError, handleEncryptionError);
     room.on(RoomEvent.MediaDevicesError, handleError);
 
@@ -1329,13 +1515,16 @@ function VideoConferenceComponent(props: {
         // All retry rounds go through this single function so the backoff counters
         // are always correct regardless of which attempt fails.
         const doConnect = () => {
+          const cd = connectionDetailsRef.current;
           room
             .connect(
-              props.connectionDetails.serverUrl,
-              props.connectionDetails.participantToken,
+              cd.serverUrl,
+              cd.participantToken,
               connectOptions,
             )
             .then(() => {
+              hasConnectedOnceRef.current = true;
+              intentionalDisconnectRef.current = false;
               if (isActionStart) {
                 const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
                 if (!wasRefresh) setShowMeetingReadyModal(true);
@@ -1358,13 +1547,44 @@ function VideoConferenceComponent(props: {
               connectRetryDisplayRef.current = 0;
               setConnectError(null);
 
-              // Enable camera/mic AFTER connection is established
-              if (props.userChoices.videoEnabled) {
-                room.localParticipant.setCameraEnabled(true).catch(handleError);
-              }
-              if (props.userChoices.audioEnabled) {
-                room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
-              }
+              // Enable camera/mic AFTER connection is established.
+              // Validate device IDs first — if the selected device has disappeared
+              // (unplugged, virtual device gone, stale ID), clear it so the browser
+              // falls back to the system default instead of throwing NotFoundError.
+              const enableDevices = async () => {
+                try {
+                  const devices = await navigator.mediaDevices.enumerateDevices();
+                  const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
+                  const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
+
+                  const wantedVideo = props.userChoices.videoDeviceId;
+                  if (wantedVideo && !videoIds.has(wantedVideo)) {
+                    console.warn('[KloudMeet] Saved video device not found, falling back to default');
+                    room.options.videoCaptureDefaults = {
+                      ...room.options.videoCaptureDefaults,
+                      deviceId: undefined,
+                    };
+                  }
+                  const wantedAudio = props.userChoices.audioDeviceId;
+                  if (wantedAudio && !audioIds.has(wantedAudio)) {
+                    console.warn('[KloudMeet] Saved audio device not found, falling back to default');
+                    room.options.audioCaptureDefaults = {
+                      ...room.options.audioCaptureDefaults,
+                      deviceId: undefined,
+                    };
+                  }
+                } catch (e) {
+                  console.warn('[KloudMeet] Could not enumerate devices, proceeding with defaults:', e);
+                }
+
+                if (props.userChoices.videoEnabled) {
+                  room.localParticipant.setCameraEnabled(true).catch(handleError);
+                }
+                if (props.userChoices.audioEnabled) {
+                  room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                }
+              };
+              enableDevices();
             })
             .catch((error) => {
               connectAttemptedRef.current = false;
@@ -1372,7 +1592,7 @@ function VideoConferenceComponent(props: {
               if (isRetryableConnectError(error)) {
                 const attempt = connectRetryCountRef.current + 1;
                 if (attempt <= MAX_CONNECT_RETRIES) {
-                  const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+                  const delay = computeBackoffMs(attempt);
                   console.warn(
                     `[KloudMeet] Signal connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
                     error.message,
@@ -1404,7 +1624,7 @@ function VideoConferenceComponent(props: {
     }
 
     return () => {
-      room.off(RoomEvent.Disconnected, handleOnLeave);
+      room.off(RoomEvent.Disconnected, handleUnexpectedDisconnected);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
       // Cancel any pending retry
@@ -1423,9 +1643,6 @@ function VideoConferenceComponent(props: {
   const lowPowerMode = useLowCPUOptimizer(room);
 
   const router = useRouter();
-  const handleOnLeave = React.useCallback(() => {
-    router.push('/');
-  }, [router]);
 
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
@@ -1437,23 +1654,123 @@ function VideoConferenceComponent(props: {
       console.warn('User cancelled or denied media request:', error);
       return;
     }
-    // Signal/network errors after all retries are shown via inline UI
+    // Device errors (unplugged, stale ID, busy) are non-fatal — user can
+    // switch devices from the in-room settings dropdown.
+    const DEVICE_ERRORS = [
+      'notfounderror', 'requested device', 'device not found',
+      'overconstrained', 'notreadableerror', 'could not start',
+    ];
+    const msg = error?.message?.toLowerCase() ?? '';
+    const name = error?.name?.toLowerCase() ?? '';
+    if (DEVICE_ERRORS.some(k => msg.includes(k) || name.includes(k))) {
+      console.warn('[KloudMeet] Media device unavailable, user may switch in settings:', error.message);
+      return;
+    }
+    // Signal/network errors & "client initiated disconnect" — auto-retry then inline UI
     if (isRetryableConnectError(error)) {
-      console.error('[KloudMeet] Connection error (surfacing to UI):', error);
+      const attempt = unexpectedErrorRetryCountRef.current + 1;
+      if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
+        unexpectedErrorRetryCountRef.current = attempt;
+        const delay = computeBackoffMs(attempt);
+        console.warn(
+          `[KloudMeet] Unexpected disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
+          error.message,
+        );
+        connectRetryTimerRef.current = setTimeout(() => {
+          connectRetryTimerRef.current = null;
+          if (room.state === ConnectionState.Disconnected) {
+            connectWithFreshDetails()
+              .then(() => {
+                console.log('[KloudMeet] Auto-reconnect succeeded');
+                unexpectedErrorRetryCountRef.current = 0;
+                hasConnectedOnceRef.current = true;
+                intentionalDisconnectRef.current = false;
+                setConnectError(null);
+              })
+              .catch((retryErr) => {
+                handleError(retryErr); // recurse — counts up until MAX then falls to UI
+              });
+          }
+        }, delay);
+        return;
+      }
+      // All retries exhausted — show inline UI, never alert()
+      console.error('[KloudMeet] All unexpected-error retries exhausted:', error);
+      connectRetryDisplayRef.current = MAX_UNEXPECTED_RETRIES;
+      unexpectedErrorRetryCountRef.current = 0;
       setConnectError(error.message);
       return;
     }
-    // Unrecoverable errors: still use alert as last resort
-    console.error(error);
-    alert(`Encountered an unexpected error, check the console logs for details: ${error.message}`);
-  }, [isRetryableConnectError]);
+    // Any other error: surface via inline UI instead of alert()
+    console.error('[KloudMeet] Unhandled error:', error);
+    setConnectError(error.message);
+  // room is stable (useMemo []), connectionDetails/connectOptions accessed via refs
+  }, [computeBackoffMs, connectWithFreshDetails, isRetryableConnectError, room]);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
-    console.error(error);
-    alert(
-      `Encountered an unexpected encryption error, check the console logs for details: ${error.message}`,
-    );
+    // Route encryption errors through the same inline UI — no alert()
+    console.error('[KloudMeet] Encryption error:', error);
+    setConnectError(`加密错误: ${error.message}`);
   }, []);
+
+  // ── Network/visibility-driven recovery ──
+  // When the device regains connectivity or the tab becomes visible again
+  // (e.g. after laptop sleep / phone backgrounding), proactively recover the
+  // LiveKit session instead of waiting for the next exponential-backoff tick.
+  // This also rescues the user from the "All retries exhausted" error UI when
+  // the network comes back later.
+  React.useEffect(() => {
+    const recover = (reason: string) => {
+      if (intentionalDisconnectRef.current) return;
+      if (!hasConnectedOnceRef.current) return;
+      if (
+        room.state === ConnectionState.Connected ||
+        room.state === ConnectionState.Reconnecting ||
+        room.state === ConnectionState.Connecting
+      ) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+      console.log(`[KloudMeet] Recovery triggered (${reason})`);
+
+      if (connectRetryTimerRef.current) {
+        clearTimeout(connectRetryTimerRef.current);
+        connectRetryTimerRef.current = null;
+      }
+      // Give the user a fresh retry budget — they actively did something
+      // (network came back, tab became visible) so we should try hard again.
+      connectRetryCountRef.current = 0;
+      unexpectedErrorRetryCountRef.current = 0;
+      connectAttemptedRef.current = true;
+
+      connectWithFreshDetails()
+        .then(() => {
+          hasConnectedOnceRef.current = true;
+          intentionalDisconnectRef.current = false;
+          connectRetryDisplayRef.current = 0;
+          setConnectError(null);
+        })
+        .catch((err) => {
+          connectAttemptedRef.current = false;
+          console.warn('[KloudMeet] Recovery reconnect failed, falling back to backoff:', err?.message);
+          handleError(err as Error);
+        });
+    };
+
+    const handleOnline = () => recover('online');
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      recover('visibility');
+    };
+
+    window.addEventListener('online', handleOnline);
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [room, connectWithFreshDetails, handleError]);
 
   React.useEffect(() => {
     if (lowPowerMode) {
@@ -1670,7 +1987,11 @@ function VideoConferenceComponent(props: {
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
     if (isToolbarMobile) {
-      alert('Use Kloud Meet App to be able to do screenshare.');
+      const toastEl = document.createElement('div');
+      toastEl.textContent = '请使用 Kloud Meet App 进行屏幕共享';
+      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      document.body.appendChild(toastEl);
+      setTimeout(() => toastEl.remove(), 3000);
       return;
     }
 
@@ -1703,9 +2024,10 @@ function VideoConferenceComponent(props: {
 
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
+    markIntentionalDisconnect();
     room.disconnect();
     router.push('/');
-  }, [room, router]);
+  }, [markIntentionalDisconnect, room, router]);
 
   // ── Recording-aware exit phase ──
   // null = no overlay | 'saving' = spinner | 'saved' = success tick
@@ -1755,10 +2077,11 @@ function VideoConferenceComponent(props: {
   // Wrapped leave: stop recording then leave
   const handleLeaveWithSave = React.useCallback(() => {
     stopRecordingAndThen(() => {
+      markIntentionalDisconnect();
       room.disconnect();
       router.push('/');
     });
-  }, [stopRecordingAndThen, room, router]);
+  }, [stopRecordingAndThen, markIntentionalDisconnect, room, router]);
 
   // ── Mute All / Unmute All ──
   // Track whether mute-all is active so the button can show the right state.
@@ -1832,8 +2155,17 @@ function VideoConferenceComponent(props: {
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
+  const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
+  const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
   const livedocHostBootstrappedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (shouldDisplayLiveDoc || isMirrorBlocked) {
+      setLivedocHasBeenActivated(true);
+    }
+  }, [shouldDisplayLiveDoc, isMirrorBlocked]);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -1864,12 +2196,14 @@ function VideoConferenceComponent(props: {
     livedocInstanceId: string | null;
     muteAllActive: boolean;
     hostMutedIdentities: string[];
+    captionsOn: boolean;
   }>({
     view: activeView,
     presenter: null,
     livedocInstanceId: null,
     muteAllActive: false,
     hostMutedIdentities: [],
+    captionsOn: false,
   });
 
   // Keep authState in sync when host changes view locally
@@ -1896,6 +2230,11 @@ function VideoConferenceComponent(props: {
       authState.current.hostMutedIdentities = hostMutedIdentities;
     }
   }, [isHost, muteAllActive, hostMutedIdentities]);
+
+  // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
+  // so we use a ref to allow handleData to call it without block-scope issues.
+  const setCaptionsOpenRef = React.useRef<((open: boolean) => Promise<void>) | null>(null);
+  const captionsRunningRef = React.useRef<boolean>(false);
 
   // Helper: send a meeting control message
   const sendMeetingMsg = React.useCallback(
@@ -1995,13 +2334,15 @@ function VideoConferenceComponent(props: {
       }
       // Small delay to allow the DataChannel message to propagate
       await new Promise((r) => setTimeout(r, 300));
+      markIntentionalDisconnect();
       room.disconnect();
       router.push('/');
     });
-  }, [room, router, sendMeetingMsg, stopRecordingAndThen]);
+  }, [markIntentionalDisconnect, room, router, sendMeetingMsg, stopRecordingAndThen]);
 
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
+    if (!shouldMountLiveDoc) return;
     if (!livekitConnected || !isHost) return;
     if (livedocHostBootstrappedRef.current) return;
     let cancelled = false;
@@ -2033,7 +2374,7 @@ function VideoConferenceComponent(props: {
     return () => {
       cancelled = true;
     };
-  }, [livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
+  }, [shouldMountLiveDoc, livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
 
   React.useEffect(() => {
     if (!isHost) return;
@@ -2049,6 +2390,7 @@ function VideoConferenceComponent(props: {
           livedocInstanceId: auth.livedocInstanceId,
           muteAllActive: auth.muteAllActive,
           hostMutedIdentities: auth.hostMutedIdentities,
+          captionsOn: auth.captionsOn,
         },
         [participant.identity],
       );
@@ -2110,6 +2452,9 @@ function VideoConferenceComponent(props: {
           if (Array.isArray(msg.hostMutedIdentities)) {
             setHostMutedIdentities(msg.hostMutedIdentities);
           }
+          if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
+            setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
+          }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
             setCopresenterIdentities((prev) =>
@@ -2139,6 +2484,7 @@ function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'END_MEETING') {
           // Host/Co-host ended the meeting for everyone — disconnect and redirect
+          markIntentionalDisconnect();
           room.disconnect();
           router.push('/');
         } else if (msg.type === 'MUTE_ALL') {
@@ -2232,10 +2578,15 @@ function VideoConferenceComponent(props: {
           const authDoc = auth.livedocInstanceId ?? null;
           const livedocMismatch =
             (authDoc !== null && guestDoc !== authDoc) || (authDoc !== null && guestDoc === null);
+          const guestCaptionsOn = (msg as { captionsOn?: boolean }).captionsOn ?? false;
+          const authCaptionsOn = auth.captionsOn;
+          const captionsMismatch = guestCaptionsOn !== authCaptionsOn;
+
           if (
             msg.view !== auth.view ||
             msg.presenter !== (auth.presenter || null) ||
-            livedocMismatch
+            livedocMismatch ||
+            captionsMismatch
           ) {
             sendMeetingMsg(
               {
@@ -2243,10 +2594,19 @@ function VideoConferenceComponent(props: {
                 view: auth.view,
                 presenter: auth.presenter,
                 livedocInstanceId: auth.livedocInstanceId,
+                muteAllActive: auth.muteAllActive,
+                hostMutedIdentities: auth.hostMutedIdentities,
+                captionsOn: auth.captionsOn,
               },
               [senderIdentity],
             );
           }
+        } else if (msg.type === 'CAPTIONS_ON') {
+          // Host/Co-host 开启了全局字幕 — 本地启动识别
+          setCaptionsOpenRef.current?.(true);
+        } else if (msg.type === 'CAPTIONS_OFF') {
+          // Host/Co-host 关闭了全局字幕 — 本地停止识别
+          setCaptionsOpenRef.current?.(false);
         }
       } catch (e) {
         console.error('Meeting control message error:', e);
@@ -2307,8 +2667,10 @@ function VideoConferenceComponent(props: {
     const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
 
     const updateCustomMics = () => {
-      // Find all tiles inside the wrapper
-      const tiles = document.querySelectorAll('.lk-grid-layout-wrapper .lk-participant-tile');
+      // 主网格 + 活文档右侧栏 + 浮窗展开网格（与主会议相同的自定义麦与主持点按静音）
+      const tiles = document.querySelectorAll(
+        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .floating-webcam-panel .floating-grid-tile.lk-participant-tile',
+      );
       const muteAllApplied = muteAllActive;
 
       tiles.forEach((tile) => {
@@ -2418,7 +2780,18 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.ParticipantDisconnected, updateCustomMics);
       clearInterval(intervalId);
     };
-  }, [room, muteAllActive, hostIdentity, cohostIdentities, autoPresenterIdentity, copresenterIdentities, hostMutedIdentities, exemptFromMuteAllIdentities]);
+  }, [
+    room,
+    muteAllActive,
+    hostIdentity,
+    cohostIdentities,
+    autoPresenterIdentity,
+    copresenterIdentities,
+    hostMutedIdentities,
+    exemptFromMuteAllIdentities,
+    isHost,
+    isCohost,
+  ]);
 
   // Clear all remote control permission state when screen share ends
   React.useEffect(() => {
@@ -2480,6 +2853,7 @@ function VideoConferenceComponent(props: {
           presenters: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
+          captionsOn: captionsRunningRef.current,
         },
         [hostId],
       );
@@ -2527,9 +2901,21 @@ function VideoConferenceComponent(props: {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // Draggable floating webcam panel state
+  // 活文档主区域显示时默认右侧 webcam 栏（非浮窗）；离开该布局时关闭，避免挡住投屏等场景的浮窗头像
+  React.useEffect(() => {
+    if (shouldDisplayLiveDoc) {
+      setShowWebcamSidebar(true);
+    } else {
+      setShowWebcamSidebar(false);
+    }
+  }, [shouldDisplayLiveDoc]);
+
+  // Draggable floating webcam panel state（默认用 right 贴距右侧，拖拽后改为 left/top 坐标）
   const floatingRef = React.useRef<HTMLDivElement>(null);
   const [floatingPos, setFloatingPos] = React.useState({ x: 12, y: 12 });
+  const [floatingPosLayout, setFloatingPosLayout] = React.useState<'right-inset' | 'coordinates'>(
+    'right-inset',
+  );
   const [floatingExpanded, setFloatingExpanded] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
@@ -2537,10 +2923,27 @@ function VideoConferenceComponent(props: {
   const handleFloatingMouseDown = React.useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true;
-      dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+      if (floatingPosLayout === 'right-inset' && floatingRef.current) {
+        const el = floatingRef.current;
+        const parent = el.offsetParent as HTMLElement | null;
+        if (parent) {
+          const rect = el.getBoundingClientRect();
+          const pRect = parent.getBoundingClientRect();
+          const x = rect.left - pRect.left;
+          const y = rect.top - pRect.top;
+          setFloatingPosLayout('coordinates');
+          setFloatingPos({ x, y });
+          dragOffset.current = { x: e.clientX - x, y: e.clientY - y };
+        } else {
+          dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+          setFloatingPosLayout('coordinates');
+        }
+      } else {
+        dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+      }
       e.preventDefault();
     },
-    [floatingPos],
+    [floatingPos, floatingPosLayout],
   );
 
   React.useEffect(() => {
@@ -2564,13 +2967,29 @@ function VideoConferenceComponent(props: {
   const [attendeeOpen, setAttendeeOpen] = React.useState(false);
 
   // ─── Captions (host/co-host only can toggle, all see the overlay) ────────
+  const { locale } = useI18n();
   const { captionsInfo, setCaptionsOpen, captionsRunning } = useCaptions({
     room,
     micEnabled,
+    languageCode: locale,
   });
+  // 赋值给 ref，让上面 handleData 里能访问到
+  setCaptionsOpenRef.current = setCaptionsOpen;
+  captionsRunningRef.current = captionsRunning;
+
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.captionsOn = captionsRunning;
+    }
+  }, [isHost, captionsRunning]);
+
   const handleToggleCaptions = React.useCallback(() => {
-    setCaptionsOpen(!captionsRunning);
-  }, [captionsRunning, setCaptionsOpen]);
+    const newState = !captionsRunning;
+    // 广播给所有参与者：全局开启/关闭字幕
+    sendMeetingMsg({ type: newState ? 'CAPTIONS_ON' : 'CAPTIONS_OFF' });
+    // 本地也执行
+    setCaptionsOpen(newState);
+  }, [captionsRunning, setCaptionsOpen, sendMeetingMsg]);
 
   // Chat messages — always listening (even when panel is closed)
   const CHAT_TOPIC = 'kloud-chat';
@@ -2704,12 +3123,15 @@ function VideoConferenceComponent(props: {
               </div>
 
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px' }}>
-                {t('prejoin.connectError', { error: '' }).split(':')[0] || '连接失败'}
+                {connectError?.startsWith('加密错误') ? '加密错误' :
+                  connectError?.toLowerCase().includes('disconnect') ? '连接已中断' : '连接失败'}
               </div>
               <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px', lineHeight: 1.6 }}>
                 {connectRetryDisplayRef.current > 0
-                  ? `已尝试 ${connectRetryDisplayRef.current}/${MAX_CONNECT_RETRIES} 次自动重连，均失败。请检查网络后手动重试。`
-                  : '无法建立信令连接，请检查您的网络后重试。'}
+                  ? `已自动重试 ${connectRetryDisplayRef.current} 次，仍无法恢复连接。请检查网络后手动重试，或退出会议。`
+                  : connectError?.toLowerCase().includes('disconnect')
+                    ? '网络波动导致连接中断，可以尝试手动重新连接。'
+                    : '无法建立信令连接，请检查您的网络后重试。'}
               </div>
 
               {/* Error detail (collapsible) */}
@@ -2737,10 +3159,12 @@ function VideoConferenceComponent(props: {
                 <button
                   onClick={() => {
                     // Go back to dashboard
+                    markIntentionalDisconnect();
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
                     connectRetryDisplayRef.current = 0;
+                    unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
                       connectRetryTimerRef.current = null;
@@ -2772,6 +3196,7 @@ function VideoConferenceComponent(props: {
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
                     connectRetryDisplayRef.current = 0;
+                    unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
                       connectRetryTimerRef.current = null;
@@ -2779,22 +3204,36 @@ function VideoConferenceComponent(props: {
                     // Re-connect and give a fresh retry budget via doConnect-equivalent inline
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      room
-                        .connect(
-                          props.connectionDetails.serverUrl,
-                          props.connectionDetails.participantToken,
-                          connectOptions,
-                        )
+                      connectWithFreshDetails()
                         .then(() => {
+                          hasConnectedOnceRef.current = true;
+                          intentionalDisconnectRef.current = false;
                           connectRetryCountRef.current = 0;
                           connectRetryDisplayRef.current = 0;
                           setConnectError(null);
-                          if (props.userChoices.videoEnabled) {
-                            room.localParticipant.setCameraEnabled(true).catch(handleError);
-                          }
-                          if (props.userChoices.audioEnabled) {
-                            room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
-                          }
+                          // Validate device IDs before enabling (same as primary connect path)
+                          const enableRetryDevices = async () => {
+                            try {
+                              const devices = await navigator.mediaDevices.enumerateDevices();
+                              const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
+                              const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
+                              const wantedVideo = props.userChoices.videoDeviceId;
+                              if (wantedVideo && !videoIds.has(wantedVideo)) {
+                                room.options.videoCaptureDefaults = { ...room.options.videoCaptureDefaults, deviceId: undefined };
+                              }
+                              const wantedAudio = props.userChoices.audioDeviceId;
+                              if (wantedAudio && !audioIds.has(wantedAudio)) {
+                                room.options.audioCaptureDefaults = { ...room.options.audioCaptureDefaults, deviceId: undefined };
+                              }
+                            } catch (_) { /* proceed with whatever defaults exist */ }
+                            if (props.userChoices.videoEnabled) {
+                              room.localParticipant.setCameraEnabled(true).catch(handleError);
+                            }
+                            if (props.userChoices.audioEnabled) {
+                              room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                            }
+                          };
+                          enableRetryDevices();
                         })
                         .catch((err) => {
                           connectAttemptedRef.current = false;
@@ -3215,10 +3654,17 @@ function VideoConferenceComponent(props: {
             display: 'flex',
           }}
         >
-          {/* Standalone LiveDoc (when user clicks LiveDoc tab, no screen share, OR presenter sharing) */}
-          {isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) && (
-            <>
-              <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+          {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
+          <div
+            style={{
+              display: shouldDisplayLiveDoc ? 'flex' : 'none',
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+              {shouldMountLiveDoc && (
                 <LiveDocView
                   meetingRoomName={meetingRoomName}
                   participantName={props.userChoices.username}
@@ -3227,7 +3673,8 @@ function VideoConferenceComponent(props: {
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
                 />
-              </div>
+              )}
+            </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
                 const allP = [
@@ -3304,46 +3751,14 @@ function VideoConferenceComponent(props: {
                       </button>
                     </div>
                     <div className="webcam-sidebar-tiles">
-                      {allP.map((p) => {
-                        const camPub = p.participant?.getTrackPublication(Track.Source.Camera);
-                        const micPub = p.participant?.getTrackPublication(Track.Source.Microphone);
-                        const hasVideo = camPub?.track && !camPub.isMuted;
-                        const micMuted = !micPub?.track || micPub.isMuted;
-                        return (
-                          <div key={p.id} className="webcam-sidebar-tile">
-                            <div className="webcam-sidebar-video">
-                              {hasVideo && camPub?.track ? (
-                                <VideoTrack
-                                  trackRef={{
-                                    participant: p.participant,
-                                    source: Track.Source.Camera,
-                                    publication: camPub,
-                                  }}
-                                />
-                              ) : (
-                                <div className="webcam-sidebar-avatar">
-                                  {getInitials(p.name || p.id || '?')}
-                                </div>
-                              )}
-                            </div>
-                            <div className="webcam-sidebar-meta">
-                              {micMuted && (
-                                <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" style={{ opacity: 0.6 }}>
-                                  <path d="M12.227 11.52a5.477 5.477 0 0 0 1.246-2.97.5.5 0 0 0-.995-.1 4.478 4.478 0 0 1-.962 2.359l-1.07-1.07C10.794 9.247 11 8.647 11 8V3a3 3 0 0 0-6 0v1.293L1.354.646a.5.5 0 1 0-.708.708l14 14a.5.5 0 0 0 .708-.708zM8 12.5c.683 0 1.33-.152 1.911-.425l.743.743c-.649.359-1.378.59-2.154.66V15h2a.5.5 0 0 1 0 1h-5a.5.5 0 0 1 0-1h2v-1.522a5.502 5.502 0 0 1-4.973-4.929.5.5 0 0 1 .995-.098A4.5 4.5 0 0 0 8 12.5z" />
-                                  <path d="M8.743 10.907 5 7.164V8a3 3 0 0 0 3.743 2.907z" />
-                                </svg>
-                              )}
-                              <span className="webcam-sidebar-name">{p.name}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
+                      {allP.map((p) => (
+                        <LiveDocWebcamSidebarTile key={p.id} participant={p.participant} name={p.name} />
+                      ))}
                     </div>
                   </div>
                 );
               })()}
-            </>
-          )}
+          </div>
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
@@ -3351,7 +3766,7 @@ function VideoConferenceComponent(props: {
             style={{
               flex: 1,
               position: 'relative',
-              display: isPureLiveDoc && (!hasScreenShare || isLocalScreenShare) ? 'none' : 'block',
+              display: shouldDisplayLiveDoc ? 'none' : 'block',
             }}
           >
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
@@ -3364,7 +3779,7 @@ function VideoConferenceComponent(props: {
             )}
 
             {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
-            {hasScreenShare && isMirrorBlocked && (
+            {hasScreenShare && isMirrorBlocked && shouldMountLiveDoc && (
               <div
                 className="mirror-livedoc-overlay"
                 style={{
@@ -3581,7 +3996,9 @@ function VideoConferenceComponent(props: {
                   style={{
                     position: 'absolute',
                     top: floatingPos.y,
-                    left: floatingPos.x,
+                    ...(floatingPosLayout === 'right-inset'
+                      ? { right: FLOATING_WEBCAM_RIGHT_INSET, left: 'auto' as const }
+                      : { left: floatingPos.x, right: 'auto' as const }),
                     zIndex: 200,
                     cursor: isDragging.current ? 'grabbing' : 'grab',
                     userSelect: 'none',
@@ -3590,16 +4007,32 @@ function VideoConferenceComponent(props: {
                   {!floatingExpanded && (
                     <div className="floating-collapsed-row">
                       <div className="floating-stacked-avatars">
-                        {allParticipants.slice(0, maxVisible).map((p, i) => (
-                          <div
-                            key={p.id}
-                            className="floating-avatar"
-                            title={p.name}
-                            style={{ zIndex: maxVisible - i }}
-                          >
-                            {getInitials(p.name || p.id || '?')}
-                          </div>
-                        ))}
+                        {allParticipants.slice(0, maxVisible).map((p, i) => {
+                          const participant =
+                            p.id === 'local'
+                              ? room.localParticipant
+                              : room.remoteParticipants.get(p.id);
+                          if (!participant) {
+                            return (
+                              <div
+                                key={p.id}
+                                className="floating-avatar"
+                                title={p.name}
+                                style={{ zIndex: maxVisible - i }}
+                              >
+                                {getInitials(p.name || p.id || '?')}
+                              </div>
+                            );
+                          }
+                          return (
+                            <LiveDocFloatingCollapsedAvatar
+                              key={p.id}
+                              participant={participant}
+                              name={p.name}
+                              style={{ zIndex: maxVisible - i }}
+                            />
+                          );
+                        })}
                         {overflow > 0 && (
                           <div className="floating-avatar overflow-badge" style={{ zIndex: 0 }}>
                             +{overflow}
@@ -3661,27 +4094,11 @@ function VideoConferenceComponent(props: {
                                 p.id === 'local'
                                   ? room.localParticipant
                                   : room.remoteParticipants.get(p.id);
-                              const camPub = participant?.getTrackPublication(Track.Source.Camera);
-                              const hasVideo = camPub?.track && !camPub.isMuted;
+                              if (!participant) {
+                                return <React.Fragment key={p.id} />;
+                              }
                               return (
-                                <div key={p.id} className="floating-grid-tile">
-                                  <div className="floating-grid-video">
-                                    {hasVideo && camPub?.track ? (
-                                      <VideoTrack
-                                        trackRef={{
-                                          participant: participant!,
-                                          source: Track.Source.Camera,
-                                          publication: camPub,
-                                        }}
-                                      />
-                                    ) : (
-                                      <div className="floating-grid-avatar">
-                                        {getInitials(p.name)}
-                                      </div>
-                                    )}
-                                  </div>
-                                  <span className="floating-grid-name">{p.name}</span>
-                                </div>
+                                <LiveDocFloatingGridTile key={p.id} participant={participant} name={p.name} />
                               );
                             })}
                           </div>
@@ -4003,15 +4420,36 @@ function VideoConferenceComponent(props: {
                display: flex;
                align-items: center;
             }
-            .floating-stacked-avatars .floating-avatar {
+            .floating-stacked-avatars .floating-avatar,
+            .floating-stacked-avatars .floating-avatar-shell {
                margin-left: -8px;
                transition: transform 0.15s ease;
             }
-            .floating-stacked-avatars .floating-avatar:first-child {
+            .floating-stacked-avatars .floating-avatar:first-child,
+            .floating-stacked-avatars .floating-avatar-shell:first-child {
                margin-left: 0;
             }
-            .floating-stacked-avatars .floating-avatar:hover {
+            .floating-stacked-avatars .floating-avatar:hover,
+            .floating-stacked-avatars .floating-avatar-shell:hover {
                transform: scale(1.15);
+            }
+            .floating-avatar-shell.lk-participant-tile {
+               width: 30px;
+               height: 30px;
+               flex-shrink: 0;
+               border-radius: 50%;
+               --lk-border-radius: 50%;
+               padding: 0 !important;
+               display: flex !important;
+               align-items: center;
+               justify-content: center;
+               gap: 0 !important;
+               flex-direction: row !important;
+            }
+            .floating-avatar-shell .floating-avatar {
+               border: none !important;
+               width: 100%;
+               height: 100%;
             }
             .floating-avatar {
                width: 30px;
@@ -4078,6 +4516,12 @@ function VideoConferenceComponent(props: {
                align-items: center;
                gap: 3px;
             }
+            .floating-grid-tile.lk-participant-tile {
+               gap: 3px !important;
+               flex-direction: column !important;
+               align-items: center !important;
+               background: transparent !important;
+            }
             .floating-grid-video {
                width: 64px;
                height: 64px;
@@ -4085,6 +4529,30 @@ function VideoConferenceComponent(props: {
                overflow: hidden;
                background: #1e293b;
                position: relative;
+            }
+            .floating-webcam-panel .webcam-floating-participant-metadata {
+               position: static !important;
+               inset: auto !important;
+               left: auto !important;
+               right: auto !important;
+               bottom: auto !important;
+               width: 100%;
+               justify-content: center;
+            }
+            .floating-grid-name-row {
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               gap: 2px;
+               max-width: 78px;
+               min-width: 0;
+               padding: 2px 4px;
+               line-height: 1;
+            }
+            .floating-grid-name-row .lk-track-muted-indicator-microphone {
+               flex-shrink: 0;
+               width: 0.75rem;
+               height: 0.75rem;
             }
             .floating-grid-video video {
                width: 100%;
@@ -4094,7 +4562,7 @@ function VideoConferenceComponent(props: {
             .floating-grid-avatar {
                width: 100%;
                height: 100%;
-               background: linear-gradient(135deg, #3b82f6, #6366f1);
+               background: linear-gradient(135deg, #8882d0, #e5e7eb);
                color: #fff;
                font-size: 16px;
                font-weight: 700;
@@ -4102,14 +4570,15 @@ function VideoConferenceComponent(props: {
                align-items: center;
                justify-content: center;
             }
-            .floating-grid-tile:hover .floating-grid-video {
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-video {
                box-shadow: 0 0 0 2px #3b82f6;
             }
             .floating-grid-name {
                color: rgba(255,255,255,0.6);
                font-size: 9px;
                font-weight: 500;
-               max-width: 72px;
+               min-width: 0;
+               max-width: 58px;
                overflow: hidden;
                text-overflow: ellipsis;
                white-space: nowrap;
@@ -4138,6 +4607,31 @@ function VideoConferenceComponent(props: {
                overflow: hidden;
                background: #1e293b;
             }
+            .webcam-sidebar-tile.lk-participant-tile {
+               gap: 0 !important;
+               flex-direction: column !important;
+            }
+            .webcam-sidebar-panel .webcam-sidebar-participant-metadata {
+               position: static !important;
+               inset: auto !important;
+               left: auto !important;
+               right: auto !important;
+               bottom: auto !important;
+               width: 100%;
+               flex-direction: column;
+               align-items: stretch;
+               gap: 0;
+            }
+            .webcam-sidebar-panel .webcam-sidebar-participant-metadata .webcam-sidebar-meta {
+               width: 100%;
+            }
+            .webcam-sidebar-meta.lk-participant-metadata-item {
+               min-width: 0;
+               flex-wrap: nowrap;
+            }
+            .webcam-sidebar-meta .lk-track-muted-indicator-microphone {
+               flex-shrink: 0;
+            }
             .webcam-sidebar-video {
                width: 100%;
                aspect-ratio: 16 / 10;
@@ -4152,7 +4646,7 @@ function VideoConferenceComponent(props: {
             .webcam-sidebar-avatar {
                width: 100%;
                height: 100%;
-               background: linear-gradient(135deg, #3b82f6, #6366f1);
+               background: linear-gradient(135deg, #8882d0, #e5e7eb);
                color: #fff;
                font-size: 22px;
                font-weight: 700;
@@ -4331,13 +4825,17 @@ function VideoConferenceComponent(props: {
                Replaces LiveKit's missing "mic on" DOM states
                ══════════════════════════════════════════════════════ */
 
-            /* Completely hide LiveKit's default microphone indicator */
-            .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone {
+            /* Completely hide LiveKit's default microphone indicator（主网格 + 活文档侧栏 + 浮窗） */
+            .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone,
+            .webcam-sidebar-panel .lk-track-muted-indicator-microphone,
+            .floating-webcam-panel .lk-track-muted-indicator-microphone {
               display: none !important;
             }
 
             /* Our custom injected microphone indicator styling */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator,
+            .floating-webcam-panel .kloud-custom-mic-indicator {
               display: flex;
               align-items: center;
               justify-content: center;
@@ -4349,7 +4847,9 @@ function VideoConferenceComponent(props: {
             }
 
             /* Add red drop-shadow pulsing just for the force-muted state */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
               width: 1.4rem;
               height: 1.4rem;
               filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
@@ -4362,7 +4862,9 @@ function VideoConferenceComponent(props: {
             }
 
             /* Host hover interactions */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive {
               cursor: pointer;
               border-radius: 50%;
               padding: 4px;          /* larger hit area */
@@ -4372,10 +4874,16 @@ function VideoConferenceComponent(props: {
             }
             /* SVG inside mic indicator must not steal pointer events */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg,
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg * {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg *,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator svg,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator svg *,
+            .floating-webcam-panel .kloud-custom-mic-indicator svg,
+            .floating-webcam-panel .kloud-custom-mic-indicator svg * {
               pointer-events: none;
             }
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover {
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:hover,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:hover {
               background: rgba(255, 255, 255, 0.18);
               transform: scale(1.2);
             }

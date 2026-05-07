@@ -665,6 +665,10 @@ export default function ReplayPage() {
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info'>('summary');
   // 为 null 表示未手动选中，高亮跟随播放时间自动
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const [genProgress, setGenProgress] = useState(0);
+
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -714,6 +718,55 @@ export default function ReplayPage() {
     setSelectedChapterId(ch.id);
   }, [seekTo]);
 
+  // AI 生成会议摘要
+  const generateSummary = useCallback(async () => {
+    if (!data?.meeting?.id) return;
+    setGenerating(true);
+    setGenProgress(0);
+    setGenerateError(null);
+    try {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
+      const token = stored ? (JSON.parse(stored).token || '') : '';
+      const res = await fetch(`/api/meeting-summary/${data.meeting.id}/generate`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setGenerateError(json.error || '生成失败');
+        return;
+      }
+      setGenProgress(100);
+      // 将新生成的摘要写回 data state，触发页面更新
+      setData((prev) =>
+        prev && prev.meeting
+          ? { ...prev, meeting: { ...prev.meeting, summaryItems: json.items } }
+          : prev
+      );
+      setSelectedChapterId(null);
+    } catch (e: any) {
+      setGenerateError(e.message || '网络错误');
+    } finally {
+      setGenerating(false);
+    }
+  }, [data]);
+
+  // 模拟进度：generating 时从 0→90 缓慢增长，完成后跳到 100
+  useEffect(() => {
+    if (!generating) return;
+    setGenProgress(0);
+    // 每 600ms 推进一次，越接近 90 推进越慢（模拟 AI 延迟感）
+    const id = setInterval(() => {
+      setGenProgress((prev) => {
+        if (prev >= 90) return prev;
+        const remaining = 90 - prev;
+        const step = Math.max(0.5, remaining * 0.08);
+        return Math.min(90, prev + step);
+      });
+    }, 600);
+    return () => clearInterval(id);
+  }, [generating]);
+
   /* ── Loading ── */
   if (loading) {
     return (
@@ -730,7 +783,7 @@ export default function ReplayPage() {
     return (
       <div style={styles.fullCenter}>
         <div style={{ textAlign: 'center', padding: 40, background: '#1e293b', borderRadius: 16, border: '1px solid #334155', maxWidth: 420 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>⚠️</div>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>&#x26A0;&#xFE0F;</div>
           <h2 style={{ color: '#f1f5f9', marginBottom: 8 }}>{t('replay.notReady')}</h2>
           <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>{error || t('replay.processing')}</p>
           <Link href="/" style={styles.primaryBtn}>{t('replay.back')}</Link>
@@ -745,66 +798,43 @@ export default function ReplayPage() {
   const participants = meeting?.participants || [];
   const meetingTitle = meeting?.title || meeting?.roomName || t('replay.loading');
 
-  // ── Demo 假数据：当会议没有真实摘要时展示样式预览 ────────────────────────
-  const DEMO_SUMMARY_ITEMS: SummaryItem[] = [
-    {
-      id: -1, sortOrder: 0, timeOffset: '00:00:00',
-      title: '📋 会议开场与议程确认',
-      content: '主持人吴孝宇宣布会议开始，介绍了本次季度产品评审会的主要议程，共分为五个议题：Q1销售数据回顾、新功能规划讨论、技术方案评审、市场推广策略和行动计划分配。所有参会成员完成自我介绍，确认无缺席情况。',
-    },
-    {
-      id: -2, sortOrder: 1, timeOffset: '00:05:00',
-      title: '📊 Q1 销售数据回顾',
-      content: '销售负责人陈晓雨汇报了Q1整体业绩：总营收同比增长 23.4%，企业客户签约数量达到 68 家，较目标超额完成 12%。重点市场华东和华南区表现亮眼，但西北区有所落后，需在Q2加强渠道建设。客户续费率维持在 87%，略低于目标的 90%，需重点关注流失风险客户。',
-    },
-    {
-      id: -3, sortOrder: 2, timeOffset: '00:10:00',
-      title: '🚀 新功能规划讨论',
-      content: '产品经理李明远演示了 KloudMeet 2.0 的核心功能规划：① AI 实时语音字幕（当前正在落地）② 智能会议摘要生成 ③ 多语言实时翻译 ④ 虚拟背景增强。团队讨论后决定将 AI 摘要功能列为本季度 P0 优先级，预计 6 周内上线内测版本。多语言翻译推迟到 Q3。',
-    },
-    {
-      id: -4, sortOrder: 3, timeOffset: '00:15:00',
-      title: '🔧 技术方案评审',
-      content: '技术负责人张伟鹏介绍了 AssemblyAI Whisper-RT 接入方案：采用服务端临时 Token 代理保障 API Key 安全性，浏览器通过 WebSocket 直连 AssemblyAI，支持中英文混合识别，延迟控制在 800ms 以内。方案整体获团队认可，需重点关注并发会话成本控制，建议设置每用户每日使用上限。',
-    },
-    {
-      id: -5, sortOrder: 4, timeOffset: '00:20:00',
-      title: '📣 市场推广策略',
-      content: '市场总监赵思思提出Q2推广三步走：① 5月邀请 20 家标杆企业客户内测并收集反馈 ② 6月在 SaaS 行业展会进行产品发布 ③ 配合 KOL 内容营销扩大品牌声量。预算申请 45 万，其中线上投放 25 万，线下活动 20 万。CFO 表示原则上同意，但需提交详细 ROI 预测表。',
-    },
-    {
-      id: -6, sortOrder: 5, timeOffset: '00:25:00',
-      title: '✅ 行动计划与任务分配',
-      content: '会议最终确定以下行动项：① 产品团队（李明远）— 2 周内完成 AI 摘要功能原型，提交评审；② 技术团队（张伟鹏）— 本周内完成 AssemblyAI 生产环境接入并通过压测；③ 销售团队（陈晓雨）— 制定西北区 Q2 拓展计划，5 月 1 日前提交；④ 市场团队（赵思思）— 3 天内提交 ROI 预测报告。下次例会定于两周后，同一时间。',
-    },
-  ];
+  function secsToHMS(s: number): string {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60);
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+  }
 
-  // 无真实摘要时用 Demo 数据预览样式（真实数据入库后自动替换）
-  const displaySummaryItems = summaryItems.length > 0 ? summaryItems : DEMO_SUMMARY_ITEMS;
+  const realChapters: ChapterCard[] = summaryItems.map((item, idx) => {
+    const startSec = offsetToSecs(item.timeOffset);
+    const nextItem = summaryItems[idx + 1];
+    const endSec = nextItem ? offsetToSecs(nextItem.timeOffset) : (recording.durationSeconds ?? startSec + 300);
+    return {
+      id: item.id, startSec, endSec,
+      timeRange: `${item.timeOffset}-${secsToHMS(endSec)}`,
+      speaker: '', topic: item.title,
+    };
+  });
 
-  // ── Demo 章节卡片数据（每5分钟一个章节，含说话人信息）────────────────────
-  const DEMO_CHAPTERS: ChapterCard[] = [
-    { id: -1, startSec: 0,    endSec: 300,  timeRange: '00:00:00-00:05:00', speaker: '吴孝宇', topic: '会议开场与议程确认' },
-    { id: -2, startSec: 300,  endSec: 600,  timeRange: '00:05:01-00:10:00', speaker: '陈晓雨', topic: 'Q1 销售数据回顾' },
-    { id: -3, startSec: 600,  endSec: 900,  timeRange: '00:10:01-00:15:00', speaker: '李明远', topic: '新功能规划讨论' },
-    { id: -4, startSec: 900,  endSec: 1200, timeRange: '00:15:01-00:20:00', speaker: '张伟鹏', topic: '技术方案评审' },
-    { id: -5, startSec: 1200, endSec: 1500, timeRange: '00:20:01-00:25:00', speaker: '赵思思', topic: '市场推广策略' },
-    { id: -6, startSec: 1500, endSec: 1800, timeRange: '00:25:01-00:30:00', speaker: '吴孝宇', topic: '行动计划与任务分配' },
-  ];
+  const realSpeakerSegments: SpeakerSegment[] = (() => {
+    if (!transcripts.length) return [];
+    const acc: Record<string, [number, number][]> = {};
+    for (const t of transcripts) {
+      if (t.offsetSeconds === null || t.offsetSeconds === undefined) continue;
+      const start = t.offsetSeconds;
+      const dur = Math.min(30, Math.max(1.5, t.content.length * 0.25));
+      if (!acc[t.speakerName]) acc[t.speakerName] = [];
+      acc[t.speakerName].push([start, start + dur]);
+    }
+    return Object.entries(acc).map(([name, segs]) => ({
+      name, color: speakerColor(name), segments: segs,
+    }));
+  })();
 
-  // ── Demo 说话人时间段数据（[startSec, endSec] 数组）─────────────────────
-  const DEMO_SPEAKER_SEGMENTS: SpeakerSegment[] = [
-    { name: '吴孝宇', color: '#6366f1', segments: [[0,290],[340,360],[1498,1795]] },
-    { name: '陈晓雨', color: '#ec4899', segments: [[298,595],[648,680],[910,940]] },
-    { name: '李明远', color: '#14b8a6', segments: [[240,280],[598,892],[1290,1320]] },
-    { name: '张伟鹏', color: '#f59e0b', segments: [[470,510],[895,1193],[1440,1470]] },
-    { name: '赵思思', color: '#10b981', segments: [[750,780],[1198,1492],[1630,1660]] },
-  ];
+  const realDuration = recording.durationSeconds ??
+    (transcripts.length ? Math.max(...transcripts.map(t => (t.offsetSeconds ?? 0))) + 60 : 300);
 
-  // Demo 假数据按 30 分钟（1800s）写的，轨道总长固定为 1800s
-  // 不能用 duration（真实视频时长可能只有几分钟），否则 > duration 的时间段
-  // 会被 overflow:hidden 裁掉，颜色就"消失"了
-  const segDuration = 1800;
+  const displaySummaryItems = summaryItems;
 
   const tabs = [
     { key: 'summary', label: t('replay.tabSummary'), count: displaySummaryItems.length },
@@ -867,20 +897,22 @@ export default function ReplayPage() {
             />
           </div>
 
-          {/* ② 章节卡片横向轮播（紧接视频下方） */}
+          {realChapters.length > 0 && (
           <ChapterCardsCarousel
-            chapters={DEMO_CHAPTERS}
+            chapters={realChapters}
             currentTime={currentTime}
             selectedId={selectedChapterId}
             onSelect={handleChapterSelect}
           />
+          )}
 
-          {/* ③ 说话人发言时间段时间轴（底部） */}
+          {realSpeakerSegments.length > 0 && (
           <SpeakerSegmentTimeline
-            speakers={DEMO_SPEAKER_SEGMENTS}
-            duration={segDuration}
+            speakers={realSpeakerSegments}
+            duration={realDuration}
             onSeek={seekTo}
           />
+          )}
 
         </div>
 
@@ -908,15 +940,89 @@ export default function ReplayPage() {
           {/* Tab Content */}
           <div style={styles.tabContent}>
             {activeTab === 'summary' && (
-              <SummaryPanel
-                items={displaySummaryItems}
-                currentTime={currentTime}
-                duration={duration}
-                onSeek={seekTo}
-                meetingId={meeting?.id ?? 0}
-                kloudMeetingId={meeting?.kloudMeetingId ?? null}
-                forceExpandId={selectedChapterId}
-              />
+              summaryItems.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+                  {/* ── Re-generate toolbar ── */}
+                  {generating ? (
+                    <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <div style={{ width: '100%', height: 4, background: '#1e293b', borderRadius: 99, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${Math.round(genProgress)}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)', borderRadius: 99, transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)', boxShadow: '0 0 6px rgba(129,140,248,0.5)' }} />
+                      </div>
+                      <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
+                        {t('replay.generating', { pct: Math.round(genProgress) })}
+                      </p>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '7px 12px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+
+                      <button
+                        onClick={generateSummary}
+                        title={t('replay.regenerateSummary')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'transparent', border: '1px solid #334155', borderRadius: 6, color: '#94a3b8', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#818cf8'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#334155'; e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                        {t('replay.regenerateSummary')}
+                      </button>
+                    </div>
+                  )}
+                  {/* ── Summary content ── */}
+                  <div style={{ flex: 1, overflow: 'hidden' }}>
+                    <SummaryPanel
+                      items={displaySummaryItems}
+                      currentTime={currentTime}
+                      duration={duration}
+                      onSeek={seekTo}
+                      meetingId={meeting?.id ?? 0}
+                      kloudMeetingId={meeting?.kloudMeetingId ?? null}
+                      forceExpandId={selectedChapterId}
+                    />
+                  </div>
+                </div>
+
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
+                  {generating ? (
+                    <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+                      <div style={{ width: '100%', height: 6, background: '#1e293b', borderRadius: 99, overflow: 'hidden', border: '1px solid #334155' }}>
+                        <div style={{ height: '100%', width: `${Math.round(genProgress)}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)', borderRadius: 99, transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)', boxShadow: '0 0 8px rgba(129,140,248,0.6)' }} />
+                      </div>
+                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 1.5 }}>
+                        {t('replay.generating', { pct: Math.round(genProgress) })}
+                      </p>
+                    </div>
+                  ) : transcripts.length > 0 ? (
+                    <>
+                      <div style={{ fontSize: 48, marginBottom: 4 }}>🤖</div>
+                      <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>{t('replay.noSummaryYet')}</p>
+                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
+                        {t('replay.noSummaryHint', { count: transcripts.length })}
+                      </p>
+                      {generateError && (
+                        <p style={{ color: '#f87171', fontSize: 13 }}>{generateError}</p>
+                      )}
+                      <button
+                        onClick={generateSummary}
+                        style={{ marginTop: 8, padding: '10px 28px', background: 'linear-gradient(135deg, #6366f1, #818cf8)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s', boxShadow: '0 2px 12px rgba(99,102,241,0.4)' }}
+                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.5)'; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.4)'; }}
+                      >
+                        {t('replay.generateSummary')}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 48, marginBottom: 4 }}>📝</div>
+                      <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>{t('replay.noTranscriptForSummary')}</p>
+                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>{t('replay.noTranscriptForSummaryHint')}</p>
+                    </>
+                  )}
+                </div>
+              )
             )}
             {activeTab === 'transcript' && (
               <TranscriptPanel
@@ -1074,7 +1180,8 @@ const styles: Record<string, React.CSSProperties> = {
   video: {
     width: '100%',
     display: 'block',
-    maxHeight: '40vh',   /* 缩小：留出空间给下方组件 */
+    maxHeight: '46vh',
+    minHeight: 320,
     outline: 'none',
   },
   chapterBar: {

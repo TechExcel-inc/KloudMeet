@@ -21,6 +21,7 @@ import { RoomEvent } from 'livekit-client';
 import type { Room } from 'livekit-client';
 import { RtasrHelper } from './RtasrHelper';
 import type { RtasrMessage } from './RtasrHelper';
+import { translateText } from './translationService';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,12 @@ export interface CaptionPayload {
   userName: string;
   /** 会议开始后的秒数（用于回放跳转） */
   offsetSeconds?: number;
+  /** 发言时的语言 */
+  speakLanguage?: string;
+  /** 广播方的默认目标翻译语言 */
+  defaultTargetLanguage?: string;
+  /** 广播方提供的默认翻译文本 */
+  defaultTranslatedText?: string;
 }
 
 export interface CaptionsInfo {
@@ -195,7 +202,29 @@ export function useCaptions({
       if (topic !== CAPTION_TOPIC) return;
       try {
         const data: CaptionPayload = JSON.parse(decoder.decode(payloadBytes));
-        showCaptionsToGUI(data);
+        
+        let settings = { subtitleVisible: true, readLanguage: languageCode === 'zh' ? 'en' : 'zh' };
+        try {
+          const raw = localStorage.getItem('kloud-stt-settings');
+          if (raw) Object.assign(settings, JSON.parse(raw));
+        } catch(e) {}
+        
+        if (!settings.subtitleVisible) return;
+        
+        const speakLanguage = data.speakLanguage || languageCode || 'zh';
+        const myReadLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
+        
+        // 核心优化：直接利用广播方的默认翻译，省去重复调用的费用
+        if (data.defaultTargetLanguage === myReadLanguage && data.defaultTranslatedText) {
+           showCaptionsToGUI({ ...data, src: data.defaultTranslatedText });
+        } else if (speakLanguage !== myReadLanguage && speakLanguage !== 'auto') {
+           // 只有在没命中默认语言，且不等于原文语言的情况下，才去调接口翻译
+           translateText(data.src, myReadLanguage, speakLanguage)
+             .then(translated => showCaptionsToGUI({ ...data, src: translated }))
+             .catch(() => showCaptionsToGUI(data));
+        } else {
+           showCaptionsToGUI(data); // 读语言 = 说语言，直接显示原文
+        }
       } catch (e) {
         console.error('[useCaptions] Failed to parse caption data', e);
       }
@@ -207,14 +236,39 @@ export function useCaptions({
     };
   }, [room, decoder, showCaptionsToGUI]);
 
-  // ── 当 mic 关闭时自动停止识别 ──────────────────────────────────────────
+  // ── 当 mic 关闭时停止本地识别（但保持字幕功能开启，仍能看到别人的字幕）──
+  // ── 当 mic 重新开启时自动恢复本地识别 ──────────────────────────────────
 
   React.useEffect(() => {
+    if (!captionsRunning) return; // 字幕功能没开，不需要做什么
+
     if (!micEnabled && rtasrRef.current) {
+      // 闭麦：只停止本地语音识别引擎，不关闭字幕功能
       rtasrRef.current.Stop();
-      setCaptionsRunning(false);
+    } else if (micEnabled && rtasrRef.current) {
+      // 开麦：自动恢复本地语音识别
+      const defaultMic = localStorage.getItem('DefaultMic') || '';
+      rtasrRef.current.Start(defaultMic).catch((err: unknown) => {
+        console.warn('[useCaptions] Failed to restart recognition:', err);
+      });
     }
-  }, [micEnabled]);
+  }, [micEnabled, captionsRunning]);
+
+  // ── 监听设置变更 ────────────────────────────────────────────────────────
+  React.useEffect(() => {
+    const handleSettingsChange = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.subtitleVisible === false) {
+        setCaptionsInfo((prev) => ({ ...prev, show: false }));
+        if (hideTimerRef.current) {
+          clearTimeout(hideTimerRef.current);
+          hideTimerRef.current = null;
+        }
+      }
+    };
+    window.addEventListener('kloud-stt-settings-changed', handleSettingsChange);
+    return () => window.removeEventListener('kloud-stt-settings-changed', handleSettingsChange);
+  }, []);
 
   // ── 开启/关闭字幕 ──────────────────────────────────────────────────────
 
@@ -226,30 +280,25 @@ export function useCaptions({
           helper.languageCode = languageCode;
 
           helper.OnMessage = async (d: RtasrMessage) => {
-            if (!micEnabledRef.current) {
-              rtasrRef.current?.Stop();
-              setCaptionsRunning(false);
-              return;
-            }
-
-            // 读取当前用户信息
-            let userId = '';
-            let userName = '';
-            try {
-              const stored = localStorage.getItem('kloudUser');
-              if (stored) {
-                const u = JSON.parse(stored);
-                userId = u.id || u.username || '';
-                userName = u.displayName || u.fullName || u.username || '';
-              }
-            } catch (_) {}
-
-            if (!userId) {
-              userId = room.localParticipant.identity;
-              userName = room.localParticipant.name || userId;
-            }
+            // 使用 LiveKit 的 localParticipant（每个连接独立，不受同浏览器多 Tab 共享 localStorage 影响）
+            const userId = room.localParticipant.identity;
+            const userName = room.localParticipant.name || userId;
 
             const offsetSeconds = getMeetingOffsetSeconds();
+
+            let settings = { 
+              subtitleVisible: true, 
+              readLanguage: languageCode === 'zh' ? 'en' : 'zh', 
+              speakLanguage: languageCode 
+            };
+            try {
+              const raw = localStorage.getItem('kloud-stt-settings');
+              if (raw) Object.assign(settings, JSON.parse(raw));
+            } catch(e) {}
+            
+            // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
+            const speakLanguage = d.detectedLanguage || settings.speakLanguage || languageCode || 'zh';
+            const defaultTargetLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
 
             const payload: CaptionPayload = {
               id: d.id,
@@ -258,10 +307,25 @@ export function useCaptions({
               userId,
               userName,
               offsetSeconds,
+              speakLanguage,
+              defaultTargetLanguage,
             };
 
-            // 本端立即显示
-            showCaptionsToGUI(payload);
+            // 核心优化：广播方先进行一次默认目标语言的翻译，再广播给所有人
+            if (speakLanguage !== defaultTargetLanguage && speakLanguage !== 'auto') {
+              try {
+                payload.defaultTranslatedText = await translateText(d.src, defaultTargetLanguage, speakLanguage);
+              } catch (e) {
+                payload.defaultTranslatedText = d.src; // 失败则 fallback 到原文
+              }
+            } else {
+              payload.defaultTranslatedText = d.src; // 说的就是目标的语言
+            }
+
+            // 本端立即显示 (既然本端语言就是 defaultTargetLanguage，直接使用翻译好的结果)
+            if (settings.subtitleVisible) {
+                showCaptionsToGUI({ ...payload, src: payload.defaultTranslatedText });
+            }
 
             // 广播给所有参与者
             try {
@@ -289,10 +353,6 @@ export function useCaptions({
             }
           };
 
-          helper.OnLog = (txt: string) => {
-            console.log('[RtasrHelper]', txt);
-          };
-
           rtasrRef.current = helper;
         } else {
           // 如果已存在实例，更新语言
@@ -300,6 +360,19 @@ export function useCaptions({
         }
 
         const defaultMic = localStorage.getItem('DefaultMic') || '';
+        
+        // 获取最新的用户选择语言并应用到识别引擎
+        try {
+          const raw = localStorage.getItem('kloud-stt-settings');
+          if (raw) {
+            const settings = JSON.parse(raw);
+            const speakLanguage = settings.speakLanguage || languageCode || 'zh';
+            if (rtasrRef.current) {
+              rtasrRef.current.languageCode = speakLanguage;
+            }
+          }
+        } catch(e) {}
+
         await rtasrRef.current.Start(defaultMic);
         setCaptionsRunning(true);
       } else {

@@ -1160,7 +1160,7 @@ function DashboardView({
   const [earlyStartMeeting, setEarlyStartMeeting] = useState<any>(null);
   const [deletingMeeting, setDeletingMeeting] = useState<any>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [meetingView, setMeetingView] = useState<'upcoming' | 'past'>('upcoming');
+  // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -1427,11 +1427,7 @@ function DashboardView({
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: userTZ });
   };
 
-  const filteredMeetings = dbMeetings
-    .filter(m => {
-      if (meetingView === 'upcoming') return m.status !== 'ENDED' && m.status !== 'CANCELED';
-      return m.status === 'ENDED' || m.status === 'CANCELED';
-    });
+  const filteredMeetings = dbMeetings.slice();
 
   const groupedMeetings = filteredMeetings.reduce((acc: Record<string, any[]>, m) => {
     const label = getDisplayDate(m);
@@ -1507,23 +1503,9 @@ function DashboardView({
 
         {/* ── Meeting List Header ── */}
         <div className={styles.meetingListHeader}>
-          {/* Title + Tabs */}
+          {/* Title */}
           <div className={styles.meetingListTitleRow}>
             <h1 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h1>
-            <div className={styles.meetingViewTabs}>
-              <button
-                className={meetingView === 'upcoming' ? styles.meetingTabActive : styles.meetingTab}
-                onClick={() => setMeetingView('upcoming')}
-              >
-                {t('dash.upcoming')}
-              </button>
-              <button
-                className={meetingView === 'past' ? styles.meetingTabActive : styles.meetingTab}
-                onClick={() => setMeetingView('past')}
-              >
-                {t('dash.past')}
-              </button>
-            </div>
           </div>
 
           {/* Search + Schedule */}
