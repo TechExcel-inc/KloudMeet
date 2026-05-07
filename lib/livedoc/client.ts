@@ -1,5 +1,12 @@
 export const LIVEDOC_ANONYMOUS_GUID_KEY = 'KloudAnonymousSyncroomID';
 const TOKEN_CACHE_PREFIX = 'KloudMeet_instant_token_';
+const DEFAULT_LIVEDOC_BASE_URL = 'https://kloud.cn';
+const DEFAULT_LIVEDOC_DEBUG_URL = 'http://localhost:8081';
+
+export type LiveDocRuntimeSettings = {
+  debugEnabled: boolean;
+  debugUrl?: string | null;
+};
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -21,17 +28,40 @@ export function getOrCreateKloudAnonymousSyncroomID(): string {
   return guid;
 }
 
-function getLiveDocBaseUrl(): string {
-  // return 'https://localhost:8082/'.replace(/\/$/, '');//本地调试模式
-  return (process.env.NEXT_PUBLIC_LIVEDOC_BASE_URL ?? 'https://kloud.cn').replace(/\/$/, '');
+function getConfiguredLiveDocBaseUrl(): string {
+  return (process.env.NEXT_PUBLIC_LIVEDOC_BASE_URL ?? DEFAULT_LIVEDOC_BASE_URL).replace(/\/$/, '');
+}
+
+function normalizeHttpUrl(input: string): string | null {
+  const candidate = input.trim();
+  if (!candidate) return null;
+  try {
+    const parsed = new URL(candidate);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
+/** Effective LiveDoc iframe origin: debug URL from system settings or env default. */
+export function resolveLiveDocBaseUrl(settings?: LiveDocRuntimeSettings | null): string {
+  if (settings?.debugEnabled) {
+    return (
+      normalizeHttpUrl(settings.debugUrl ?? '') ??
+      DEFAULT_LIVEDOC_DEBUG_URL
+    ).replace(/\/$/, '');
+  }
+  return getConfiguredLiveDocBaseUrl();
 }
 
 export function buildLiveDocIframeSrc(
   livedocInstanceId: string,
   userToken: string,
   languageId: 0 | 1,
+  settings?: LiveDocRuntimeSettings | null,
 ): string {
-  const base = getLiveDocBaseUrl();
+  const base = resolveLiveDocBaseUrl(settings);
   const id = encodeURIComponent(livedocInstanceId);
   const token = encodeURIComponent(userToken);
   return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}`;

@@ -1,7 +1,12 @@
 'use client';
 
 import React from 'react';
-import { buildLiveDocIframeSrc, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
+import {
+  buildLiveDocIframeSrc,
+  createOrUpdateInstantAccount,
+  resolveLiveDocBaseUrl,
+  type LiveDocRuntimeSettings,
+} from '@/lib/livedoc/client';
 import { useI18n } from '@/lib/i18n';
 import styles from '../styles/LiveDocView.module.css';
 
@@ -27,7 +32,36 @@ export function LiveDocView({
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
   const [pluginLoaded, setPluginLoaded] = React.useState(false);
+  const [runtimeSettings, setRuntimeSettings] = React.useState<LiveDocRuntimeSettings | null>(null);
+  const [settingsLoading, setSettingsLoading] = React.useState(true);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    setSettingsLoading(true);
+    fetch('/api/settings')
+      .then((res) => (res.ok ? res.json() : ({} as Record<string, unknown>)))
+      .then((data) => {
+        if (cancelled) return;
+        const raw = (data as Record<string, unknown>).livedoc_debug_enabled;
+        const debugEnabled =
+          raw === true || raw === 'true' || raw === '1' || raw === 1;
+        const debugUrl =
+          typeof (data as Record<string, unknown>).livedoc_debug_url === 'string'
+            ? String((data as Record<string, unknown>).livedoc_debug_url)
+            : '';
+        setRuntimeSettings({ debugEnabled, debugUrl });
+      })
+      .catch(() => {
+        if (!cancelled) setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
+      })
+      .finally(() => {
+        if (!cancelled) setSettingsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     const name = participantName?.trim() || 'Guest';
@@ -67,7 +101,7 @@ export function LiveDocView({
       const cw = iframeRef.current?.contentWindow;
       if (!cw || e.source !== cw) return;
       setPluginLoaded(true);
-      cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: 0 }, '*');
+      cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: 1 }, '*');
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
@@ -101,7 +135,7 @@ export function LiveDocView({
     );
   }
 
-  if (tokenLoading) {
+  if (tokenLoading || settingsLoading) {
     return (
       <div className={styles.container}>
         <div className={styles.message}>
@@ -123,13 +157,14 @@ export function LiveDocView({
   }
 
   const languageId = locale === 'zh' ? 0 : 1;
-  const src = buildLiveDocIframeSrc(livedocInstanceId, userToken, languageId);
+  const src = buildLiveDocIframeSrc(livedocInstanceId, userToken, languageId, runtimeSettings);
+  const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 
   return (
     <div className={styles.container}>
       <iframe
         ref={iframeRef}
-        key={livedocInstanceId}
+        key={`${livedocInstanceId}-${baseUrl}`}
         id="sharedIframePlayer"
         title="LiveDoc"
         src={src}

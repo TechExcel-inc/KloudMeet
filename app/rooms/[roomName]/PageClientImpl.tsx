@@ -56,8 +56,14 @@ import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
 
-/** 浮窗头像条默认距主会议区右侧的间距（px）；默认 top 仍为 12 */
+/** LiveDoc 浮窗头像条相对右侧文件控制栏的默认间距（px）；默认 top 仍为 12 */
+const FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL = 16;
+const FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL = 3;
+const LIVEDOC_FILE_PANEL_EXPANDED_WIDTH = 320;
+const LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH = 56;
 const FLOATING_WEBCAM_RIGHT_INSET = 350;
+const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 104;
+const FLOATING_WEBCAM_TOP_INSET = 12;
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -2887,26 +2893,224 @@ function VideoConferenceComponent(props: {
     return () => clearInterval(interval);
   }, []);
 
+  const [liveDocFilePanelVisible, setLiveDocFilePanelVisible] = React.useState(false);
+  const [liveDocFilePanelWidth, setLiveDocFilePanelWidth] = React.useState(
+    LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
+  );
+
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   React.useEffect(() => {
+    const getPanelVisibility = (data: {
+      Show?: unknown;
+      show?: unknown;
+      visible?: unknown;
+      isVisible?: unknown;
+      IsVisible?: unknown;
+      IsShow?: unknown;
+      expanded?: unknown;
+      isExpanded?: unknown;
+      data?: {
+        Show?: unknown;
+        show?: unknown;
+        visible?: unknown;
+        isVisible?: unknown;
+        IsVisible?: unknown;
+        IsShow?: unknown;
+        expanded?: unknown;
+        isExpanded?: unknown;
+        panel?: {
+          Show?: unknown;
+          show?: unknown;
+          visible?: unknown;
+          isVisible?: unknown;
+          IsVisible?: unknown;
+          IsShow?: unknown;
+          expanded?: unknown;
+          isExpanded?: unknown;
+        };
+      };
+      panel?: {
+        Show?: unknown;
+        show?: unknown;
+        visible?: unknown;
+        isVisible?: unknown;
+        IsVisible?: unknown;
+        IsShow?: unknown;
+        expanded?: unknown;
+        isExpanded?: unknown;
+      };
+    }) => {
+      const value =
+        data.data?.panel?.show ??
+        data.data?.panel?.Show ??
+        data.data?.panel?.visible ??
+        data.data?.panel?.isVisible ??
+        data.data?.panel?.IsVisible ??
+        data.data?.panel?.IsShow ??
+        data.data?.panel?.expanded ??
+        data.data?.panel?.isExpanded ??
+        data.data?.show ??
+        data.data?.Show ??
+        data.data?.visible ??
+        data.data?.isVisible ??
+        data.data?.IsVisible ??
+        data.data?.IsShow ??
+        data.data?.expanded ??
+        data.data?.isExpanded ??
+        data.panel?.show ??
+        data.panel?.Show ??
+        data.panel?.visible ??
+        data.panel?.isVisible ??
+        data.panel?.IsVisible ??
+        data.panel?.IsShow ??
+        data.panel?.expanded ??
+        data.panel?.isExpanded ??
+        data.show ??
+        data.Show ??
+        data.visible ??
+        data.isVisible ??
+        data.IsVisible ??
+        data.IsShow ??
+        data.expanded ??
+        data.isExpanded;
+
+      if (typeof value === 'boolean') return value;
+      if (typeof value === 'number') return value === 1;
+      if (typeof value === 'string') return value === '1' || value.toLowerCase() === 'true';
+      return null;
+    };
+
+    const getPanelWidth = (data: {
+      width?: unknown;
+      panelWidth?: unknown;
+      filePanelWidth?: unknown;
+      sidebarWidth?: unknown;
+      rightPanelWidth?: unknown;
+      Width?: unknown;
+      panel?: {
+        width?: unknown;
+        Width?: unknown;
+        panelWidth?: unknown;
+        filePanelWidth?: unknown;
+        sidebarWidth?: unknown;
+        rightPanelWidth?: unknown;
+      };
+      data?: {
+        width?: unknown;
+        panelWidth?: unknown;
+        filePanelWidth?: unknown;
+        sidebarWidth?: unknown;
+        rightPanelWidth?: unknown;
+        Width?: unknown;
+        panel?: {
+          width?: unknown;
+          Width?: unknown;
+          panelWidth?: unknown;
+          filePanelWidth?: unknown;
+          sidebarWidth?: unknown;
+          rightPanelWidth?: unknown;
+        };
+      };
+    }) => {
+      const candidate =
+        data.data?.panel?.filePanelWidth ??
+        data.data?.panel?.panelWidth ??
+        data.data?.panel?.rightPanelWidth ??
+        data.data?.panel?.sidebarWidth ??
+        data.data?.panel?.width ??
+        data.data?.panel?.Width ??
+        data.data?.filePanelWidth ??
+        data.data?.panelWidth ??
+        data.data?.rightPanelWidth ??
+        data.data?.sidebarWidth ??
+        data.data?.width ??
+        data.data?.Width ??
+        data.panel?.filePanelWidth ??
+        data.panel?.panelWidth ??
+        data.panel?.rightPanelWidth ??
+        data.panel?.sidebarWidth ??
+        data.panel?.width ??
+        data.panel?.Width ??
+        data.filePanelWidth ??
+        data.panelWidth ??
+        data.rightPanelWidth ??
+        data.sidebarWidth ??
+        data.width ??
+        data.Width;
+
+      const width =
+        typeof candidate === 'number'
+          ? candidate
+          : typeof candidate === 'string'
+            ? Number(candidate)
+            : NaN;
+
+      if (!Number.isFinite(width)) return null;
+      // Guardrail: LiveDoc right panel should be in a sane range.
+      return Math.max(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH, Math.min(480, width));
+    };
+
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
+      const data = e.data as {
+        type?: string;
+        Show?: unknown;
+        show?: unknown;
+        visible?: unknown;
+        isVisible?: unknown;
+        data?: { Show?: unknown; show?: unknown; visible?: unknown; isVisible?: unknown };
+      };
+      if (
+        process.env.NODE_ENV === 'development' &&
+        typeof data.type === 'string' &&
+        (data.type.toLowerCase().includes('kloud') || data.type.toLowerCase().includes('file'))
+      ) {
+        console.debug('[LiveDoc postMessage]', data);
+      }
       if (e.data.type === 'Kloud-ShowWebcamView') {
         setShowWebcamSidebar(true);
+        setLiveDocFilePanelVisible(false);
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
+        setLiveDocFilePanelVisible(true);
+      } else if (data.type === 'onkloudloaded') {
+        setShowWebcamSidebar(false);
+        setLiveDocFilePanelVisible(true);
+      } else if (
+        data.type === 'onKloudFilePanelVisibleChange' ||
+        data.type === 'Kloud-FilePanelVisibleChange' ||
+        data.type === 'Kloud-ShowFilePanel' ||
+        !!data.type?.toLowerCase().includes('filepanel')
+      ) {
+        const visible = getPanelVisibility(data);
+        if (visible !== null) {
+          setLiveDocFilePanelVisible(visible);
+        }
+        const panelWidth = getPanelWidth(data);
+        if (panelWidth !== null) {
+          setLiveDocFilePanelWidth(panelWidth);
+        } else if (visible !== null) {
+          // Fallback if plugin message omits width.
+          setLiveDocFilePanelWidth(
+            visible ? LIVEDOC_FILE_PANEL_EXPANDED_WIDTH : LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH,
+          );
+        }
       }
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // 活文档主区域显示时默认右侧 webcam 栏（非浮窗）；离开该布局时关闭，避免挡住投屏等场景的浮窗头像
+  // 活文档主区域显示时默认右侧文件控制栏；离开该布局时关闭浮窗/侧栏状态。
   React.useEffect(() => {
     if (shouldDisplayLiveDoc) {
-      setShowWebcamSidebar(true);
+      setShowWebcamSidebar(false);
+      setLiveDocFilePanelVisible(true);
+      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_EXPANDED_WIDTH);
     } else {
       setShowWebcamSidebar(false);
+      setLiveDocFilePanelVisible(false);
+      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
     }
   }, [shouldDisplayLiveDoc]);
 
@@ -2917,12 +3121,97 @@ function VideoConferenceComponent(props: {
     'right-inset',
   );
   const [floatingExpanded, setFloatingExpanded] = React.useState(false);
+  const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
+  const rememberedGapFromLiveDocPanel = React.useRef<number | null>(null);
+  const floatingPosRef = React.useRef(floatingPos);
+  const floatingXAnimationRef = React.useRef<number | null>(null);
+  const FLOATING_SYNC_ANIMATION_MS = 340;
+  const effectiveLiveDocPanelWidth =
+    liveDocFilePanelVisible
+      ? liveDocFilePanelWidth
+      : LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH;
+  const floatingRightInset =
+    activeView === 'liveDoc' && !hasScreenShare
+      ? effectiveLiveDocPanelWidth +
+        FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
+      : FLOATING_WEBCAM_RIGHT_INSET;
+  const floatingRightBoundaryInset =
+    activeView === 'liveDoc' && !hasScreenShare
+      ? effectiveLiveDocPanelWidth + FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL
+      : FLOATING_WEBCAM_RIGHT_INSET;
+
+  const getGapFromLiveDocPanel = React.useCallback((x: number) => {
+    const el = floatingRef.current;
+    const parent = el?.offsetParent as HTMLElement | null;
+    if (!el || !parent) return null;
+    const gap = parent.clientWidth - (x + el.offsetWidth) - effectiveLiveDocPanelWidth;
+    return Math.max(FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL, gap);
+  }, [effectiveLiveDocPanelWidth]);
+  const clampFloatingPosition = React.useCallback(
+    (x: number, y: number) => {
+      const el = floatingRef.current;
+      const parent = el?.offsetParent as HTMLElement | null;
+      if (!el || !parent) return { x, y };
+
+      const minY = activeView === 'liveDoc' && !hasScreenShare ? FLOATING_WEBCAM_TOP_INSET : 0;
+      const maxX = Math.max(0, parent.clientWidth - el.offsetWidth - floatingRightBoundaryInset);
+      const maxY = Math.max(
+        minY,
+        parent.clientHeight - el.offsetHeight - FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET,
+      );
+      return {
+        x: Math.min(Math.max(0, x), maxX),
+        y: Math.min(Math.max(minY, y), maxY),
+      };
+    },
+    [activeView, floatingRightBoundaryInset, hasScreenShare],
+  );
+
+  React.useEffect(() => {
+    floatingPosRef.current = floatingPos;
+  }, [floatingPos]);
+
+  const cancelFloatingXAnimation = React.useCallback(() => {
+    if (floatingXAnimationRef.current !== null) {
+      window.cancelAnimationFrame(floatingXAnimationRef.current);
+      floatingXAnimationRef.current = null;
+    }
+  }, []);
+
+  const animateFloatingXTo = React.useCallback(
+    (targetX: number) => {
+      cancelFloatingXAnimation();
+      const start = floatingPosRef.current;
+      const deltaX = targetX - start.x;
+      if (Math.abs(deltaX) < 0.5) return;
+      const startAt = performance.now();
+      const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+
+      const tick = (now: number) => {
+        const elapsed = now - startAt;
+        const progress = Math.min(1, elapsed / FLOATING_SYNC_ANIMATION_MS);
+        const eased = easeOut(progress);
+        const x = start.x + deltaX * eased;
+        const clamped = clampFloatingPosition(x, start.y);
+        setFloatingPos({ x: clamped.x, y: clamped.y });
+        if (progress < 1 && !isDragging.current) {
+          floatingXAnimationRef.current = window.requestAnimationFrame(tick);
+        } else {
+          floatingXAnimationRef.current = null;
+        }
+      };
+      floatingXAnimationRef.current = window.requestAnimationFrame(tick);
+    },
+    [cancelFloatingXAnimation, clampFloatingPosition],
+  );
 
   const handleFloatingMouseDown = React.useCallback(
     (e: React.MouseEvent) => {
       isDragging.current = true;
+      setIsFloatingDragging(true);
+      cancelFloatingXAnimation();
       if (floatingPosLayout === 'right-inset' && floatingRef.current) {
         const el = floatingRef.current;
         const parent = el.offsetParent as HTMLElement | null;
@@ -2931,9 +3220,13 @@ function VideoConferenceComponent(props: {
           const pRect = parent.getBoundingClientRect();
           const x = rect.left - pRect.left;
           const y = rect.top - pRect.top;
+          const clamped = clampFloatingPosition(x, y);
           setFloatingPosLayout('coordinates');
-          setFloatingPos({ x, y });
-          dragOffset.current = { x: e.clientX - x, y: e.clientY - y };
+          setFloatingPos(clamped);
+          if (activeView === 'liveDoc' && !hasScreenShare) {
+            rememberedGapFromLiveDocPanel.current = getGapFromLiveDocPanel(clamped.x);
+          }
+          dragOffset.current = { x: e.clientX - clamped.x, y: e.clientY - clamped.y };
         } else {
           dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
           setFloatingPosLayout('coordinates');
@@ -2943,16 +3236,21 @@ function VideoConferenceComponent(props: {
       }
       e.preventDefault();
     },
-    [floatingPos, floatingPosLayout],
+    [activeView, cancelFloatingXAnimation, clampFloatingPosition, floatingPos, floatingPosLayout, getGapFromLiveDocPanel, hasScreenShare],
   );
 
   React.useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isDragging.current) return;
-      setFloatingPos({ x: e.clientX - dragOffset.current.x, y: e.clientY - dragOffset.current.y });
+      const next = clampFloatingPosition(e.clientX - dragOffset.current.x, e.clientY - dragOffset.current.y);
+      setFloatingPos(next);
+      if (floatingPosLayout === 'coordinates' && activeView === 'liveDoc' && !hasScreenShare) {
+        rememberedGapFromLiveDocPanel.current = getGapFromLiveDocPanel(next.x);
+      }
     };
     const handleMouseUp = () => {
       isDragging.current = false;
+      setIsFloatingDragging(false);
     };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
@@ -2960,7 +3258,64 @@ function VideoConferenceComponent(props: {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
+  }, [activeView, clampFloatingPosition, floatingPosLayout, getGapFromLiveDocPanel, hasScreenShare]);
+
+  React.useEffect(() => {
+    const finishDrag = () => {
+      isDragging.current = false;
+      setIsFloatingDragging(false);
+    };
+    window.addEventListener('blur', finishDrag);
+    return () => window.removeEventListener('blur', finishDrag);
   }, []);
+
+  React.useEffect(() => {
+    if (floatingPosLayout !== 'coordinates') return;
+    setFloatingPos((pos) => clampFloatingPosition(pos.x, pos.y));
+  }, [clampFloatingPosition, floatingExpanded, floatingPosLayout]);
+
+  const syncFloatingXToRememberedGap = React.useCallback(() => {
+    if (floatingPosLayout !== 'coordinates' || activeView !== 'liveDoc' || hasScreenShare) return;
+    const el = floatingRef.current;
+    const parent = el?.offsetParent as HTMLElement | null;
+    if (!el || !parent) return;
+    const current = floatingPosRef.current;
+
+    const rememberedGap =
+      rememberedGapFromLiveDocPanel.current ??
+      getGapFromLiveDocPanel(current.x) ??
+      FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL;
+
+    rememberedGapFromLiveDocPanel.current = rememberedGap;
+    const targetX = parent.clientWidth - el.offsetWidth - effectiveLiveDocPanelWidth - rememberedGap;
+    const clampedTarget = clampFloatingPosition(targetX, current.y);
+    if (isDragging.current) {
+      setFloatingPos(clampedTarget);
+    } else {
+      animateFloatingXTo(clampedTarget.x);
+    }
+  }, [
+    activeView,
+    animateFloatingXTo,
+    clampFloatingPosition,
+    effectiveLiveDocPanelWidth,
+    floatingPosLayout,
+    getGapFromLiveDocPanel,
+    hasScreenShare,
+  ]);
+
+  React.useEffect(() => {
+    syncFloatingXToRememberedGap();
+  }, [syncFloatingXToRememberedGap]);
+
+  React.useEffect(() => {
+    return () => cancelFloatingXAnimation();
+  }, [cancelFloatingXAnimation]);
+
+  React.useEffect(() => {
+    if (floatingPosLayout !== 'coordinates' || activeView !== 'liveDoc' || hasScreenShare) return;
+    syncFloatingXToRememberedGap();
+  }, [activeView, floatingExpanded, floatingPosLayout, hasScreenShare, syncFloatingXToRememberedGap]);
 
   // Chat + Attendee overlay state
   const [chatOpen, setChatOpen] = React.useState(false);
@@ -3693,6 +4048,7 @@ function VideoConferenceComponent(props: {
                 const handleFileClick = () => {
                   // Switch to floating mode
                   setShowWebcamSidebar(false);
+                  setLiveDocFilePanelVisible(true);
                   // Send message to iframe
                   const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
                   if (iframe?.contentWindow) {
@@ -3997,11 +4353,14 @@ function VideoConferenceComponent(props: {
                     position: 'absolute',
                     top: floatingPos.y,
                     ...(floatingPosLayout === 'right-inset'
-                      ? { right: FLOATING_WEBCAM_RIGHT_INSET, left: 'auto' as const }
+                      ? { right: floatingRightInset, left: 'auto' as const }
                       : { left: floatingPos.x, right: 'auto' as const }),
                     zIndex: 200,
                     cursor: isDragging.current ? 'grabbing' : 'grab',
                     userSelect: 'none',
+                    transition: isFloatingDragging
+                      ? 'none'
+                      : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out',
                   }}
                 >
                   {!floatingExpanded && (
