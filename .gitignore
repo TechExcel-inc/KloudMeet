@@ -50,6 +50,7 @@ prisma/add_replay_tables.sql
 
 # local db / scratch files
 mysql.txt
+/backups/
 
 # figma design prototypes (not production code)
 figma-design/
