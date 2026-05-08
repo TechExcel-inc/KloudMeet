@@ -37,35 +37,35 @@ export function LiveDocView({
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
-    if (process.env.NODE_ENV !== 'development') {
-      setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
-      setSettingsLoading(false);
-      return;
+    if (process.env.NODE_ENV === 'development') {
+      let cancelled = false;
+      setSettingsLoading(true);
+      fetch('/api/settings')
+        .then((res) => (res.ok ? res.json() : ({} as Record<string, unknown>)))
+        .then((data) => {
+          if (cancelled) return;
+          const raw = (data as Record<string, unknown>).livedoc_debug_enabled;
+          const debugEnabled =
+            raw === true || raw === 'true' || raw === '1' || raw === 1;
+          const debugUrl =
+            typeof (data as Record<string, unknown>).livedoc_debug_url === 'string'
+              ? String((data as Record<string, unknown>).livedoc_debug_url)
+              : '';
+          setRuntimeSettings({ debugEnabled, debugUrl });
+        })
+        .catch(() => {
+          if (!cancelled) setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
+        })
+        .finally(() => {
+          if (!cancelled) setSettingsLoading(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
-    let cancelled = false;
-    setSettingsLoading(true);
-    fetch('/api/settings')
-      .then((res) => (res.ok ? res.json() : ({} as Record<string, unknown>)))
-      .then((data) => {
-        if (cancelled) return;
-        const raw = (data as Record<string, unknown>).livedoc_debug_enabled;
-        const debugEnabled =
-          raw === true || raw === 'true' || raw === '1' || raw === 1;
-        const debugUrl =
-          typeof (data as Record<string, unknown>).livedoc_debug_url === 'string'
-            ? String((data as Record<string, unknown>).livedoc_debug_url)
-            : '';
-        setRuntimeSettings({ debugEnabled, debugUrl });
-      })
-      .catch(() => {
-        if (!cancelled) setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
-      })
-      .finally(() => {
-        if (!cancelled) setSettingsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+
+    setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
+    setSettingsLoading(false);
   }, []);
 
   React.useEffect(() => {
@@ -99,7 +99,7 @@ export function LiveDocView({
     setPluginLoaded(false);
   }, [livedocInstanceId]);
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     const handler = (e: MessageEvent) => {
       const data = e.data as { type?: unknown } | null;
       if (!data || typeof data !== 'object' || data.type !== 'onkloudloaded') return;
