@@ -1,8 +1,6 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
 
 // All setting keys managed by the System Settings modal
 const SETTING_KEYS = [
@@ -18,7 +16,6 @@ const SETTING_KEYS = [
   'livekit_api_secret',
   'telnyx_app_key',
 ];
-const SETTINGS_FALLBACK_FILE = path.join(process.cwd(), 'tmp', 'system-settings.json');
 
 async function ensureSystemSettingTable() {
   await prisma.$executeRawUnsafe(`
@@ -32,33 +29,6 @@ async function ensureSystemSettingTable() {
       UNIQUE KEY \`SystemSetting_key_key\` (\`key\`)
     ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
   `);
-}
-
-function normalizeSettings(input: Record<string, unknown>): Record<string, string> {
-  const normalized: Record<string, string> = {};
-  for (const key of SETTING_KEYS) {
-    if (key in input) normalized[key] = String(input[key] ?? '');
-  }
-  return normalized;
-}
-
-async function readFallbackSettings(): Promise<Record<string, string>> {
-  try {
-    const text = await fs.readFile(SETTINGS_FALLBACK_FILE, 'utf8');
-    const parsed = JSON.parse(text) as Record<string, unknown>;
-    return normalizeSettings(parsed);
-  } catch {
-    return {};
-  }
-}
-
-async function writeFallbackSettings(nextSettings: Record<string, string>): Promise<void> {
-  await fs.mkdir(path.dirname(SETTINGS_FALLBACK_FILE), { recursive: true });
-  await fs.writeFile(
-    SETTINGS_FALLBACK_FILE,
-    JSON.stringify(nextSettings, null, 2),
-    'utf8',
-  );
 }
 
 // GET /api/settings — Load all system settings
@@ -78,17 +48,17 @@ export async function GET() {
     return NextResponse.json(settings);
   } catch (error) {
     console.error('[settings GET]', error);
-    const fallback = await readFallbackSettings();
-    return NextResponse.json(fallback);
+    return NextResponse.json(
+      { error: 'Failed to load settings' },
+      { status: 500 },
+    );
   }
 }
 
 // PUT /api/settings — Upsert system settings
 export async function PUT(request: NextRequest) {
   const body = await request.json();
-  const entries = Object.entries(body).filter(
-    ([key]) => SETTING_KEYS.includes(key),
-  );
+  const entries = Object.entries(body).filter(([key]) => SETTING_KEYS.includes(key));
 
   try {
     await ensureSystemSettingTable();
@@ -109,12 +79,9 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error('[settings PUT]', error);
-    const previous = await readFallbackSettings();
-    const merged = { ...previous };
-    for (const [key, value] of entries) {
-      merged[key] = String(value ?? '');
-    }
-    await writeFallbackSettings(merged);
-    return NextResponse.json({ ok: true, storage: 'fallback-file' });
+    return NextResponse.json(
+      { error: 'Failed to save settings' },
+      { status: 500 },
+    );
   }
 }

@@ -46,6 +46,9 @@ function normalizeHttpUrl(input: string): string | null {
 
 /** Effective LiveDoc iframe origin: debug URL from system settings or env default. */
 export function resolveLiveDocBaseUrl(settings?: LiveDocRuntimeSettings | null): string {
+  if (process.env.NODE_ENV === 'production') {
+    return getConfiguredLiveDocBaseUrl();
+  }
   if (settings?.debugEnabled) {
     return (
       normalizeHttpUrl(settings.debugUrl ?? '') ??

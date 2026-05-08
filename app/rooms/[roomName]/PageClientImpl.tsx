@@ -3058,7 +3058,64 @@ function VideoConferenceComponent(props: {
         show?: unknown;
         visible?: unknown;
         isVisible?: unknown;
-        data?: { Show?: unknown; show?: unknown; visible?: unknown; isVisible?: unknown };
+        IsVisible?: unknown;
+        IsShow?: unknown;
+        expanded?: unknown;
+        isExpanded?: unknown;
+        width?: unknown;
+        panelWidth?: unknown;
+        filePanelWidth?: unknown;
+        sidebarWidth?: unknown;
+        rightPanelWidth?: unknown;
+        Width?: unknown;
+        panel?: {
+          Show?: unknown;
+          show?: unknown;
+          visible?: unknown;
+          isVisible?: unknown;
+          IsVisible?: unknown;
+          IsShow?: unknown;
+          expanded?: unknown;
+          isExpanded?: unknown;
+          width?: unknown;
+          Width?: unknown;
+          panelWidth?: unknown;
+          filePanelWidth?: unknown;
+          sidebarWidth?: unknown;
+          rightPanelWidth?: unknown;
+        };
+        data?: {
+          Show?: unknown;
+          show?: unknown;
+          visible?: unknown;
+          isVisible?: unknown;
+          IsVisible?: unknown;
+          IsShow?: unknown;
+          expanded?: unknown;
+          isExpanded?: unknown;
+          width?: unknown;
+          panelWidth?: unknown;
+          filePanelWidth?: unknown;
+          sidebarWidth?: unknown;
+          rightPanelWidth?: unknown;
+          Width?: unknown;
+          panel?: {
+            Show?: unknown;
+            show?: unknown;
+            visible?: unknown;
+            isVisible?: unknown;
+            IsVisible?: unknown;
+            IsShow?: unknown;
+            expanded?: unknown;
+            isExpanded?: unknown;
+            width?: unknown;
+            Width?: unknown;
+            panelWidth?: unknown;
+            filePanelWidth?: unknown;
+            sidebarWidth?: unknown;
+            rightPanelWidth?: unknown;
+          };
+        };
       };
       if (
         process.env.NODE_ENV === 'development' &&
@@ -5507,7 +5564,7 @@ function VideoConferenceComponent(props: {
           }
         `}</style>
 
-        <DebugMode />
+        {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       </RoomContext.Provider>

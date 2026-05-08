@@ -37,6 +37,11 @@ export function LiveDocView({
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   React.useEffect(() => {
+    if (process.env.NODE_ENV !== 'development') {
+      setRuntimeSettings({ debugEnabled: false, debugUrl: '' });
+      setSettingsLoading(false);
+      return;
+    }
     let cancelled = false;
     setSettingsLoading(true);
     fetch('/api/settings')

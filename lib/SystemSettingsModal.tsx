@@ -42,11 +42,16 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
       .then((data) => {
         if (data && typeof data === 'object' && !data.error) {
           setOrgName(data.org_name || '');
-          const debugRaw = data.livedoc_debug_enabled;
-          setLiveDocDebugEnabled(
-            debugRaw === true || debugRaw === 'true' || debugRaw === '1' || debugRaw === 1,
-          );
-          setLiveDocDebugUrl(data.livedoc_debug_url || '');
+          if (process.env.NODE_ENV === 'development') {
+            const debugRaw = data.livedoc_debug_enabled;
+            setLiveDocDebugEnabled(
+              debugRaw === true || debugRaw === 'true' || debugRaw === '1' || debugRaw === 1,
+            );
+            setLiveDocDebugUrl(data.livedoc_debug_url || '');
+          } else {
+            setLiveDocDebugEnabled(false);
+            setLiveDocDebugUrl('');
+          }
           setAwsAccessKey(data.aws_access_key || '');
           setAwsSecretKey(data.aws_secret_key || '');
           setAwsRegion(data.aws_region || '');
@@ -69,8 +74,12 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           org_name: orgName,
-          livedoc_debug_enabled: liveDocDebugEnabled ? '1' : '0',
-          livedoc_debug_url: liveDocDebugUrl.trim(),
+          ...(process.env.NODE_ENV === 'development'
+            ? {
+                livedoc_debug_enabled: liveDocDebugEnabled ? '1' : '0',
+                livedoc_debug_url: liveDocDebugUrl.trim(),
+              }
+            : {}),
           aws_access_key: awsAccessKey,
           aws_secret_key: awsSecretKey,
           aws_region: awsRegion,
@@ -168,29 +177,33 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       />
                       <p className={styles.helperText}>{t('settings.orgNameHelper')}</p>
                     </div>
-                    <div className={styles.inputRow}>
-                      <label className={styles.checkboxRow}>
-                        <input
-                          type="checkbox"
-                          checked={liveDocDebugEnabled}
-                          onChange={(e) => setLiveDocDebugEnabled(e.target.checked)}
-                        />
-                        <span>{t('settings.enableDebugMode')}</span>
-                      </label>
-                      <p className={styles.helperText}>{t('settings.enableDebugModeHelper')}</p>
-                    </div>
-                    {liveDocDebugEnabled && (
-                      <div className={styles.inputRow}>
-                        <label className={styles.label}>{t('settings.localHostUrl')}</label>
-                        <input
-                          type="text"
-                          className={styles.input}
-                          value={liveDocDebugUrl}
-                          onChange={(e) => setLiveDocDebugUrl(e.target.value)}
-                          placeholder="http://localhost:8081"
-                        />
-                        <p className={styles.helperText}>{t('settings.localHostUrlHelper')}</p>
-                      </div>
+                    {process.env.NODE_ENV === 'development' && (
+                      <>
+                        <div className={styles.inputRow}>
+                          <label className={styles.checkboxRow}>
+                            <input
+                              type="checkbox"
+                              checked={liveDocDebugEnabled}
+                              onChange={(e) => setLiveDocDebugEnabled(e.target.checked)}
+                            />
+                            <span>{t('settings.enableDebugMode')}</span>
+                          </label>
+                          <p className={styles.helperText}>{t('settings.enableDebugModeHelper')}</p>
+                        </div>
+                        {liveDocDebugEnabled && (
+                          <div className={styles.inputRow}>
+                            <label className={styles.label}>{t('settings.localHostUrl')}</label>
+                            <input
+                              type="text"
+                              className={styles.input}
+                              value={liveDocDebugUrl}
+                              onChange={(e) => setLiveDocDebugUrl(e.target.value)}
+                              placeholder="http://localhost:8081"
+                            />
+                            <p className={styles.helperText}>{t('settings.localHostUrlHelper')}</p>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}

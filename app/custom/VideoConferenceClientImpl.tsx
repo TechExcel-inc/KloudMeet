@@ -91,7 +91,9 @@ export function VideoConferenceClientImpl(props: {
             process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU === 'true' ? SettingsMenu : undefined
           }
         />
-        <DebugMode logLevel={LogLevel.debug} />
+        {process.env.NODE_ENV === 'development' ? (
+          <DebugMode logLevel={LogLevel.debug} />
+        ) : null}
       </RoomContext.Provider>
     </div>
   );
