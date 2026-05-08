@@ -22,17 +22,30 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Missing jitsiInstanceId' }, { status: 400 });
   }
 
-  const upstream = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      UserToken: userToken,
-    },
-    body: JSON.stringify({
-      jitsiInstanceId: payload.jitsiInstanceId,
-      companyId: 3255,
-    }),
-  });
+  let upstream: Response;
+  try {
+    upstream = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        UserToken: userToken,
+      },
+      body: JSON.stringify({
+        jitsiInstanceId: payload.jitsiInstanceId,
+        companyId: 3255,
+      }),
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown upstream error';
+    return NextResponse.json(
+      {
+        error: 'LiveDoc meeting-server upstream unavailable',
+        url,
+        detail: message,
+      },
+      { status: 502 },
+    );
+  }
 
   const text = await upstream.text();
   return new NextResponse(text, {

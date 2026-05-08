@@ -1535,9 +1535,24 @@ function VideoConferenceComponent(props: {
                 const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
                 if (!wasRefresh) setShowMeetingReadyModal(true);
               }
-              if (typeof navigator !== 'undefined' && navigator.clipboard) {
-                navigator.clipboard.writeText(window.location.href).catch(console.error);
-                console.log('Meeting URL auto-copied to clipboard!');
+              const canAutoCopyMeetingUrl =
+                typeof window !== 'undefined' &&
+                typeof document !== 'undefined' &&
+                typeof navigator !== 'undefined' &&
+                !!navigator.clipboard &&
+                document.hasFocus();
+              if (canAutoCopyMeetingUrl) {
+                navigator.clipboard
+                  .writeText(window.location.href)
+                  .then(() => {
+                    console.log('Meeting URL auto-copied to clipboard!');
+                  })
+                  .catch((error) => {
+                    // Ignore expected focus-related clipboard rejections.
+                    if (error?.name !== 'NotAllowedError') {
+                      console.warn('Failed to auto-copy meeting URL:', error);
+                    }
+                  });
               }
 
               // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
