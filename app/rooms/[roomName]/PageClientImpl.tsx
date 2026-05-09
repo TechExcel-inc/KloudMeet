@@ -55,6 +55,7 @@ import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 
 /** LiveDoc 浮窗头像条相对右侧文件控制栏的默认间距（px）；默认 top 仍为 12 */
 const FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL = 16;
@@ -80,6 +81,7 @@ export function PageClientImpl(props: {
   hq: boolean;
   codec: VideoCodec;
 }) {
+  const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const searchParams = useSearchParams();
   const isActionStart = searchParams?.get('action') === 'start';
   const isBot = searchParams?.get('isBot') === 'true';
@@ -800,6 +802,58 @@ export function PageClientImpl(props: {
               onError={handlePreJoinError}
             />
           )}
+          {!isBot && (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '0.4rem',
+                maxWidth: '560px',
+                margin: '0.6rem auto 0',
+                zIndex: 2,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => openDesktopEntry('prejoin')}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#5b21b6',
+                  fontWeight: 600,
+                  fontSize: '0.9rem',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: '2px',
+                  padding: 0,
+                }}
+              >
+                {t('toolbar.openDesktop.menuItem')}
+              </button>
+              <span
+                title={t('toolbar.openDesktop.prejoinTip')}
+                aria-label={t('toolbar.openDesktop.prejoinTip')}
+                style={{
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  border: '1px solid #a78bfa',
+                  color: '#6d28d9',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'help',
+                  userSelect: 'none',
+                  lineHeight: 1,
+                }}
+              >
+                i
+              </span>
+            </div>
+          )}
           {isHost && isActive && !isSameTabRefresh && (
             <div style={{ textAlign: 'center', marginTop: '1.25rem', zIndex: 2 }}>
               <button
@@ -823,6 +877,7 @@ export function PageClientImpl(props: {
       )}
 
       {/* Help Modal — always available (pre-join + in-meeting) */}
+      {desktopLaunchModal}
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </main>
   );
@@ -1129,6 +1184,7 @@ function VideoConferenceComponent(props: {
     codec: VideoCodec;
   };
 }) {
+  const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
@@ -5407,6 +5463,7 @@ function VideoConferenceComponent(props: {
           muteAllActive={muteAllActive}
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
+          onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
           isMutedByHost={(muteAllActive || hostMutedIdentities.includes(room.localParticipant.identity)) && !micEnabled && !(isHost || isCohost)}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
@@ -5581,6 +5638,7 @@ function VideoConferenceComponent(props: {
 
         {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
+        {desktopLaunchModal}
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
       </RoomContext.Provider>
     </div>

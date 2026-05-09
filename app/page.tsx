@@ -8,6 +8,7 @@ import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { useI18n, LOCALE_OPTIONS, type Locale } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
+import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -69,7 +70,7 @@ function useToast() {
 /* ════════════════════════════════════════════════════
    Top Toolbar Component
    ════════════════════════════════════════════════════ */
-function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, onOpenHelp, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, onOpenHelp?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
+function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, onOpenHelp, onOpenDesktopApp, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, onOpenHelp?: () => void, onOpenDesktopApp?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const { t, locale, setLocale } = useI18n();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = React.useRef<HTMLDivElement>(null);
@@ -242,6 +243,16 @@ function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile
                     style={{ borderBottom: '1px solid #f1f5f9' }}
                   >
                     {t('nav.systemSettings')}
+                  </button>
+                  <button
+                    className={styles.dropdownItem}
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onOpenDesktopApp && onOpenDesktopApp();
+                    }}
+                    style={{ borderBottom: '1px solid #f1f5f9' }}
+                  >
+                    {t('toolbar.openDesktop.menuItem')}
                   </button>
                   <button 
                     className={styles.dropdownItem} 
@@ -1129,12 +1140,14 @@ function DashboardView({
   onSignOut,
   onUpdateUser,
   onOpenHelp,
+  onOpenDesktopApp,
   toast,
 }: {
   user: AuthUser;
   onSignOut: () => void;
   onUpdateUser: (u: AuthUser) => void;
   onOpenHelp: () => void;
+  onOpenDesktopApp: () => void;
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
@@ -1444,6 +1457,7 @@ function DashboardView({
         onOpenSettings={() => setShowSettingsModal(true)} 
         onOpenProfile={() => setShowProfileModal(true)}
         onOpenHelp={onOpenHelp}
+        onOpenDesktopApp={onOpenDesktopApp}
         hideAvatar={false} 
       />
 
@@ -2358,6 +2372,7 @@ function ForgotPasswordView({
    Main Page (state machine)
    ════════════════════════════════════════════════════ */
 function HomeContent() {
+  const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const [view, setView] = useState<PageView>('anonymous');
   const [signupSource, setSignupSource] = useState<PageView>('login');
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -2461,9 +2476,17 @@ function HomeContent() {
         />
       )}
       {view === 'dashboard' && user && (
-        <DashboardView user={user} onSignOut={handleSignOut} onUpdateUser={setUser} onOpenHelp={() => setShowHelp(true)} toast={toast} />
+        <DashboardView
+          user={user}
+          onSignOut={handleSignOut}
+          onUpdateUser={setUser}
+          onOpenHelp={() => setShowHelp(true)}
+          onOpenDesktopApp={() => openDesktopEntry('outsideMeeting')}
+          toast={toast}
+        />
       )}
 
+      {desktopLaunchModal}
       <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
     </>
   );

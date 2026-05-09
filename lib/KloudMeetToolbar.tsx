@@ -72,6 +72,7 @@ interface KloudMeetToolbarProps {
   /** Whether captions are currently active */
   captionsEnabled?: boolean;
   onToggleCaptions?: () => void;
+  onOpenDesktopApp?: () => void;
 }
 
 export function KloudMeetToolbar({
@@ -114,6 +115,7 @@ export function KloudMeetToolbar({
   canToggleCaptions,
   captionsEnabled,
   onToggleCaptions,
+  onOpenDesktopApp,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const [iframeMouseActive, setIframeMouseActive] = useState(false);
@@ -957,6 +959,7 @@ export function KloudMeetToolbar({
                 onOpenSTTSettings={() => setShowSTTSettings(true)}
                 onOpenCCSettings={() => setShowCCSettings(true)}
                 localSubtitleVisible={localSubtitleVisible}
+              onOpenDesktopApp={onOpenDesktopApp}
               />
             </div>
           </div>
@@ -1259,6 +1262,7 @@ function ActiveSheetContent({
   onOpenSTTSettings,
   onOpenCCSettings,
   localSubtitleVisible,
+  onOpenDesktopApp,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1407,9 +1411,13 @@ function ActiveSheetContent({
             </button>
           )}
           <button className={styles.actionSheetItem} onClick={() => {
-            const currentUrl = new URL(window.location.href);
-            const rn = currentUrl.pathname.split('/').filter(Boolean).pop() || '';
-            window.location.href = `kloudmeet://join/${encodeURIComponent(rn)}${currentUrl.search}`;
+            if (onOpenDesktopApp) {
+              onOpenDesktopApp();
+            } else {
+              const currentUrl = new URL(window.location.href);
+              const rn = currentUrl.pathname.split('/').filter(Boolean).pop() || '';
+              window.location.href = `kloudmeet://join/${encodeURIComponent(rn)}${currentUrl.search}`;
+            }
             setActiveSheet(null);
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
