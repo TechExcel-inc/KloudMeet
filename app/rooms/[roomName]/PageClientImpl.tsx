@@ -3248,7 +3248,7 @@ function VideoConferenceComponent(props: {
   const [floatingPosLayout, setFloatingPosLayout] = React.useState<'right-inset' | 'coordinates'>(
     'right-inset',
   );
-  const [floatingExpanded, setFloatingExpanded] = React.useState(false);
+  const [floatingExpanded, setFloatingExpanded] = React.useState(true);
   const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });

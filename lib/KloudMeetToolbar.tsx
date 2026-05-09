@@ -1104,6 +1104,7 @@ export function KloudMeetToolbar({
                       onOpenSTTSettings={() => setShowSTTSettings(true)}
                       onOpenCCSettings={() => setShowCCSettings(true)}
                       localSubtitleVisible={localSubtitleVisible}
+                      onOpenDesktopApp={onOpenDesktopApp}
                     />
                   </div>
                 )}
@@ -1421,7 +1422,7 @@ function ActiveSheetContent({
             setActiveSheet(null);
           }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
-            {t('toolbar.launchInApp')}
+            {t('toolbar.openDesktop.menuItem')}
           </button>
           {false && (
             <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.appDeviceSettings')); setActiveSheet(null); }}>
