@@ -10,6 +10,7 @@ import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/K
 import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
+import { VideoHighlightOverlay, type VideoHighlightRect } from '@/lib/VideoHighlightOverlay';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -65,6 +66,13 @@ const LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH = 56;
 const FLOATING_WEBCAM_RIGHT_INSET = 350;
 const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 104;
 const FLOATING_WEBCAM_TOP_INSET = 12;
+const VIDEO_HIGHLIGHT_AUTO_REMOVE_MS = 1200;
+
+type VideoHighlight = VideoHighlightRect & {
+  targetVideoId: string;
+  createdBy: string;
+  sentAt: number;
+};
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -1202,6 +1210,8 @@ function VideoConferenceComponent(props: {
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
+  const [isVideoHighlightMode, setIsVideoHighlightMode] = React.useState(false);
+  const [videoHighlights, setVideoHighlights] = React.useState<Record<string, VideoHighlight>>({});
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   // Remote control permission flow
   const [remoteControlPending, setRemoteControlPending] = React.useState(false);
@@ -1434,6 +1444,9 @@ function VideoConferenceComponent(props: {
 
   const handleViewChange = React.useCallback(
     (view: ViewMode) => {
+      if (view !== 'liveDoc') {
+        setIsVideoHighlightMode(false);
+      }
       if (view !== 'shareScreen') {
         setIsDrawingMode(false);
         setIsRemoteControlMode(false);
@@ -2227,6 +2240,29 @@ function VideoConferenceComponent(props: {
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
   // Interactive meetings: everyone can switch views by default
   const canSwitchViews = true;
+  const liveDocInteractiveParam = searchParams?.get('livedocInteractive');
+  const defaultLiveDocInteractive =
+    process.env.NEXT_PUBLIC_LIVEDOC_INTERACTIVE_DEFAULT === 'true';
+  const isLiveDocInteractiveEnabled =
+    liveDocInteractiveParam === null
+      ? defaultLiveDocInteractive
+      : ['1', 'true', 'yes', 'on'].includes(liveDocInteractiveParam.toLowerCase());
+  const isPresenterForHighlight =
+    isAutoPresenter || isCopresenter || screenShareActive;
+  const canEditVideoHighlights =
+    isLiveDocInteractiveEnabled || isHost || isPresenterForHighlight;
+
+  const canIdentityEditVideoHighlights = React.useCallback(
+    (identity?: string | null) => {
+      if (!identity) return false;
+      if (isLiveDocInteractiveEnabled) return true;
+      if (identity === hostIdentity) return true;
+      if (identity === autoPresenterIdentity) return true;
+      if (copresenterIdentities.includes(identity)) return true;
+      return false;
+    },
+    [isLiveDocInteractiveEnabled, hostIdentity, autoPresenterIdentity, copresenterIdentities],
+  );
 
   const meetingRoomName = props.connectionDetails.roomName;
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
@@ -2237,12 +2273,37 @@ function VideoConferenceComponent(props: {
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
   const livedocHostBootstrappedRef = React.useRef(false);
+  const highlightTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const activeVideoHighlightItems = React.useMemo(() => {
+    const currentTarget = livedocInstanceId ?? meetingRoomName;
+    return Object.values(videoHighlights).filter((item) => item.targetVideoId === currentTarget);
+  }, [videoHighlights, livedocInstanceId, meetingRoomName]);
 
   React.useEffect(() => {
     if (shouldDisplayLiveDoc || isMirrorBlocked) {
       setLivedocHasBeenActivated(true);
     }
   }, [shouldDisplayLiveDoc, isMirrorBlocked]);
+
+  React.useEffect(() => {
+    setVideoHighlights({});
+    setIsVideoHighlightMode(false);
+    Object.values(highlightTimersRef.current).forEach((timer) => clearTimeout(timer));
+    highlightTimersRef.current = {};
+  }, [livedocInstanceId]);
+
+  React.useEffect(() => {
+    if (!canEditVideoHighlights) {
+      setIsVideoHighlightMode(false);
+    }
+  }, [canEditVideoHighlights]);
+
+  React.useEffect(() => {
+    return () => {
+      Object.values(highlightTimersRef.current).forEach((timer) => clearTimeout(timer));
+      highlightTimersRef.current = {};
+    };
+  }, []);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -2274,6 +2335,7 @@ function VideoConferenceComponent(props: {
     muteAllActive: boolean;
     hostMutedIdentities: string[];
     captionsOn: boolean;
+    videoHighlights: Record<string, VideoHighlight>;
   }>({
     view: activeView,
     presenter: null,
@@ -2281,6 +2343,7 @@ function VideoConferenceComponent(props: {
     muteAllActive: false,
     hostMutedIdentities: [],
     captionsOn: false,
+    videoHighlights: {},
   });
 
   // Keep authState in sync when host changes view locally
@@ -2308,6 +2371,12 @@ function VideoConferenceComponent(props: {
     }
   }, [isHost, muteAllActive, hostMutedIdentities]);
 
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.videoHighlights = videoHighlights;
+    }
+  }, [isHost, videoHighlights]);
+
   // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
   // so we use a ref to allow handleData to call it without block-scope issues.
   const setCaptionsOpenRef = React.useRef<((open: boolean) => Promise<void>) | null>(null);
@@ -2331,6 +2400,79 @@ function VideoConferenceComponent(props: {
       });
     },
     [room, encoder],
+  );
+
+  const applyHighlightAdd = React.useCallback((highlight: VideoHighlight) => {
+    const existingTimer = highlightTimersRef.current[highlight.id];
+    if (existingTimer) clearTimeout(existingTimer);
+    highlightTimersRef.current[highlight.id] = setTimeout(() => {
+      setVideoHighlights((prev) => {
+        if (!prev[highlight.id]) return prev;
+        const next = { ...prev };
+        delete next[highlight.id];
+        return next;
+      });
+      delete highlightTimersRef.current[highlight.id];
+    }, VIDEO_HIGHLIGHT_AUTO_REMOVE_MS);
+    setVideoHighlights((prev) => ({ ...prev, [highlight.id]: highlight }));
+  }, []);
+
+  const applyHighlightRemove = React.useCallback((id: string) => {
+    const timer = highlightTimersRef.current[id];
+    if (timer) {
+      clearTimeout(timer);
+      delete highlightTimersRef.current[id];
+    }
+    setVideoHighlights((prev) => {
+      if (!prev[id]) return prev;
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  const handleVideoHighlightAdd = React.useCallback(
+    (rect: VideoHighlightRect) => {
+      if (!canEditVideoHighlights) return;
+      const highlight: VideoHighlight = {
+        ...rect,
+        targetVideoId: livedocInstanceId ?? meetingRoomName,
+        createdBy: room.localParticipant.identity,
+        sentAt: Date.now(),
+      };
+      applyHighlightAdd(highlight);
+      sendMeetingMsg({ type: 'HIGHLIGHT_ADD', highlight });
+    },
+    [
+      canEditVideoHighlights,
+      livedocInstanceId,
+      meetingRoomName,
+      room.localParticipant.identity,
+      applyHighlightAdd,
+      sendMeetingMsg,
+    ],
+  );
+
+  const handleVideoHighlightRemove = React.useCallback(
+    (id: string) => {
+      if (!canEditVideoHighlights) return;
+      applyHighlightRemove(id);
+      sendMeetingMsg({
+        type: 'HIGHLIGHT_REMOVE',
+        id,
+        targetVideoId: livedocInstanceId ?? meetingRoomName,
+        removedBy: room.localParticipant.identity,
+        sentAt: Date.now(),
+      });
+    },
+    [
+      canEditVideoHighlights,
+      livedocInstanceId,
+      meetingRoomName,
+      room.localParticipant.identity,
+      applyHighlightRemove,
+      sendMeetingMsg,
+    ],
   );
 
   // Mute All / Unmute All handlers (defined after sendMeetingMsg)
@@ -2468,6 +2610,7 @@ function VideoConferenceComponent(props: {
           muteAllActive: auth.muteAllActive,
           hostMutedIdentities: auth.hostMutedIdentities,
           captionsOn: auth.captionsOn,
+          videoHighlights: auth.videoHighlights,
         },
         [participant.identity],
       );
@@ -2531,6 +2674,14 @@ function VideoConferenceComponent(props: {
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
+          }
+          if (
+            (msg as { videoHighlights?: unknown }).videoHighlights &&
+            typeof (msg as { videoHighlights?: unknown }).videoHighlights === 'object'
+          ) {
+            setVideoHighlights(
+              (msg as { videoHighlights: Record<string, VideoHighlight> }).videoHighlights,
+            );
           }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
@@ -2674,6 +2825,7 @@ function VideoConferenceComponent(props: {
                 muteAllActive: auth.muteAllActive,
                 hostMutedIdentities: auth.hostMutedIdentities,
                 captionsOn: auth.captionsOn,
+                videoHighlights: auth.videoHighlights,
               },
               [senderIdentity],
             );
@@ -2684,6 +2836,16 @@ function VideoConferenceComponent(props: {
         } else if (msg.type === 'CAPTIONS_OFF') {
           // Host/Co-host 关闭了全局字幕 — 本地停止识别
           setCaptionsOpenRef.current?.(false);
+        } else if (msg.type === 'HIGHLIGHT_ADD') {
+          const highlight = (msg as { highlight?: VideoHighlight }).highlight;
+          if (!highlight || typeof highlight.id !== 'string') return;
+          if (!canIdentityEditVideoHighlights(senderIdentity)) return;
+          applyHighlightAdd(highlight);
+        } else if (msg.type === 'HIGHLIGHT_REMOVE') {
+          const id = (msg as { id?: string }).id;
+          if (typeof id !== 'string' || !id) return;
+          if (!canIdentityEditVideoHighlights(senderIdentity)) return;
+          applyHighlightRemove(id);
         }
       } catch (e) {
         console.error('Meeting control message error:', e);
@@ -2694,7 +2856,19 @@ function VideoConferenceComponent(props: {
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room, isHost, decoder, sendMeetingMsg, screenShareActive, approvedControllerIdentity, remoteControlRequest, micEnabled]);
+  }, [
+    room,
+    isHost,
+    decoder,
+    sendMeetingMsg,
+    screenShareActive,
+    approvedControllerIdentity,
+    remoteControlRequest,
+    micEnabled,
+    canIdentityEditVideoHighlights,
+    applyHighlightAdd,
+    applyHighlightRemove,
+  ]);
 
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
   // Event delegation on document (capture phase) so it fires before LiveKit's own handlers.
@@ -4157,6 +4331,16 @@ function VideoConferenceComponent(props: {
                   isHost={isHost}
                 />
               )}
+              {shouldDisplayLiveDoc && (
+                <VideoHighlightOverlay
+                  highlights={activeVideoHighlightItems}
+                  enabled={isVideoHighlightMode}
+                  canEdit={canEditVideoHighlights}
+                  excludeRightPx={effectiveLiveDocPanelWidth}
+                  onAdd={handleVideoHighlightAdd}
+                  onRemove={handleVideoHighlightRemove}
+                />
+              )}
             </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
@@ -4284,6 +4468,14 @@ function VideoConferenceComponent(props: {
                   hostInitError={livedocInitError}
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
+                />
+                <VideoHighlightOverlay
+                  highlights={activeVideoHighlightItems}
+                  enabled={isVideoHighlightMode}
+                  canEdit={canEditVideoHighlights}
+                  excludeRightPx={effectiveLiveDocPanelWidth}
+                  onAdd={handleVideoHighlightAdd}
+                  onRemove={handleVideoHighlightRemove}
                 />
               </div>
             )}
@@ -5394,6 +5586,7 @@ function VideoConferenceComponent(props: {
           screenShareActive={screenShareActive}
           canShareScreen={!hasScreenShare || screenShareActive}
           isDrawingMode={isDrawingMode}
+          isVideoHighlightMode={isVideoHighlightMode}
           onToggleDrawingMode={() => {
             if (hasScreenShare) {
               setIsDrawingMode((prev) => {
@@ -5403,6 +5596,14 @@ function VideoConferenceComponent(props: {
               });
             }
           }}
+          onToggleVideoHighlightMode={() => {
+            if (activeView !== 'liveDoc' || !canEditVideoHighlights) return;
+            setIsVideoHighlightMode((prev) => !prev);
+            setIsDrawingMode(false);
+            setIsRemoteControlMode(false);
+          }}
+          canVideoHighlight={activeView === 'liveDoc'}
+          canEditVideoHighlights={canEditVideoHighlights}
           isRemoteControlMode={isRemoteControlMode}
           remoteControlPending={remoteControlPending}
           onToggleRemoteControlMode={() => {

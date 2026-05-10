@@ -35,6 +35,10 @@ interface KloudMeetToolbarProps {
   canShareScreen: boolean;
   isDrawingMode: boolean;
   onToggleDrawingMode: () => void;
+  isVideoHighlightMode?: boolean;
+  onToggleVideoHighlightMode?: () => void;
+  canVideoHighlight?: boolean;
+  canEditVideoHighlights?: boolean;
   isRemoteControlMode: boolean;
   onToggleRemoteControlMode: () => void;
   remoteControlPending?: boolean;
@@ -89,6 +93,10 @@ export function KloudMeetToolbar({
   canShareScreen,
   isDrawingMode,
   onToggleDrawingMode,
+  isVideoHighlightMode,
+  onToggleVideoHighlightMode,
+  canVideoHighlight,
+  canEditVideoHighlights,
   isRemoteControlMode,
   onToggleRemoteControlMode,
   remoteControlPending,
@@ -736,6 +744,23 @@ export function KloudMeetToolbar({
                     </svg>
                     {t('toolbar.liveDoc')}
                   </button>
+                  {canVideoHighlight && (
+                    <button
+                      className={`${styles.tabBtn} ${isVideoHighlightMode ? styles.tabBtnCheck : ''}`}
+                      onClick={() => onToggleVideoHighlightMode?.()}
+                      title={
+                        canEditVideoHighlights
+                          ? t('toolbar.highlightTooltip')
+                          : t('toolbar.highlightPermissionDenied')
+                      }
+                      disabled={!canEditVideoHighlights}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 5.5l3 3M4 20l4.5-1 9.5-9.5-3-3L5.5 16z" />
+                      </svg>
+                      {t('toolbar.highlight')}
+                    </button>
+                  )}
                   {false && activeView === 'liveDoc' && liveDocPluginLoaded && (
                     <button
                       type="button"

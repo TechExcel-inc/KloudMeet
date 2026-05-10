@@ -2,9 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const DEFAULT_MEETING_SERVER = 'https://wss.peertime.cn/MeetingServer';
 
+function ensureHostBypassesProxy(targetUrl: string): void {
+  let host: string;
+  try {
+    host = new URL(targetUrl).hostname;
+  } catch {
+    return;
+  }
+  if (!host) return;
+
+  const appendHost = (current: string | undefined): string => {
+    const entries = (current ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!entries.includes(host)) entries.push(host);
+    return entries.join(',');
+  };
+
+  process.env.NO_PROXY = appendHost(process.env.NO_PROXY);
+  process.env.no_proxy = appendHost(process.env.no_proxy);
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const meetingBase = process.env.LIVEDOC_SERVER_API_BASE_URL ?? DEFAULT_MEETING_SERVER;
   const url = `${meetingBase.replace(/\/$/, '')}/jitsi/create_meeting_instance`;
+  ensureHostBypassesProxy(url);
 
   const userToken = request.headers.get('UserToken') ?? request.headers.get('usertoken');
   if (!userToken) {

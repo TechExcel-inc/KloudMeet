@@ -1,0 +1,28 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.enabled {
+  pointer-events: auto;
+  cursor: default;
+}
+
+.highlightRect,
+.draftRect {
+  position: absolute;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.highlightRect {
+  border: 2px solid rgba(250, 204, 21, 0.95);
+  background: rgba(250, 204, 21, 0.22);
+}
+
+.draftRect {
+  border: 2px dashed rgba(250, 204, 21, 0.95);
+  background: rgba(250, 204, 21, 0.12);
+}
