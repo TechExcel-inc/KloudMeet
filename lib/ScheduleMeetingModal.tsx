@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
 import styles from '../styles/ScheduleMeetingModal.module.css';
 import { useI18n } from './i18n';
@@ -12,21 +12,145 @@ interface ScheduleMeetingModalProps {
   onSave: () => void;
 }
 
+const FALLBACK_TIMEZONES = [
+  'UTC',
+  'America/Los_Angeles',
+  'America/Denver',
+  'America/Chicago',
+  'America/New_York',
+  'Europe/London',
+  'Europe/Paris',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Asia/Singapore',
+  'Australia/Sydney',
+];
+
+function getUserTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+}
+
+function getTimezoneOffsetMinutes(timezone: string, date: Date): number {
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'longOffset',
+      year: 'numeric',
+    }).formatToParts(date);
+    const offsetPart = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT+00:00';
+    if (offsetPart === 'GMT') return 0;
+    const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+    if (!match) return 0;
+    const sign = match[1] === '-' ? -1 : 1;
+    const hours = Number(match[2] || 0);
+    const minutes = Number(match[3] || 0);
+    return sign * (hours * 60 + minutes);
+  } catch {
+    return 0;
+  }
+}
+
+function toDateAndTimeInTimezone(input: Date, timezone: string): { date: string; time: string } {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(input);
+    const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return {
+      date: `${map.year}-${map.month}-${map.day}`,
+      time: `${map.hour}:${map.minute}`,
+    };
+  } catch {
+    const iso = input.toISOString();
+    return {
+      date: iso.split('T')[0],
+      time: `${String(input.getHours()).padStart(2, '0')}:${String(input.getMinutes()).padStart(2, '0')}`,
+    };
+  }
+}
+
+function zonedDateTimeToUtcIso(date: string, time: string, timezone: string): string {
+  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const timeMatch = time.match(/^(\d{2}):(\d{2})$/);
+  if (!match || !timeMatch) return new Date(`${date}T${time}:00`).toISOString();
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(timeMatch[1]);
+  const minute = Number(timeMatch[2]);
+
+  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
+  let timestamp = localAsUtc;
+
+  for (let i = 0; i < 2; i += 1) {
+    const offsetMinutes = getTimezoneOffsetMinutes(timezone, new Date(timestamp));
+    timestamp = localAsUtc - offsetMinutes * 60_000;
+  }
+
+  return new Date(timestamp).toISOString();
+}
+
+function formatTimezoneLabel(timezone: string): string {
+  const offset = getTimezoneOffsetMinutes(timezone, new Date());
+  const sign = offset >= 0 ? '+' : '-';
+  const abs = Math.abs(offset);
+  const hh = String(Math.floor(abs / 60)).padStart(2, '0');
+  const mm = String(abs % 60).padStart(2, '0');
+  return `(GMT${sign}${hh}:${mm}) ${timezone}`;
+}
+
+function formatInviteDateTime(scheduledFor?: string, timezone?: string): string {
+  if (!scheduledFor) return 'To be announced';
+  try {
+    const date = new Date(scheduledFor);
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'full',
+      timeStyle: 'short',
+      timeZone: timezone || undefined,
+    }).format(date);
+  } catch {
+    return scheduledFor;
+  }
+}
+
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const { t } = useI18n();
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
+  const [showInviteMenu, setShowInviteMenu] = useState(false);
+  const inviteMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [title, setTitle] = useState(existingMeeting?.title || `${user?.displayName || 'User'}'s Meeting`);
   const [description, setDescription] = useState(existingMeeting?.description || '');
-  
-  const initDate = existingMeeting?.scheduledFor 
-    ? new Date(existingMeeting.scheduledFor).toISOString().split('T')[0] 
-    : new Date().toISOString().split('T')[0];
-  const initTime = existingMeeting?.scheduledFor 
-    ? new Date(existingMeeting.scheduledFor).toTimeString().substring(0, 5) 
-    : '20:00';
-    
+
+  const initialTimezone = existingMeeting?.timezone || getUserTimezone();
+  const initialDateTime = existingMeeting?.scheduledFor
+    ? toDateAndTimeInTimezone(new Date(existingMeeting.scheduledFor), initialTimezone)
+    : toDateAndTimeInTimezone(new Date(), initialTimezone);
+
+  const [timezone, setTimezone] = useState(initialTimezone);
+  const timezoneOptions = useMemo(() => {
+    const supportedValuesOf = (Intl as typeof Intl & {
+      supportedValuesOf?: (key: string) => string[];
+    }).supportedValuesOf;
+    const tzList =
+      typeof supportedValuesOf === 'function'
+        ? supportedValuesOf('timeZone')
+        : FALLBACK_TIMEZONES;
+    return Array.from(new Set([...tzList, timezone])).sort((a, b) => a.localeCompare(b));
+  }, [timezone]);
+
+  const initDate = initialDateTime.date;
+  const initTime = existingMeeting?.scheduledFor ? initialDateTime.time : '20:00';
+
   const [date, setDate] = useState(initDate);
   const [time, setTime] = useState(initTime);
   
@@ -48,6 +172,59 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const isFinished = existingMeeting?.status === 'ENDED' || existingMeeting?.status === 'FINISHED';
   const isCanceled = existingMeeting?.status === 'CANCELED';
   const isReadOnly = isFinished || isCanceled;
+
+  useEffect(() => {
+    if (!showInviteMenu) return;
+    const handleOutside = (event: MouseEvent) => {
+      if (!inviteMenuRef.current?.contains(event.target as Node)) {
+        setShowInviteMenu(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    return () => document.removeEventListener('mousedown', handleOutside);
+  }, [showInviteMenu]);
+
+  const copyMeetingLink = async () => {
+    if (!existingMeeting?.roomName) return;
+    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
+    await navigator.clipboard.writeText(url);
+    setShowInviteMenu(false);
+    alert(t('schedule.linkCopied'));
+  };
+
+  const copyMeetingInvite = async () => {
+    if (!existingMeeting?.roomName) return;
+    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
+    const hostName =
+      existingMeeting?.createdByMember?.fullName ||
+      existingMeeting?.createdByMember?.username ||
+      user?.displayName ||
+      user?.username ||
+      'Host';
+    const timezoneLabel = formatTimezoneLabel(timezone || existingMeeting?.timezone || getUserTimezone());
+    const scheduledForForInvite = date && time
+      ? zonedDateTimeToUtcIso(date, time, timezone || existingMeeting?.timezone || getUserTimezone())
+      : existingMeeting?.scheduledFor;
+    const inviteText = [
+      `You are invited to a Kloud Meeting`,
+      '',
+      `${existingMeeting.title || 'Untitled Meeting'}`,
+      `Host: ${hostName}`,
+      `When: ${formatInviteDateTime(scheduledForForInvite, timezone || existingMeeting?.timezone)}`,
+      `Time Zone: ${timezoneLabel}`,
+      existingMeeting.durationMinutes ? `Duration: ${existingMeeting.durationMinutes} minutes` : '',
+      description ? `Description: ${description}` : '',
+      `Meeting ID: ${existingMeeting.roomName}`,
+      `Join meeting: ${url}`,
+      '',
+      'Please join a few minutes early to test your audio and video setup.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    await navigator.clipboard.writeText(inviteText);
+    setShowInviteMenu(false);
+    alert(t('schedule.inviteCopied'));
+  };
 
   const handleCancelMeeting = async () => {
     if (!confirm(t('schedule.cancelConfirm'))) return;
@@ -77,15 +254,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     }
   };
 
-  // Timezone display (Forced to US Pacific Time)
-  const tzString = '(GMT-08:00) Pacific Time (US & Canada)';
-
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const roomName = generateRoomId();
-      
-      const scheduledFor = new Date(`${date}T${time}:00`);
+      const scheduledForIso = zonedDateTimeToUtcIso(date, time, timezone);
       
       let durationMinutes = 30;
       if (durationStr === '15min') durationMinutes = 15;
@@ -107,9 +279,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           body: JSON.stringify({
             title,
             description,
-            scheduledFor: scheduledFor.toISOString(),
+            scheduledFor: scheduledForIso,
             durationMinutes,
-            timezone: tzString,
+            timezone,
           }),
         });
       } else {
@@ -121,9 +293,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             createdByMemberId: user.id,
             title,
             description,
-            scheduledFor: scheduledFor.toISOString(),
+            scheduledFor: scheduledForIso,
             durationMinutes,
-            timezone: tzString,
+            timezone,
             status: 'ACTIVE'
           }),
         });
@@ -146,22 +318,69 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             <h2 className={styles.title}>{existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}</h2>
             <div className={styles.headerActions}>
               {existingMeeting && !isCanceled && (
-                <button 
-                  className={styles.btnOutline} 
-                  onClick={() => {
-                    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
-                    navigator.clipboard.writeText(`Join my KloudMeet meeting:\n${existingMeeting.title || 'Untitled Meeting'}\n${url}`);
-                    alert(t('schedule.inviteCopied'));
-                  }}
-                  type="button"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
-                  </svg>
-                  {t('schedule.copyInvite')}
-                </button>
+                <div ref={inviteMenuRef} style={{ position: 'relative' }}>
+                  <button
+                    className={styles.btnOutline}
+                    onClick={() => setShowInviteMenu((prev) => !prev)}
+                    type="button"
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                    </svg>
+                    {t('schedule.copyInvite')}
+                  </button>
+                  {showInviteMenu && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 'calc(100% + 8px)',
+                        right: 0,
+                        minWidth: '180px',
+                        background: '#fff',
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)',
+                        zIndex: 30,
+                        padding: '6px',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={copyMeetingLink}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          border: 'none',
+                          background: 'transparent',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                          color: '#1f2937',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t('schedule.copyLink')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copyMeetingInvite}
+                        style={{
+                          width: '100%',
+                          textAlign: 'left',
+                          border: 'none',
+                          background: 'transparent',
+                          borderRadius: '6px',
+                          padding: '8px 10px',
+                          color: '#1f2937',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        {t('schedule.copyInvite')}
+                      </button>
+                    </div>
+                  )}
+                </div>
               )}
               {existingMeeting && !isFinished && !isCanceled && (
                 <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>{t('common.cancel')}</button>
@@ -310,9 +529,19 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 
               <div className={styles.formRow}>
                 <label className={styles.label}>{t('schedule.timeZone')}</label>
-                <div className={styles.inputWrapper} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.7rem' }}>
-                  <span style={{ color: '#4b5563', fontSize: '0.95rem' }}>{tzString}</span>
-                  <button className={styles.linkBtn}>{t('common.change')}</button>
+                <div className={styles.inputWrapper}>
+                  <select
+                    className={`${styles.input} ${styles.select}`}
+                    value={timezone}
+                    onChange={(e) => setTimezone(e.target.value)}
+                    disabled={isReadOnly}
+                  >
+                    {timezoneOptions.map((tz) => (
+                      <option key={tz} value={tz}>
+                        {formatTimezoneLabel(tz)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

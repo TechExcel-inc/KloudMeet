@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
+import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -53,6 +54,11 @@ export async function POST(request: NextRequest) {
               fileSizeBytes: fileInfo.size ? Number(fileInfo.size) : null,
               durationSeconds: fileInfo.duration ? Math.floor(Number(fileInfo.duration) / 1000000000) : null,
             }
+          });
+
+          // If live STT was not enabled, backfill transcripts from the recorded media.
+          void generateTranscriptFromRecording(recording.id).catch((transcribeErr) => {
+            console.error('[webhooks livekit] post-recording transcription failed', transcribeErr);
           });
         }
       }

@@ -273,7 +273,9 @@
 
   "schedule.editMeeting": "회의 편집",
   "schedule.newMeeting": "새 회의",
+  "schedule.copyLink": "회의 링크 복사",
   "schedule.copyInvite": "초대 복사",
+  "schedule.linkCopied": "회의 링크가 클립보드에 복사되었습니다!",
   "schedule.inviteCopied": "초대 링크가 클립보드에 복사되었습니다!",
   "schedule.cancelConfirm": "이 회의를 취소하시겠습니까?",
   "schedule.cancelFailed": "회의 취소에 실패했습니다.",

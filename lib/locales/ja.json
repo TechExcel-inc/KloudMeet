@@ -273,7 +273,9 @@
 
   "schedule.editMeeting": "ミーティングを編集",
   "schedule.newMeeting": "新しいミーティング",
+  "schedule.copyLink": "リンクをコピー",
   "schedule.copyInvite": "招待をコピー",
+  "schedule.linkCopied": "ミーティングリンクをクリップボードにコピーしました！",
   "schedule.inviteCopied": "招待リンクをクリップボードにコピーしました！",
   "schedule.cancelConfirm": "このミーティングをキャンセルしますか？",
   "schedule.cancelFailed": "キャンセルに失敗しました。",

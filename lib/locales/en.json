@@ -290,7 +290,9 @@
 
   "schedule.editMeeting": "Edit Meeting",
   "schedule.newMeeting": "New Meeting",
+  "schedule.copyLink": "Copy Link",
   "schedule.copyInvite": "Copy Invite",
+  "schedule.linkCopied": "Meeting link copied to clipboard!",
   "schedule.inviteCopied": "Invite copied to clipboard!",
   "schedule.cancelConfirm": "Are you sure you want to cancel this meeting?",
   "schedule.cancelFailed": "Failed to cancel meeting.",

@@ -1175,11 +1175,24 @@ function DashboardView({
   const [deleteLoading, setDeleteLoading] = useState(false);
   // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
+  const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!inviteMenuRoomName) return;
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-invite-menu-anchor="true"]')) {
+        setInviteMenuRoomName(null);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [inviteMenuRoomName]);
 
   // Fetch personal room ID from profile
   useEffect(() => {
@@ -1327,6 +1340,56 @@ function DashboardView({
       setDeleteLoading(false);
       setDeletingMeeting(null);
     }
+  };
+
+  const formatInviteWhen = (meeting: any): string => {
+    if (!meeting?.scheduledFor) return 'To be announced';
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone: meeting.timezone || undefined,
+      }).format(new Date(meeting.scheduledFor));
+    } catch {
+      return new Date(meeting.scheduledFor).toLocaleString();
+    }
+  };
+
+  const copyMeetingLink = (meeting: any) => {
+    const link = `${window.location.origin}/?code=${meeting.roomName}`;
+    navigator.clipboard?.writeText(link);
+    toast.show('Meeting link copied!');
+    setInviteMenuRoomName(null);
+  };
+
+  const copyMeetingInvite = (meeting: any) => {
+    const link = `${window.location.origin}/?code=${meeting.roomName}`;
+    const hostName =
+      meeting?.createdByMember?.fullName ||
+      meeting?.createdByMember?.username ||
+      user?.displayName ||
+      user?.username ||
+      'Host';
+    const description = typeof meeting?.description === 'string' ? meeting.description.trim() : '';
+    const inviteText = [
+      `You are invited to a Kloud Meeting`,
+      '',
+      `${meeting.title || meeting.roomName || 'Untitled Meeting'}`,
+      `Host: ${hostName}`,
+      `When: ${formatInviteWhen(meeting)}`,
+      meeting?.timezone ? `Time Zone: ${meeting.timezone}` : '',
+      meeting?.durationMinutes ? `Duration: ${meeting.durationMinutes} minutes` : '',
+      description ? `Description: ${description}` : '',
+      `Meeting ID: ${meeting.roomName}`,
+      `Join meeting: ${link}`,
+      '',
+      'Please join a few minutes early to test your audio and video setup.',
+    ]
+      .filter(Boolean)
+      .join('\n');
+    navigator.clipboard?.writeText(inviteText);
+    toast.show('Invite copied!');
+    setInviteMenuRoomName(null);
   };
 
   const handleNewMeeting = async () => {
@@ -1781,20 +1844,53 @@ function DashboardView({
 
                               {/* Copy link */}
                               {m.roomName && (
-                                <button
-                                  title="Copy meeting link"
-                                  className={styles.iconBtn}
-                                  onClick={() => {
-                                    const link = `${window.location.origin}/?code=${m.roomName}`;
-                                    navigator.clipboard?.writeText(link);
-                                    toast.show('Meeting link copied!');
-                                  }}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
+                                <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
+                                  <button
+                                    title="Copy meeting invite"
+                                    className={styles.iconBtn}
+                                    onClick={() =>
+                                      setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                    }
+                                  >
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  </button>
+                                  {inviteMenuRoomName === m.roomName && (
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        top: 'calc(100% + 8px)',
+                                        right: 0,
+                                        minWidth: '170px',
+                                        background: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '8px',
+                                        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.15)',
+                                        zIndex: 60,
+                                        padding: '6px',
+                                      }}
+                                    >
+                                      <button
+                                        type="button"
+                                        className={styles.dropdownItem}
+                                        onClick={() => copyMeetingLink(m)}
+                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
+                                      >
+                                        Copy Link
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={styles.dropdownItem}
+                                        onClick={() => copyMeetingInvite(m)}
+                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
+                                      >
+                                        Copy Invite
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
                               )}
 
                               {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
@@ -1880,20 +1976,53 @@ function DashboardView({
                             )}
                             {/* Copy link */}
                             {m.roomName && (
-                              <button
-                                className={styles.mobileCopyBtn}
-                                onClick={() => {
-                                  const link = `${window.location.origin}/?code=${m.roomName}`;
-                                  navigator.clipboard?.writeText(link);
-                                  toast.show('Meeting link copied!');
-                                }}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                  <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                Copy Link
-                              </button>
+                              <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
+                                <button
+                                  className={styles.mobileCopyBtn}
+                                  onClick={() =>
+                                    setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                  }
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                  Invite
+                                </button>
+                                {inviteMenuRoomName === m.roomName && (
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: 'calc(100% + 8px)',
+                                      left: 0,
+                                      minWidth: '160px',
+                                      background: '#fff',
+                                      border: '1px solid #e5e7eb',
+                                      borderRadius: '8px',
+                                      boxShadow: '0 10px 24px rgba(15, 23, 42, 0.15)',
+                                      zIndex: 60,
+                                      padding: '6px',
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={styles.dropdownItem}
+                                      onClick={() => copyMeetingLink(m)}
+                                      style={{ borderRadius: '6px', padding: '8px 10px' }}
+                                    >
+                                      Copy Link
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={styles.dropdownItem}
+                                      onClick={() => copyMeetingInvite(m)}
+                                      style={{ borderRadius: '6px', padding: '8px 10px' }}
+                                    >
+                                      Copy Invite
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
                             )}
                             {/* Delete */}
                             {isHost && !m.isActive && (
