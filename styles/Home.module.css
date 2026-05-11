@@ -783,7 +783,6 @@
   margin: 0 auto;
   padding: 0.25rem 1.5rem 3rem;
   position: relative;
-  z-index: 0;
 }
 
 .dashHeader {
@@ -1931,6 +1930,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+
+/* When invite submenu is open, sit above sticky list header (40) and following cards, below topNav (50) */
+.meetingCardInviteMenuOpen {
+  z-index: 42;
 }
 
 /* Base meeting card */

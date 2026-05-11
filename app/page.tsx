@@ -1661,7 +1661,9 @@ function DashboardView({
                     return (
                       <div
                         key={m.id || i}
-                        className={isLive ? styles.meetingCardLive : styles.meetingCard}
+                        className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
+                          inviteMenuRoomName === m.roomName ? ` ${styles.meetingCardInviteMenuOpen}` : ''
+                        }`}
                         onDoubleClick={() => setEditingMeeting(m)}
                       >
                         {/* Live badge */}

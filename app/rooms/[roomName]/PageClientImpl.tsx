@@ -10,7 +10,6 @@ import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/K
 import { HelpModal } from '@/lib/HelpModal';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
-import { VideoHighlightOverlay, type VideoHighlightRect } from '@/lib/VideoHighlightOverlay';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -60,19 +59,14 @@ import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 
 /** LiveDoc 浮窗头像条相对右侧文件控制栏的默认间距（px）；默认 top 仍为 12 */
 const FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL = 16;
-const FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL = 3;
 const LIVEDOC_FILE_PANEL_EXPANDED_WIDTH = 320;
 const LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH = 56;
+/** 非 LiveDoc 场景下默认 `right`：为右侧聊天等预留（与 chat-overlay 约 352px 对齐） */
 const FLOATING_WEBCAM_RIGHT_INSET = 350;
+/** 拖拽时 maxX 只用父容器右缘留白；文件栏在 iframe 内不占外层 clientWidth，不能再扣 livedoc 宽度或 350 */
+const FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN = 12;
 const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 104;
 const FLOATING_WEBCAM_TOP_INSET = 12;
-const VIDEO_HIGHLIGHT_AUTO_REMOVE_MS = 1200;
-
-type VideoHighlight = VideoHighlightRect & {
-  targetVideoId: string;
-  createdBy: string;
-  sentAt: number;
-};
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -1210,8 +1204,6 @@ function VideoConferenceComponent(props: {
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
-  const [isVideoHighlightMode, setIsVideoHighlightMode] = React.useState(false);
-  const [videoHighlights, setVideoHighlights] = React.useState<Record<string, VideoHighlight>>({});
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   // Remote control permission flow
   const [remoteControlPending, setRemoteControlPending] = React.useState(false);
@@ -1444,9 +1436,6 @@ function VideoConferenceComponent(props: {
 
   const handleViewChange = React.useCallback(
     (view: ViewMode) => {
-      if (view !== 'liveDoc') {
-        setIsVideoHighlightMode(false);
-      }
       if (view !== 'shareScreen') {
         setIsDrawingMode(false);
         setIsRemoteControlMode(false);
@@ -2240,29 +2229,6 @@ function VideoConferenceComponent(props: {
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
   // Interactive meetings: everyone can switch views by default
   const canSwitchViews = true;
-  const liveDocInteractiveParam = searchParams?.get('livedocInteractive');
-  const defaultLiveDocInteractive =
-    process.env.NEXT_PUBLIC_LIVEDOC_INTERACTIVE_DEFAULT === 'true';
-  const isLiveDocInteractiveEnabled =
-    liveDocInteractiveParam === null
-      ? defaultLiveDocInteractive
-      : ['1', 'true', 'yes', 'on'].includes(liveDocInteractiveParam.toLowerCase());
-  const isPresenterForHighlight =
-    isAutoPresenter || isCopresenter || screenShareActive;
-  const canEditVideoHighlights =
-    isLiveDocInteractiveEnabled || isHost || isPresenterForHighlight;
-
-  const canIdentityEditVideoHighlights = React.useCallback(
-    (identity?: string | null) => {
-      if (!identity) return false;
-      if (isLiveDocInteractiveEnabled) return true;
-      if (identity === hostIdentity) return true;
-      if (identity === autoPresenterIdentity) return true;
-      if (copresenterIdentities.includes(identity)) return true;
-      return false;
-    },
-    [isLiveDocInteractiveEnabled, hostIdentity, autoPresenterIdentity, copresenterIdentities],
-  );
 
   const meetingRoomName = props.connectionDetails.roomName;
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
@@ -2273,37 +2239,12 @@ function VideoConferenceComponent(props: {
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
   const livedocHostBootstrappedRef = React.useRef(false);
-  const highlightTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const activeVideoHighlightItems = React.useMemo(() => {
-    const currentTarget = livedocInstanceId ?? meetingRoomName;
-    return Object.values(videoHighlights).filter((item) => item.targetVideoId === currentTarget);
-  }, [videoHighlights, livedocInstanceId, meetingRoomName]);
 
   React.useEffect(() => {
     if (shouldDisplayLiveDoc || isMirrorBlocked) {
       setLivedocHasBeenActivated(true);
     }
   }, [shouldDisplayLiveDoc, isMirrorBlocked]);
-
-  React.useEffect(() => {
-    setVideoHighlights({});
-    setIsVideoHighlightMode(false);
-    Object.values(highlightTimersRef.current).forEach((timer) => clearTimeout(timer));
-    highlightTimersRef.current = {};
-  }, [livedocInstanceId]);
-
-  React.useEffect(() => {
-    if (!canEditVideoHighlights) {
-      setIsVideoHighlightMode(false);
-    }
-  }, [canEditVideoHighlights]);
-
-  React.useEffect(() => {
-    return () => {
-      Object.values(highlightTimersRef.current).forEach((timer) => clearTimeout(timer));
-      highlightTimersRef.current = {};
-    };
-  }, []);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -2335,7 +2276,6 @@ function VideoConferenceComponent(props: {
     muteAllActive: boolean;
     hostMutedIdentities: string[];
     captionsOn: boolean;
-    videoHighlights: Record<string, VideoHighlight>;
   }>({
     view: activeView,
     presenter: null,
@@ -2343,7 +2283,6 @@ function VideoConferenceComponent(props: {
     muteAllActive: false,
     hostMutedIdentities: [],
     captionsOn: false,
-    videoHighlights: {},
   });
 
   // Keep authState in sync when host changes view locally
@@ -2371,12 +2310,6 @@ function VideoConferenceComponent(props: {
     }
   }, [isHost, muteAllActive, hostMutedIdentities]);
 
-  React.useEffect(() => {
-    if (isHost) {
-      authState.current.videoHighlights = videoHighlights;
-    }
-  }, [isHost, videoHighlights]);
-
   // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
   // so we use a ref to allow handleData to call it without block-scope issues.
   const setCaptionsOpenRef = React.useRef<((open: boolean) => Promise<void>) | null>(null);
@@ -2400,79 +2333,6 @@ function VideoConferenceComponent(props: {
       });
     },
     [room, encoder],
-  );
-
-  const applyHighlightAdd = React.useCallback((highlight: VideoHighlight) => {
-    const existingTimer = highlightTimersRef.current[highlight.id];
-    if (existingTimer) clearTimeout(existingTimer);
-    highlightTimersRef.current[highlight.id] = setTimeout(() => {
-      setVideoHighlights((prev) => {
-        if (!prev[highlight.id]) return prev;
-        const next = { ...prev };
-        delete next[highlight.id];
-        return next;
-      });
-      delete highlightTimersRef.current[highlight.id];
-    }, VIDEO_HIGHLIGHT_AUTO_REMOVE_MS);
-    setVideoHighlights((prev) => ({ ...prev, [highlight.id]: highlight }));
-  }, []);
-
-  const applyHighlightRemove = React.useCallback((id: string) => {
-    const timer = highlightTimersRef.current[id];
-    if (timer) {
-      clearTimeout(timer);
-      delete highlightTimersRef.current[id];
-    }
-    setVideoHighlights((prev) => {
-      if (!prev[id]) return prev;
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
-  }, []);
-
-  const handleVideoHighlightAdd = React.useCallback(
-    (rect: VideoHighlightRect) => {
-      if (!canEditVideoHighlights) return;
-      const highlight: VideoHighlight = {
-        ...rect,
-        targetVideoId: livedocInstanceId ?? meetingRoomName,
-        createdBy: room.localParticipant.identity,
-        sentAt: Date.now(),
-      };
-      applyHighlightAdd(highlight);
-      sendMeetingMsg({ type: 'HIGHLIGHT_ADD', highlight });
-    },
-    [
-      canEditVideoHighlights,
-      livedocInstanceId,
-      meetingRoomName,
-      room.localParticipant.identity,
-      applyHighlightAdd,
-      sendMeetingMsg,
-    ],
-  );
-
-  const handleVideoHighlightRemove = React.useCallback(
-    (id: string) => {
-      if (!canEditVideoHighlights) return;
-      applyHighlightRemove(id);
-      sendMeetingMsg({
-        type: 'HIGHLIGHT_REMOVE',
-        id,
-        targetVideoId: livedocInstanceId ?? meetingRoomName,
-        removedBy: room.localParticipant.identity,
-        sentAt: Date.now(),
-      });
-    },
-    [
-      canEditVideoHighlights,
-      livedocInstanceId,
-      meetingRoomName,
-      room.localParticipant.identity,
-      applyHighlightRemove,
-      sendMeetingMsg,
-    ],
   );
 
   // Mute All / Unmute All handlers (defined after sendMeetingMsg)
@@ -2610,7 +2470,6 @@ function VideoConferenceComponent(props: {
           muteAllActive: auth.muteAllActive,
           hostMutedIdentities: auth.hostMutedIdentities,
           captionsOn: auth.captionsOn,
-          videoHighlights: auth.videoHighlights,
         },
         [participant.identity],
       );
@@ -2674,14 +2533,6 @@ function VideoConferenceComponent(props: {
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
-          }
-          if (
-            (msg as { videoHighlights?: unknown }).videoHighlights &&
-            typeof (msg as { videoHighlights?: unknown }).videoHighlights === 'object'
-          ) {
-            setVideoHighlights(
-              (msg as { videoHighlights: Record<string, VideoHighlight> }).videoHighlights,
-            );
           }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
@@ -2825,7 +2676,6 @@ function VideoConferenceComponent(props: {
                 muteAllActive: auth.muteAllActive,
                 hostMutedIdentities: auth.hostMutedIdentities,
                 captionsOn: auth.captionsOn,
-                videoHighlights: auth.videoHighlights,
               },
               [senderIdentity],
             );
@@ -2836,16 +2686,6 @@ function VideoConferenceComponent(props: {
         } else if (msg.type === 'CAPTIONS_OFF') {
           // Host/Co-host 关闭了全局字幕 — 本地停止识别
           setCaptionsOpenRef.current?.(false);
-        } else if (msg.type === 'HIGHLIGHT_ADD') {
-          const highlight = (msg as { highlight?: VideoHighlight }).highlight;
-          if (!highlight || typeof highlight.id !== 'string') return;
-          if (!canIdentityEditVideoHighlights(senderIdentity)) return;
-          applyHighlightAdd(highlight);
-        } else if (msg.type === 'HIGHLIGHT_REMOVE') {
-          const id = (msg as { id?: string }).id;
-          if (typeof id !== 'string' || !id) return;
-          if (!canIdentityEditVideoHighlights(senderIdentity)) return;
-          applyHighlightRemove(id);
         }
       } catch (e) {
         console.error('Meeting control message error:', e);
@@ -2865,9 +2705,6 @@ function VideoConferenceComponent(props: {
     approvedControllerIdentity,
     remoteControlRequest,
     micEnabled,
-    canIdentityEditVideoHighlights,
-    applyHighlightAdd,
-    applyHighlightRemove,
   ]);
 
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
@@ -3426,31 +3263,27 @@ function VideoConferenceComponent(props: {
   const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
-  const rememberedGapFromLiveDocPanel = React.useRef<number | null>(null);
+  /** 浮窗右边缘距 offsetParent 右缘的像素（与 CSS `right` 同向），用于 LiveDoc 下宽度变化后同步 */
+  const rememberedRightInsetRef = React.useRef<number | null>(null);
   const floatingPosRef = React.useRef(floatingPos);
+  const floatingPosLayoutRef = React.useRef(floatingPosLayout);
   const floatingXAnimationRef = React.useRef<number | null>(null);
   const FLOATING_SYNC_ANIMATION_MS = 340;
-  const effectiveLiveDocPanelWidth =
-    liveDocFilePanelVisible
-      ? liveDocFilePanelWidth
-      : LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH;
+  /** 文件栏完全隐藏时不占位，避免仍按「折叠宽度」把浮窗拦在距右缘 56px+ 处 */
+  const effectiveLiveDocPanelWidth = liveDocFilePanelVisible ? liveDocFilePanelWidth : 0;
   const floatingRightInset =
     activeView === 'liveDoc' && !hasScreenShare
       ? effectiveLiveDocPanelWidth +
         FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
       : FLOATING_WEBCAM_RIGHT_INSET;
-  const floatingRightBoundaryInset =
-    activeView === 'liveDoc' && !hasScreenShare
-      ? effectiveLiveDocPanelWidth + FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL
-      : FLOATING_WEBCAM_RIGHT_INSET;
+  const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
 
-  const getGapFromLiveDocPanel = React.useCallback((x: number) => {
+  const getInsetFromParentRight = React.useCallback((x: number) => {
     const el = floatingRef.current;
     const parent = el?.offsetParent as HTMLElement | null;
     if (!el || !parent) return null;
-    const gap = parent.clientWidth - (x + el.offsetWidth) - effectiveLiveDocPanelWidth;
-    return Math.max(FLOATING_WEBCAM_MIN_GAP_TO_LIVEDOC_PANEL, gap);
-  }, [effectiveLiveDocPanelWidth]);
+    return parent.clientWidth - x - el.offsetWidth;
+  }, []);
   const clampFloatingPosition = React.useCallback(
     (x: number, y: number) => {
       const el = floatingRef.current;
@@ -3474,6 +3307,7 @@ function VideoConferenceComponent(props: {
   React.useEffect(() => {
     floatingPosRef.current = floatingPos;
   }, [floatingPos]);
+  floatingPosLayoutRef.current = floatingPosLayout;
 
   const cancelFloatingXAnimation = React.useCallback(() => {
     if (floatingXAnimationRef.current !== null) {
@@ -3526,19 +3360,21 @@ function VideoConferenceComponent(props: {
           setFloatingPosLayout('coordinates');
           setFloatingPos(clamped);
           if (activeView === 'liveDoc' && !hasScreenShare) {
-            rememberedGapFromLiveDocPanel.current = getGapFromLiveDocPanel(clamped.x);
+            rememberedRightInsetRef.current = getInsetFromParentRight(clamped.x);
           }
           dragOffset.current = { x: e.clientX - clamped.x, y: e.clientY - clamped.y };
         } else {
-          dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+          const p = floatingPosRef.current;
+          dragOffset.current = { x: e.clientX - p.x, y: e.clientY - p.y };
           setFloatingPosLayout('coordinates');
         }
       } else {
-        dragOffset.current = { x: e.clientX - floatingPos.x, y: e.clientY - floatingPos.y };
+        const p = floatingPosRef.current;
+        dragOffset.current = { x: e.clientX - p.x, y: e.clientY - p.y };
       }
       e.preventDefault();
     },
-    [activeView, cancelFloatingXAnimation, clampFloatingPosition, floatingPos, floatingPosLayout, getGapFromLiveDocPanel, hasScreenShare],
+    [activeView, cancelFloatingXAnimation, clampFloatingPosition, floatingPosLayout, getInsetFromParentRight, hasScreenShare],
   );
 
   React.useEffect(() => {
@@ -3546,8 +3382,8 @@ function VideoConferenceComponent(props: {
       if (!isDragging.current) return;
       const next = clampFloatingPosition(e.clientX - dragOffset.current.x, e.clientY - dragOffset.current.y);
       setFloatingPos(next);
-      if (floatingPosLayout === 'coordinates' && activeView === 'liveDoc' && !hasScreenShare) {
-        rememberedGapFromLiveDocPanel.current = getGapFromLiveDocPanel(next.x);
+      if (isDragging.current && activeView === 'liveDoc' && !hasScreenShare) {
+        rememberedRightInsetRef.current = getInsetFromParentRight(next.x);
       }
     };
     const handleMouseUp = () => {
@@ -3560,7 +3396,7 @@ function VideoConferenceComponent(props: {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [activeView, clampFloatingPosition, floatingPosLayout, getGapFromLiveDocPanel, hasScreenShare]);
+  }, [activeView, clampFloatingPosition, getInsetFromParentRight, hasScreenShare]);
 
   React.useEffect(() => {
     const finishDrag = () => {
@@ -3571,38 +3407,36 @@ function VideoConferenceComponent(props: {
     return () => window.removeEventListener('blur', finishDrag);
   }, []);
 
-  React.useEffect(() => {
-    if (floatingPosLayout !== 'coordinates') return;
+  // 勿在「切换到 coordinates」时触发：mousedown 已写入 clamped 坐标，再 setState 会多一次布局导致起手卡顿。
+  React.useLayoutEffect(() => {
+    if (floatingPosLayoutRef.current !== 'coordinates') return;
     setFloatingPos((pos) => clampFloatingPosition(pos.x, pos.y));
-  }, [clampFloatingPosition, floatingExpanded, floatingPosLayout]);
+  }, [clampFloatingPosition, floatingExpanded]);
 
   const syncFloatingXToRememberedGap = React.useCallback(() => {
     if (floatingPosLayout !== 'coordinates' || activeView !== 'liveDoc' || hasScreenShare) return;
+    if (isDragging.current) return;
     const el = floatingRef.current;
     const parent = el?.offsetParent as HTMLElement | null;
     if (!el || !parent) return;
     const current = floatingPosRef.current;
 
-    const rememberedGap =
-      rememberedGapFromLiveDocPanel.current ??
-      getGapFromLiveDocPanel(current.x) ??
-      FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL;
+    const rememberedInset =
+      rememberedRightInsetRef.current ??
+      getInsetFromParentRight(current.x) ??
+      effectiveLiveDocPanelWidth + FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL;
 
-    rememberedGapFromLiveDocPanel.current = rememberedGap;
-    const targetX = parent.clientWidth - el.offsetWidth - effectiveLiveDocPanelWidth - rememberedGap;
+    rememberedRightInsetRef.current = rememberedInset;
+    const targetX = parent.clientWidth - el.offsetWidth - rememberedInset;
     const clampedTarget = clampFloatingPosition(targetX, current.y);
-    if (isDragging.current) {
-      setFloatingPos(clampedTarget);
-    } else {
-      animateFloatingXTo(clampedTarget.x);
-    }
+    animateFloatingXTo(clampedTarget.x);
   }, [
     activeView,
     animateFloatingXTo,
     clampFloatingPosition,
     effectiveLiveDocPanelWidth,
     floatingPosLayout,
-    getGapFromLiveDocPanel,
+    getInsetFromParentRight,
     hasScreenShare,
   ]);
 
@@ -4331,16 +4165,6 @@ function VideoConferenceComponent(props: {
                   isHost={isHost}
                 />
               )}
-              {shouldDisplayLiveDoc && (
-                <VideoHighlightOverlay
-                  highlights={activeVideoHighlightItems}
-                  enabled={isVideoHighlightMode}
-                  canEdit={canEditVideoHighlights}
-                  excludeRightPx={effectiveLiveDocPanelWidth}
-                  onAdd={handleVideoHighlightAdd}
-                  onRemove={handleVideoHighlightRemove}
-                />
-              )}
             </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
@@ -4468,14 +4292,6 @@ function VideoConferenceComponent(props: {
                   hostInitError={livedocInitError}
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
-                />
-                <VideoHighlightOverlay
-                  highlights={activeVideoHighlightItems}
-                  enabled={isVideoHighlightMode}
-                  canEdit={canEditVideoHighlights}
-                  excludeRightPx={effectiveLiveDocPanelWidth}
-                  onAdd={handleVideoHighlightAdd}
-                  onRemove={handleVideoHighlightRemove}
                 />
               </div>
             )}
@@ -4676,7 +4492,7 @@ function VideoConferenceComponent(props: {
                       ? { right: floatingRightInset, left: 'auto' as const }
                       : { left: floatingPos.x, right: 'auto' as const }),
                     zIndex: 200,
-                    cursor: isDragging.current ? 'grabbing' : 'grab',
+                    cursor: isFloatingDragging ? 'grabbing' : 'grab',
                     userSelect: 'none',
                     transition: isFloatingDragging
                       ? 'none'
@@ -5586,7 +5402,6 @@ function VideoConferenceComponent(props: {
           screenShareActive={screenShareActive}
           canShareScreen={!hasScreenShare || screenShareActive}
           isDrawingMode={isDrawingMode}
-          isVideoHighlightMode={isVideoHighlightMode}
           onToggleDrawingMode={() => {
             if (hasScreenShare) {
               setIsDrawingMode((prev) => {
@@ -5596,14 +5411,6 @@ function VideoConferenceComponent(props: {
               });
             }
           }}
-          onToggleVideoHighlightMode={() => {
-            if (activeView !== 'liveDoc' || !canEditVideoHighlights) return;
-            setIsVideoHighlightMode((prev) => !prev);
-            setIsDrawingMode(false);
-            setIsRemoteControlMode(false);
-          }}
-          canVideoHighlight={activeView === 'liveDoc'}
-          canEditVideoHighlights={canEditVideoHighlights}
           isRemoteControlMode={isRemoteControlMode}
           remoteControlPending={remoteControlPending}
           onToggleRemoteControlMode={() => {

@@ -87,7 +87,7 @@ async function transcribeWithOpenAI(fileName: string, bytes: Uint8Array): Promis
   const form = new FormData();
   form.append('model', 'gpt-4o-transcribe');
   form.append('response_format', 'verbose_json');
-  form.append('file', new Blob([bytes]), fileName || 'recording.mp4');
+  form.append('file', new Blob([bytes as BlobPart]), fileName || 'recording.mp4');
 
   const res = await fetch('https://api.openai.com/v1/audio/transcriptions', {
     method: 'POST',

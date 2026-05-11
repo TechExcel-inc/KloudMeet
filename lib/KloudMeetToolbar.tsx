@@ -35,10 +35,6 @@ interface KloudMeetToolbarProps {
   canShareScreen: boolean;
   isDrawingMode: boolean;
   onToggleDrawingMode: () => void;
-  isVideoHighlightMode?: boolean;
-  onToggleVideoHighlightMode?: () => void;
-  canVideoHighlight?: boolean;
-  canEditVideoHighlights?: boolean;
   isRemoteControlMode: boolean;
   onToggleRemoteControlMode: () => void;
   remoteControlPending?: boolean;
@@ -93,10 +89,6 @@ export function KloudMeetToolbar({
   canShareScreen,
   isDrawingMode,
   onToggleDrawingMode,
-  isVideoHighlightMode,
-  onToggleVideoHighlightMode,
-  canVideoHighlight,
-  canEditVideoHighlights,
   isRemoteControlMode,
   onToggleRemoteControlMode,
   remoteControlPending,
@@ -518,25 +510,24 @@ export function KloudMeetToolbar({
     onShareScreen();
   };
 
-  const handleLiveDocSettingsClick = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const x = e.pageX;
-    const y = e.pageY - 80;
+  const handleLiveDocSettingsClick = (e: React.MouseEvent<HTMLElement>) => {
     const show = liveDocActionDialogVisible ? 0 : 1;
     const iframe =
       (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
 
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.postMessage(
-        {
-          type: 'Kloud-ShowActionDialog',
-          x,
-          y,
-          show,
-        },
-        '*',
-      );
-    }
+    if (!iframe?.contentWindow) return;
+    const iRect = iframe.getBoundingClientRect();
+    const t = e.currentTarget.getBoundingClientRect();
+    const cx = t.left + t.width / 2 - iRect.left;
+    const cy = t.top + t.height / 2 - iRect.top;
+    const pad = 12;
+    const x = Math.round(Math.min(Math.max(cx, pad), Math.max(pad, iRect.width - pad)));
+    const y = Math.round(Math.min(Math.max(cy, pad), Math.max(pad, iRect.height - pad)));
+    iframe.contentWindow.postMessage(
+      { type: 'Kloud-ShowActionDialog', x, y, show },
+      '*',
+    );
   };
 
   return (
@@ -744,23 +735,6 @@ export function KloudMeetToolbar({
                     </svg>
                     {t('toolbar.liveDoc')}
                   </button>
-                  {canVideoHighlight && (
-                    <button
-                      className={`${styles.tabBtn} ${isVideoHighlightMode ? styles.tabBtnCheck : ''}`}
-                      onClick={() => onToggleVideoHighlightMode?.()}
-                      title={
-                        canEditVideoHighlights
-                          ? t('toolbar.highlightTooltip')
-                          : t('toolbar.highlightPermissionDenied')
-                      }
-                      disabled={!canEditVideoHighlights}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.5 5.5l3 3M4 20l4.5-1 9.5-9.5-3-3L5.5 16z" />
-                      </svg>
-                      {t('toolbar.highlight')}
-                    </button>
-                  )}
                   {false && activeView === 'liveDoc' && liveDocPluginLoaded && (
                     <button
                       type="button"
@@ -896,21 +870,6 @@ export function KloudMeetToolbar({
                 {t('toolbar.chats')}
               </button>
 
-              {activeView === 'liveDoc' && liveDocPluginLoaded && (
-                <button
-                  type="button"
-                  className={`${styles.tabBtn} ${styles.liveDocActionBtn} ${liveDocActionDialogVisible ? styles.tabBtnActive : ''}`}
-                  onClick={handleLiveDocSettingsClick}
-                  title={t('toolbar.liveDocMenu')}
-                  aria-label={t('toolbar.liveDocMenu')}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-                  {t('toolbar.liveDocMenu')}
-                </button>
-              )}
               <button ref={moreMenuBtnRef} type="button" className={styles.tabBtn} onClick={() => openSheet('more')}>
                 <svg viewBox="0 0 24 24" fill="currentColor">
                   <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
@@ -984,7 +943,10 @@ export function KloudMeetToolbar({
                 onOpenSTTSettings={() => setShowSTTSettings(true)}
                 onOpenCCSettings={() => setShowCCSettings(true)}
                 localSubtitleVisible={localSubtitleVisible}
-              onOpenDesktopApp={onOpenDesktopApp}
+                onOpenDesktopApp={onOpenDesktopApp}
+                liveDocPluginLoaded={liveDocPluginLoaded}
+                liveDocActionDialogVisible={liveDocActionDialogVisible}
+                onLiveDocMenuClick={handleLiveDocSettingsClick}
               />
             </div>
           </div>
@@ -1130,6 +1092,9 @@ export function KloudMeetToolbar({
                       onOpenCCSettings={() => setShowCCSettings(true)}
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
+                      liveDocPluginLoaded={liveDocPluginLoaded}
+                      liveDocActionDialogVisible={liveDocActionDialogVisible}
+                      onLiveDocMenuClick={handleLiveDocSettingsClick}
                     />
                   </div>
                 )}
@@ -1289,6 +1254,9 @@ function ActiveSheetContent({
   onOpenCCSettings,
   localSubtitleVisible,
   onOpenDesktopApp,
+  liveDocPluginLoaded,
+  liveDocActionDialogVisible,
+  onLiveDocMenuClick,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1449,6 +1417,23 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
             {t('toolbar.openDesktop.menuItem')}
           </button>
+          {activeView === 'liveDoc' && liveDocPluginLoaded && (
+            <button
+              type="button"
+              className={`${styles.actionSheetItem} ${liveDocActionDialogVisible ? styles.active : ''}`}
+              onClick={(ev) => {
+                onLiveDocMenuClick?.(ev);
+                setActiveSheet(null);
+              }}
+              title={t('toolbar.liveDocMenu')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
+              {t('toolbar.liveDocMenu')}
+            </button>
+          )}
           {false && (
             <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.appDeviceSettings')); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
