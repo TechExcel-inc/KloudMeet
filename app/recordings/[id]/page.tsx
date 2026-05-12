@@ -798,6 +798,9 @@ export default function ReplayPage() {
   const participants = meeting?.participants || [];
   const meetingTitle = meeting?.title || meeting?.roomName || t('replay.loading');
 
+  /** 有逐条字幕数据时才展示摘要/逐字稿/信息侧栏及章节卡片等「其余」区域 */
+  const hasTranscripts = transcripts.some((tr) => (tr.content || '').trim().length > 0);
+
   function secsToHMS(s: number): string {
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
@@ -879,17 +882,31 @@ export default function ReplayPage() {
       </header>
 
       {/* ── Main Layout ── */}
-      <div style={styles.mainLayout}>
-        {/* Left: Video → Chapter Cards → Speaker Timeline */}
-        <div style={styles.leftPanel}>
-
+      <div
+        style={{
+          ...styles.mainLayout,
+          ...(hasTranscripts ? {} : { flexDirection: 'column' as const }),
+        }}
+      >
+        {/* Left: Video →（有字幕时）Chapter Cards → Speaker Timeline */}
+        <div
+          style={{
+            ...styles.leftPanel,
+            ...(hasTranscripts ? {} : { borderRight: 'none', flex: 1, minHeight: 0 }),
+          }}
+        >
           {/* ① 视频播放器（最顶部） */}
           <div style={styles.videoWrap}>
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
-              style={styles.video}
+              style={{
+                ...styles.video,
+                ...(hasTranscripts
+                  ? {}
+                  : { maxHeight: 'min(88vh, 1200px)', minHeight: '52vh' }),
+              }}
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               onDurationChange={(e) => setDuration(e.currentTarget.duration)}
               onPlay={() => setPlaying(true)}
@@ -897,7 +914,7 @@ export default function ReplayPage() {
             />
           </div>
 
-          {realChapters.length > 0 && (
+          {hasTranscripts && realChapters.length > 0 && (
           <ChapterCardsCarousel
             chapters={realChapters}
             currentTime={currentTime}
@@ -906,7 +923,7 @@ export default function ReplayPage() {
           />
           )}
 
-          {realSpeakerSegments.length > 0 && (
+          {hasTranscripts && realSpeakerSegments.length > 0 && (
           <SpeakerSegmentTimeline
             speakers={realSpeakerSegments}
             duration={realDuration}
@@ -916,7 +933,8 @@ export default function ReplayPage() {
 
         </div>
 
-        {/* Right: Tab Panel */}
+        {/* Right: Tab Panel（仅在有字幕时展示） */}
+        {hasTranscripts && (
         <div style={styles.rightPanel}>
           {/* Tabs */}
           <div style={styles.tabBar}>
@@ -1036,6 +1054,7 @@ export default function ReplayPage() {
             )}
           </div>
         </div>
+        )}
       </div>
 
       <style>{`

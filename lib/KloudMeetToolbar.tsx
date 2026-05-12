@@ -22,6 +22,26 @@ export function buildInviteLinkForClipboard(isDesktop: boolean): string {
   return `kloudmeet://join/${encodeURIComponent(roomName)}${u.search}`;
 }
 
+function roomNameFromLocation(): string {
+  if (typeof window === 'undefined') return '';
+  const segments = new URL(window.location.href).pathname.split('/').filter(Boolean);
+  return segments.pop() || '';
+}
+
+/** 会议内「复制邀请」正文（与首页会议卡片的 Copy Invite 结构类似） */
+function buildInMeetingInviteClipboardText(isDesktop: boolean): string {
+  const roomName = roomNameFromLocation();
+  const link = buildInviteLinkForClipboard(isDesktop);
+  return [
+    'You are invited to a Kloud Meeting',
+    '',
+    `Meeting ID: ${roomName}`,
+    `Join meeting: ${link}`,
+    '',
+    'Please join a few minutes early to test your audio and video setup.',
+  ].join('\n');
+}
+
 interface KloudMeetToolbarProps {
   activeView: ViewMode;
   onViewChange: (view: ViewMode) => void;
@@ -123,6 +143,7 @@ export function KloudMeetToolbar({
   const { t } = useI18n();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const recordMenuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -175,8 +196,17 @@ export function KloudMeetToolbar({
     return () => window.removeEventListener('kloud-stt-settings-changed', handleSettingsChange);
   }, []);
 
+  const closeInviteMenu = () => setInviteMenuOpen(false);
+
+  const showInviteToast = (msg: string) => {
+    setToastMsg(msg);
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+  };
+
   // Synchronous wrapper: close Chat/Attendee BEFORE opening a sheet
   const openSheet = (sheet: ActionSheetType) => {
+    closeInviteMenu();
     if (sheet !== null) {
       onOpenSheet?.(); // closes Chat & Attendee in parent synchronously
     }
@@ -184,14 +214,28 @@ export function KloudMeetToolbar({
   };
 
   const handleToggleChat = () => {
+    closeInviteMenu();
     setActiveSheet(null); // close any open sheet
     onToggleChat();
   };
 
   const handleToggleAttendee = () => {
+    closeInviteMenu();
     setActiveSheet(null); // close any open sheet
     onToggleAttendee();
   };
+
+  useEffect(() => {
+    if (!inviteMenuOpen) return;
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-invite-menu-anchor="true"]')) {
+        setInviteMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [inviteMenuOpen]);
 
   const isMobile = useToolbarIsMobile();
   const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
@@ -218,7 +262,7 @@ export function KloudMeetToolbar({
       : null;
 
   const applyMouseVisibility = (clientY: number, forceVisible?: boolean) => {
-    if (activeSheetRef.current || chatOpen || attendeeOpen || forceVisible) {
+    if (activeSheetRef.current || chatOpen || attendeeOpen || inviteMenuOpen || forceVisible) {
       setVisible(true);
       return;
     }
@@ -308,7 +352,7 @@ export function KloudMeetToolbar({
       window.addEventListener('mousemove', handleMouseMove);
       return () => window.removeEventListener('mousemove', handleMouseMove);
     }
-  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet]);
+  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen]);
 
   // 接收 iframe postMessage：mousemove 和点击事件沿用同一套显示/隐藏逻辑
   useEffect(() => {
@@ -378,12 +422,12 @@ export function KloudMeetToolbar({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isMobile, chatOpen, attendeeOpen]);
+  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen]);
 
   // 鼠标离开窗口/页面失焦时，桌面端按“上方区域”处理，避免 toolbar 悬停不消失
   useEffect(() => {
     const hideByLeave = () => {
-      if (!isMobile && !activeSheetRef.current && !chatOpen && !attendeeOpen) {
+      if (!isMobile && !activeSheetRef.current && !chatOpen && !attendeeOpen && !inviteMenuOpen) {
         setVisible(false);
       }
     };
@@ -401,7 +445,7 @@ export function KloudMeetToolbar({
       window.removeEventListener('mouseout', handleMouseOut);
       window.removeEventListener('blur', hideByLeave);
     };
-  }, [isMobile, chatOpen, attendeeOpen]);
+  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen]);
 
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
@@ -456,7 +500,7 @@ export function KloudMeetToolbar({
     };
 
     layout();
-  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen]);
+  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen, inviteMenuOpen]);
 
   useEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) return;
@@ -528,6 +572,15 @@ export function KloudMeetToolbar({
       { type: 'Kloud-ShowActionDialog', x, y, show },
       '*',
     );
+  };
+
+  /** Align with Dev MainStage: handleShowLiveDocPanel + clickTab + close action dialog */
+  const postLiveDocPanelTab = (tab: 'file' | 'summary' | 'transcript') => {
+    const iframe =
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
+      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: 'Kloud-LiveDocPanelTab', tab }, '*');
   };
 
   return (
@@ -641,21 +694,53 @@ export function KloudMeetToolbar({
               </button>
             )}
 
-            {/* 5. Invite */}
-            <button
-              className={styles.mobileBtn}
-              onClick={() => {
-                navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-                setToastMsg(t('toolbar.inviteCopied'));
-                if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-              }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-              </svg>
-              <span>{t('toolbar.invite')}</span>
-            </button>
+            {/* 5. Invite — 与会议列表一致：向上弹出「复制链接 / 复制邀请」 */}
+            <div data-invite-menu-anchor="true" className={styles.inviteMenuAnchor}>
+              <button
+                type="button"
+                className={`${styles.mobileBtn} ${inviteMenuOpen ? styles.active : ''}`}
+                onClick={() =>
+                  setInviteMenuOpen((prev) => {
+                    const next = !prev;
+                    if (next) onOpenSheet?.();
+                    return next;
+                  })
+                }
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                </svg>
+                <span>{t('toolbar.invite')}</span>
+              </button>
+              {inviteMenuOpen && (
+                <div className={styles.inviteDropdown} role="menu">
+                  <button
+                    type="button"
+                    className={styles.inviteDropdownItem}
+                    role="menuitem"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+                      showInviteToast(t('toolbar.inviteCopied'));
+                      closeInviteMenu();
+                    }}
+                  >
+                    {t('schedule.copyLink')}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.inviteDropdownItem}
+                    role="menuitem"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                      showInviteToast(t('schedule.inviteCopied'));
+                      closeInviteMenu();
+                    }}
+                  >
+                    {t('schedule.copyInvite')}
+                  </button>
+                </div>
+              )}
+            </div>
 
             {/* 6. More */}
             <button
@@ -848,20 +933,52 @@ export function KloudMeetToolbar({
                 {t('toolbar.attendees')}
               </button>
 
-              <button
-                className={`${styles.tabBtn} ${styles.tabBtnGreen}`}
-                onClick={() => {
-                  navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-                  setToastMsg(t('toolbar.inviteCopied'));
-                  if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-                  toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-                }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                </svg>
-                {t('toolbar.invite')}
-              </button>
+              <div data-invite-menu-anchor="true" className={styles.inviteMenuAnchor}>
+                <button
+                  type="button"
+                  className={`${styles.tabBtn} ${styles.tabBtnGreen} ${inviteMenuOpen ? styles.tabBtnActive : ''}`}
+                  onClick={() =>
+                    setInviteMenuOpen((prev) => {
+                      const next = !prev;
+                      if (next) onOpenSheet?.();
+                      return next;
+                    })
+                  }
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                    <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                  {t('toolbar.invite')}
+                </button>
+                {inviteMenuOpen && (
+                  <div className={styles.inviteDropdown} role="menu">
+                    <button
+                      type="button"
+                      className={styles.inviteDropdownItem}
+                      role="menuitem"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+                        showInviteToast(t('toolbar.inviteCopied'));
+                        closeInviteMenu();
+                      }}
+                    >
+                      {t('schedule.copyLink')}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.inviteDropdownItem}
+                      role="menuitem"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                        showInviteToast(t('schedule.inviteCopied'));
+                        closeInviteMenu();
+                      }}
+                    >
+                      {t('schedule.copyInvite')}
+                    </button>
+                  </div>
+                )}
+              </div>
 
               <button ref={chatMenuBtnRef} className={`${styles.tabBtn} ${chatOpen ? styles.tabBtnActive : ''}`} onClick={handleToggleChat}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -945,8 +1062,7 @@ export function KloudMeetToolbar({
                 localSubtitleVisible={localSubtitleVisible}
                 onOpenDesktopApp={onOpenDesktopApp}
                 liveDocPluginLoaded={liveDocPluginLoaded}
-                liveDocActionDialogVisible={liveDocActionDialogVisible}
-                onLiveDocMenuClick={handleLiveDocSettingsClick}
+                onLiveDocPanelTab={postLiveDocPanelTab}
               />
             </div>
           </div>
@@ -1093,8 +1209,7 @@ export function KloudMeetToolbar({
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
                       liveDocPluginLoaded={liveDocPluginLoaded}
-                      liveDocActionDialogVisible={liveDocActionDialogVisible}
-                      onLiveDocMenuClick={handleLiveDocSettingsClick}
+                      onLiveDocPanelTab={postLiveDocPanelTab}
                     />
                   </div>
                 )}
@@ -1255,8 +1370,7 @@ function ActiveSheetContent({
   localSubtitleVisible,
   onOpenDesktopApp,
   liveDocPluginLoaded,
-  liveDocActionDialogVisible,
-  onLiveDocMenuClick,
+  onLiveDocPanelTab,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1326,6 +1440,47 @@ function ActiveSheetContent({
             {t('toolbar.chats')}
           </button>
           */}
+
+          {activeView === 'liveDoc' && liveDocPluginLoaded && (
+            <div className={styles.actionSheetGroup}>
+              <div className={styles.actionSheetGroupLabel}>{t('toolbar.liveDocMenu')}</div>
+              <div className={styles.actionSheetGroupItems}>
+                <button
+                  type="button"
+                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
+                  onClick={() => {
+                    onLiveDocPanelTab?.('file');
+                    setActiveSheet(null);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  {t('toolbar.liveDocPanelFile')}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
+                  onClick={() => {
+                    onLiveDocPanelTab?.('summary');
+                    setActiveSheet(null);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  {t('toolbar.liveDocPanelSummary')}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
+                  onClick={() => {
+                    onLiveDocPanelTab?.('transcript');
+                    setActiveSheet(null);
+                  }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h7" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  {t('toolbar.liveDocPanelTranscript')}
+                </button>
+              </div>
+            </div>
+          )}
 
           {!isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
@@ -1417,23 +1572,6 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
             {t('toolbar.openDesktop.menuItem')}
           </button>
-          {activeView === 'liveDoc' && liveDocPluginLoaded && (
-            <button
-              type="button"
-              className={`${styles.actionSheetItem} ${liveDocActionDialogVisible ? styles.active : ''}`}
-              onClick={(ev) => {
-                onLiveDocMenuClick?.(ev);
-                setActiveSheet(null);
-              }}
-              title={t('toolbar.liveDocMenu')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              {t('toolbar.liveDocMenu')}
-            </button>
-          )}
           {false && (
             <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.appDeviceSettings')); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
