@@ -56,6 +56,7 @@ import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
+import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 
 /** LiveDoc 浮窗头像条相对右侧文件控制栏的默认间距（px）；默认 top 仍为 12 */
 const FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL = 16;
@@ -75,6 +76,40 @@ const LiveDocView = dynamic(
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
+
+/** Bearer for Kloud session — lets `/api/connection-details` issue a stable LiveKit identity (`km_<memberId>`) for logged-in users. */
+function getKloudSessionBearer(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const local = localStorage.getItem('kloudUser');
+    if (local) {
+      const u = JSON.parse(local);
+      if (u?.token && typeof u.token === 'string') return u.token;
+    }
+    const sess = sessionStorage.getItem('kloudUser');
+    if (sess) {
+      const u = JSON.parse(sess);
+      if (u?.token && typeof u.token === 'string') return u.token;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+function connectionDetailsFetchInit(overrides?: RequestInit): RequestInit {
+  const t = getKloudSessionBearer();
+  const authHeaders: Record<string, string> = {};
+  if (t) authHeaders.Authorization = `Bearer ${t}`;
+  const o = overrides ?? {};
+  const mergedHeaders = {
+    ...authHeaders,
+    ...(typeof o.headers === 'object' && o.headers !== null && !Array.isArray(o.headers)
+      ? (o.headers as Record<string, string>)
+      : {}),
+  };
+  return { ...o, headers: mergedHeaders };
+}
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
 
 export function PageClientImpl(props: {
@@ -244,7 +279,11 @@ export function PageClientImpl(props: {
       if (props.region) {
         url.searchParams.append('region', props.region);
       }
-      const connectionDetailsResp = await fetch(url.toString());
+      const connectionDetailsResp = await fetch(url.toString(), connectionDetailsFetchInit());
+      if (connectionDetailsResp.status === 401) {
+        handleKloudSessionExpired();
+        return;
+      }
       if (!connectionDetailsResp.ok) {
         throw new Error(
           `Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`,
@@ -872,6 +911,11 @@ export function PageClientImpl(props: {
           <VideoConferenceComponent
             connectionDetails={connectionDetails}
             userChoices={preJoinChoices}
+            meetingOwnerMemberId={
+              meetingInfo?.createdByMemberId != null
+                ? String(meetingInfo.createdByMemberId)
+                : null
+            }
             region={props.region}
             options={{ codec: props.codec, hq: props.hq }}
           />
@@ -1177,9 +1221,24 @@ function LiveDocFloatingCollapsedAvatar({
   );
 }
 
+/** Parse LiveKit participant metadata set by `/api/connection-details` for logged-in users. */
+function parseKloudMemberIdFromMetadata(metadata?: string | null): string | null {
+  if (!metadata || typeof metadata !== 'string') return null;
+  try {
+    const o = JSON.parse(metadata) as { kloudMemberId?: string | number };
+    const id = o?.kloudMemberId;
+    if (id === undefined || id === null) return null;
+    return String(id);
+  } catch {
+    return null;
+  }
+}
+
 function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
   connectionDetails: ConnectionDetails;
+  /** DB `Meeting.createdByMemberId` — when set, that member (via token metadata) stays in-room host after reconnect. */
+  meetingOwnerMemberId?: string | null;
   region?: string;
   options: {
     hq: boolean;
@@ -1508,7 +1567,11 @@ function VideoConferenceComponent(props: {
       url.searchParams.append('region', props.region);
     }
 
-    const response = await fetch(url.toString(), { cache: 'no-store' });
+    const response = await fetch(url.toString(), connectionDetailsFetchInit({ cache: 'no-store' }));
+    if (response.status === 401) {
+      handleKloudSessionExpired();
+      throw new Error('Session expired');
+    }
     if (!response.ok) {
       throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
     }
@@ -2178,15 +2241,32 @@ function VideoConferenceComponent(props: {
     room.localParticipant.identity,
   );
 
-  // Recompute host from join times whenever participants change
+  // Recompute host: DB meeting owner (logged-in metadata) > earliest joiner
   React.useEffect(() => {
+    const ownerKey = props.meetingOwnerMemberId;
+
     const recompute = () => {
+      // Prefer meeting creator when they're in the room and we can match token metadata (logged-in).
+      if (ownerKey) {
+        const localMid = parseKloudMemberIdFromMetadata(room.localParticipant.metadata);
+        if (localMid === ownerKey) {
+          setHostIdentityFromJoin(room.localParticipant.identity);
+          return;
+        }
+        for (const [, p] of room.remoteParticipants) {
+          if (parseKloudMemberIdFromMetadata(p.metadata) === ownerKey) {
+            setHostIdentityFromJoin(p.identity);
+            return;
+          }
+        }
+      }
+
       // Only one person in the meeting? They're the host, period.
       if (room.remoteParticipants.size === 0) {
         setHostIdentityFromJoin(room.localParticipant.identity);
         return;
       }
-      // Multiple participants: earliest joiner is host
+      // Multiple participants, no in-room DB owner match: earliest joiner is host (guest / legacy).
       let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
       let hId = room.localParticipant.identity;
       for (const [, p] of room.remoteParticipants) {
@@ -2212,7 +2292,7 @@ function VideoConferenceComponent(props: {
       room.off(RoomEvent.ParticipantConnected, recompute);
       room.off(RoomEvent.ParticipantDisconnected, recompute);
     };
-  }, [room]);
+  }, [room, props.meetingOwnerMemberId]);
 
   const hostIdentity = hostIdentityOverride || hostIdentityFromJoin;
   const isHost = hostIdentity === room.localParticipant.identity;

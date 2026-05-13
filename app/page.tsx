@@ -9,6 +9,7 @@ import { MyProfileModal } from '@/lib/MyProfileModal';
 import { useI18n, LOCALE_OPTIONS, type Locale } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
+import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import styles from '../styles/Home.module.css';
 
 /* ────────── Types ────────── */
@@ -2523,8 +2524,23 @@ function HomeContent() {
       fetch('/api/auth/profile', {
         headers: { Authorization: `Bearer ${ssoToken}` }
       })
-      .then(res => res.json())
+      .then(async (res) => {
+        if (res.status === 401) {
+          handleKloudSessionExpired();
+          return null;
+        }
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return { __ssoError: (err as { error?: string }).error || 'Failed to get profile' };
+        }
+        return res.json();
+      })
       .then(data => {
+        if (data === null) return;
+        if (data && typeof data === 'object' && '__ssoError' in data) {
+          toast.show((data as { __ssoError: string }).__ssoError);
+          return;
+        }
         if (!data.error) {
           const u: AuthUser = {
             id: data.id,
@@ -2551,16 +2567,68 @@ function HomeContent() {
     }
   }, [searchParams]);
 
-  // Restore session from localStorage
+  // Restore session from localStorage — validate token with /api/auth/profile
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem('kloudUser');
-      if (stored) {
+    let cancelled = false;
+    (async () => {
+      try {
+        const stored = localStorage.getItem('kloudUser');
+        if (!stored) return;
         const parsed = JSON.parse(stored) as AuthUser;
-        setUser(parsed);
+        if (!parsed?.token) {
+          if (!cancelled) {
+            setUser(parsed);
+            setView('dashboard');
+          }
+          return;
+        }
+        const res = await fetch('/api/auth/profile', {
+          headers: { Authorization: `Bearer ${parsed.token}` },
+        });
+        if (cancelled) return;
+        if (res.status === 401) {
+          handleKloudSessionExpired();
+          return;
+        }
+        if (!res.ok) {
+          setUser(parsed);
+          setView('dashboard');
+          return;
+        }
+        const data = await res.json().catch(() => null);
+        if (!data || typeof data !== 'object' || !data.id) {
+          setUser(parsed);
+          setView('dashboard');
+          return;
+        }
+        const u: AuthUser = {
+          id: data.id,
+          username: data.username,
+          displayName: data.fullName || data.username,
+          email: data.email,
+          avatarUrl: data.avatarUrl,
+          token: parsed.token,
+        };
+        localStorage.setItem('kloudUser', JSON.stringify(u));
+        setUser(u);
         setView('dashboard');
+      } catch {
+        if (!cancelled) {
+          try {
+            const stored = localStorage.getItem('kloudUser');
+            if (stored) {
+              setUser(JSON.parse(stored) as AuthUser);
+              setView('dashboard');
+            }
+          } catch {
+            /* ignore */
+          }
+        }
       }
-    } catch {}
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleAuthSuccess = (u: AuthUser) => {

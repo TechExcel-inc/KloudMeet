@@ -1,6 +1,6 @@
 {
   "name": "livekit-meet",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "description": "Kloud Meet — LiveKit + Next.js desktop and web client",
   "author": "Kloud",

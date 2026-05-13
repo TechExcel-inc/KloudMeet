@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { randomString } from '@/lib/client-utils';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
+import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { ConnectionDetails } from '@/lib/types';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
@@ -76,15 +77,39 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Meeting has already ended', { status: 403 });
     }
 
-    // Generate participant token
-    if (!randomParticipantPostfix) {
-      randomParticipantPostfix = randomString(4);
+    const authHeader = request.headers.get('authorization');
+    const bearerToken =
+      authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+    const clientClaimsLoggedIn = bearerToken.length > 0;
+
+    const member = await getSessionTeamMember(request);
+    // 客户端带了会话却无效时，不要静默降级为访客（否则会换随机 identity，与已登录稳定身份预期相反）。
+    if (clientClaimsLoggedIn && !member) {
+      return new NextResponse('Session expired or invalid', { status: 401 });
     }
+
+    let identity: string;
+    let tokenMetadata = metadata;
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+
+    if (member) {
+      // Logged-in: stable LiveKit identity across reconnects (host / co-host lists bind to identity).
+      identity = `km_${member.id}`;
+      tokenMetadata = JSON.stringify({ kloudMemberId: member.id });
+    } else {
+      // Guest: unchanged — random postfix persisted in HttpOnly cookie.
+      if (!randomParticipantPostfix) {
+        randomParticipantPostfix = randomString(4);
+      }
+      identity = `${participantName}__${randomParticipantPostfix}`;
+      headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
+    }
+
     const participantToken = await createParticipantToken(
       {
-        identity: `${participantName}__${randomParticipantPostfix}`,
+        identity,
         name: participantName,
-        metadata,
+        metadata: tokenMetadata,
       },
       roomName,
     );
@@ -97,10 +122,7 @@ export async function GET(request: NextRequest) {
       participantName: participantName,
     };
     return new NextResponse(JSON.stringify(data), {
-      headers: {
-        'Content-Type': 'application/json',
-        'Set-Cookie': `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`,
-      },
+      headers,
     });
   } catch (error) {
     if (error instanceof Error) {
