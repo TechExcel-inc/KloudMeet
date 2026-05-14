@@ -1,6 +1,6 @@
 {
   "name": "livekit-meet",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Kloud Meet — LiveKit + Next.js desktop and web client",
   "author": "Kloud",
@@ -88,6 +88,10 @@
     "files": [
       "main.js",
       "preload.js",
+      "update-progress.html",
+      "update-progress-preload.js",
+      "update-ready.html",
+      "update-ready-preload.js",
       "package.json",
       "node_modules/**/*",
       "!node_modules/.cache/**",
@@ -132,6 +136,7 @@
     },
     "win": {
       "executableName": "KloudMeet",
+      "signAndEditExecutable": false,
       "target": [
         "nsis"
       ],

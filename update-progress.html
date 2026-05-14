@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>更新进度</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background: transparent;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      .card {
+        margin: 0 4px;
+        border-radius: 8px;
+        background: rgba(15, 23, 42, 0.82);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        padding: 6px 9px 7px;
+        box-sizing: border-box;
+        -webkit-app-region: drag;
+        cursor: grab;
+      }
+      .card:active {
+        cursor: grabbing;
+      }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 11px;
+        line-height: 1.2;
+        color: rgba(255, 255, 255, 0.92);
+        letter-spacing: 0.02em;
+      }
+      .bar-outer {
+        margin-top: 5px;
+        height: 3px;
+        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.16);
+        overflow: hidden;
+      }
+      .bar-inner {
+        height: 100%;
+        border-radius: 2px;
+        width: 0%;
+        background: linear-gradient(90deg, #34d399, #22d3ee);
+        transition: width 0.12s ease-out;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card" title="可拖动到空白处">
+      <div class="row">
+        <span>新版本下载</span>
+        <span id="pct">0%</span>
+      </div>
+      <div class="bar-outer"><div id="fill" class="bar-inner"></div></div>
+    </div>
+    <script>
+      (function () {
+        var pctEl = document.getElementById('pct');
+        var fillEl = document.getElementById('fill');
+        if (window.updateProgress && typeof window.updateProgress.onProgress === 'function') {
+          window.updateProgress.onProgress(function (p) {
+            var n = typeof p.percent === 'number' && !isNaN(p.percent) ? p.percent : 0;
+            n = Math.min(100, Math.max(0, Math.round(n)));
+            pctEl.textContent = n + '%';
+            fillEl.style.width = n + '%';
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

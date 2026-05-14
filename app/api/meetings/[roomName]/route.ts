@@ -32,14 +32,18 @@ export async function GET(
     });
 
     // Personal room handling: supports creating a new session each time
-    // Trigger when: meeting not found OR previous session has ended
-    if (!meeting || meeting.status === 'ENDED') {
+    // Trigger when: meeting not found OR previous session has ended / was canceled
+    const recycleStatuses = ['ENDED', 'CANCELED'];
+    const shouldRecyclePersonalRoom =
+      !meeting || (typeof meeting.status === 'string' && recycleStatuses.includes(meeting.status));
+
+    if (shouldRecyclePersonalRoom) {
       const owner = await prisma.teamMember.findFirst({
         where: { personalRoomId: roomName },
       });
       if (owner) {
-        // Archive the old ENDED record so it stays as history (rename its roomName)
-        if (meeting && meeting.status === 'ENDED') {
+        // Archive the old ENDED / CANCELED record so it stays as history (rename its roomName)
+        if (meeting && typeof meeting.status === 'string' && recycleStatuses.includes(meeting.status)) {
           await prisma.meeting.update({
             where: { id: meeting.id },
             data: { roomName: `${roomName}_${meeting.id}` },

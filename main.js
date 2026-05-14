@@ -57,6 +57,282 @@ function showFatal(title, detail) {
 
 let mainWindow;
 let overlayWindow;
+/** 对齐主窗口右上角的更新下载进度（仅打包环境使用） */
+let updateProgressWindow;
+/** 更新下载完成后的「立即重启」模态窗 */
+let updateReadyPromptWindow;
+
+const UPDATE_PROGRESS_W = 208;
+const UPDATE_PROGRESS_H = 44;
+const UPDATE_PROGRESS_MARGIN = 10;
+/** 相对内容区顶部下移，避开页面内常见顶栏／右上角按钮 */
+const UPDATE_PROGRESS_TOP_INSET = 44;
+
+/** @type {{ percent: number } | null} */
+let pendingUpdateProgressPayload = null;
+
+/** 避免 download-progress 与 update-downloaded 连续两次 100% 等重复帧 */
+let lastUpdaterProgressRounded = -1;
+
+/** 同一次下载只弹一次安装确认（electron-updater 偶发重复事件） */
+let updateDownloadedDialogShown = false;
+
+function pctFromUpdaterProgress(p) {
+  if (p && typeof p.percent === 'number' && !Number.isNaN(p.percent)) {
+    return Math.min(100, Math.max(0, p.percent));
+  }
+  if (p && p.total > 0) {
+    return Math.min(100, Math.max(0, (p.transferred / p.total) * 100));
+  }
+  return 0;
+}
+
+function layoutUpdateProgressWindow() {
+  if (!updateProgressWindow || updateProgressWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+  const cb = mainWindow.getContentBounds();
+  updateProgressWindow.setBounds({
+    x: cb.x + cb.width - UPDATE_PROGRESS_W - UPDATE_PROGRESS_MARGIN,
+    y: cb.y + UPDATE_PROGRESS_TOP_INSET,
+    width: UPDATE_PROGRESS_W,
+    height: UPDATE_PROGRESS_H,
+  });
+}
+
+function destroyUpdateProgressWindow() {
+  if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
+    updateProgressWindow.destroy();
+  }
+  updateProgressWindow = null;
+  pendingUpdateProgressPayload = null;
+  lastUpdaterProgressRounded = -1;
+}
+
+function broadcastUpdateDownloadProgress(payload) {
+  const rounded = Math.round(payload.percent);
+  if (rounded === lastUpdaterProgressRounded) return;
+  lastUpdaterProgressRounded = rounded;
+  pendingUpdateProgressPayload = payload;
+  const w = updateProgressWindow;
+  if (!w || w.isDestroyed()) return;
+  if (!w.webContents.isLoading()) {
+    w.webContents.send('update-download-progress', payload);
+  }
+}
+
+/**
+ * 全屏 alwaysOnTop 的 overlay 会把挂在主窗口上的原生对话框挡在下面；先隐藏 overlay，并用无宿主窗口调用保证提示在最前。
+ */
+async function showUpdaterMessageBox(options) {
+  let overlayWasVisible = false;
+  try {
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+      overlayWasVisible = true;
+      overlayWindow.hide();
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+      try {
+        mainWindow.moveTop();
+      } catch {
+        /* ignore */
+      }
+    }
+    return await dialog.showMessageBox(null, options);
+  } finally {
+    if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.show();
+    }
+  }
+}
+
+/**
+ * 用主窗口子模态窗代替原生 dialog，避免被全屏 overlay / 层级 挡住或静默失败。
+ * @param {string} version
+ * @returns {Promise<boolean>} 用户是否选择立即安装
+ */
+function showUpdateReadyPrompt(version) {
+  return new Promise((resolve) => {
+    const log = (s) => appendStartupLog(`[update-ready] ${s}`);
+
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      log('skip: no mainWindow');
+      resolve(false);
+      return;
+    }
+
+    let overlayWasVisible = false;
+    try {
+      if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+        overlayWasVisible = true;
+        overlayWindow.hide();
+      }
+    } catch (e) {
+      log(`overlay hide: ${e instanceof Error ? e.message : String(e)}`);
+    }
+
+    let settled = false;
+    /** @type {import('electron').BrowserWindow | null} */
+    let promptWinRef = null;
+
+    const settle = (value) => {
+      if (settled) return;
+      settled = true;
+      ipcMain.removeListener('update-ready-response', onResponse);
+      if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
+        try {
+          overlayWindow.show();
+        } catch {
+          /* ignore */
+        }
+      }
+      const w = promptWinRef;
+      promptWinRef = null;
+      updateReadyPromptWindow = null;
+      if (w && !w.isDestroyed()) {
+        try {
+          w.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+      resolve(Boolean(value));
+    };
+
+    const onResponse = (event, install) => {
+      const w = promptWinRef;
+      if (!w || w.isDestroyed()) return;
+      if (event.sender !== w.webContents) return;
+      settle(install === true);
+    };
+
+    ipcMain.on('update-ready-response', onResponse);
+
+    const PROMPT_W = 420;
+    const PROMPT_H = 168;
+    const promptWin = new BrowserWindow({
+      parent: mainWindow,
+      modal: true,
+      show: false,
+      width: PROMPT_W,
+      height: PROMPT_H,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      autoHideMenuBar: true,
+      title: '更新已就绪',
+      webPreferences: {
+        preload: path.join(__dirname, 'update-ready-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+
+    promptWinRef = promptWin;
+    updateReadyPromptWindow = promptWin;
+
+    const mb = mainWindow.getBounds();
+    promptWin.setBounds({
+      x: Math.round(mb.x + (mb.width - PROMPT_W) / 2),
+      y: Math.round(mb.y + (mb.height - PROMPT_H) / 2),
+      width: PROMPT_W,
+      height: PROMPT_H,
+    });
+
+    promptWin.on('closed', () => {
+      promptWinRef = null;
+      updateReadyPromptWindow = null;
+      if (!settled) {
+        ipcMain.removeListener('update-ready-response', onResponse);
+        if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
+          try {
+            overlayWindow.show();
+          } catch {
+            /* ignore */
+          }
+        }
+        settled = true;
+        resolve(false);
+      }
+    });
+
+    promptWin.webContents.once('did-finish-load', () => {
+      try {
+        promptWin.show();
+        promptWin.focus();
+      } catch (e) {
+        log(`show/focus: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+
+    const vq = encodeURIComponent(String(version || ''));
+    promptWin
+      .loadFile(path.join(__dirname, 'update-ready.html'), { query: { v: vq } })
+      .catch((e) => {
+        log(`loadFile: ${e.message}`);
+        settle(false);
+      });
+  });
+}
+
+function ensureUpdateProgressWindow() {
+  if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
+    layoutUpdateProgressWindow();
+    return updateProgressWindow;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+
+  updateProgressWindow = new BrowserWindow({
+    width: UPDATE_PROGRESS_W,
+    height: UPDATE_PROGRESS_H,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    show: false,
+    hasShadow: false,
+    focusable: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'update-progress-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+
+  try {
+    updateProgressWindow.setAlwaysOnTop(true, 'pop-up-menu', 2);
+  } catch {
+    try {
+      updateProgressWindow.setAlwaysOnTop(true);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  updateProgressWindow.webContents.once('did-finish-load', () => {
+    layoutUpdateProgressWindow();
+    updateProgressWindow.show();
+    if (pendingUpdateProgressPayload) {
+      updateProgressWindow.webContents.send('update-download-progress', pendingUpdateProgressPayload);
+    }
+  });
+
+  updateProgressWindow.on('closed', () => {
+    updateProgressWindow = null;
+  });
+
+  updateProgressWindow.loadFile(path.join(__dirname, 'update-progress.html'));
+  layoutUpdateProgressWindow();
+  return updateProgressWindow;
+}
 
 /** @type {string | null} */
 let pendingDeepLink = null;
@@ -259,7 +535,20 @@ function createWindows() {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
+  const syncUpdateProgressLayout = () => layoutUpdateProgressWindow();
+  mainWindow.on('move', syncUpdateProgressLayout);
+  mainWindow.on('resize', syncUpdateProgressLayout);
+
   mainWindow.on('close', () => {
+    destroyUpdateProgressWindow();
+    if (updateReadyPromptWindow && !updateReadyPromptWindow.isDestroyed()) {
+      try {
+        updateReadyPromptWindow.destroy();
+      } catch {
+        /* ignore */
+      }
+    }
+    updateReadyPromptWindow = null;
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.destroy();
       overlayWindow = null;
@@ -429,29 +718,47 @@ if (!gotLock) {
         error: (msg) => appendStartupLog(`[updater][error] ${msg}`),
       };
 
+      // NSIS 默认先差分再必要时全量，两阶段各自 0→100%，角标会像跑两遍；关差分只拉整包，进度连续（流量略增）。
+      autoUpdater.disableDifferentialDownload = true;
+
       autoUpdater.on('update-available', (info) => {
-        dialog.showMessageBox(mainWindow, {
+        updateDownloadedDialogShown = false;
+        showUpdaterMessageBox({
           type: 'info',
           title: '发现新版本',
           message: `Kloud Meet ${info.version} 已发布，正在后台下载…`,
           buttons: ['好的'],
-        });
+        }).catch(() => {});
+      });
+
+      autoUpdater.on('download-progress', (p) => {
+        ensureUpdateProgressWindow();
+        broadcastUpdateDownloadProgress({ percent: pctFromUpdaterProgress(p) });
       });
 
       autoUpdater.on('update-downloaded', (info) => {
-        dialog.showMessageBox(mainWindow, {
-          type: 'question',
-          title: '更新已就绪',
-          message: `Kloud Meet ${info.version} 下载完成，立即重启安装？`,
-          buttons: ['立即重启', '稍后'],
-          defaultId: 0,
-        }).then(({ response }) => {
-          if (response === 0) autoUpdater.quitAndInstall();
-        });
+        if (updateDownloadedDialogShown) return;
+        updateDownloadedDialogShown = true;
+        destroyUpdateProgressWindow();
+        appendStartupLog(`[updater] update-downloaded ${info.version}, opening install prompt`);
+        showUpdateReadyPrompt(info.version)
+          .then((install) => {
+            if (install) {
+              try {
+                autoUpdater.quitAndInstall();
+              } catch (e) {
+                appendStartupLog(`quitAndInstall: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }
+          })
+          .catch((e) => {
+            appendStartupLog(`showUpdateReadyPrompt: ${e instanceof Error ? e.message : String(e)}`);
+          });
       });
 
       autoUpdater.on('error', (err) => {
         appendStartupLog(`autoUpdater error: ${err.message}`);
+        destroyUpdateProgressWindow();
       });
 
       // 启动后延迟 5 秒检查，避免影响启动速度

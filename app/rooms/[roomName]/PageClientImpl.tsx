@@ -45,6 +45,7 @@ import {
   Participant,
   TrackPublishDefaults,
   VideoCaptureOptions,
+  ScreenShareCaptureOptions,
   Track,
   DataPacket_Kind,
 } from 'livekit-client';
@@ -68,6 +69,12 @@ const FLOATING_WEBCAM_RIGHT_INSET = 350;
 const FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN = 12;
 const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 104;
 const FLOATING_WEBCAM_TOP_INSET = 12;
+
+/** 请求屏幕共享时的系统/标签页音频，浏览器才会在选取器中显示对应勾选项（支持情况因浏览器而异）。 */
+const SCREEN_SHARE_CAPTURE: ScreenShareCaptureOptions = {
+  audio: true,
+  systemAudio: 'include',
+};
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -820,10 +827,6 @@ export function PageClientImpl(props: {
                     <button onClick={() => alert('System Settings coming soon')} className="ead-menu-item">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
                       {t('nav.systemSettings')}
-                    </button>
-                    <button onClick={() => alert('AI Digital Human Setup coming soon')} className="ead-menu-item">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
-                      {t('prejoin.aiDigitalHuman')}
                     </button>
                   </div>
                 )}
@@ -2152,7 +2155,9 @@ function VideoConferenceComponent(props: {
       broadcastViewChangeRef.current?.('shareScreen');
     }
 
-    room.localParticipant.setScreenShareEnabled(next).catch((e) => {
+    room.localParticipant
+      .setScreenShareEnabled(next, next ? SCREEN_SHARE_CAPTURE : undefined)
+      .catch((e) => {
       setScreenShareActive(false);
       // Revert view to liveDoc if screen share was cancelled/failed
       if (next) {
@@ -2466,7 +2471,7 @@ function VideoConferenceComponent(props: {
       setScreenShareActive(true);
       setActiveView('liveDoc');
       broadcastViewChangeRef.current?.('shareScreen');
-      room.localParticipant.setScreenShareEnabled(true).catch((e) => {
+      room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e) => {
         setScreenShareActive(false);
         setActiveView('liveDoc');
         broadcastViewChangeRef.current?.('liveDoc');

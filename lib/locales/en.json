@@ -182,7 +182,6 @@
   "prejoin.meetingCanceledDesc": "This meeting has been canceled and is no longer available.",
   "prejoin.returnDashboard": "Return to Dashboard",
   "prejoin.profile": "Profile",
-  "prejoin.aiDigitalHuman": "AI Digital Human Setup",
   "prejoin.connectError": "Could not connect to the room. Is your LiveKit server running? Error: {error}",
   "prejoin.prejoinError": "LiveKit PreJoin Error: {error}",
 
@@ -407,6 +406,11 @@
   "profile.saved": "Profile saved successfully!",
   "profile.saveFailed": "Failed to update profile",
   "profile.networkError": "Network error saving profile.",
+  "profile.roomIdInvalid": "Meeting room ID must be 3–12 letters or numbers.",
+  "profile.roomIdTaken": "This meeting room ID is already taken.",
+  "profile.emailInvalid": "Invalid email format.",
+  "profile.emailInUse": "This email is already in use.",
+  "profile.phoneInvalid": "Invalid phone format.",
 
   "help.title": "Help & Support",
   "help.subtitle": "Learn how to use Kloud Meet effectively",

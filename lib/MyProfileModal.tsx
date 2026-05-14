@@ -2,6 +2,24 @@ import React, { useState, useEffect, useRef } from 'react';
 import styles from '../styles/MyProfileModal.module.css';
 import { useI18n } from './i18n';
 
+/** API PUT /api/account/profile 校验错误码 → i18n key */
+const PROFILE_PUT_ERROR_I18N: Record<string, string> = {
+  PERSONAL_ROOM_ID_INVALID: 'profile.roomIdInvalid',
+  PERSONAL_ROOM_ID_TAKEN: 'profile.roomIdTaken',
+  EMAIL_INVALID: 'profile.emailInvalid',
+  EMAIL_IN_USE: 'profile.emailInUse',
+  PHONE_INVALID: 'profile.phoneInvalid',
+};
+
+function profilePutErrorMessage(
+  data: { error?: string; code?: string },
+  t: (key: string) => string,
+): string {
+  const i18nKey = data.code ? PROFILE_PUT_ERROR_I18N[data.code] : undefined;
+  if (i18nKey) return t(i18nKey);
+  return data.error || t('profile.saveFailed');
+}
+
 interface AuthUser {
   id: string;
   username: string;
@@ -115,7 +133,7 @@ export function MyProfileModal({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error || t('profile.saveFailed'));
+        setError(profilePutErrorMessage(data, t));
         setSaving(false);
         return;
       }

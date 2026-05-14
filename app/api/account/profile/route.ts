@@ -37,33 +37,48 @@ export async function PUT(request: NextRequest) {
     // Validate personalRoomId
     if (personalRoomId) {
       if (!/^[a-zA-Z0-9]{3,12}$/.test(personalRoomId)) {
-        return NextResponse.json({ error: 'Room ID must be 3-12 letters or digits' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Room ID must be 3-12 letters or digits', code: 'PERSONAL_ROOM_ID_INVALID' },
+          { status: 400 },
+        );
       }
       const existing = await prisma.teamMember.findFirst({
         where: { personalRoomId, id: { not: member.id } }
       });
       if (existing) {
-        return NextResponse.json({ error: 'This Room ID is already taken.' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'This Room ID is already taken.', code: 'PERSONAL_ROOM_ID_TAKEN' },
+          { status: 400 },
+        );
       }
     }
 
     // Validate email if provided
     if (email !== undefined && email !== '') {
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return NextResponse.json({ error: 'Invalid email format' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid email format', code: 'EMAIL_INVALID' },
+          { status: 400 },
+        );
       }
       const existingEmail = await prisma.teamMember.findFirst({
         where: { email, id: { not: member.id } }
       });
       if (existingEmail) {
-        return NextResponse.json({ error: 'This email is already in use.' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'This email is already in use.', code: 'EMAIL_IN_USE' },
+          { status: 400 },
+        );
       }
     }
 
     // Validate phone if provided
     if (phone !== undefined && phone !== '') {
       if (!/^[+]?[\d\s()-]{6,20}$/.test(phone)) {
-        return NextResponse.json({ error: 'Invalid phone format' }, { status: 400 });
+        return NextResponse.json(
+          { error: 'Invalid phone format', code: 'PHONE_INVALID' },
+          { status: 400 },
+        );
       }
     }
 
