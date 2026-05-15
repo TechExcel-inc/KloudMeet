@@ -1152,7 +1152,15 @@ function LiveDocWebcamSidebarTile({ participant, name }: { participant: Particip
   );
 }
 
-function LiveDocFloatingGridTile({ participant, name }: { participant: Participant; name: string }) {
+function LiveDocFloatingGridTile({
+  participant,
+  name,
+  size = 'compact',
+}: {
+  participant: Participant;
+  name: string;
+  size?: 'hero' | 'compact';
+}) {
   const camPub = participant.getTrackPublication(Track.Source.Camera);
   const micPub = participant.getTrackPublication(Track.Source.Microphone);
   const hasVideo = !!(camPub?.track && !camPub.isMuted);
@@ -1168,7 +1176,7 @@ function LiveDocFloatingGridTile({ participant, name }: { participant: Participa
   );
   return (
     <div
-      className="floating-grid-tile lk-participant-tile"
+      className={`floating-grid-tile lk-participant-tile floating-grid-tile--${size}`}
       data-lk-participant={participant.identity}
       data-lk-speaking={isSpeaking}
       data-lk-audio-muted={micMuted}
@@ -1192,9 +1200,172 @@ function LiveDocFloatingGridTile({ participant, name }: { participant: Participa
       <div className="lk-participant-metadata webcam-floating-participant-metadata">
         <div className="floating-grid-name-row lk-participant-metadata-item">
           <TrackMutedIndicator trackRef={micTrackRef} show="always" />
-          <span className="floating-grid-name">{name}</span>
+          <span className="floating-grid-name" title={name}>
+            {name}
+          </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+type FloatingParticipantEntry = { id: string; name: string };
+
+/** 浮窗展开：左 3 大格按「麦+镜头+说话 → …」全局排序取前 3，右三列小格且高度不超过左侧、超出滚动 */
+function LiveDocFloatingExpandedParticipantLayout({
+  room,
+  hostIdentity,
+  cohostIdentities,
+  sortedEntries,
+}: {
+  room: Room;
+  hostIdentity: string;
+  cohostIdentities: string[];
+  sortedEntries: FloatingParticipantEntry[];
+}) {
+  const heroColumnRef = React.useRef<HTMLDivElement>(null);
+  const [restMaxHeight, setRestMaxHeight] = React.useState<number | undefined>(undefined);
+  const [layoutKey, bumpLayout] = React.useReducer((n: number) => n + 1, 0);
+
+  React.useEffect(() => {
+    const onLayout = () => bumpLayout();
+    const evs = [
+      RoomEvent.ActiveSpeakersChanged,
+      RoomEvent.TrackMuted,
+      RoomEvent.TrackUnmuted,
+      RoomEvent.TrackPublished,
+      RoomEvent.TrackUnpublished,
+      RoomEvent.LocalTrackPublished,
+      RoomEvent.LocalTrackUnpublished,
+      RoomEvent.ParticipantConnected,
+      RoomEvent.ParticipantDisconnected,
+    ] as const;
+    for (const e of evs) {
+      room.on(e, onLayout);
+    }
+    return () => {
+      for (const e of evs) {
+        room.off(e, onLayout);
+      }
+    };
+  }, [room]);
+
+  React.useLayoutEffect(() => {
+    const el = heroColumnRef.current;
+    if (!el) return;
+    const sync = () => setRestMaxHeight(el.getBoundingClientRect().height);
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
+    ro?.observe(el);
+    sync();
+    return () => {
+      ro?.disconnect();
+    };
+  }, [sortedEntries, layoutKey]);
+
+  const { heroEntries, restEntries, heroesOnly } = React.useMemo(() => {
+    const resolve = (id: string): Participant | undefined =>
+      id === 'local' ? room.localParticipant : room.remoteParticipants.get(id);
+
+    const identityFor = (id: string) =>
+      id === 'local' ? room.localParticipant.identity : id;
+
+    const hasVideo = (p: Participant | undefined) => {
+      if (!p) return false;
+      const camPub = p.getTrackPublication(Track.Source.Camera);
+      return !!(camPub?.track && !camPub.isMuted);
+    };
+
+    const micLive = (p: Participant | undefined) => {
+      if (!p) return false;
+      const micPub = p.getTrackPublication(Track.Source.Microphone);
+      return !!(micPub?.track && !micPub.isMuted);
+    };
+
+    const isSpeaking = (p: Participant | undefined) => {
+      if (!p) return false;
+      return room.activeSpeakers.some((s) => s.identity === p.identity);
+    };
+
+    const roleRank = (identity: string) => {
+      if (identity === hostIdentity) return 0;
+      if (cohostIdentities.includes(identity)) return 1;
+      return 2;
+    };
+
+    const rows = sortedEntries
+      .map((e) => {
+        const participant = resolve(e.id);
+        if (!participant) return null;
+        const identity = identityFor(e.id);
+        return {
+          id: e.id,
+          name: e.name,
+          participant,
+          identity,
+          joinedAt: participant.joinedAt?.getTime() ?? 0,
+          hasVideo: hasVideo(participant),
+          micLive: micLive(participant),
+          isSpeaking: isSpeaking(participant),
+        };
+      })
+      .filter((r): r is NonNullable<typeof r> => r !== null);
+
+    const byJoin = (a: (typeof rows)[0], b: (typeof rows)[0]) => a.joinedAt - b.joinedAt;
+
+    /** 数字越小越优先；与需求一致：开麦+镜头+说话 → 开麦+说话 → 仅开麦+镜头 → 仅镜头 → 仅开麦 → 其余 */
+    const heroTier = (r: (typeof rows)[0]): number => {
+      if (r.micLive && r.hasVideo && r.isSpeaking) return 0;
+      if (r.micLive && r.isSpeaking) return 1;
+      if (r.micLive && r.hasVideo && !r.isSpeaking) return 2;
+      if (r.hasVideo && !r.micLive) return 3;
+      if (r.micLive && !r.hasVideo && !r.isSpeaking) return 4;
+      return 5;
+    };
+
+    const compareWithinSameTier = (a: (typeof rows)[0], b: (typeof rows)[0], tier: number) => {
+      const poolSize = rows.filter((x) => heroTier(x) === tier).length;
+      if (poolSize > 3) {
+        const rr = roleRank(a.identity) - roleRank(b.identity);
+        if (rr !== 0) return rr;
+      }
+      return byJoin(a, b);
+    };
+
+    const sortedForHero = [...rows].sort((a, b) => {
+      const ta = heroTier(a);
+      const tb = heroTier(b);
+      if (ta !== tb) return ta - tb;
+      return compareWithinSameTier(a, b, ta);
+    });
+
+    const hero = sortedForHero.slice(0, 3);
+    const used = new Set(hero.map((r) => r.id));
+
+    const rest = rows.filter((r) => !used.has(r.id)).sort(byJoin);
+    return { heroEntries: hero, restEntries: rest, heroesOnly: rest.length === 0 };
+  }, [room, sortedEntries, hostIdentity, cohostIdentities, layoutKey]);
+
+  return (
+    <div
+      className={`floating-expanded-grid${heroesOnly ? ' floating-expanded-grid--heroes-only' : ''}`}
+    >
+      <div ref={heroColumnRef} className="floating-expanded-hero-column">
+        {heroEntries.map((e) => (
+          <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="hero" />
+        ))}
+      </div>
+      {!heroesOnly && (
+        <div
+          className="floating-expanded-rest-wrap"
+          style={restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : undefined}
+        >
+          <div className="floating-expanded-rest-inner">
+            {restEntries.map((e) => (
+              <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="compact" />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3430,6 +3601,14 @@ function VideoConferenceComponent(props: {
 
   const handleFloatingMouseDown = React.useCallback(
     (e: React.MouseEvent) => {
+      const target = e.target as Element;
+      if (
+        target.closest('.kloud-custom-mic-indicator') ||
+        target.closest('.floating-chevron-btn') ||
+        target.closest('button')
+      ) {
+        return;
+      }
       isDragging.current = true;
       setIsFloatingDragging(true);
       cancelFloatingXAnimation();
@@ -4576,7 +4755,7 @@ function VideoConferenceComponent(props: {
                     ...(floatingPosLayout === 'right-inset'
                       ? { right: floatingRightInset, left: 'auto' as const }
                       : { left: floatingPos.x, right: 'auto' as const }),
-                    zIndex: 200,
+                    zIndex: floatingExpanded ? 350 : 200,
                     cursor: isFloatingDragging ? 'grabbing' : 'grab',
                     userSelect: 'none',
                     transition: isFloatingDragging
@@ -4668,19 +4847,13 @@ function VideoConferenceComponent(props: {
                               </svg>
                             </button>
                           </div>
-                          <div className="floating-expanded-grid">
-                            {allParticipants.map((p) => {
-                              const participant =
-                                p.id === 'local'
-                                  ? room.localParticipant
-                                  : room.remoteParticipants.get(p.id);
-                              if (!participant) {
-                                return <React.Fragment key={p.id} />;
-                              }
-                              return (
-                                <LiveDocFloatingGridTile key={p.id} participant={participant} name={p.name} />
-                              );
-                            })}
+                          <div className="floating-expanded-grid-wrap">
+                            <LiveDocFloatingExpandedParticipantLayout
+                              room={room}
+                              hostIdentity={hostIdentity}
+                              cohostIdentities={cohostIdentities}
+                              sortedEntries={allParticipants}
+                            />
                           </div>
                         </>
                       );
@@ -4989,7 +5162,9 @@ function VideoConferenceComponent(props: {
             .floating-webcam-panel.expanded {
                border-radius: 16px;
                padding: 10px 12px;
-               min-width: 200px;
+               min-width: 420px;
+               max-width: 420px;
+               box-sizing: border-box;
             }
             .floating-collapsed-row {
                display: flex;
@@ -5083,23 +5258,116 @@ function VideoConferenceComponent(props: {
                text-transform: uppercase;
                letter-spacing: 0.5px;
             }
-            .floating-expanded-grid {
-               display: grid;
-               grid-template-columns: repeat(3, 1fr);
-               gap: 8px;
-               max-height: 300px;
-               overflow-y: auto;
+            .floating-expanded-grid-wrap {
+               margin-top: 2px;
             }
-            .floating-grid-tile {
+            .floating-expanded-grid {
+               display: flex;
+               flex-direction: row;
+               align-items: flex-start;
+               gap: 10px;
+               background: rgba(22, 48, 36, 0.42);
+               border-radius: 14px;
+               padding: 8px 8px 8px 8px;
+               border: 1px solid rgba(255,255,255,0.06);
+               overflow: visible;
+            }
+            .floating-expanded-grid--heroes-only {
+               gap: 0;
+            }
+            .floating-webcam-panel.expanded:has(.floating-expanded-grid--heroes-only) {
+               min-width: 140px;
+               max-width: 150px;
+            }
+            .floating-expanded-hero-column {
                display: flex;
                flex-direction: column;
-               align-items: center;
-               gap: 3px;
+               gap: 8px;
+               width: 118px;
+               flex-shrink: 0;
+            }
+            .floating-expanded-rest-wrap {
+               flex: 0 0 252px;
+               width: 252px;
+               min-width: 252px;
+               max-width: 252px;
+               position: relative;
+               z-index: 2;
+               overflow-x: visible;
+               overflow-y: auto;
+               scrollbar-gutter: stable;
+               -webkit-overflow-scrolling: touch;
+               scrollbar-width: thin;
+               box-sizing: border-box;
+            }
+            .floating-expanded-rest-inner {
+               display: grid;
+               grid-template-columns: repeat(3, 76px);
+               gap: 8px;
+               width: 244px;
+               align-content: start;
+               box-sizing: border-box;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact {
+               position: relative;
+               z-index: 1;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .webcam-floating-participant-metadata {
+               z-index: 6;
+            }
+            .floating-grid-tile--hero .floating-grid-video {
+               width: 100%;
+               height: auto;
+               aspect-ratio: 4 / 5;
+               border-radius: 14px;
+            }
+            .floating-grid-tile--hero .floating-grid-avatar {
+               font-size: 22px;
+               background: #e8dcc8;
+               color: #111827;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-video {
+               width: 76px;
+               height: 76px;
+               aspect-ratio: 1;
+               min-height: 0;
+               border-radius: 10px;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-avatar {
+               font-size: 17px;
+            }
+            .floating-grid-tile--hero .floating-grid-name {
+               font-size: 10px;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-name {
+               font-size: 9px;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-name-row {
+               padding: 2px 5px;
+               gap: 4px;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator {
+              width: 1rem;
+              height: 1rem;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+              width: 1.15rem;
+              height: 1.15rem;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator.operator-interactive {
+              min-width: 1.35rem;
+              min-height: 1.35rem;
+              padding: 3px;
+              margin: 0;
+            }
+            .floating-grid-tile {
+               display: block;
+               position: relative;
             }
             .floating-grid-tile.lk-participant-tile {
-               gap: 3px !important;
-               flex-direction: column !important;
-               align-items: center !important;
+               gap: 0 !important;
+               flex-direction: row !important;
+               align-items: stretch !important;
                background: transparent !important;
             }
             .floating-grid-video {
@@ -5109,25 +5377,39 @@ function VideoConferenceComponent(props: {
                overflow: hidden;
                background: #1e293b;
                position: relative;
+               display: block;
             }
             .floating-webcam-panel .webcam-floating-participant-metadata {
-               position: static !important;
-               inset: auto !important;
-               left: auto !important;
+               position: absolute !important;
+               inset: auto auto 4px 4px !important;
+               left: 4px !important;
                right: auto !important;
-               bottom: auto !important;
-               width: 100%;
-               justify-content: center;
+               bottom: 4px !important;
+               top: auto !important;
+               width: auto !important;
+               max-width: calc(100% - 8px);
+               justify-content: flex-start !important;
+               z-index: 4;
+               pointer-events: none;
+            }
+            .floating-webcam-panel .floating-grid-name-row {
+               pointer-events: none;
+            }
+            .floating-webcam-panel .kloud-custom-mic-indicator {
+               pointer-events: auto;
             }
             .floating-grid-name-row {
-               display: flex;
+               display: inline-flex;
                align-items: center;
-               justify-content: center;
-               gap: 2px;
-               max-width: 78px;
+               justify-content: flex-start;
+               gap: 3px;
+               max-width: 100%;
                min-width: 0;
                padding: 2px 4px;
                line-height: 1;
+               border-radius: 4px;
+               background: rgba(0, 0, 0, 0.58);
+               backdrop-filter: blur(4px);
             }
             .floating-grid-name-row .lk-track-muted-indicator-microphone {
                flex-shrink: 0;
@@ -5154,15 +5436,27 @@ function VideoConferenceComponent(props: {
                box-shadow: 0 0 0 2px #3b82f6;
             }
             .floating-grid-name {
-               color: rgba(255,255,255,0.6);
+               color: rgba(255,255,255,0.92);
                font-size: 9px;
                font-weight: 500;
                min-width: 0;
-               max-width: 58px;
+               max-width: 0;
+               opacity: 0;
                overflow: hidden;
                text-overflow: ellipsis;
                white-space: nowrap;
-               text-align: center;
+               text-align: left;
+               transition: max-width 0.18s ease, opacity 0.18s ease;
+            }
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-name {
+               opacity: 1;
+               max-width: 72px;
+            }
+            .floating-grid-tile.lk-participant-tile.floating-grid-tile--hero:hover .floating-grid-name {
+               max-width: 108px;
+            }
+            .floating-expanded-rest-inner .floating-grid-tile--compact:hover .floating-grid-name {
+               max-width: 68px;
             }
 
             /* ── Right webcam sidebar (LiveDoc + postMessage) ─── */
