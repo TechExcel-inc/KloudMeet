@@ -1211,7 +1211,23 @@ function LiveDocFloatingGridTile({
 
 type FloatingParticipantEntry = { id: string; name: string };
 
-/** 浮窗展开：左 3 大格按「麦+镜头+说话 → …」全局排序取前 3，右三列小格且高度不超过左侧、超出滚动 */
+/** 右侧每列人数：6、7、6、7…；超过 13 人时底部可横向翻页 */
+const FLOATING_REST_COL_PATTERN = [6, 7] as const;
+
+function chunkRestIntoColumns<T>(items: T[]): T[][] {
+  const cols: T[][] = [];
+  let i = 0;
+  let colIdx = 0;
+  while (i < items.length) {
+    const cap = FLOATING_REST_COL_PATTERN[colIdx % FLOATING_REST_COL_PATTERN.length];
+    cols.push(items.slice(i, i + cap));
+    i += cap;
+    colIdx += 1;
+  }
+  return cols;
+}
+
+/** 浮窗展开：左 3 大格按「麦+镜头+说话 → …」全局排序取前 3，右侧按列 6/7 排布，>13 人底部横向翻 */
 function LiveDocFloatingExpandedParticipantLayout({
   room,
   hostIdentity,
@@ -1224,7 +1240,9 @@ function LiveDocFloatingExpandedParticipantLayout({
   sortedEntries: FloatingParticipantEntry[];
 }) {
   const heroColumnRef = React.useRef<HTMLDivElement>(null);
+  const restHScrollRef = React.useRef<HTMLDivElement>(null);
   const [restMaxHeight, setRestMaxHeight] = React.useState<number | undefined>(undefined);
+  const [hScrollEdge, setHScrollEdge] = React.useState({ canLeft: false, canRight: false });
   const [layoutKey, bumpLayout] = React.useReducer((n: number) => n + 1, 0);
 
   React.useEffect(() => {
@@ -1345,6 +1363,50 @@ function LiveDocFloatingExpandedParticipantLayout({
     return { heroEntries: hero, restEntries: rest, heroesOnly: rest.length === 0 };
   }, [room, sortedEntries, hostIdentity, cohostIdentities, layoutKey]);
 
+  const restColumns = React.useMemo(() => chunkRestIntoColumns(restEntries), [restEntries]);
+  const showRestHNav = restEntries.length > 13;
+
+  const syncHScrollEdges = React.useCallback(() => {
+    const el = restHScrollRef.current;
+    if (!el) {
+      setHScrollEdge({ canLeft: false, canRight: false });
+      return;
+    }
+    const { scrollLeft, scrollWidth, clientWidth } = el;
+    setHScrollEdge({
+      canLeft: scrollLeft > 2,
+      canRight: scrollLeft + clientWidth < scrollWidth - 2,
+    });
+  }, []);
+
+  React.useLayoutEffect(() => {
+    syncHScrollEdges();
+  }, [restColumns, restMaxHeight, layoutKey, showRestHNav, syncHScrollEdges]);
+
+  React.useEffect(() => {
+    const el = restHScrollRef.current;
+    if (!el) return;
+    const onScroll = () => syncHScrollEdges();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(() => syncHScrollEdges()) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      ro?.disconnect();
+    };
+  }, [syncHScrollEdges, showRestHNav, heroesOnly]);
+
+  const scrollRestHorizontal = React.useCallback(
+    (dir: -1 | 1) => {
+      const el = restHScrollRef.current;
+      if (!el) return;
+      const step = Math.max(100, Math.floor(el.clientWidth * 0.88));
+      el.scrollBy({ left: dir * step, behavior: 'smooth' });
+      window.setTimeout(syncHScrollEdges, 350);
+    },
+    [syncHScrollEdges],
+  );
+
   return (
     <div
       className={`floating-expanded-grid${heroesOnly ? ' floating-expanded-grid--heroes-only' : ''}`}
@@ -1357,13 +1419,48 @@ function LiveDocFloatingExpandedParticipantLayout({
       {!heroesOnly && (
         <div
           className="floating-expanded-rest-wrap"
-          style={restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : undefined}
+          style={{
+            ...(restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : {}),
+            ['--floating-rest-visible-cols' as string]: String(Math.min(restColumns.length, 3)),
+          }}
         >
-          <div className="floating-expanded-rest-inner">
-            {restEntries.map((e) => (
-              <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="compact" />
+          <div ref={restHScrollRef} className="floating-expanded-rest-scroll">
+            {restColumns.map((col, ci) => (
+              <div key={`rest-col-${ci}`} className="floating-expanded-rest-col">
+                {col.map((e) => (
+                  <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="compact" />
+                ))}
+              </div>
             ))}
           </div>
+          {showRestHNav && (
+            <div className="floating-expanded-rest-hnav">
+              <button
+                type="button"
+                className="floating-expanded-rest-hnav-btn"
+                disabled={!hScrollEdge.canLeft}
+                onClick={() => scrollRestHorizontal(-1)}
+                aria-label="向左查看更多参与者"
+                title="向左"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <polyline points="15 6 9 12 15 18" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className="floating-expanded-rest-hnav-btn floating-expanded-rest-hnav-btn--primary"
+                disabled={!hScrollEdge.canRight}
+                onClick={() => scrollRestHorizontal(1)}
+                aria-label="向右查看更多参与者"
+                title="向右"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <polyline points="9 6 15 12 9 18" />
+                </svg>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -5162,7 +5259,7 @@ function VideoConferenceComponent(props: {
             .floating-webcam-panel.expanded {
                border-radius: 16px;
                padding: 10px 12px;
-               min-width: 420px;
+               min-width: 360px;
                max-width: 420px;
                box-sizing: border-box;
             }
@@ -5264,97 +5361,146 @@ function VideoConferenceComponent(props: {
             .floating-expanded-grid {
                display: flex;
                flex-direction: row;
-               align-items: flex-start;
+               align-items: stretch;
                gap: 10px;
                background: rgba(22, 48, 36, 0.42);
                border-radius: 14px;
                padding: 8px 8px 8px 8px;
                border: 1px solid rgba(255,255,255,0.06);
                overflow: visible;
+               --floating-hero-col-w: 132px;
+               --floating-rest-tile: calc(var(--floating-hero-col-w) / 3 + 10px);
             }
             .floating-expanded-grid--heroes-only {
                gap: 0;
             }
             .floating-webcam-panel.expanded:has(.floating-expanded-grid--heroes-only) {
-               min-width: 140px;
-               max-width: 150px;
+               min-width: 156px;
+               max-width: 168px;
             }
             .floating-expanded-hero-column {
                display: flex;
                flex-direction: column;
+               justify-content: center;
                gap: 8px;
-               width: 118px;
+               width: var(--floating-hero-col-w, 132px);
                flex-shrink: 0;
+               align-self: stretch;
+               min-height: 0;
             }
             .floating-expanded-rest-wrap {
-               flex: 0 0 252px;
-               width: 252px;
-               min-width: 252px;
-               max-width: 252px;
+               flex: 0 0 auto;
+               width: calc(var(--floating-rest-tile) * var(--floating-rest-visible-cols, 1) + 8px * (var(--floating-rest-visible-cols, 1) - 1));
+               min-width: calc(var(--floating-rest-tile) * var(--floating-rest-visible-cols, 1) + 8px * (var(--floating-rest-visible-cols, 1) - 1));
+               max-width: calc(var(--floating-rest-tile) * 3 + 16px);
+               display: flex;
+               flex-direction: column;
                position: relative;
                z-index: 2;
-               overflow-x: visible;
-               overflow-y: auto;
-               scrollbar-gutter: stable;
-               -webkit-overflow-scrolling: touch;
-               scrollbar-width: thin;
                box-sizing: border-box;
+               min-height: 0;
+               align-self: stretch;
+               overflow: hidden;
             }
-            .floating-expanded-rest-inner {
-               display: grid;
-               grid-template-columns: repeat(3, 76px);
+            .floating-expanded-rest-scroll {
+               flex: 1 1 auto;
+               min-height: 0;
+               display: flex;
+               flex-direction: row;
+               flex-wrap: nowrap;
+               align-items: stretch;
                gap: 8px;
-               width: 244px;
-               align-content: start;
-               box-sizing: border-box;
+               overflow-x: auto;
+               overflow-y: hidden;
+               scrollbar-width: thin;
+               -webkit-overflow-scrolling: touch;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact {
-               position: relative;
-               z-index: 1;
+            .floating-expanded-rest-col {
+               display: flex;
+               flex-direction: column;
+               justify-content: center;
+               gap: 6px;
+               flex: 0 0 var(--floating-rest-tile);
+               width: var(--floating-rest-tile);
+               min-width: 0;
+               min-height: 0;
+               align-self: stretch;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .webcam-floating-participant-metadata {
-               z-index: 6;
+            .floating-expanded-rest-hnav {
+               display: flex;
+               flex-direction: row;
+               justify-content: flex-end;
+               align-items: center;
+               gap: 8px;
+               flex-shrink: 0;
+               padding-top: 6px;
+               min-height: 30px;
+            }
+            .floating-expanded-rest-hnav-btn {
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               width: 34px;
+               height: 28px;
+               border-radius: 8px;
+               border: 1px solid rgba(255,255,255,0.22);
+               background: rgba(0,0,0,0.35);
+               color: rgba(255,255,255,0.88);
+               cursor: pointer;
+               transition: background 0.15s ease, opacity 0.15s ease;
+            }
+            .floating-expanded-rest-hnav-btn:hover:not(:disabled) {
+               background: rgba(255,255,255,0.14);
+            }
+            .floating-expanded-rest-hnav-btn:disabled {
+               opacity: 0.3;
+               cursor: default;
+            }
+            .floating-expanded-rest-hnav-btn--primary:not(:disabled) {
+               border-color: rgba(96, 165, 250, 0.55);
+               color: #93c5fd;
             }
             .floating-grid-tile--hero .floating-grid-video {
                width: 100%;
                height: auto;
-               aspect-ratio: 4 / 5;
-               border-radius: 14px;
+               aspect-ratio: 1 / 1;
+               border-radius: 12px;
             }
             .floating-grid-tile--hero .floating-grid-avatar {
                font-size: 22px;
                background: #e8dcc8;
                color: #111827;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-video {
-               width: 76px;
-               height: 76px;
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-video {
+               width: var(--floating-rest-tile);
+               height: var(--floating-rest-tile);
                aspect-ratio: 1;
                min-height: 0;
+               min-width: 0;
                border-radius: 10px;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-avatar {
-               font-size: 17px;
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar {
+               font-size: calc(var(--floating-rest-tile) * 0.34);
             }
             .floating-grid-tile--hero .floating-grid-name {
                font-size: 10px;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-name {
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-name {
                font-size: 9px;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .floating-grid-name-row {
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-name-row {
                padding: 2px 5px;
                gap: 4px;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator {
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator {
               width: 1rem;
               height: 1rem;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
               width: 1.15rem;
               height: 1.15rem;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact .kloud-custom-mic-indicator.operator-interactive {
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.operator-interactive {
               min-width: 1.35rem;
               min-height: 1.35rem;
               padding: 3px;
@@ -5453,10 +5599,10 @@ function VideoConferenceComponent(props: {
                max-width: 72px;
             }
             .floating-grid-tile.lk-participant-tile.floating-grid-tile--hero:hover .floating-grid-name {
-               max-width: 108px;
+               max-width: 120px;
             }
-            .floating-expanded-rest-inner .floating-grid-tile--compact:hover .floating-grid-name {
-               max-width: 68px;
+            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .floating-grid-name {
+               max-width: calc(var(--floating-rest-tile) * 1.05);
             }
 
             /* ── Right webcam sidebar (LiveDoc + postMessage) ─── */
