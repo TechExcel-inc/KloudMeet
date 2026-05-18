@@ -1,28 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { isAuthError, requireSession } from '@/lib/apiAuth';
 
 export async function POST(request: NextRequest) {
+  const member = await requireSession(request);
+  if (isAuthError(member)) return member;
+
   try {
     const body = await request.json();
-    const { 
-      roomName, 
-      createdByMemberId,
+    const {
+      roomName,
       title,
       description,
       scheduledFor,
       durationMinutes,
       timezone,
-      status
+      status,
     } = body;
 
-    if (!roomName || !createdByMemberId) {
+    if (!roomName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const meeting = await prisma.meeting.create({
       data: {
         roomName,
-        createdByMemberId,
+        createdByMemberId: member.id,
         title,
         description,
         scheduledFor: scheduledFor ? new Date(scheduledFor) : undefined,

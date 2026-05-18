@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
+import { isAuthError, requireAccountAdmin } from '@/lib/apiAuth';
 
 // All setting keys managed by the System Settings modal
 const SETTING_KEYS = [
@@ -31,20 +32,41 @@ async function ensureSystemSettingTable() {
   `);
 }
 
-// GET /api/settings — Load all system settings
-export async function GET() {
-  try {
-    await ensureSystemSettingTable();
-    const keys = Prisma.join(SETTING_KEYS.map((key) => Prisma.sql`${key}`));
-    const rows = await prisma.$queryRaw<Array<{ key: string; value: string }>>(
-      Prisma.sql`SELECT \`key\`, \`value\` FROM \`SystemSetting\` WHERE \`key\` IN (${keys})`,
-    );
+async function loadSettings(keys: string[]) {
+  await ensureSystemSettingTable();
+  const joined = Prisma.join(keys.map((key) => Prisma.sql`${key}`));
+  const rows = await prisma.$queryRaw<Array<{ key: string; value: string }>>(
+    Prisma.sql`SELECT \`key\`, \`value\` FROM \`SystemSetting\` WHERE \`key\` IN (${joined})`,
+  );
+  const settings: Record<string, string> = {};
+  for (const row of rows) {
+    settings[row.key] = row.value;
+  }
+  return settings;
+}
 
-    const settings: Record<string, string> = {};
-    for (const row of rows) {
-      settings[row.key] = row.value;
+// GET /api/settings — admin only; ?scope=livedoc allowed in development without admin
+export async function GET(request: NextRequest) {
+  const scope = new URL(request.url).searchParams.get('scope');
+
+  if (scope === 'livedoc' && process.env.NODE_ENV === 'development') {
+    try {
+      const settings = await loadSettings(['livedoc_debug_enabled', 'livedoc_debug_url']);
+      return NextResponse.json(settings);
+    } catch (error) {
+      console.error('[settings GET livedoc]', error);
+      return NextResponse.json(
+        { error: 'Failed to load settings' },
+        { status: 500 },
+      );
     }
+  }
 
+  const member = await requireAccountAdmin(request);
+  if (isAuthError(member)) return member;
+
+  try {
+    const settings = await loadSettings(SETTING_KEYS);
     return NextResponse.json(settings);
   } catch (error) {
     console.error('[settings GET]', error);
@@ -55,15 +77,17 @@ export async function GET() {
   }
 }
 
-// PUT /api/settings — Upsert system settings
+// PUT /api/settings — Upsert system settings (admin only)
 export async function PUT(request: NextRequest) {
+  const member = await requireAccountAdmin(request);
+  if (isAuthError(member)) return member;
+
   const body = await request.json();
   const entries = Object.entries(body).filter(([key]) => SETTING_KEYS.includes(key));
 
   try {
     await ensureSystemSettingTable();
 
-    // Upsert each key-value pair
     await Promise.all(
       entries.map(([key, value]) =>
         prisma.$executeRaw(

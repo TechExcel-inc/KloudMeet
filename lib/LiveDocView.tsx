@@ -40,7 +40,7 @@ export function LiveDocView({
     if (process.env.NODE_ENV === 'development') {
       let cancelled = false;
       setSettingsLoading(true);
-      fetch('/api/settings')
+      fetch('/api/settings?scope=livedoc')
         .then((res) => (res.ok ? res.json() : ({} as Record<string, unknown>)))
         .then((data) => {
           if (cancelled) return;

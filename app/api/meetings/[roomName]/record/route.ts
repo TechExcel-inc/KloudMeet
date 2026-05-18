@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
+import { isAuthError, requireSession } from '@/lib/apiAuth';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -17,6 +18,9 @@ export async function POST(
   { params }: { params: Promise<{ roomName: string }> }
 ) {
   try {
+    const member = await requireSession(request);
+    if (isAuthError(member)) return member;
+
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
     if (!roomName) {
@@ -24,11 +28,8 @@ export async function POST(
     }
 
     const body = await request.json();
-    const { teamMemberId, action, pageUrl } = body;
-
-    if (!teamMemberId) {
-      return NextResponse.json({ error: 'teamMemberId is required' }, { status: 401 });
-    }
+    const { action, pageUrl } = body;
+    const teamMemberId = member.id;
 
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {

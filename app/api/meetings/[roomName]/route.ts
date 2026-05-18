@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { RoomServiceClient } from 'livekit-server-sdk';
+import {
+  canManageMeeting,
+  forbidden,
+  isAuthError,
+  publicMeetingPayload,
+  requireSession,
+} from '@/lib/apiAuth';
+import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -98,7 +106,15 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ ...meeting, status: currentStatus, isActive });
+    const payload = { ...meeting, status: currentStatus, isActive };
+    const sessionMember = await getSessionTeamMember(request);
+    if (
+      sessionMember &&
+      canManageMeeting(sessionMember.id, { createdByMemberId: meeting.createdByMemberId })
+    ) {
+      return NextResponse.json(payload);
+    }
+    return NextResponse.json(publicMeetingPayload(payload as Record<string, unknown>));
   } catch (error) {
     console.error('[meetings GET]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -110,6 +126,9 @@ export async function PUT(
   { params }: { params: Promise<{ roomName: string }> }
 ) {
   try {
+    const member = await requireSession(request);
+    if (isAuthError(member)) return member;
+
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
     if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
@@ -117,9 +136,11 @@ export async function PUT(
     const body = await request.json();
     const { title, description, scheduledFor, durationMinutes, timezone, status, actualStartedAt, endedAt } = body;
 
-    // Fetch current meeting to avoid overwriting webhook-provided values
     const current = await prisma.meeting.findUnique({ where: { roomName } });
     if (!current) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!canManageMeeting(member.id, current)) {
+      return forbidden('Only the meeting host can update this meeting');
+    }
 
     const data: any = {};
     if (title !== undefined) data.title = title;
@@ -163,9 +184,18 @@ export async function DELETE(
   { params }: { params: Promise<{ roomName: string }> }
 ) {
   try {
+    const member = await requireSession(request);
+    if (isAuthError(member)) return member;
+
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
     if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+
+    const current = await prisma.meeting.findUnique({ where: { roomName } });
+    if (!current) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!canManageMeeting(member.id, current)) {
+      return forbidden('Only the meeting host can delete this meeting');
+    }
 
     const updated = await prisma.meeting.update({
       where: { roomName },

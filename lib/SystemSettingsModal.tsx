@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styles from '../styles/SystemSettingsModal.module.css';
 import { useI18n } from './i18n';
+import { authFetch, authHeaders } from '@/lib/kloudSession';
 
 interface SystemSettingsModalProps {
   onClose: () => void;
@@ -37,7 +38,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
   // Load settings from API on mount
   useEffect(() => {
     setIsLoading(true);
-    fetch('/api/settings')
+    authFetch('/api/settings')
       .then((res) => res.json())
       .then((data) => {
         if (data && typeof data === 'object' && !data.error) {
@@ -69,9 +70,9 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const res = await fetch('/api/settings', {
+      const res = await authFetch('/api/settings', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({
           org_name: orgName,
           ...(process.env.NODE_ENV === 'development'

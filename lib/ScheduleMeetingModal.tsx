@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { generateRoomId } from '@/lib/client-utils';
+import { authFetch, authHeaders } from '@/lib/kloudSession';
 import styles from '../styles/ScheduleMeetingModal.module.css';
 import { useI18n } from './i18n';
 
@@ -230,9 +231,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     if (!confirm(t('schedule.cancelConfirm'))) return;
     setIsSaving(true);
     try {
-      await fetch(`/api/meetings/${existingMeeting.roomName}`, {
+      await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status: 'CANCELED' }),
       });
       onSave();
@@ -246,7 +247,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     if (!confirm(t('schedule.deleteConfirm'))) return;
     setIsSaving(true);
     try {
-      await fetch(`/api/meetings/${existingMeeting.roomName}`, { method: 'DELETE' });
+      await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      });
       onSave();
     } catch (e) {
       alert(t('schedule.deleteFailed'));
@@ -273,9 +277,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       else if (durationStr === '420min(7h)') durationMinutes = 420;
 
       if (existingMeeting?.roomName) {
-        await fetch(`/api/meetings/${existingMeeting.roomName}`, {
+        await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             title,
             description,
@@ -285,12 +289,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           }),
         });
       } else {
-        await fetch('/api/meetings', {
+        await authFetch('/api/meetings', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
             roomName: generateRoomId(),
-            createdByMemberId: user.id,
             title,
             description,
             scheduledFor: scheduledForIso,
