@@ -3841,8 +3841,9 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel.expanded {
                border-radius: 16px;
                padding: 10px 12px;
-               min-width: 360px;
-               max-width: 420px;
+               width: fit-content;
+               max-width: min(420px, calc(100vw - 24px));
+               min-width: 0;
                box-sizing: border-box;
             }
             .floating-collapsed-row {
@@ -3939,11 +3940,15 @@ export function VideoConferenceComponent(props: {
             }
             .floating-expanded-grid-wrap {
                margin-top: 2px;
+               width: fit-content;
+               max-width: 100%;
             }
             .floating-expanded-grid {
                display: flex;
                flex-direction: row;
                align-items: stretch;
+               width: fit-content;
+               max-width: 100%;
                gap: 10px;
                background: rgba(22, 48, 36, 0.42);
                border-radius: 14px;

@@ -494,9 +494,12 @@ export function LiveDocFloatingExpandedParticipantLayout({
     [syncHScrollEdges],
   );
 
+  const restVisibleCols = heroesOnly ? 0 : Math.min(restColumns.length, 3);
+
   return (
     <div
       className={`floating-expanded-grid${heroesOnly ? ' floating-expanded-grid--heroes-only' : ''}`}
+      style={{ ['--floating-rest-visible-cols' as string]: String(restVisibleCols) }}
     >
       <div ref={heroColumnRef} className="floating-expanded-hero-column">
         {heroEntries.map((e) => (
@@ -506,10 +509,7 @@ export function LiveDocFloatingExpandedParticipantLayout({
       {!heroesOnly && (
         <div
           className="floating-expanded-rest-wrap"
-          style={{
-            ...(restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : {}),
-            ['--floating-rest-visible-cols' as string]: String(Math.min(restColumns.length, 3)),
-          }}
+          style={restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : undefined}
         >
           <div ref={restHScrollRef} className="floating-expanded-rest-scroll">
             {restColumns.map((col, ci) => (
