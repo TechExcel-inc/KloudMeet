@@ -13,6 +13,7 @@ import {
 } from '@livekit/components-react';
 import { getInitials } from '@/lib/getInitials';
 import { useI18n } from '@/lib/i18n';
+import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import {
   FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET,
   FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL,
@@ -579,15 +580,4 @@ export function LiveDocFloatingCollapsedAvatar({
   );
 }
 
-/** Parse LiveKit participant metadata set by `/api/connection-details` for logged-in users. */
-export function parseKloudMemberIdFromMetadata(metadata?: string | null): string | null {
-  if (!metadata || typeof metadata !== 'string') return null;
-  try {
-    const o = JSON.parse(metadata) as { kloudMemberId?: string | number };
-    const id = o?.kloudMemberId;
-    if (id === undefined || id === null) return null;
-    return String(id);
-  } catch {
-    return null;
-  }
-}
+export { parseKloudMemberIdFromMetadata };

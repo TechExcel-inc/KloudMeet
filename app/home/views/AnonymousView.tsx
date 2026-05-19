@@ -144,24 +144,27 @@ export function AnonymousView({
           {t('anon.hostPrivilege')}
         </p>
 
-        <div className={styles.joinRow} style={{ maxWidth: '640px', background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.5)', borderRadius: '20px', padding: '0.9rem 1.25rem', backdropFilter: 'blur(20px)' }}>
-          <div className={styles.joinInnerGroup}>
+        <div className={styles.anonActionCard}>
+          <div className={styles.anonJoinGroup}>
             <input
-              className={styles.joinInput}
+              className={styles.anonJoinInput}
               placeholder={t('anon.enterMeetingCode')}
               value={code}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
             />
-            <button className={isJoining ? styles.joinBtnLoading : styles.joinBtn} onClick={handleJoin} disabled={isJoining} style={isJoining ? { opacity: 0.7, cursor: 'not-allowed' } : {}}>
+            <button
+              type="button"
+              className={styles.anonJoinBtn}
+              onClick={handleJoin}
+              disabled={isJoining}
+              aria-busy={isJoining}
+            >
               {isJoining ? t('common.joining') : t('common.join')}
             </button>
           </div>
-          
-          <div className={styles.quickDivider} style={{ display: 'block', height: '48px', margin: '0 0.5rem' }} />
-          
-          <button className={styles.quickNewBtn} onClick={onSignIn}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+          <button type="button" className={styles.anonSignInBtn} onClick={onSignIn}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden>
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
             {t('nav.signIn')}
@@ -195,7 +198,7 @@ export function AnonymousView({
         </button>
       </div>
 
-      {/* ── Download Desktop App — hidden on mobile ── */}
+      {/* Download Desktop App - hidden on mobile */}
       <div className={`${styles.downloadRow} ${styles.mobileHidden}`} style={{ gap: '0.75rem', flexWrap: 'wrap', margin: '0 auto 0 auto', paddingBottom: '2rem', justifyContent: 'center', width: '100%' }}>
         <a
           href="/api/download?os=win"
@@ -235,7 +238,7 @@ export function AnonymousView({
         </a>
       </div>
 
-      {/* ── Warning Message Overlay ── */}
+      {/* Warning Message Overlay */}
       {warningMessage && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
           <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
@@ -261,7 +264,7 @@ export function AnonymousView({
         </div>
       )}
 
-      {/* ── Scheduled Meeting Overlay ── */}
+      {/* Scheduled Meeting Overlay */}
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
           <div className={styles.dashModalContent}>

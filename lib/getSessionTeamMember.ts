@@ -3,7 +3,8 @@ import { NextRequest } from 'next/server';
 
 /** Resolve logged-in team member from `Authorization: Bearer <session token>`. */
 export async function getSessionTeamMember(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
+  const authHeader =
+    request.headers.get('authorization') ?? request.headers.get('Authorization');
   if (!authHeader?.startsWith('Bearer ')) return null;
 
   const token = authHeader.slice(7);

@@ -271,71 +271,130 @@
   line-height: 1.6;
 }
 
-/* Join row */
-.joinRow {
+/* ── 未登录首页：独立操作区（不与 dashboard quickActions 共用类名） ── */
+.anonActionCard {
   display: flex;
-  gap: 0.75rem;
+  flex-direction: column;
+  gap: 0.65rem;
+  align-items: stretch;
   width: 100%;
-  max-width: 520px;
+  max-width: min(640px, 100%);
   margin-bottom: 2.5rem;
+  padding: 0.9rem 1.25rem;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 20px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
-.joinInput {
-  flex: 1;
+.anonJoinGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.anonJoinInput {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 0.85rem 1.15rem;
-  border: 1.5px solid rgba(226,229,235,0.9);
+  border: 1.5px solid rgba(226, 229, 235, 0.9);
   border-radius: 14px;
   font-size: 0.97rem;
   outline: none;
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
   font-family: inherit;
-  background: rgba(255,255,255,0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+  background: rgba(255, 255, 255, 0.85);
   color: #1e1e2e;
 }
 
-.joinInput::placeholder {
+.anonJoinInput::placeholder {
   color: #9ca3af;
 }
 
-.joinInput:focus {
+.anonJoinInput:focus {
   border-color: #5227D3;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(82,39,211,0.1), inset 0 2px 4px rgba(0,0,0,0.01);
+  box-shadow: 0 0 0 4px rgba(82, 39, 211, 0.1);
 }
 
-.joinBtn {
-  padding: 0.85rem 1.6rem;
+.anonJoinBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  flex-shrink: 0;
+  padding: 0.85rem 1.25rem;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(135deg, #5227D3 0%, #7C55F1 100%);
+  background: linear-gradient(135deg, #5227D3 0%, #7c55f1 100%);
   color: #fff;
   font-weight: 700;
   font-size: 0.97rem;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
   font-family: inherit;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(82,39,211,0.35), inset 0 1px 1px rgba(255,255,255,0.2);
-  letter-spacing: 0.01em;
+  box-shadow: 0 4px 14px rgba(82, 39, 211, 0.35);
 }
 
-.joinBtn:hover {
-  transform: translateY(-2px) scale(1.02);
-  box-shadow: 0 8px 22px rgba(82,39,211,0.45), inset 0 1px 1px rgba(255,255,255,0.2);
+.anonJoinBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(82, 39, 211, 0.4);
 }
 
-.joinBtn:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.joinBtn:disabled {
-  opacity: 0.55;
+.anonJoinBtn:disabled {
+  opacity: 0.65;
   cursor: not-allowed;
   transform: none;
-  box-shadow: none;
+}
+
+.anonSignInBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 48px;
+  padding: 0 1.25rem;
+  border: 1.5px solid #a5b4fc;
+  border-radius: 14px;
+  background: rgba(238, 242, 255, 0.95);
+  color: #5227d3;
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+
+.anonSignInBtn:hover {
+  background: rgba(224, 231, 255, 1);
+  box-shadow: 0 2px 10px rgba(82, 39, 211, 0.15);
+}
+
+@media (min-width: 901px) {
+  .anonJoinGroup {
+    flex-direction: row;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .anonJoinInput {
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+  }
+
+  .anonJoinBtn {
+    width: auto;
+    min-width: 7rem;
+    padding: 0.85rem 1.6rem;
+  }
 }
 
 /* Recent meetings */
@@ -1122,6 +1181,129 @@
   }
 }
 
+/* Active meeting conflict modal */
+.conflictModalContent {
+  max-width: 520px;
+  padding: 1.5rem 1.75rem 2rem;
+}
+
+.conflictModalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.conflictModalTitle {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.conflictModalActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.conflictBtnPrimary {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: none;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.conflictBtnPrimary:hover:not(:disabled) {
+  background: #1d4ed8;
+}
+
+.conflictBtnPrimary:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.conflictBtnCancel {
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #374151;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.conflictBtnCancel:hover:not(:disabled) {
+  background: #f9fafb;
+}
+
+.conflictModalBody {
+  text-align: center;
+  padding: 0.5rem 0.5rem 0;
+}
+
+.conflictWarningIcon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 0.75rem;
+}
+
+.conflictStatusText {
+  margin: 0 0 1rem;
+  color: #dc2626;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.conflictMessage {
+  margin: 0 0 0.75rem;
+  color: #4b5563;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+.conflictMeetingName {
+  margin: 0 0 1rem;
+  color: #111827;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.conflictNote {
+  margin: 0;
+  color: #dc2626;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 520px) {
+  .conflictModalHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .conflictModalActions {
+    justify-content: stretch;
+  }
+
+  .conflictBtnPrimary,
+  .conflictBtnCancel {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 /* ═══════════════════════════════════════════════════
    Signup View
    ═══════════════════════════════════════════════════ */
@@ -1635,14 +1817,18 @@
 }
 
 .quickJoinGroup {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   gap: 0.65rem;
   align-items: center;
 }
 
 .quickJoinInput {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
   height: 48px;
   padding: 0 1rem;
   border: 1.5px solid rgba(226, 232, 240, 0.7);
@@ -1667,6 +1853,7 @@
 }
 
 .quickJoinBtn {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -1707,11 +1894,14 @@
   flex-shrink: 0;
 }
 
-@media (min-width: 640px) {
-  .quickDivider { display: block; }
+@media (min-width: 901px) {
+  .quickActionsBar > .quickDivider {
+    display: block;
+  }
 }
 
 .quickNewBtn {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1737,6 +1927,7 @@
 }
 
 .quickPersonalRoomBtn {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -1762,6 +1953,11 @@
   transform: translateY(-1px);
 }
 
+/* Personal room + new meeting (desktop: inline flex children) */
+.quickActionsSecondary {
+  display: contents;
+}
+
 /* ═══════════════════════════════════════════════════
    Figma Meeting List — Header
    ═══════════════════════════════════════════════════ */
@@ -1782,6 +1978,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 1.5rem;
+  flex-shrink: 0;
 }
 
 .meetingListTitle {
@@ -1826,12 +2023,15 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .meetingSearchWrapper {
   position: relative;
   display: flex;
   align-items: center;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .meetingSearchIcon {
@@ -1854,7 +2054,10 @@
   appearance: none;
   -webkit-appearance: none;
   color: #1e293b;
-  width: 280px;
+  width: 100%;
+  max-width: 280px;
+  min-width: 0;
+  box-sizing: border-box;
   box-shadow: inset 0 0 1px 1px rgba(255, 255, 255, 0.5);
   transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
 }
@@ -2207,7 +2410,8 @@
 /* ═══════════════════════════════════════════════════
    Responsive
    ═══════════════════════════════════════════════════ */
-@media (max-width: 768px) {
+/* 平板 / 窄屏：所有输入区纵向全宽，避免 flex 挤压 */
+@media (max-width: 900px) {
   .authContainer {
     padding: 1rem 1rem 6rem;
   }
@@ -2236,25 +2440,126 @@
   .quickActionsInner {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.625rem;
+  }
+
+  .quickActionsBar {
+    border-radius: 16px;
+    padding: 0.875rem;
   }
 
   .quickJoinGroup {
-    flex-direction: row;
+    width: 100%;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .quickJoinInput {
+    width: 100%;
+    flex: none;
+    min-width: 0;
+    height: 48px;
+    font-size: 0.95rem;
+    border-radius: 12px;
+  }
+
+  /* 仅会议列表快捷操作区全宽 */
+  .quickActionsBar .quickJoinBtn,
+  .quickActionsBar .quickPersonalRoomBtn,
+  .quickActionsBar .quickNewBtn,
+  .quickActionsSecondary .quickPersonalRoomBtn,
+  .quickActionsSecondary .quickNewBtn {
+    width: 100%;
+    height: 48px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    justify-content: center;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .quickActionsBar .quickJoinBtn {
+    padding: 0 1rem;
+  }
+
+  .quickActionsBar .quickJoinBtn svg,
+  .quickActionsBar .quickPersonalRoomBtn svg,
+  .quickActionsBar .quickNewBtn svg,
+  .quickActionsSecondary .quickPersonalRoomBtn svg,
+  .quickActionsSecondary .quickNewBtn svg {
+    flex-shrink: 0;
+  }
+
+  .anonActionCard {
+    padding: 0.85rem 1rem;
+    border-radius: 16px;
+  }
+
+  .quickDivider {
+    display: none !important;
+  }
+
+  .quickActionsSecondary {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+    margin-top: 0.125rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid rgba(226, 232, 240, 0.65);
+  }
+
+  .quickActionsBar .quickPersonalRoomBtn {
+    padding: 0 1rem;
+    font-size: 0.9rem;
+  }
+
+  .quickActionsBar .quickNewBtn,
+  .quickActionsSecondary .quickNewBtn {
+    box-shadow: 0 3px 12px rgba(82, 39, 211, 0.28);
+  }
+
+  .quickActionsBar .quickNewBtn:hover,
+  .quickActionsSecondary .quickNewBtn:hover {
+    transform: none;
   }
 
   .meetingListHeader {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+  }
+
+  .meetingListTitleRow {
     flex-direction: row;
     align-items: center;
-    flex-wrap: nowrap;
+    gap: 0.75rem;
+    width: 100%;
+  }
+
+  .meetingListTitle {
+    font-size: 1.05rem;
+    white-space: nowrap;
   }
 
   .meetingListActions {
     width: 100%;
+    min-width: 0;
+    gap: 0.5rem;
+  }
+
+  .meetingSearchWrapper {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
   .meetingSearchInput {
     width: 100%;
-    flex: 1;
+    max-width: none;
+    flex: none;
+    min-width: 0;
   }
 
   .meetingCardContent {
@@ -2314,86 +2619,10 @@
     padding: 0.75rem 1rem 2rem;
   }
 
-  /* ── QuickActions: 2-row layout ── */
   .quickActionsBar {
-    border-radius: 16px;
-    padding: 1rem;
     margin-bottom: 0.5rem;
     max-width: 100%;
   }
-
-  .quickActionsInner {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .quickJoinGroup {
-    width: 100%;
-    flex-direction: row;
-  }
-
-  .quickJoinInput {
-    flex: 1;
-    height: 48px;
-    font-size: 0.9rem;
-  }
-
-  .quickJoinBtn {
-    height: 48px;
-    padding: 0 1rem;
-    font-size: 0.85rem;
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .quickDivider {
-    display: none;
-  }
-
-  .quickNewBtn {
-    width: 100%;
-    height: 52px;
-    border-radius: 14px;
-    font-size: 1rem;
-    justify-content: center;
-  }
-
-  /* ── Meeting List Header ── */
-  .meetingListHeader {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 0.5rem 0 0.75rem;
-    gap: 0.75rem;
-    margin: 0;
-  }
-
-  .meetingListTitleRow {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-  }
-
-  .meetingListTitle {
-    font-size: 1.05rem;
-    white-space: nowrap;
-  }
-
-  /* ── Search row: flex stretch ── */
-  .meetingListActions {
-    width: 100%;
-    gap: 0.5rem;
-  }
-
-  .meetingSearchWrapper {
-    flex: 1;
-  }
-
-  .meetingSearchInput {
-    width: 100%;
-    background: transparent;
-  }
-
 
   /* ── Meeting cards: vertical layout ── */
   .meetingCard,
@@ -2525,13 +2754,41 @@
 /* mobileHidden: hide on mobile, visible on desktop */
 .mobileHidden { display: flex; }
 
-/* Join inner group: horizontal on desktop */
-.joinInnerGroup {
-  flex: 1;
-  display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
-  align-items: center;
+/* 宽屏桌面：横排布局 */
+@media (min-width: 901px) {
+  .quickActionsInner {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .quickJoinGroup {
+    flex-direction: row;
+  }
+
+  .quickActionsSecondary {
+    display: contents;
+  }
+
+  .meetingListHeader {
+    flex-direction: row;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .meetingListActions {
+    flex: 0 1 auto;
+    width: auto;
+  }
+
+  .meetingSearchWrapper {
+    flex: 0 1 auto;
+    width: auto;
+  }
+
+  .meetingSearchInput {
+    width: 280px;
+    max-width: 280px;
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -2597,56 +2854,6 @@
   .anonSubtitle {
     font-size: 0.9rem;
     margin-bottom: 1.75rem;
-  }
-
-  /* joinRow: stack input + join vertically; Sign In on its own row */
-  .joinRow {
-    flex-direction: column;
-    gap: 0.65rem;
-    align-items: stretch;
-    max-width: 100% !important;
-    padding: 0.85rem 1rem !important;
-    border-radius: 16px !important;
-  }
-
-  /* joinInnerGroup: column on mobile */
-  .joinInnerGroup {
-    flex-direction: column;
-    width: 100%;
-    gap: 0.6rem;
-  }
-
-  .joinInput {
-    width: 100%;
-    font-size: 0.95rem;
-  }
-
-  .joinBtn,
-  .joinBtnLoading {
-    width: 100%;
-    text-align: center;
-    justify-content: center;
-    padding: 0.85rem 1rem;
-    border-radius: 14px;
-  }
-
-  /* quickDivider in joinRow: hide on mobile */
-  .joinRow .quickDivider {
-    display: none;
-  }
-
-  /* Sign In button inside joinRow: full width */
-  .quickNewBtn.joinSignIn,
-  .joinRow .quickNewBtn {
-    width: 100%;
-    justify-content: center;
-    border-radius: 14px;
-    height: 48px;
-    background: rgba(238,242,255,0.95);
-    border: 1.5px solid #a5b4fc;
-    color: #5227D3;
-    box-shadow: none;
-    font-size: 0.95rem;
   }
 
   /* Recent cards: slightly more compact */

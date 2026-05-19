@@ -65,7 +65,12 @@ import {
   MobileVideoLayout,
   parseKloudMemberIdFromMetadata,
 } from './roomVideoLayouts';
+import { isDbMeetingOwner } from '@/lib/meetingOwner';
 import { authHeaders, connectionDetailsFetchInit } from '@/lib/kloudSession';
+import {
+  isMeetingEnded,
+  setMeetingClosedNotice,
+} from '@/lib/meetingClosedNotice';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -100,6 +105,7 @@ export function VideoConferenceComponent(props: {
 }) {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
+  const router = useRouter();
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
@@ -404,6 +410,9 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
   // Connection error state — drives the inline error UI instead of alert()
   const [connectError, setConnectError] = React.useState<string | null>(null);
+  const [meetingEndedByHost, setMeetingEndedByHost] = React.useState(false);
+  const hostEndedHandledRef = React.useRef(false);
+  const hostEndedRedirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
   const connectRetryDisplayRef = React.useRef(0);
   // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
@@ -445,7 +454,46 @@ export function VideoConferenceComponent(props: {
       clearTimeout(connectRetryTimerRef.current);
       connectRetryTimerRef.current = null;
     }
+    if (hostEndedRedirectTimerRef.current) {
+      clearTimeout(hostEndedRedirectTimerRef.current);
+      hostEndedRedirectTimerRef.current = null;
+    }
   }, []);
+
+  const handleClosedByHostExit = React.useCallback(() => {
+    if (hostEndedHandledRef.current) return;
+    hostEndedHandledRef.current = true;
+    intentionalDisconnectRef.current = true;
+
+    if (connectRetryTimerRef.current) {
+      clearTimeout(connectRetryTimerRef.current);
+      connectRetryTimerRef.current = null;
+    }
+    setConnectError(null);
+    connectRetryCountRef.current = 0;
+    connectRetryDisplayRef.current = 0;
+    unexpectedErrorRetryCountRef.current = 0;
+
+    setMeetingClosedNotice(t('meeting.closedByHostToast'));
+    setMeetingEndedByHost(true);
+    try {
+      localStorage.removeItem('activeMeetingId');
+      localStorage.removeItem('activeMeetingStartedAt');
+    } catch {
+      /* ignore */
+    }
+
+    if (room.state !== ConnectionState.Disconnected) {
+      room.disconnect().catch(console.error);
+    }
+
+    if (hostEndedRedirectTimerRef.current) {
+      clearTimeout(hostEndedRedirectTimerRef.current);
+    }
+    hostEndedRedirectTimerRef.current = setTimeout(() => {
+      router.push('/');
+    }, 2200);
+  }, [room, router, t]);
 
   // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
   const computeBackoffMs = React.useCallback((attempt: number): number => {
@@ -478,7 +526,24 @@ export function VideoConferenceComponent(props: {
     const handleUnexpectedDisconnected = () => {
       if (intentionalDisconnectRef.current) return;
       if (!hasConnectedOnceRef.current) return;
-      handleError(new Error('LiveKit connection disconnected unexpectedly'));
+      if (hostEndedHandledRef.current) return;
+
+      const roomName = connectionDetailsRef.current?.roomName;
+      if (!roomName) {
+        handleError(new Error('LiveKit connection disconnected unexpectedly'));
+        return;
+      }
+
+      intentionalDisconnectRef.current = true;
+      void (async () => {
+        const ended = await isMeetingEnded(roomName);
+        if (ended) {
+          handleClosedByHostExit();
+          return;
+        }
+        intentionalDisconnectRef.current = false;
+        handleError(new Error('LiveKit connection disconnected unexpectedly'));
+      })();
     };
     room.on(RoomEvent.Disconnected, handleUnexpectedDisconnected);
     room.on(RoomEvent.EncryptionError, handleEncryptionError);
@@ -529,13 +594,20 @@ export function VideoConferenceComponent(props: {
                   });
               }
 
-              // Fallback: Set actualStartedAt via API in case LiveKit webhook isn't configured
+              // Fallback: only DB meeting owner may update (matches PUT /api/meetings auth).
               const rn = props.connectionDetails.roomName;
-              fetch(`/api/meetings/${rn}`, {
-                method: 'PUT',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
-              }).catch(e => console.warn('[meeting start fallback] failed', e));
+              if (
+                isDbMeetingOwner(
+                  props.meetingOwnerMemberId,
+                  room.localParticipant.metadata,
+                )
+              ) {
+                fetch(`/api/meetings/${rn}`, {
+                  method: 'PUT',
+                  headers: authHeaders({ 'Content-Type': 'application/json' }),
+                  body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
+                }).catch((e) => console.warn('[meeting start fallback] failed', e));
+              }
 
               // Reset retry counters on success
               connectRetryCountRef.current = 0;
@@ -624,6 +696,7 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.MediaDevicesError, handleError);
       // Cancel any pending retry
       if (connectRetryTimerRef.current) clearTimeout(connectRetryTimerRef.current);
+      if (hostEndedRedirectTimerRef.current) clearTimeout(hostEndedRedirectTimerRef.current);
       // Properly disconnect when component unmounts (fixes StrictMode double-mount)
       if (room.state !== ConnectionState.Disconnected) {
         room.disconnect().catch(console.error);
@@ -636,8 +709,6 @@ export function VideoConferenceComponent(props: {
   }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
-
-  const router = useRouter();
 
   const handleError = React.useCallback((error: Error) => {
     // Ignore user cancellation errors (like declining screen share)
@@ -1337,14 +1408,21 @@ export function VideoConferenceComponent(props: {
       sendMeetingMsg({ type: 'END_MEETING' });
 
       const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
-      try {
-        await fetch(`/api/meetings/${rn}`, {
-          method: 'PUT',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
-          body: JSON.stringify({ endedAt: new Date().toISOString() }),
-        });
-      } catch (e) {
-        console.warn('[meeting end] failed', e);
+      if (
+        isDbMeetingOwner(
+          props.meetingOwnerMemberId,
+          room.localParticipant.metadata,
+        )
+      ) {
+        try {
+          await fetch(`/api/meetings/${rn}`, {
+            method: 'PUT',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ endedAt: new Date().toISOString() }),
+          });
+        } catch (e) {
+          console.warn('[meeting end] failed', e);
+        }
       }
       // Small delay to allow the DataChannel message to propagate
       await new Promise((r) => setTimeout(r, 300));
@@ -1497,10 +1575,8 @@ export function VideoConferenceComponent(props: {
             });
           }
         } else if (msg.type === 'END_MEETING') {
-          // Host/Co-host ended the meeting for everyone — disconnect and redirect
-          markIntentionalDisconnect();
-          room.disconnect();
-          router.push('/');
+          // Host/Co-host ended the meeting for everyone
+          handleClosedByHostExit();
         } else if (msg.type === 'MUTE_ALL') {
           // Snapshot current mic state before muting (so UNMUTE_ALL can restore it).
           // micEnabled is the React source of truth for the local mic toggle state.
@@ -2502,8 +2578,87 @@ export function VideoConferenceComponent(props: {
       <RoomContext.Provider value={room}>
         <KeyboardShortcuts />
 
+        {/* ── Host ended meeting (remote end or END_MEETING) ── */}
+        {meetingEndedByHost && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(8, 8, 18, 0.88)',
+              backdropFilter: 'blur(14px)',
+            }}
+          >
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: '16px',
+                padding: '2rem 2.25rem',
+                maxWidth: '420px',
+                width: '90%',
+                textAlign: 'center',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '12px',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+                  <rect x="2" y="2" width="20" height="20" rx="2" fill="#ef4444" />
+                  <path
+                    d="M12 7v7M12 16.5v.5"
+                    stroke="#fff"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </div>
+              <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem', color: '#111827' }}>
+                {t('meeting.closedByHostTitle')}
+              </h3>
+              <p style={{ margin: '0 0 1.5rem', color: '#4b5563', lineHeight: 1.6, fontSize: '0.9375rem' }}>
+                {t('meeting.closedByHostDesc')}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (hostEndedRedirectTimerRef.current) {
+                    clearTimeout(hostEndedRedirectTimerRef.current);
+                    hostEndedRedirectTimerRef.current = null;
+                  }
+                  router.push('/');
+                }}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#2563eb',
+                  color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t('meeting.returnHomeNow')}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Connection Error / Retry Overlay ── */}
-        {connectError !== null && (
+        {connectError !== null && !meetingEndedByHost && (
           <div
             id="connect-error-overlay"
             style={{
@@ -4078,18 +4233,39 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-name-row {
                padding: 2px 5px;
                gap: 4px;
+               background: transparent;
+               backdrop-filter: none;
             }
+            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .floating-grid-name-row {
+               background: rgba(0, 0, 0, 0.58);
+               backdrop-filter: blur(4px);
+            }
+            /* 右侧小格：麦克风默认隐藏，悬停头像再显示（左侧 hero 不受影响） */
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator {
-              width: 1rem;
-              height: 1rem;
+              opacity: 0;
+              width: 0 !important;
+              min-width: 0 !important;
+              height: 0 !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              overflow: hidden;
+              pointer-events: none;
+              transition: opacity 0.18s ease, width 0.18s ease, min-width 0.18s ease, height 0.18s ease;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
-              width: 1.15rem;
-              height: 1.15rem;
+            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator {
+              opacity: 1;
+              width: 1rem !important;
+              height: 1rem !important;
+              pointer-events: auto;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.operator-interactive {
-              min-width: 1.35rem;
-              min-height: 1.35rem;
+            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+              width: 1.15rem !important;
+              height: 1.15rem !important;
+            }
+            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator.operator-interactive {
+              min-width: 1.35rem !important;
+              min-height: 1.35rem !important;
               padding: 3px;
               margin: 0;
             }

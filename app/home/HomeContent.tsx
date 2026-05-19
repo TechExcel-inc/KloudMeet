@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { HelpModal } from '@/lib/HelpModal';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
+import { consumeMeetingClosedNotice } from '@/lib/meetingClosedNotice';
 import styles from '../../styles/Home.module.css';
 import type { AuthUser, PageView } from './types';
 import { useToast } from './components/useToast';
@@ -22,6 +23,11 @@ export function HomeContent() {
   const [showHelp, setShowHelp] = useState(false);
   const toast = useToast();
   const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const notice = consumeMeetingClosedNotice();
+    if (notice) toast.show(notice);
+  }, [toast]);
 
   // Handle SSO token via URL
   useEffect(() => {

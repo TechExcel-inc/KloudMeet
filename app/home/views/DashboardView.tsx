@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
@@ -10,7 +10,14 @@ import { useI18n } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
-import { authFetch, authHeaders } from '@/lib/kloudSession';
+import { authFetch, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
+import { ActiveMeetingConflictModal } from '@/lib/ActiveMeetingConflictModal';
+import {
+  checkMeetingStartGuard,
+  endMeetingByHost,
+  type ActiveMeetingInfo,
+  type MeetingStartIntent,
+} from '@/lib/meetingStartGuard';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
@@ -42,6 +49,8 @@ export function DashboardView({
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
   
   const [isJoining, setIsJoining] = useState(false);
+  const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
+  const creatingMeetingRef = useRef(false);
   const [scheduledModalData, setScheduledModalData] = useState<any>(null);
   const [countdown, setCountdown] = useState<string | null>(null);
   const [warningMessage, setWarningMessage] = useState<string | null>(null);
@@ -58,6 +67,11 @@ export function DashboardView({
   // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
+  const [meetingConflict, setMeetingConflict] = useState<{
+    activeMeeting: ActiveMeetingInfo;
+    pendingIntent: MeetingStartIntent;
+  } | null>(null);
+  const [endingActiveMeeting, setEndingActiveMeeting] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -274,20 +288,178 @@ export function DashboardView({
     setInviteMenuRoomName(null);
   };
 
-  const handleNewMeeting = async () => {
-    const roomId = generateRoomId();
-    if (user && user.id) {
+  const executeMeetingIntent = useCallback(
+    async (intent: MeetingStartIntent) => {
+      if (intent.type === 'personalRoom') {
+        router.push(`/rooms/${intent.roomName}?action=start`);
+        return;
+      }
+      if (intent.type === 'startScheduled') {
+        router.push(`/rooms/${intent.roomName}?action=start`);
+        return;
+      }
+
+      if (creatingMeetingRef.current || isCreatingMeeting) return;
+      creatingMeetingRef.current = true;
+      setIsCreatingMeeting(true);
+
+      const roomId = generateRoomId();
       try {
-        await fetch('/api/meetings', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ roomName: roomId, createdByMemberId: user.id }),
-        });
+        if (user?.token) {
+          const res = await authFetch('/api/meetings', {
+            method: 'POST',
+            headers: authHeaders({
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${user.token}`,
+            }),
+            body: JSON.stringify({ roomName: roomId }),
+          });
+          if (!res.ok) {
+            toast.show(t('dash.networkError'));
+            creatingMeetingRef.current = false;
+            setIsCreatingMeeting(false);
+            return;
+          }
+        }
+        router.push(`/rooms/${roomId}?action=start`);
       } catch (e) {
         console.error('Failed to register meeting:', e);
+        toast.show(t('dash.networkError'));
+        creatingMeetingRef.current = false;
+        setIsCreatingMeeting(false);
+      }
+    },
+    [isCreatingMeeting, router, t, toast, user?.token],
+  );
+
+  const runMeetingStartGuard = useCallback(
+    async (intent: MeetingStartIntent): Promise<boolean> => {
+      const token = user?.token ?? getKloudSessionBearer();
+      if (!token) {
+        await executeMeetingIntent(intent);
+        return true;
+      }
+      try {
+        const result = await checkMeetingStartGuard(token, intent);
+        if (result.action === 'redirect') {
+          router.push(`/rooms/${result.roomName}?action=${result.joinAction}`);
+          return true;
+        }
+        if (result.action === 'conflict') {
+          setMeetingConflict({
+            activeMeeting: result.activeMeeting,
+            pendingIntent: result.pendingIntent,
+          });
+          return false;
+        }
+        await executeMeetingIntent(intent);
+        return true;
+      } catch (e) {
+        console.error('[meetingStartGuard]', e);
+        toast.show(t('dash.networkError'));
+        return false;
+      }
+    },
+    [executeMeetingIntent, router, t, toast, user?.token],
+  );
+
+  const handleNewMeeting = () => {
+    void runMeetingStartGuard({ type: 'newMeeting' });
+  };
+
+  const handleMyRoomClick = () => {
+    if (!personalRoomId) return;
+    void runMeetingStartGuard({ type: 'personalRoom', roomName: personalRoomId });
+  };
+
+  const handleStartMeetingClick = (m: { roomName: string; scheduledFor?: string | null }) => {
+    const proceedAfterGuard = async () => {
+      if (m.scheduledFor) {
+        const diff = new Date(m.scheduledFor).getTime() - Date.now();
+        if (Math.abs(diff) > 15 * 60 * 1000) {
+          setEarlyStartMeeting(m);
+          return;
+        }
+      }
+      await executeMeetingIntent({ type: 'startScheduled', roomName: m.roomName });
+    };
+
+    if (!user?.token) {
+      void proceedAfterGuard();
+      return;
+    }
+
+    void (async () => {
+      const token = user?.token ?? getKloudSessionBearer();
+      if (!token) {
+        await proceedAfterGuard();
+        return;
+      }
+      try {
+        const result = await checkMeetingStartGuard(token, {
+          type: 'startScheduled',
+          roomName: m.roomName,
+        });
+        if (result.action === 'redirect') {
+          router.push(`/rooms/${result.roomName}?action=${result.joinAction}`);
+          return;
+        }
+        if (result.action === 'conflict') {
+          setMeetingConflict({
+            activeMeeting: result.activeMeeting,
+            pendingIntent: result.pendingIntent,
+          });
+          return;
+        }
+        await proceedAfterGuard();
+      } catch (e) {
+        console.error('[meetingStartGuard]', e);
+        toast.show(t('dash.networkError'));
+      }
+    })();
+  };
+
+  const handleConflictContinue = () => {
+    if (!meetingConflict) return;
+    const { roomName } = meetingConflict.activeMeeting;
+    setMeetingConflict(null);
+    router.push(`/rooms/${roomName}?action=join`);
+  };
+
+  const handleConflictStartNew = async () => {
+    if (!meetingConflict || !user?.token) return;
+    setEndingActiveMeeting(true);
+    const { activeMeeting, pendingIntent } = meetingConflict;
+    const ok = await endMeetingByHost(user.token, activeMeeting.roomName);
+    if (!ok) {
+      toast.show(t('dash.conflict.endFailed'));
+      setEndingActiveMeeting(false);
+      return;
+    }
+    try {
+      localStorage.removeItem('activeMeetingId');
+      localStorage.removeItem('activeMeetingStartedAt');
+    } catch {
+      /* ignore */
+    }
+    setMeetingConflict(null);
+    setEndingActiveMeeting(false);
+    fetchMeetings();
+
+    if (pendingIntent.type === 'startScheduled') {
+      const meeting =
+        dbMeetings.find((x) => x.roomName === pendingIntent.roomName) ?? {
+          roomName: pendingIntent.roomName,
+        };
+      if (meeting.scheduledFor) {
+        const diff = new Date(meeting.scheduledFor).getTime() - Date.now();
+        if (Math.abs(diff) > 15 * 60 * 1000) {
+          setEarlyStartMeeting(meeting);
+          return;
+        }
       }
     }
-    router.push(`/rooms/${roomId}?action=start`);
+    await executeMeetingIntent(pendingIntent);
   };
 
   const handleJoinMeeting = async () => {
@@ -433,12 +605,12 @@ export function DashboardView({
             </div>
             {/* Divider */}
             <div className={styles.quickDivider} />
-            {/* Personal Room */}
-            {personalRoomId && (
-              <>
+            <div className={styles.quickActionsSecondary}>
+              {personalRoomId && (
                 <button
+                  type="button"
                   className={styles.quickPersonalRoomBtn}
-                  onClick={() => router.push(`/rooms/${personalRoomId}?action=start`)}
+                  onClick={handleMyRoomClick}
                   title={`${t('dash.myRoom')}: ${personalRoomId}`}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
@@ -447,16 +619,25 @@ export function DashboardView({
                   </svg>
                   {t('dash.myRoom')}
                 </button>
-                <div className={styles.quickDivider} />
-              </>
-            )}
-            {/* New Meeting */}
-            <button className={styles.quickNewBtn} onClick={handleNewMeeting}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+              )}
+              <button
+                type="button"
+                className={styles.quickNewBtn}
+                onClick={handleNewMeeting}
+                disabled={isCreatingMeeting}
+                aria-busy={isCreatingMeeting}
+                style={
+                  isCreatingMeeting
+                    ? { opacity: 0.7, cursor: 'not-allowed', pointerEvents: 'none' }
+                    : undefined
+                }
+              >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden>
                 <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
-              {t('dash.newMeeting')}
+              {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
             </button>
+            </div>
           </div>
         </div>
 
@@ -699,14 +880,14 @@ export function DashboardView({
                                   className={isHost && !m.isActive && m.scheduledFor ? styles.startActionBtn : styles.cardJoinBtn}
                                   onClick={() => {
                                     if (isHost && m.scheduledFor) {
-                                      const diff = new Date(m.scheduledFor).getTime() - Date.now();
-                                      if (Math.abs(diff) > 15 * 60 * 1000) {
-                                        setEarlyStartMeeting(m);
-                                      } else {
-                                        router.push(`/rooms/${m.roomName}?action=start`);
-                                      }
+                                      handleStartMeetingClick(m);
+                                    } else if (isHost) {
+                                      void runMeetingStartGuard({
+                                        type: 'startScheduled',
+                                        roomName: m.roomName,
+                                      });
                                     } else {
-                                      router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`);
+                                      router.push(`/rooms/${m.roomName}?action=join`);
                                     }
                                   }}
                                 >
@@ -832,14 +1013,14 @@ export function DashboardView({
                                 className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
                                 onClick={() => {
                                   if (isHost && m.scheduledFor) {
-                                    const diff = new Date(m.scheduledFor).getTime() - Date.now();
-                                    if (Math.abs(diff) > 15 * 60 * 1000) {
-                                      setEarlyStartMeeting(m);
-                                    } else {
-                                      router.push(`/rooms/${m.roomName}?action=start`);
-                                    }
+                                    handleStartMeetingClick(m);
+                                  } else if (isHost) {
+                                    void runMeetingStartGuard({
+                                      type: 'startScheduled',
+                                      roomName: m.roomName,
+                                    });
                                   } else {
-                                    router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`);
+                                    router.push(`/rooms/${m.roomName}?action=join`);
                                   }
                                 }}
                               >
@@ -1039,6 +1220,18 @@ export function DashboardView({
         />
       )}
 
+      {meetingConflict && (
+        <ActiveMeetingConflictModal
+          activeMeeting={meetingConflict.activeMeeting}
+          ending={endingActiveMeeting}
+          onContinue={handleConflictContinue}
+          onStartNew={() => void handleConflictStartNew()}
+          onCancel={() => {
+            if (!endingActiveMeeting) setMeetingConflict(null);
+          }}
+        />
+      )}
+
       {earlyStartMeeting && (
         <div className={styles.dashModalOverlay}>
           <div className={styles.dashModalContent}>
@@ -1058,7 +1251,16 @@ export function DashboardView({
                 Cancel
               </button>
               <button 
-                onClick={() => router.push(`/rooms/${earlyStartMeeting.roomName}?action=start`)}
+                onClick={() => {
+                  const m = earlyStartMeeting;
+                  setEarlyStartMeeting(null);
+                  if (m) {
+                    void runMeetingStartGuard({
+                      type: 'startScheduled',
+                      roomName: m.roomName,
+                    });
+                  }
+                }}
                 style={{
                   padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#db2777', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
                 }}
