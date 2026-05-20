@@ -289,7 +289,10 @@ export function PageClientImpl(props: {
     }
   }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
 
-  if (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') {
+  if (
+    (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
+    !meetingInfo?.isPersonalRoom
+  ) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>
         <div style={{ background: '#fff', padding: '3rem 2.5rem', borderRadius: '16px', boxShadow: '0 8px 35px rgba(17,24,39,0.05)', textAlign: 'center', maxWidth: '440px', width: '90%', border: '1px solid #e5e7eb' }}>

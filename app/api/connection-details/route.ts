@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/db';
+import { ensurePersonalRoomMeeting } from '@/lib/meetingRoomIsActive';
+import { findPersonalRoomOwner } from '@/lib/personalRoom';
 import { randomString } from '@/lib/client-utils';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
@@ -35,38 +37,11 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Missing required query parameter: participantName', { status: 400 });
     }
 
-    // Strict Database Validation for Room Existence
-    let meeting = await prisma.meeting.findUnique({
-      where: { roomName: roomName }
-    });
-
-    // Personal room handling: supports creating a new session each time.
-    // Trigger when: meeting not found OR previous session has ended.
-    let isPersonalRoom = false;
-    if (!meeting || meeting.status === 'ENDED') {
-      const owner = await prisma.teamMember.findFirst({
-        where: { personalRoomId: roomName },
-      });
-      if (owner) {
-        isPersonalRoom = true;
-        // Archive the old ENDED record so history is preserved (rename its roomName)
-        if (meeting && meeting.status === 'ENDED') {
-          await prisma.meeting.update({
-            where: { id: meeting.id },
-            data: { roomName: `${roomName}_${meeting.id}` },
-          });
-        }
-        // Create a fresh session record
-        meeting = await prisma.meeting.create({
-          data: {
-            roomName,
-            createdByMemberId: owner.id,
-            title: `${owner.fullName || owner.username}'s Room`,
-            status: 'ACTIVE',
-          },
-        });
-      }
-    }
+    let meeting = await ensurePersonalRoomMeeting(roomName);
+    const personalOwner = await findPersonalRoomOwner(roomName);
+    const isPersonalRoom = Boolean(
+      meeting && personalOwner && personalOwner.id === meeting.createdByMemberId,
+    );
 
     if (!meeting) {
       return new NextResponse('Meeting not found', { status: 404 });

@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { RoomServiceClient } from 'livekit-server-sdk';
+import {
+  findMeetingByRoomName,
+  getMeetingIsActiveByRoomName,
+} from '@/lib/meetingRoomIsActive';
+import { findPersonalRoomOwner } from '@/lib/personalRoom';
 import {
   canManageMeeting,
   forbidden,
@@ -9,10 +13,6 @@ import {
   requireSession,
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
-
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
 
 export async function GET(
   request: NextRequest,
@@ -27,10 +27,25 @@ export async function GET(
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
-    let meeting = await prisma.meeting.findUnique({
-      where: {
+    let meetingCore = await findMeetingByRoomName(roomName);
+    if (!meetingCore) {
+      const owner = await findPersonalRoomOwner(roomName);
+      if (!owner) {
+        return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      }
+      // 专属会议室无当前场次记录时仍可入会（connection-details 会创建新场次）
+      return NextResponse.json({
         roomName,
-      },
+        title: `${owner.fullName || owner.username}'s Room`,
+        status: 'ACTIVE',
+        isActive: await getMeetingIsActiveByRoomName(roomName),
+        createdByMemberId: owner.id,
+        isPersonalRoom: true,
+      });
+    }
+
+    let meeting = await prisma.meeting.findUnique({
+      where: { id: meetingCore.id },
       include: {
         createdByMember: {
           select: { fullName: true, username: true },
@@ -39,59 +54,11 @@ export async function GET(
       },
     });
 
-    // Personal room handling: supports creating a new session each time
-    // Trigger when: meeting not found OR previous session has ended / was canceled
-    const recycleStatuses = ['ENDED', 'CANCELED'];
-    const shouldRecyclePersonalRoom =
-      !meeting || (typeof meeting.status === 'string' && recycleStatuses.includes(meeting.status));
-
-    if (shouldRecyclePersonalRoom) {
-      const owner = await prisma.teamMember.findFirst({
-        where: { personalRoomId: roomName },
-      });
-      if (owner) {
-        // Archive the old ENDED / CANCELED record so it stays as history (rename its roomName)
-        if (meeting && typeof meeting.status === 'string' && recycleStatuses.includes(meeting.status)) {
-          await prisma.meeting.update({
-            where: { id: meeting.id },
-            data: { roomName: `${roomName}_${meeting.id}` },
-          });
-        }
-        // Create a fresh session record
-        const title = `${owner.fullName || owner.username}'s Room`;
-        meeting = await prisma.meeting.create({
-          data: {
-            roomName,
-            createdByMemberId: owner.id,
-            title,
-            status: 'ACTIVE',
-          },
-          include: {
-            createdByMember: {
-              select: { fullName: true, username: true },
-            },
-            recordings: true,
-          },
-        }) as any;
-      }
-    }
-
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
 
-    let isActive = false;
-    try {
-      if (LIVEKIT_URL && API_KEY && API_SECRET) {
-        const roomService = new RoomServiceClient(LIVEKIT_URL, API_KEY, API_SECRET);
-        const activeRooms = await roomService.listRooms([roomName]);
-        if (activeRooms && activeRooms.length > 0) {
-          isActive = true;
-        }
-      }
-    } catch (e) {
-      console.error('[meetings GET] LiveKit query failed', e);
-    }
+    const isActive = await getMeetingIsActiveByRoomName(roomName);
 
     // Auto update status to PAST_DUE if scheduled time has passed and not currently active
     let currentStatus = meeting.status;

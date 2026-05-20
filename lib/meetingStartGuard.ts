@@ -7,6 +7,8 @@ export type ActiveMeetingInfo = {
   status: string;
   actualStartedAt: string;
   scheduledFor?: string | null;
+  /** 与 GET /api/meetings/[roomName] 的 isActive 一致 */
+  isActive?: boolean;
 };
 
 export type MeetingStartIntent =
@@ -16,7 +18,12 @@ export type MeetingStartIntent =
 
 export type ActiveMeetingCheckResult =
   | { action: 'proceed' }
-  | { action: 'redirect'; roomName: string; joinAction: 'join' | 'start' }
+  | {
+      action: 'redirect';
+      roomName: string;
+      joinAction: 'join' | 'start';
+      meetingId?: number;
+    }
   | {
       action: 'conflict';
       activeMeeting: ActiveMeetingInfo;
@@ -29,7 +36,9 @@ export async function fetchActiveMeeting(
   const res = await authFetch('/api/account/active-meeting', {
     headers: authHeaders({ Authorization: `Bearer ${token}` }),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    throw new Error(`active-meeting ${res.status}`);
+  }
   const data = await res.json();
   if (!data.hasActive || !data.meeting) return null;
   return data.meeting as ActiveMeetingInfo;
@@ -46,15 +55,8 @@ export async function endMeetingByHost(
   return res.ok;
 }
 
-function targetRoomName(intent: MeetingStartIntent): string | null {
-  if (intent.type === 'personalRoom' || intent.type === 'startScheduled') {
-    return intent.roomName;
-  }
-  return null;
-}
-
 /**
- * Decide whether to proceed, show conflict modal, or redirect to the same active room.
+ * 有进行中的会议则一律弹冲突窗（含列表 Start 与当前点击同 roomName 的情况）。
  */
 export async function checkMeetingStartGuard(
   token: string,
@@ -63,21 +65,6 @@ export async function checkMeetingStartGuard(
   const active = await fetchActiveMeeting(token);
   if (!active) {
     return { action: 'proceed' };
-  }
-
-  // 仅「开始同一场预约会议」且该会已在进行 → 直接加入。
-  // My Room 即使目标房间相同也弹窗，便于「继续 / 结束并开新场」。
-  const target = targetRoomName(intent);
-  if (
-    intent.type === 'startScheduled' &&
-    target &&
-    target === active.roomName
-  ) {
-    return {
-      action: 'redirect',
-      roomName: active.roomName,
-      joinAction: 'join',
-    };
   }
 
   return {

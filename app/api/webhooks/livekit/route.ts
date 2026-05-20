@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
+import { archivePersonalRoomMeeting } from '@/lib/personalRoom';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
         const startedTimeMs = meeting.actualStartedAt ? meeting.actualStartedAt.getTime() : meeting.startedAt.getTime();
         const actualDurationMinutes = Math.max(1, Math.round((endedAt.getTime() - startedTimeMs) / 60000));
         
-        await prisma.meeting.update({
+        const updated = await prisma.meeting.update({
           where: { roomName },
           data: {
             endedAt,
@@ -99,6 +100,7 @@ export async function POST(request: NextRequest) {
             status: 'ENDED'
           }
         });
+        await archivePersonalRoomMeeting(updated);
       }
     }
 

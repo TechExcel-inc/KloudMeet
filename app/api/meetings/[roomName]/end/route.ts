@@ -7,6 +7,10 @@ import {
   requireSession,
 } from '@/lib/apiAuth';
 import { deleteLiveKitRoom } from '@/lib/livekitRooms';
+import {
+  archivePersonalRoomMeeting,
+  findPersonalRoomOwner,
+} from '@/lib/personalRoom';
 
 export async function POST(
   request: NextRequest,
@@ -22,16 +26,27 @@ export async function POST(
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
-    const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+    let meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      const owner = await findPersonalRoomOwner(roomName);
+      if (!owner || !canManageMeeting(member.id, { createdByMemberId: owner.id })) {
+        return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      }
+      await deleteLiveKitRoom(roomName);
+      return NextResponse.json({
+        success: true,
+        meeting: { roomName, status: 'ENDED', isPersonalRoom: true },
+      });
     }
     if (!canManageMeeting(member.id, meeting)) {
       return forbidden('Only the meeting host can end this meeting');
     }
 
     if (meeting.status === 'ENDED') {
-      return NextResponse.json({ success: true, meeting });
+      await deleteLiveKitRoom(roomName);
+      await archivePersonalRoomMeeting(meeting);
+      const archived = await prisma.meeting.findUnique({ where: { id: meeting.id } });
+      return NextResponse.json({ success: true, meeting: archived ?? meeting });
     }
 
     const endedAt = new Date();
@@ -55,7 +70,13 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ success: true, meeting: updated });
+    await archivePersonalRoomMeeting(updated);
+
+    const finalMeeting = await prisma.meeting.findUnique({
+      where: { id: updated.id },
+    });
+
+    return NextResponse.json({ success: true, meeting: finalMeeting ?? updated });
   } catch (error) {
     console.error('[meetings end POST]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

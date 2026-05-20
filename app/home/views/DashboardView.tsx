@@ -342,6 +342,13 @@ export function DashboardView({
       try {
         const result = await checkMeetingStartGuard(token, intent);
         if (result.action === 'redirect') {
+          if (result.meetingId) {
+            try {
+              localStorage.setItem('activeMeetingId', String(result.meetingId));
+            } catch {
+              /* ignore */
+            }
+          }
           router.push(`/rooms/${result.roomName}?action=${result.joinAction}`);
           return true;
         }
@@ -373,7 +380,12 @@ export function DashboardView({
   };
 
   const handleStartMeetingClick = (m: { roomName: string; scheduledFor?: string | null }) => {
-    const proceedAfterGuard = async () => {
+    const intent: MeetingStartIntent = {
+      type: 'startScheduled',
+      roomName: m.roomName,
+    };
+
+    void (async () => {
       if (m.scheduledFor) {
         const diff = new Date(m.scheduledFor).getTime() - Date.now();
         if (Math.abs(diff) > 15 * 60 * 1000) {
@@ -381,56 +393,29 @@ export function DashboardView({
           return;
         }
       }
-      await executeMeetingIntent({ type: 'startScheduled', roomName: m.roomName });
-    };
-
-    if (!user?.token) {
-      void proceedAfterGuard();
-      return;
-    }
-
-    void (async () => {
-      const token = user?.token ?? getKloudSessionBearer();
-      if (!token) {
-        await proceedAfterGuard();
-        return;
-      }
-      try {
-        const result = await checkMeetingStartGuard(token, {
-          type: 'startScheduled',
-          roomName: m.roomName,
-        });
-        if (result.action === 'redirect') {
-          router.push(`/rooms/${result.roomName}?action=${result.joinAction}`);
-          return;
-        }
-        if (result.action === 'conflict') {
-          setMeetingConflict({
-            activeMeeting: result.activeMeeting,
-            pendingIntent: result.pendingIntent,
-          });
-          return;
-        }
-        await proceedAfterGuard();
-      } catch (e) {
-        console.error('[meetingStartGuard]', e);
-        toast.show(t('dash.networkError'));
-      }
+      await runMeetingStartGuard(intent);
     })();
   };
 
   const handleConflictContinue = () => {
     if (!meetingConflict) return;
-    const { roomName } = meetingConflict.activeMeeting;
+    const { roomName, id } = meetingConflict.activeMeeting;
     setMeetingConflict(null);
+    try {
+      if (id) localStorage.setItem('activeMeetingId', String(id));
+    } catch {
+      /* ignore */
+    }
     router.push(`/rooms/${roomName}?action=join`);
   };
 
   const handleConflictStartNew = async () => {
-    if (!meetingConflict || !user?.token) return;
+    if (!meetingConflict) return;
+    const token = user?.token ?? getKloudSessionBearer();
+    if (!token) return;
     setEndingActiveMeeting(true);
     const { activeMeeting, pendingIntent } = meetingConflict;
-    const ok = await endMeetingByHost(user.token, activeMeeting.roomName);
+    const ok = await endMeetingByHost(token, activeMeeting.roomName);
     if (!ok) {
       toast.show(t('dash.conflict.endFailed'));
       setEndingActiveMeeting(false);
@@ -498,8 +483,8 @@ export function DashboardView({
       const isHost = data.createdByMemberId === user.id;
       const targetAction = isHost && !data.isActive ? 'start' : 'join';
       
-      // 2. Already Finished
-      if (data.status === 'ENDED') {
+      // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
+      if (data.status === 'ENDED' && !data.isPersonalRoom) {
         setWarningMessage('This meeting has already ended and is no longer available.');
         setIsJoining(false);
         return;
@@ -879,13 +864,8 @@ export function DashboardView({
                                 <button
                                   className={isHost && !m.isActive && m.scheduledFor ? styles.startActionBtn : styles.cardJoinBtn}
                                   onClick={() => {
-                                    if (isHost && m.scheduledFor) {
+                                    if (isHost) {
                                       handleStartMeetingClick(m);
-                                    } else if (isHost) {
-                                      void runMeetingStartGuard({
-                                        type: 'startScheduled',
-                                        roomName: m.roomName,
-                                      });
                                     } else {
                                       router.push(`/rooms/${m.roomName}?action=join`);
                                     }
@@ -1012,13 +992,8 @@ export function DashboardView({
                               <button
                                 className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
                                 onClick={() => {
-                                  if (isHost && m.scheduledFor) {
+                                  if (isHost) {
                                     handleStartMeetingClick(m);
-                                  } else if (isHost) {
-                                    void runMeetingStartGuard({
-                                      type: 'startScheduled',
-                                      roomName: m.roomName,
-                                    });
                                   } else {
                                     router.push(`/rooms/${m.roomName}?action=join`);
                                   }

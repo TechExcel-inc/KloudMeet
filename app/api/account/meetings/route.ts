@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { RoomServiceClient } from 'livekit-server-sdk';
-
-const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
+import { listActiveRoomNames } from '@/lib/livekitRooms';
+import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
 
 export async function GET(request: NextRequest) {
   try {
@@ -73,24 +70,14 @@ export async function GET(request: NextRequest) {
       })
     ]);
 
-    // REST API Fallback check for active LiveKit rooms
-    let activeRooms: string[] = [];
-    try {
-      if (LIVEKIT_URL && API_KEY && API_SECRET) {
-        const roomService = new RoomServiceClient(LIVEKIT_URL, API_KEY, API_SECRET);
-        const rooms = await roomService.listRooms();
-        activeRooms = rooms.map(r => r.name);
-      }
-    } catch (e) {
-      console.error('[account meetings GET] LiveKit fallback query failed', e);
-    }
+    const activeRooms = await listActiveRoomNames();
 
     const enhancedMeetings = meetings.map(m => {
       const mx = m as any;
-      const isLive = activeRooms.includes(m.roomName);
-      // If DB says ENDED, don't override with LiveKit active status
-      // (LiveKit rooms may take seconds to be reclaimed after last participant leaves)
-      const isActive = m.status === 'ENDED' ? false : isLive;
+      const isLive = isRoomLiveInList(m.roomName, activeRooms);
+      // DB 已结束则一律不算进行中（避免 LiveKit 延迟回收导致误显示 Live）
+      const isActive =
+        m.status === 'ENDED' || m.status === 'CANCELED' ? false : isLive;
       return {
         ...mx,
         isActive,

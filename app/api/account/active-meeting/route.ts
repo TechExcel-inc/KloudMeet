@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
-import { listActiveRoomNames } from '@/lib/livekitRooms';
+import { resolveHostActiveMeeting } from '@/lib/hostActiveMeeting';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 
 export async function GET(request: NextRequest) {
@@ -8,32 +7,11 @@ export async function GET(request: NextRequest) {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
 
-    const activeRoomNames = await listActiveRoomNames();
-    if (activeRoomNames.length === 0) {
-      return NextResponse.json({ hasActive: false });
-    }
+    const preferredRoomName =
+      request.nextUrl.searchParams.get('roomName')?.trim() || null;
 
-    const meetings = await prisma.meeting.findMany({
-      where: {
-        createdByMemberId: member.id,
-        deletedAt: null,
-        status: { not: 'ENDED' },
-        roomName: { in: activeRoomNames },
-      },
-      orderBy: { actualStartedAt: 'desc' },
-      take: 1,
-      select: {
-        id: true,
-        roomName: true,
-        title: true,
-        status: true,
-        actualStartedAt: true,
-        startedAt: true,
-        scheduledFor: true,
-      },
-    });
+    const meeting = await resolveHostActiveMeeting(member.id, preferredRoomName);
 
-    const meeting = meetings[0];
     if (!meeting) {
       return NextResponse.json({ hasActive: false });
     }
@@ -41,12 +19,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       hasActive: true,
       meeting: {
-        id: meeting.id,
-        roomName: meeting.roomName,
-        title: meeting.title,
-        status: meeting.status,
-        actualStartedAt: meeting.actualStartedAt ?? meeting.startedAt,
-        scheduledFor: meeting.scheduledFor,
+        ...meeting,
+        isActive: meeting.isActive ?? true,
+        actualStartedAt:
+          meeting.actualStartedAt instanceof Date
+            ? meeting.actualStartedAt.toISOString()
+            : meeting.actualStartedAt,
+        scheduledFor:
+          meeting.scheduledFor instanceof Date
+            ? meeting.scheduledFor.toISOString()
+            : meeting.scheduledFor,
       },
     });
   } catch (error) {

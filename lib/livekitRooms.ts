@@ -22,6 +22,12 @@ export async function listActiveRoomNames(): Promise<string[]> {
   }
 }
 
+/** @deprecated 使用 getMeetingIsActiveByRoomName（与 GET /api/meetings/[roomName] 一致） */
+export async function isLiveKitRoomActive(roomName: string): Promise<boolean> {
+  const { getMeetingIsActiveByRoomName } = await import('@/lib/meetingRoomIsActive');
+  return getMeetingIsActiveByRoomName(roomName);
+}
+
 export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
   const client = getRoomServiceClient();
   if (!client) return false;

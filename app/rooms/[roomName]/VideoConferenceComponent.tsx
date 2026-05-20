@@ -462,6 +462,17 @@ export function VideoConferenceComponent(props: {
 
   const handleClosedByHostExit = React.useCallback(() => {
     if (hostEndedHandledRef.current) return;
+    // 仅参会者展示「主持人已结束会议」；主持人/有权限结束会议的角色不弹窗
+    if (
+      isDbMeetingOwner(
+        props.meetingOwnerMemberId,
+        room.localParticipant.metadata,
+      )
+    ) {
+      hostEndedHandledRef.current = true;
+      intentionalDisconnectRef.current = true;
+      return;
+    }
     hostEndedHandledRef.current = true;
     intentionalDisconnectRef.current = true;
 
@@ -493,7 +504,7 @@ export function VideoConferenceComponent(props: {
     hostEndedRedirectTimerRef.current = setTimeout(() => {
       router.push('/');
     }, 2200);
-  }, [room, router, t]);
+  }, [room, router, t, props.meetingOwnerMemberId]);
 
   // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
   const computeBackoffMs = React.useCallback((attempt: number): number => {
@@ -538,6 +549,16 @@ export function VideoConferenceComponent(props: {
       void (async () => {
         const ended = await isMeetingEnded(roomName);
         if (ended) {
+          if (
+            isDbMeetingOwner(
+              props.meetingOwnerMemberId,
+              room.localParticipant.metadata,
+            )
+          ) {
+            hostEndedHandledRef.current = true;
+            router.push('/');
+            return;
+          }
           handleClosedByHostExit();
           return;
         }
@@ -1401,36 +1422,42 @@ export function VideoConferenceComponent(props: {
     }, 600);
   }, [room, screenShareTracks, sendMeetingMsg]);
 
-  // End for All (host/co-host only): broadcast END_MEETING, mark as ended in DB, then disconnect
+  // End for All (host/co-host only): notify room, delete LiveKit room + ENDED in DB, then leave UI
   const handleEndForAll = React.useCallback(async () => {
     await stopRecordingAndThen(async () => {
-      // Notify all participants to leave via DataChannel
+      const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
+      const isOwner = isDbMeetingOwner(
+        props.meetingOwnerMemberId,
+        room.localParticipant.metadata,
+      );
+
+      hostEndedHandledRef.current = true;
+      markIntentionalDisconnect();
       sendMeetingMsg({ type: 'END_MEETING' });
 
-      const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
-      if (
-        isDbMeetingOwner(
-          props.meetingOwnerMemberId,
-          room.localParticipant.metadata,
-        )
-      ) {
+      if (isOwner && rn) {
         try {
-          await fetch(`/api/meetings/${rn}`, {
-            method: 'PUT',
+          await fetch(`/api/meetings/${rn}/end`, {
+            method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
-            body: JSON.stringify({ endedAt: new Date().toISOString() }),
           });
         } catch (e) {
-          console.warn('[meeting end] failed', e);
+          console.warn('[meeting end] delete room / mark ended failed', e);
         }
       }
-      // Small delay to allow the DataChannel message to propagate
+
       await new Promise((r) => setTimeout(r, 300));
-      markIntentionalDisconnect();
       room.disconnect();
       router.push('/');
     });
-  }, [markIntentionalDisconnect, room, router, sendMeetingMsg, stopRecordingAndThen]);
+  }, [
+    markIntentionalDisconnect,
+    props.meetingOwnerMemberId,
+    room,
+    router,
+    sendMeetingMsg,
+    stopRecordingAndThen,
+  ]);
 
   // Host: anonymous token + LiveDoc instance, then broadcast id to the room
   React.useEffect(() => {
@@ -1575,7 +1602,18 @@ export function VideoConferenceComponent(props: {
             });
           }
         } else if (msg.type === 'END_MEETING') {
-          // Host/Co-host ended the meeting for everyone
+          // 仅参会者提示；结束方（主持人/联席）不弹窗
+          if (senderIdentity === room.localParticipant.identity) return;
+          if (
+            isDbMeetingOwner(
+              props.meetingOwnerMemberId,
+              room.localParticipant.metadata,
+            ) ||
+            isHost ||
+            isCohost
+          ) {
+            return;
+          }
           handleClosedByHostExit();
         } else if (msg.type === 'MUTE_ALL') {
           // Snapshot current mic state before muting (so UNMUTE_ALL can restore it).
@@ -1710,12 +1748,15 @@ export function VideoConferenceComponent(props: {
   }, [
     room,
     isHost,
+    isCohost,
     decoder,
     sendMeetingMsg,
     screenShareActive,
     approvedControllerIdentity,
     remoteControlRequest,
     micEnabled,
+    props.meetingOwnerMemberId,
+    handleClosedByHostExit,
   ]);
 
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
