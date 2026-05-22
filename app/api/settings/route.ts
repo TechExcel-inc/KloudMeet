@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { isAuthError, requireAccountAdmin } from '@/lib/apiAuth';
+import { isAuthError, requireSession } from '@/lib/apiAuth';
 
 // All setting keys managed by the System Settings modal
 const SETTING_KEYS = [
@@ -45,13 +45,31 @@ async function loadSettings(keys: string[]) {
   return settings;
 }
 
-// GET /api/settings — admin only; ?scope=livedoc allowed in development without admin
+const LIVEDOC_SETTING_KEYS = ['livedoc_debug_enabled', 'livedoc_debug_url'] as const;
+
+// GET /api/settings — logged-in users; ?scope=livedoc allowed in development without auth
 export async function GET(request: NextRequest) {
   const scope = new URL(request.url).searchParams.get('scope');
 
-  if (scope === 'livedoc' && process.env.NODE_ENV === 'development') {
+  if (scope === 'livedoc') {
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const settings = await loadSettings([...LIVEDOC_SETTING_KEYS]);
+        return NextResponse.json(settings);
+      } catch (error) {
+        console.error('[settings GET livedoc]', error);
+        return NextResponse.json(
+          { error: 'Failed to load settings' },
+          { status: 500 },
+        );
+      }
+    }
+
+    const livedocMember = await requireSession(request);
+    if (isAuthError(livedocMember)) return livedocMember;
+
     try {
-      const settings = await loadSettings(['livedoc_debug_enabled', 'livedoc_debug_url']);
+      const settings = await loadSettings([...LIVEDOC_SETTING_KEYS]);
       return NextResponse.json(settings);
     } catch (error) {
       console.error('[settings GET livedoc]', error);
@@ -62,7 +80,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const member = await requireAccountAdmin(request);
+  const member = await requireSession(request);
   if (isAuthError(member)) return member;
 
   try {
@@ -77,9 +95,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/settings — Upsert system settings (admin only)
+// PUT /api/settings — Upsert system settings (logged-in users)
 export async function PUT(request: NextRequest) {
-  const member = await requireAccountAdmin(request);
+  const member = await requireSession(request);
   if (isAuthError(member)) return member;
 
   const body = await request.json();

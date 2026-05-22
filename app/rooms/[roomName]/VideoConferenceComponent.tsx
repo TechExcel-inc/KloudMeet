@@ -14,7 +14,11 @@ import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlO
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { useIsDesktop } from '@/lib/useIsDesktop';
-import { useToolbarIsMobile } from '@/lib/useToolbarIsMobile';
+import {
+  isToolbarMobileUserAgent,
+  postKloudShowFilePanelToIframe,
+  useToolbarIsMobile,
+} from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
 import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
@@ -1809,13 +1813,12 @@ export function VideoConferenceComponent(props: {
     const updateCustomMics = () => {
       // 主网格 + 活文档右侧栏 + 浮窗展开网格（与主会议相同的自定义麦与主持点按静音）
       const tiles = document.querySelectorAll(
-        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .floating-webcam-panel .floating-grid-tile.lk-participant-tile',
+        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .floating-webcam-panel .floating-grid-tile.lk-participant-tile, .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile',
       );
       const muteAllApplied = muteAllActive;
 
       tiles.forEach((tile) => {
-        const metadata = tile.querySelector('.lk-participant-metadata');
-        if (!metadata) return;
+        const inCarousel = !!tile.closest('.lk-carousel');
 
         // Determine participant identity from the tile's data-lk-participant or fallback to name matching
         let identity = tile.getAttribute('data-lk-participant');
@@ -1823,13 +1826,50 @@ export function VideoConferenceComponent(props: {
 
         // Fallback to name matching if data attribute doesn't contain identity
         if (!participant) {
-          const nameEl = tile.querySelector('.lk-participant-name');
+          const nameEl = tile.querySelector(
+            '.lk-participant-name, .floating-grid-name, .webcam-sidebar-name',
+          );
           const displayName = nameEl?.textContent?.trim();
           const matched = Array.from(room.remoteParticipants.values()).find(p => (p.name || p.identity) === displayName);
           participant = matched || (room.localParticipant.name === displayName ? room.localParticipant : null);
         }
         if (!participant) return;
         identity = participant.identity;
+        tile.setAttribute('data-lk-participant', identity);
+
+        let metadata = tile.querySelector('.lk-participant-metadata');
+        if (!metadata && inCarousel) {
+          metadata = document.createElement('div');
+          metadata.className = 'lk-participant-metadata';
+          const itemContainer = document.createElement('div');
+          itemContainer.className = 'lk-participant-metadata-item';
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'lk-participant-name';
+          nameSpan.textContent = participant.name || participant.identity;
+          itemContainer.appendChild(nameSpan);
+          metadata.appendChild(itemContainer);
+          tile.appendChild(metadata);
+        }
+        if (!metadata) return;
+
+        let itemContainer = metadata.querySelector('.lk-participant-metadata-item');
+        if (!itemContainer) {
+          itemContainer = document.createElement('div');
+          itemContainer.className = 'lk-participant-metadata-item';
+          metadata.appendChild(itemContainer);
+        }
+        // 仅 screenshare aside（carousel）补 LiveKit 风格名字；浮窗/侧栏已有专用 name 节点，禁止重复注入
+        if (inCarousel && !itemContainer.querySelector('.lk-participant-name')) {
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'lk-participant-name';
+          nameSpan.textContent = participant.name || participant.identity;
+          itemContainer.appendChild(nameSpan);
+        } else if (!inCarousel) {
+          const builtInName = itemContainer.querySelector('.floating-grid-name, .webcam-sidebar-name');
+          if (builtInName) {
+            itemContainer.querySelectorAll('.lk-participant-name').forEach((el) => el.remove());
+          }
+        }
 
         const isLocal = participant.identity === room.localParticipant.identity;
         const micPub = participant.getTrackPublication(Track.Source.Microphone);
@@ -1846,36 +1886,39 @@ export function VideoConferenceComponent(props: {
         // Note: !isLocal was intentionally removed — the muted participant should see red on their own tile.
         // Operator exemption (!targetIsOperator) already handles preventing hosts/cohosts from being marked red.
         const isForceMuted = ((muteAllApplied && !exemptFromMuteAllIdentities.includes(identity)) || hostMutedIdentities.includes(identity)) && !targetIsOperator && isMuted;
+        tile.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
+
         // Look for our custom icon container, or create it if missing
         let customMic = metadata.querySelector('.kloud-custom-mic-indicator');
         if (!customMic) {
           customMic = document.createElement('div');
           customMic.className = 'kloud-custom-mic-indicator';
-
-          // Place it inside the left-side metadata item, BEFORE the name
-          const itemContainer = metadata.querySelector('.lk-participant-metadata-item');
-          if (itemContainer) {
-            itemContainer.insertBefore(customMic, itemContainer.firstChild);
+          const nameAnchor =
+            itemContainer.querySelector('.floating-grid-name') ||
+            itemContainer.querySelector('.webcam-sidebar-name') ||
+            itemContainer.querySelector('.lk-participant-name');
+          if (nameAnchor) {
+            itemContainer.insertBefore(customMic, nameAnchor);
           } else {
-            metadata.insertBefore(customMic, metadata.firstChild);
+            itemContainer.insertBefore(customMic, itemContainer.firstChild);
           }
         }
 
-        // Apply state data attributes (useful for the click handler and CSS)
-        customMic.setAttribute('data-kloud-identity', identity);
-        customMic.setAttribute('data-kloud-muted', isMuted ? 'true' : 'false');
-        customMic.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
+        const customMicEl = customMic as HTMLElement;
+        customMicEl.setAttribute('data-kloud-identity', identity);
+        customMicEl.setAttribute('data-kloud-muted', isMuted ? 'true' : 'false');
+        customMicEl.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
+        customMicEl.classList.toggle('kloud-custom-mic--force-muted', isForceMuted);
 
-        // Apply Icon + Color
         if (!isMuted) {
-          customMic.innerHTML = micSvg;
-          (customMic as HTMLElement).style.color = '#22c55e'; // Green
+          customMicEl.innerHTML = micSvg;
+          customMicEl.style.setProperty('color', '#22c55e', 'important');
         } else if (isForceMuted) {
-          customMic.innerHTML = micOffSvg;
-          (customMic as HTMLElement).style.color = '#ff2020'; // Red
+          customMicEl.innerHTML = micOffSvg;
+          customMicEl.style.setProperty('color', '#ff2020', 'important');
         } else {
-          customMic.innerHTML = micOffSvg;
-          (customMic as HTMLElement).style.color = 'rgba(255,255,255,0.75)'; // Gray
+          customMicEl.innerHTML = micOffSvg;
+          customMicEl.style.setProperty('color', 'rgba(255,255,255,0.75)', 'important');
         }
 
         // If I am a host/co-host viewing a remote tile, show pointer and tooltip styles
@@ -2266,7 +2309,12 @@ export function VideoConferenceComponent(props: {
         setLiveDocFilePanelVisible(true);
       } else if (data.type === 'onkloudloaded') {
         setShowWebcamSidebar(false);
-        setLiveDocFilePanelVisible(true);
+        if (isToolbarMobileUserAgent()) {
+          setLiveDocFilePanelVisible(false);
+          setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
+        } else {
+          setLiveDocFilePanelVisible(true);
+        }
       } else if (
         data.type === 'onKloudFilePanelVisibleChange' ||
         data.type === 'Kloud-FilePanelVisibleChange' ||
@@ -2292,18 +2340,24 @@ export function VideoConferenceComponent(props: {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // 活文档主区域显示时默认右侧文件控制栏；离开该布局时关闭浮窗/侧栏状态。
+  // 活文档主区域显示时：桌面默认展开右侧文件栏；移动端与 iframe 内 showRightTab=false 一致，保持关闭。
   React.useEffect(() => {
     if (shouldDisplayLiveDoc) {
       setShowWebcamSidebar(false);
-      setLiveDocFilePanelVisible(true);
-      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_EXPANDED_WIDTH);
+      if (isToolbarMobile) {
+        setLiveDocFilePanelVisible(false);
+        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
+        postKloudShowFilePanelToIframe(0);
+      } else {
+        setLiveDocFilePanelVisible(true);
+        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_EXPANDED_WIDTH);
+      }
     } else {
       setShowWebcamSidebar(false);
       setLiveDocFilePanelVisible(false);
       setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
     }
-  }, [shouldDisplayLiveDoc]);
+  }, [shouldDisplayLiveDoc, isToolbarMobile]);
 
   // Draggable floating webcam panel state（默认用 right 贴距右侧，拖拽后改为 left/top 坐标）
   const floatingRef = React.useRef<HTMLDivElement>(null);
@@ -3854,23 +3908,26 @@ export function VideoConferenceComponent(props: {
                 pointer-events: none !important; /* CRITICAL: Blocks Firefox/Chrome from spawning native Picture-in-Picture hover overlays! */
               }
 
-              /* 3. The Webcam Panel relies entirely on a CSS parent class for instant toggling without destroying the entire <style> block via React */
+              /* 3. Screenshare aside（lk-carousel）与浮窗左侧 3 个大格（hero）同款样式 */
               .sky-meet-video-wrapper .lk-carousel { 
+                --screenshare-aside-tile: 132px;
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: flex-start !important; /* Align webcams from top down */
+                justify-content: flex-start !important;
                 align-items: center !important;
-                width: 160px !important; 
-                min-width: 160px !important; 
-                max-width: 160px !important;
+                width: calc(var(--screenshare-aside-tile) + 16px) !important; 
+                min-width: calc(var(--screenshare-aside-tile) + 16px) !important; 
+                max-width: calc(var(--screenshare-aside-tile) + 16px) !important;
                 height: 100% !important;
                 margin: 0 !important;
                 flex-shrink: 0 !important; 
-                background: #111 !important;
-                gap: 12px !important;
+                background: rgba(22, 48, 36, 0.42) !important;
+                gap: 8px !important;
                 overflow-y: auto !important;
-                border-right: 1px solid rgba(255,255,255,0.1) !important;
-                padding: 12px 8px !important;
+                overflow-x: hidden !important;
+                border-right: 1px solid rgba(255,255,255,0.06) !important;
+                padding: 8px !important;
+                box-sizing: border-box !important;
               }
               
               /* This pure CSS toggle prevents the catastrophic Layout Thrashing bug */
@@ -3879,14 +3936,104 @@ export function VideoConferenceComponent(props: {
               }
 
               .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile {
-                pointer-events: none !important; /* Absolutely prevents accidental clicks which would swap the webcam into the FocusLayout! */
-                flex: 0 0 auto !important; /* CRITICAL: Prevent flexbox from vertically stretching the tile to fill the 100vh sidebar */
-                width: 100% !important;
-                height: auto !important; /* Allow aspect-ratio to dictate height */
+                position: relative !important;
+                display: block !important;
+                flex: 0 0 auto !important;
+                width: var(--screenshare-aside-tile) !important;
+                max-width: var(--screenshare-aside-tile) !important;
+                height: auto !important;
                 min-height: 0 !important;
-                aspect-ratio: 16 / 9 !important;
-                border-radius: 8px !important;
-                box-shadow: 0 4px 12px rgba(0,0,0,0.5) !important;
+                aspect-ratio: 1 / 1 !important;
+                border-radius: 12px !important;
+                box-shadow: none !important;
+                overflow: hidden !important;
+                background: #1e293b !important;
+                gap: 0 !important;
+                padding: 0 !important;
+                pointer-events: auto !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-video-container,
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-media-container {
+                position: relative !important;
+                width: 100% !important;
+                height: 100% !important;
+                aspect-ratio: 1 / 1 !important;
+                border-radius: 12px !important;
+                overflow: hidden !important;
+                background: #1e293b !important;
+                pointer-events: none !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile video {
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: cover !important;
+                pointer-events: none !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-placeholder {
+                background: #e8dcc8 !important;
+                color: #111827 !important;
+                font-size: 22px !important;
+                font-weight: 700 !important;
+              }
+              /* 关摄像头时 tile 中央的缩写（::after），覆盖全局白字 */
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
+                color: #111827 !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile:hover .lk-video-container,
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile:hover .lk-participant-media-container {
+                box-shadow: 0 0 0 2px #3b82f6 !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-metadata {
+                position: absolute !important;
+                inset: auto auto 4px 4px !important;
+                left: 4px !important;
+                right: auto !important;
+                bottom: 4px !important;
+                top: auto !important;
+                width: auto !important;
+                max-width: calc(100% - 8px) !important;
+                justify-content: flex-start !important;
+                z-index: 4 !important;
+                pointer-events: none !important;
+                background: transparent !important;
+                padding: 0 !important;
+                margin: 0 !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-metadata-item {
+                display: inline-flex !important;
+                align-items: center !important;
+                justify-content: flex-start !important;
+                gap: 3px !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                padding: 2px 4px !important;
+                line-height: 1 !important;
+                border-radius: 4px !important;
+                background: rgba(0, 0, 0, 0.58) !important;
+                backdrop-filter: blur(4px) !important;
+                pointer-events: none !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-name {
+                color: rgba(255,255,255,0.92) !important;
+                font-size: 10px !important;
+                font-weight: 500 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+                opacity: 0 !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+                white-space: nowrap !important;
+                transition: max-width 0.18s ease, opacity 0.18s ease !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile:hover .lk-participant-name {
+                opacity: 1 !important;
+                max-width: 120px !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile > button,
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-button,
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-focus-toggle-button {
+                display: none !important;
+                pointer-events: none !important;
               }
 
               /* 4. Hide all redundant LiveKit controls (Maximize, PiP, etc.) from the screenshare tile entirely */
@@ -3916,20 +4063,33 @@ export function VideoConferenceComponent(props: {
                   width: 100% !important;
                   max-width: 100% !important;
                   min-width: 0 !important;
-                  height: 120px !important;
-                  min-height: 120px !important;
-                  flex-direction: row !important; /* Horizontal scrolling on phones */
-                  overflow-x: auto !important;
-                  overflow-y: hidden !important;
+                  height: auto !important;
+                  min-height: 0 !important;
+                  flex-direction: column !important;
+                  flex-wrap: nowrap !important;
+                  justify-content: flex-start !important;
+                  align-items: center !important;
+                  overflow-x: hidden !important;
+                  overflow-y: auto !important;
+                  -webkit-overflow-scrolling: touch;
+                  overscroll-behavior-x: none;
+                  touch-action: pan-y;
                   border-right: none !important;
                   border-bottom: 1px solid rgba(255,255,255,0.1) !important;
                   padding: 8px !important;
                   gap: 8px !important;
                 }
+                .sky-meet-video-wrapper .lk-carousel {
+                  --screenshare-aside-tile: 100px;
+                  width: calc(var(--screenshare-aside-tile) + 16px) !important;
+                  max-width: calc(var(--screenshare-aside-tile) + 16px) !important;
+                  min-width: calc(var(--screenshare-aside-tile) + 16px) !important;
+                }
                 .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile {
-                  height: 100% !important;
-                  width: auto !important;
-                  aspect-ratio: 16 / 9 !important;
+                  width: var(--screenshare-aside-tile) !important;
+                  max-width: var(--screenshare-aside-tile) !important;
+                  height: auto !important;
+                  aspect-ratio: 1 / 1 !important;
                 }
               }
 
@@ -4652,14 +4812,16 @@ export function VideoConferenceComponent(props: {
             /* Completely hide LiveKit's default microphone indicator（主网格 + 活文档侧栏 + 浮窗） */
             .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone,
             .webcam-sidebar-panel .lk-track-muted-indicator-microphone,
-            .floating-webcam-panel .lk-track-muted-indicator-microphone {
+            .floating-webcam-panel .lk-track-muted-indicator-microphone,
+            .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-microphone {
               display: none !important;
             }
 
             /* Our custom injected microphone indicator styling */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator,
             .webcam-sidebar-panel .kloud-custom-mic-indicator,
-            .floating-webcam-panel .kloud-custom-mic-indicator {
+            .floating-webcam-panel .kloud-custom-mic-indicator,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator {
               display: flex;
               align-items: center;
               justify-content: center;
@@ -4668,16 +4830,30 @@ export function VideoConferenceComponent(props: {
               height: 1.15rem;
               flex-shrink: 0;
               transition: all 0.2s ease;
+              pointer-events: auto;
             }
 
-            /* Add red drop-shadow pulsing just for the force-muted state */
+            /* 主持强制静音：红色 + 脉冲（自行关麦仍为灰色，由 JS 内联 color 控制） */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
             .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
-            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
               width: 1.4rem;
               height: 1.4rem;
+              color: #ff2020 !important;
               filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
               animation: kloud-mic-alert-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+              color: #ff2020 !important;
+            }
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg * {
+              fill: currentColor !important;
+              stroke: currentColor !important;
             }
 
             @keyframes kloud-mic-alert-pulse {
@@ -4688,7 +4864,8 @@ export function VideoConferenceComponent(props: {
             /* Host hover interactions */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
             .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
-            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive {
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive {
               cursor: pointer;
               border-radius: 50%;
               padding: 4px;          /* larger hit area */
@@ -4702,12 +4879,15 @@ export function VideoConferenceComponent(props: {
             .webcam-sidebar-panel .kloud-custom-mic-indicator svg,
             .webcam-sidebar-panel .kloud-custom-mic-indicator svg *,
             .floating-webcam-panel .kloud-custom-mic-indicator svg,
-            .floating-webcam-panel .kloud-custom-mic-indicator svg * {
+            .floating-webcam-panel .kloud-custom-mic-indicator svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator svg * {
               pointer-events: none;
             }
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:hover,
             .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:hover,
-            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:hover {
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:hover,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive:hover {
               background: rgba(255, 255, 255, 0.18);
               transform: scale(1.2);
             }

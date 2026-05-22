@@ -8,6 +8,8 @@ import {
   type LiveDocRuntimeSettings,
 } from '@/lib/livedoc/client';
 import { useI18n } from '@/lib/i18n';
+import { authFetch } from '@/lib/kloudSession';
+import { isToolbarMobileUserAgent } from '@/lib/useToolbarIsMobile';
 import styles from '../styles/LiveDocView.module.css';
 
 interface LiveDocViewProps {
@@ -40,7 +42,7 @@ export function LiveDocView({
     if (process.env.NODE_ENV === 'development') {
       let cancelled = false;
       setSettingsLoading(true);
-      fetch('/api/settings?scope=livedoc')
+      authFetch('/api/settings?scope=livedoc')
         .then((res) => (res.ok ? res.json() : ({} as Record<string, unknown>)))
         .then((data) => {
           if (cancelled) return;
@@ -106,7 +108,9 @@ export function LiveDocView({
       const cw = iframeRef.current?.contentWindow;
       if (!cw || e.source !== cw) return;
       setPluginLoaded(true);
-      cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: 1 }, '*');
+      // 移动端与 Dev MainStage created() 一致：默认关闭右侧栏，勿用 Show:1 顶开
+      const showPanel = isToolbarMobileUserAgent() ? 0 : 1;
+      cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: showPanel }, '*');
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);

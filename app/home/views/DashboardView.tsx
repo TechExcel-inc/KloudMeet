@@ -556,7 +556,7 @@ export function DashboardView({
       <TopToolbar 
         user={user} 
         onSignOut={onSignOut} 
-        onOpenSettings={() => setShowSettingsModal(true)} 
+        onOpenSettings={() => setShowSettingsModal(true)}
         onOpenProfile={() => setShowProfileModal(true)}
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}

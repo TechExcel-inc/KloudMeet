@@ -170,8 +170,8 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
                   >
                     {t('nav.myProfile')}
                   </button>
-                  <button 
-                    className={styles.dropdownItem} 
+                  <button
+                    className={styles.dropdownItem}
                     onClick={() => {
                       setMenuOpen(false);
                       onOpenSettings && onOpenSettings();

@@ -315,7 +315,7 @@ function chunkRestIntoColumns<T>(items: T[]): T[][] {
   return cols;
 }
 
-/** 浮窗展开：左 3 大格按「麦+镜头+说话 → …」全局排序取前 3，右侧按列 6/7 排布，>13 人底部横向翻 */
+/** 浮窗展开：左 3 大格按麦/镜头优先级（不含说话）取前 3，右侧按列 6/7 排布，>13 人底部横向翻 */
 export function LiveDocFloatingExpandedParticipantLayout({
   room,
   hostIdentity,
@@ -336,7 +336,6 @@ export function LiveDocFloatingExpandedParticipantLayout({
   React.useEffect(() => {
     const onLayout = () => bumpLayout();
     const evs = [
-      RoomEvent.ActiveSpeakersChanged,
       RoomEvent.TrackMuted,
       RoomEvent.TrackUnmuted,
       RoomEvent.TrackPublished,
@@ -387,11 +386,6 @@ export function LiveDocFloatingExpandedParticipantLayout({
       return !!(micPub?.track && !micPub.isMuted);
     };
 
-    const isSpeaking = (p: Participant | undefined) => {
-      if (!p) return false;
-      return room.activeSpeakers.some((s) => s.identity === p.identity);
-    };
-
     const roleRank = (identity: string) => {
       if (identity === hostIdentity) return 0;
       if (cohostIdentities.includes(identity)) return 1;
@@ -411,21 +405,18 @@ export function LiveDocFloatingExpandedParticipantLayout({
           joinedAt: participant.joinedAt?.getTime() ?? 0,
           hasVideo: hasVideo(participant),
           micLive: micLive(participant),
-          isSpeaking: isSpeaking(participant),
         };
       })
       .filter((r): r is NonNullable<typeof r> => r !== null);
 
     const byJoin = (a: (typeof rows)[0], b: (typeof rows)[0]) => a.joinedAt - b.joinedAt;
 
-    /** 数字越小越优先；与需求一致：开麦+镜头+说话 → 开麦+说话 → 仅开麦+镜头 → 仅镜头 → 仅开麦 → 其余 */
+    /** 左侧 3 格：开麦+开摄像头 → 仅开摄像头 → 仅开麦 → 其余（不含说话，避免多人说话时位置跳动） */
     const heroTier = (r: (typeof rows)[0]): number => {
-      if (r.micLive && r.hasVideo && r.isSpeaking) return 0;
-      if (r.micLive && r.isSpeaking) return 1;
-      if (r.micLive && r.hasVideo && !r.isSpeaking) return 2;
-      if (r.hasVideo && !r.micLive) return 3;
-      if (r.micLive && !r.hasVideo && !r.isSpeaking) return 4;
-      return 5;
+      if (r.micLive && r.hasVideo) return 0;
+      if (r.hasVideo && !r.micLive) return 1;
+      if (r.micLive && !r.hasVideo) return 2;
+      return 3;
     };
 
     const compareWithinSameTier = (a: (typeof rows)[0], b: (typeof rows)[0], tier: number) => {
