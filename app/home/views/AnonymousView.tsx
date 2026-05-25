@@ -84,7 +84,7 @@ export function AnonymousView({
     setIsJoining(true);
 
     try {
-      const res = await fetch(`/api/meetings/${roomId}`);
+      const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`);
       
       // 1. Non-Existing
       if (!res.ok) {
@@ -96,7 +96,7 @@ export function AnonymousView({
       const data = await res.json();
       
       // 2. Already Finished
-      if (data.status === 'ENDED') {
+      if (data.status === 'ENDED' && !data.isPersonalRoom) {
         setWarningMessage(t('anon.meetingEnded'));
         setIsJoining(false);
         return;

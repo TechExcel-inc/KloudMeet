@@ -470,7 +470,7 @@ export function DashboardView({
     setIsJoining(true);
 
     try {
-      const res = await fetch(`/api/meetings/${roomId}`);
+      const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`);
       
       // 1. Non-Existing
       if (!res.ok) {

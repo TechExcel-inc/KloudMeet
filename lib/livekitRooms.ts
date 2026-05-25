@@ -28,6 +28,34 @@ export async function isLiveKitRoomActive(roomName: string): Promise<boolean> {
   return getMeetingIsActiveByRoomName(roomName);
 }
 
+function roomNameVariants(roomName: string): string[] {
+  const trimmed = roomName.trim();
+  return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];
+}
+
+/** 从 LiveKit 参与者 identity（km_{memberId}）推断当前房间内的 Kloud 主持人 memberId */
+export async function findKloudMemberHostInLiveRoom(
+  roomName: string,
+): Promise<number | null> {
+  const client = getRoomServiceClient();
+  if (!client) return null;
+
+  for (const rn of roomNameVariants(roomName)) {
+    try {
+      const participants = await client.listParticipants(rn);
+      for (const p of participants) {
+        const match = p.identity?.match(/^km_(\d+)$/);
+        if (match) {
+          return parseInt(match[1], 10);
+        }
+      }
+    } catch (e) {
+      console.error('[livekitRooms] listParticipants failed', rn, e);
+    }
+  }
+  return null;
+}
+
 export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
   const client = getRoomServiceClient();
   if (!client) return false;

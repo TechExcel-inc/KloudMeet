@@ -1,18 +1,27 @@
 import { prisma } from '@/lib/db';
+import { isPrismaConnectionError } from '@/lib/prismaErrors';
 
 /** 是否为某成员的专属会议室 roomName */
 export async function findPersonalRoomOwner(roomName: string) {
   const trimmed = roomName.trim();
   if (!trimmed) return null;
-  return prisma.teamMember.findFirst({
-    where: {
-      OR: [
-        { personalRoomId: trimmed },
-        { personalRoomId: trimmed.toLowerCase() },
-        { personalRoomId: trimmed.toUpperCase() },
-      ],
-    },
-  });
+  try {
+    return await prisma.teamMember.findFirst({
+      where: {
+        OR: [
+          { personalRoomId: trimmed },
+          { personalRoomId: trimmed.toLowerCase() },
+          { personalRoomId: trimmed.toUpperCase() },
+        ],
+      },
+    });
+  } catch (error) {
+    if (isPrismaConnectionError(error)) {
+      console.error('[findPersonalRoomOwner] database unavailable', error);
+      return null;
+    }
+    throw error;
+  }
 }
 
 /**

@@ -60,12 +60,38 @@ import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { VideoConferenceComponent } from './VideoConferenceComponent';
 import { connectionDetailsFetchInit } from '@/lib/kloudSession';
+import {
+  fetchPersonalRoomResolve,
+  isPersonalRoomResolveKind,
+  type PersonalRoomResolveResponse,
+} from '@/lib/personalRoomResolveClient';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
+
+function RoomEntryLoading() {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        background: '#f8f9fb',
+        fontFamily: 'Inter, sans-serif',
+        color: '#6b7280',
+        fontSize: '0.95rem',
+      }}
+      aria-busy="true"
+      aria-live="polite"
+    >
+      Loading meeting…
+    </div>
+  );
+}
 
 export function PageClientImpl(props: {
   roomName: string;
@@ -74,6 +100,7 @@ export function PageClientImpl(props: {
   codec: VideoCodec;
 }) {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const isActionStart = searchParams?.get('action') === 'start';
   const isBot = searchParams?.get('isBot') === 'true';
@@ -86,6 +113,9 @@ export function PageClientImpl(props: {
   const [prejoinKey, setPrejoinKey] = React.useState(0); // 用于强制重挂载 PreJoin
 
   const [prejoinReady, setPrejoinReady] = React.useState(false);
+  const [resolveReady, setResolveReady] = React.useState(false);
+  const [personalResolve, setPersonalResolve] =
+    React.useState<PersonalRoomResolveResponse | null>(null);
 
   React.useEffect(() => {
     try {
@@ -154,7 +184,25 @@ export function PageClientImpl(props: {
   const [showLangMenu, setShowLangMenu] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
 
+  const loadMeetingInfo = React.useCallback((roomName: string) => {
+    fetch(`/api/meetings/${encodeURIComponent(roomName)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.error) return;
+        setMeetingInfo(data);
+        if (data.id) localStorage.setItem('activeMeetingId', String(data.id));
+        if (data.actualStartedAt) {
+          localStorage.setItem('activeMeetingStartedAt', data.actualStartedAt);
+        } else if (data.startedAt) {
+          localStorage.setItem('activeMeetingStartedAt', data.startedAt);
+        }
+      })
+      .catch(console.error);
+  }, []);
+
   React.useEffect(() => {
+    let cancelled = false;
+
     if (typeof window !== 'undefined') {
       try {
         const stored = localStorage.getItem('kloudUser');
@@ -163,22 +211,29 @@ export function PageClientImpl(props: {
         if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
           setIsSameTabRefresh(true);
         }
-      } catch (e) { }
+      } catch {
+        /* ignore */
+      }
     }
 
-    fetch(`/api/meetings/${props.roomName}`)
-      .then(res => res.json())
-      .then(data => {
-        if (!data.error) {
-          setMeetingInfo(data);
-          // 供 useCaptions 读取，用于字幕持久化和时间偏移计算
-          if (data.id) localStorage.setItem('activeMeetingId', String(data.id));
-          if (data.actualStartedAt) localStorage.setItem('activeMeetingStartedAt', data.actualStartedAt);
-          else if (data.startedAt) localStorage.setItem('activeMeetingStartedAt', data.startedAt);
-        }
-      })
-      .catch(console.error);
-  }, [props.roomName]);
+    (async () => {
+      const resolved = await fetchPersonalRoomResolve(props.roomName);
+      if (cancelled) return;
+
+      setPersonalResolve(resolved);
+      const infoRoom =
+        resolved?.kind === 'join_live'
+          ? resolved.effectiveRoomName
+          : props.roomName;
+      loadMeetingInfo(infoRoom);
+      // direct_join / not_found：按普通会议处理，仅加载当前 roomName
+      setResolveReady(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [props.roomName, loadMeetingInfo]);
 
   React.useEffect(() => {
     if (!meetingInfo?.startedAt) return;
@@ -199,9 +254,16 @@ export function PageClientImpl(props: {
     return () => clearInterval(intv);
   }, [meetingInfo?.startedAt]);
 
-  const isHost = React.useMemo(() => {
-    return meetingInfo?.createdByMemberId && currentUser?.id === meetingInfo.createdByMemberId;
+  const isMeetingCreator = React.useMemo(() => {
+    if (!meetingInfo?.createdByMemberId || currentUser?.id == null) {
+      return false;
+    }
+    return (
+      String(meetingInfo.createdByMemberId) === String(currentUser.id)
+    );
   }, [meetingInfo, currentUser]);
+
+  const isHost = isMeetingCreator;
 
   const isActive = meetingInfo?.isActive === true;
 
@@ -225,38 +287,91 @@ export function PageClientImpl(props: {
     return t('prejoin.joinNow');
   }, [isHost, isActive, t]);
 
-  const handlePreJoinSubmit = React.useCallback(async (values: LocalUserChoices) => {
-    try {
-      setPreJoinChoices(values);
-      const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
-      url.searchParams.append('roomName', props.roomName);
-      url.searchParams.append('participantName', values.username);
-      if (props.region) {
-        url.searchParams.append('region', props.region);
+  const handlePreJoinSubmit = React.useCallback(
+    async (values: LocalUserChoices) => {
+      try {
+        localStorage.setItem(
+          'lk-user-choices',
+          JSON.stringify({
+            ...values,
+            audioDeviceId: values.audioDeviceId ?? '',
+            videoDeviceId: values.videoDeviceId ?? '',
+          }),
+        );
+      } catch {
+        /* ignore */
       }
-      const connectionDetailsResp = await fetch(url.toString(), connectionDetailsFetchInit());
-      if (connectionDetailsResp.status === 401) {
-        handleKloudSessionExpired();
+
+      const shouldGoToLiveMeeting =
+        !isMeetingCreator &&
+        isPersonalRoomResolveKind(personalResolve) &&
+        personalResolve?.kind === 'join_live' &&
+        personalResolve.effectiveRoomName.toLowerCase() !==
+          props.roomName.toLowerCase();
+
+      if (shouldGoToLiveMeeting) {
+        const q = new URLSearchParams({
+          action: 'join',
+          via: props.roomName,
+        });
+        if (props.region) {
+          q.set('region', props.region);
+        }
+        const codec = searchParams?.get('codec');
+        if (codec) {
+          q.set('codec', codec);
+        }
+        if (searchParams?.get('hq') === 'true') {
+          q.set('hq', 'true');
+        }
+        router.push(
+          `/rooms/${encodeURIComponent(personalResolve.effectiveRoomName)}?${q.toString()}`,
+        );
         return;
       }
-      if (!connectionDetailsResp.ok) {
-        throw new Error(
-          `Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`,
-        );
-      }
-      const connectionDetailsData = await connectionDetailsResp.json();
-      setConnectionDetails(connectionDetailsData);
 
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('activeKloudRoom', props.roomName);
+      try {
+        setPreJoinChoices(values);
+        const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
+        url.searchParams.append('roomName', props.roomName);
+        url.searchParams.append('participantName', values.username);
+        if (props.region) {
+          url.searchParams.append('region', props.region);
+        }
+        const connectionDetailsResp = await fetch(
+          url.toString(),
+          connectionDetailsFetchInit(),
+        );
+        if (connectionDetailsResp.status === 401) {
+          handleKloudSessionExpired();
+          return;
+        }
+        if (!connectionDetailsResp.ok) {
+          throw new Error(
+            `Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`,
+          );
+        }
+        const connectionDetailsData = await connectionDetailsResp.json();
+        setConnectionDetails(connectionDetailsData);
+
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('activeKloudRoom', props.roomName);
+        }
+      } catch (error: any) {
+        console.error('Failed to get connection details:', error);
+        alert(`${t('prejoin.connectError', { error: error.message })}`);
       }
-    } catch (error: any) {
-      console.error('Failed to get connection details:', error);
-      alert(
-        `${t('prejoin.connectError', { error: error.message })}`,
-      );
-    }
-  }, [props.roomName, props.region, t]);
+    },
+    [
+      isMeetingCreator,
+      personalResolve,
+      props.roomName,
+      props.region,
+      router,
+      searchParams,
+      t,
+    ],
+  );
   const handlePreJoinError = React.useCallback((error: any) => {
     console.error('PreJoin device error:', error);
     const msg: string = error?.message || String(error);
@@ -288,6 +403,8 @@ export function PageClientImpl(props: {
       });
     }
   }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
+
+  const canShowPreJoin = prejoinReady && resolveReady;
 
   if (
     (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
@@ -322,6 +439,7 @@ export function PageClientImpl(props: {
   return (
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
+        canShowPreJoin ? (
         <div className="kloud-prejoin-wrapper" style={{ display: isBot ? 'none' : undefined }}>
           <style>{`
             .kloud-prejoin-wrapper button[type="submit"].lk-button,
@@ -860,6 +978,9 @@ export function PageClientImpl(props: {
             </div>
           )}
         </div>
+        ) : (
+          <RoomEntryLoading />
+        )
       ) : (
         <div data-lk-theme="default" style={{ height: '100%' }}>
           <VideoConferenceComponent
