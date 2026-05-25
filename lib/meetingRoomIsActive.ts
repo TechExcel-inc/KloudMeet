@@ -7,13 +7,19 @@ const LIVEKIT_URL =
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 
+function roomNameVariants(roomName: string): string[] {
+  const trimmed = roomName.trim();
+  return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];
+}
+
 /**
  * 与 GET /api/meetings/[roomName] 中 isActive 的计算方式完全一致。
  */
 export async function getMeetingIsActiveByRoomName(
   roomName: string,
 ): Promise<boolean> {
-  if (!roomName) return false;
+  const trimmed = roomName?.trim();
+  if (!trimmed) return false;
 
   try {
     if (LIVEKIT_URL && API_KEY && API_SECRET) {
@@ -22,10 +28,14 @@ export async function getMeetingIsActiveByRoomName(
         API_KEY,
         API_SECRET,
       );
-      const activeRooms = await roomService.listRooms([roomName]);
-      if (activeRooms && activeRooms.length > 0) {
-        return true;
+      for (const rn of roomNameVariants(trimmed)) {
+        const matched = await roomService.listRooms([rn]);
+        if (matched && matched.length > 0) {
+          return true;
+        }
       }
+      const allRooms = await roomService.listRooms();
+      return isRoomLiveInList(trimmed, allRooms.map((r) => r.name));
     }
   } catch (e) {
     console.error('[meetingRoomIsActive] LiveKit query failed', e);
@@ -124,11 +134,4 @@ export async function ensurePersonalRoomMeeting(
   }
 
   return meeting;
-}
-
-/** @deprecated 请使用 findMeetingByRoomName（只读）或 ensurePersonalRoomMeeting（入会） */
-export async function loadMeetingByRoomName(
-  roomName: string,
-): Promise<MeetingRecordForActiveCheck | null> {
-  return ensurePersonalRoomMeeting(roomName);
 }

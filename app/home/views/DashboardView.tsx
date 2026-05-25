@@ -591,7 +591,7 @@ export function DashboardView({
             {/* Divider */}
             <div className={styles.quickDivider} />
             <div className={styles.quickActionsSecondary}>
-              {personalRoomId && (
+              {/* {personalRoomId && (
                 <button
                   type="button"
                   className={styles.quickPersonalRoomBtn}
@@ -604,7 +604,7 @@ export function DashboardView({
                   </svg>
                   {t('dash.myRoom')}
                 </button>
-              )}
+              )} */}
               <button
                 type="button"
                 className={styles.quickNewBtn}

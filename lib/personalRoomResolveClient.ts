@@ -1,30 +1,18 @@
+/** resolve API 响应（客户端仅消费 join_live.effectiveRoomName） */
 export type PersonalRoomResolveResponse =
   | { kind: 'not_found' }
-  | {
-      kind: 'direct_join';
-      roomName: string;
-      redirectTo: string;
-    }
+  | { kind: 'direct_join'; roomName: string }
   | {
       kind: 'join_live';
-      personalRoomId: string;
       effectiveRoomName: string;
-      redirectTo: string;
+      personalRoomId?: string;
       isPersonalSession?: boolean;
-      meeting?: {
-        id: number;
-        createdByMemberId: number;
-        isActive?: boolean;
-        status?: string;
-        scheduledFor?: string | null;
-        [key: string]: unknown;
-      };
+      meeting?: Record<string, unknown>;
       owner?: { id: number; displayName: string };
     }
   | {
       kind: 'open_personal_idle';
-      personalRoomId: string;
-      redirectTo: string;
+      personalRoomId?: string;
       owner?: { id: number; displayName: string };
     };
 
@@ -46,11 +34,18 @@ export async function fetchPersonalRoomResolve(
   return (await res.json()) as PersonalRoomResolveResponse;
 }
 
-/** 是否需走个人房解析（登记人其它会场 / 空闲等） */
-export function isPersonalRoomResolveKind(
+/** 个人房入口解析出的真实 LiveKit 会场（与当前 URL roomName 不同时需跟会） */
+export function getResolvedLiveRoomName(
+  roomName: string,
   resolved: PersonalRoomResolveResponse | null,
-): boolean {
-  return (
-    resolved?.kind === 'join_live' || resolved?.kind === 'open_personal_idle'
-  );
+): string | null {
+  if (resolved?.kind !== 'join_live') {
+    return null;
+  }
+  if (
+    resolved.effectiveRoomName.toLowerCase() === roomName.trim().toLowerCase()
+  ) {
+    return null;
+  }
+  return resolved.effectiveRoomName;
 }

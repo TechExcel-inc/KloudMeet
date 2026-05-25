@@ -49,7 +49,7 @@ import {
   Track,
   DataPacket_Kind,
 } from 'livekit-client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
@@ -62,9 +62,9 @@ import { VideoConferenceComponent } from './VideoConferenceComponent';
 import { connectionDetailsFetchInit } from '@/lib/kloudSession';
 import {
   fetchPersonalRoomResolve,
-  isPersonalRoomResolveKind,
-  type PersonalRoomResolveResponse,
+  getResolvedLiveRoomName,
 } from '@/lib/personalRoomResolveClient';
+import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 
 const CONN_DETAILS_ENDPOINT =
@@ -100,22 +100,19 @@ export function PageClientImpl(props: {
   codec: VideoCodec;
 }) {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const isActionStart = searchParams?.get('action') === 'start';
   const isBot = searchParams?.get('isBot') === 'true';
 
   const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
     undefined,
   );
 
-  // ── 清理 stale 设备 ID（在 mount 时执行，避免渲染期竞争）
-  const [prejoinKey, setPrejoinKey] = React.useState(0); // 用于强制重挂载 PreJoin
-
   const [prejoinReady, setPrejoinReady] = React.useState(false);
   const [resolveReady, setResolveReady] = React.useState(false);
-  const [personalResolve, setPersonalResolve] =
-    React.useState<PersonalRoomResolveResponse | null>(null);
+  /** 个人房入口解析出的真实会场；非 null 时访客一次 Join 直连该 room */
+  const [resolvedLiveRoom, setResolvedLiveRoom] = React.useState<string | null>(
+    null,
+  );
 
   React.useEffect(() => {
     try {
@@ -184,49 +181,78 @@ export function PageClientImpl(props: {
   const [showLangMenu, setShowLangMenu] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
 
-  const loadMeetingInfo = React.useCallback((roomName: string) => {
-    fetch(`/api/meetings/${encodeURIComponent(roomName)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.error) return;
-        setMeetingInfo(data);
-        if (data.id) localStorage.setItem('activeMeetingId', String(data.id));
-        if (data.actualStartedAt) {
-          localStorage.setItem('activeMeetingStartedAt', data.actualStartedAt);
-        } else if (data.startedAt) {
-          localStorage.setItem('activeMeetingStartedAt', data.startedAt);
-        }
-      })
-      .catch(console.error);
+  const applyMeetingInfo = React.useCallback((data: Record<string, unknown>) => {
+    if (data.error) return;
+    setMeetingInfo(data);
+    if (data.id) localStorage.setItem('activeMeetingId', String(data.id));
+    if (data.actualStartedAt) {
+      localStorage.setItem('activeMeetingStartedAt', String(data.actualStartedAt));
+    } else if (data.startedAt) {
+      localStorage.setItem('activeMeetingStartedAt', String(data.startedAt));
+    }
   }, []);
+
+  const loadMeetingInfo = React.useCallback(
+    async (roomName: string) => {
+      try {
+        const res = await fetch(
+          `/api/meetings/${encodeURIComponent(roomName)}`,
+        );
+        const data = await res.json();
+        applyMeetingInfo(data);
+        return data;
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    },
+    [applyMeetingInfo],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
 
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('kloudUser');
-        if (stored) setCurrentUser(JSON.parse(stored));
-
-        if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
-          setIsSameTabRefresh(true);
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
     (async () => {
+      let kloudUser: { id?: number | string } | null = null;
+      if (typeof window !== 'undefined') {
+        try {
+          const stored = localStorage.getItem('kloudUser');
+          if (stored) {
+            kloudUser = JSON.parse(stored);
+            if (!cancelled) setCurrentUser(kloudUser);
+          }
+          if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
+            if (!cancelled) setIsSameTabRefresh(true);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+
+      const initialMeeting = await loadMeetingInfo(props.roomName);
+      if (cancelled) return;
+
+      // 发起人已在真实会场（如 /rooms/yieg-kgxf）：不调用 resolve，直接按原逻辑入会
+      if (isCurrentUserMeetingCreator(initialMeeting, kloudUser)) {
+        setResolvedLiveRoom(null);
+        setResolveReady(true);
+        return;
+      }
+
       const resolved = await fetchPersonalRoomResolve(props.roomName);
       if (cancelled) return;
 
-      setPersonalResolve(resolved);
+      setResolvedLiveRoom(getResolvedLiveRoomName(props.roomName, resolved));
       const infoRoom =
         resolved?.kind === 'join_live'
           ? resolved.effectiveRoomName
           : props.roomName;
-      loadMeetingInfo(infoRoom);
-      // direct_join / not_found：按普通会议处理，仅加载当前 roomName
+      if (
+        infoRoom.toLowerCase() !== props.roomName.toLowerCase() ||
+        !initialMeeting?.createdByMemberId
+      ) {
+        await loadMeetingInfo(infoRoom);
+      }
       setResolveReady(true);
     })();
 
@@ -254,14 +280,10 @@ export function PageClientImpl(props: {
     return () => clearInterval(intv);
   }, [meetingInfo?.startedAt]);
 
-  const isMeetingCreator = React.useMemo(() => {
-    if (!meetingInfo?.createdByMemberId || currentUser?.id == null) {
-      return false;
-    }
-    return (
-      String(meetingInfo.createdByMemberId) === String(currentUser.id)
-    );
-  }, [meetingInfo, currentUser]);
+  const isMeetingCreator = React.useMemo(
+    () => isCurrentUserMeetingCreator(meetingInfo, currentUser),
+    [meetingInfo, currentUser],
+  );
 
   const isHost = isMeetingCreator;
 
@@ -302,38 +324,15 @@ export function PageClientImpl(props: {
         /* ignore */
       }
 
-      const shouldGoToLiveMeeting =
-        !isMeetingCreator &&
-        isPersonalRoomResolveKind(personalResolve) &&
-        personalResolve?.kind === 'join_live' &&
-        personalResolve.effectiveRoomName.toLowerCase() !==
-          props.roomName.toLowerCase();
-
-      if (shouldGoToLiveMeeting) {
-        const q = new URLSearchParams({
-          action: 'join',
-          via: props.roomName,
-        });
-        if (props.region) {
-          q.set('region', props.region);
-        }
-        const codec = searchParams?.get('codec');
-        if (codec) {
-          q.set('codec', codec);
-        }
-        if (searchParams?.get('hq') === 'true') {
-          q.set('hq', 'true');
-        }
-        router.push(
-          `/rooms/${encodeURIComponent(personalResolve.effectiveRoomName)}?${q.toString()}`,
-        );
-        return;
-      }
+      const roomToJoin =
+        !isMeetingCreator && resolvedLiveRoom
+          ? resolvedLiveRoom
+          : props.roomName;
 
       try {
         setPreJoinChoices(values);
         const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
-        url.searchParams.append('roomName', props.roomName);
+        url.searchParams.append('roomName', roomToJoin);
         url.searchParams.append('participantName', values.username);
         if (props.region) {
           url.searchParams.append('region', props.region);
@@ -355,7 +354,28 @@ export function PageClientImpl(props: {
         setConnectionDetails(connectionDetailsData);
 
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('activeKloudRoom', props.roomName);
+          sessionStorage.setItem('activeKloudRoom', roomToJoin);
+          if (resolvedLiveRoom) {
+            const q = new URLSearchParams({
+              action: 'join',
+              via: props.roomName,
+            });
+            if (props.region) {
+              q.set('region', props.region);
+            }
+            const codec = searchParams?.get('codec');
+            if (codec) {
+              q.set('codec', codec);
+            }
+            if (searchParams?.get('hq') === 'true') {
+              q.set('hq', 'true');
+            }
+            window.history.replaceState(
+              null,
+              '',
+              `/rooms/${encodeURIComponent(resolvedLiveRoom)}?${q.toString()}`,
+            );
+          }
         }
       } catch (error: any) {
         console.error('Failed to get connection details:', error);
@@ -364,10 +384,9 @@ export function PageClientImpl(props: {
     },
     [
       isMeetingCreator,
-      personalResolve,
+      resolvedLiveRoom,
       props.roomName,
       props.region,
-      router,
       searchParams,
       t,
     ],
@@ -909,7 +928,6 @@ export function PageClientImpl(props: {
           </div>
           {!isBot && prejoinReady && (
             <PreJoin
-              key={prejoinKey}
               defaults={preJoinDefaults}
               onSubmit={handlePreJoinSubmit}
               onError={handlePreJoinError}

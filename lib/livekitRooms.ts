@@ -22,12 +22,6 @@ export async function listActiveRoomNames(): Promise<string[]> {
   }
 }
 
-/** @deprecated 使用 getMeetingIsActiveByRoomName（与 GET /api/meetings/[roomName] 一致） */
-export async function isLiveKitRoomActive(roomName: string): Promise<boolean> {
-  const { getMeetingIsActiveByRoomName } = await import('@/lib/meetingRoomIsActive');
-  return getMeetingIsActiveByRoomName(roomName);
-}
-
 function roomNameVariants(roomName: string): string[] {
   const trimmed = roomName.trim();
   return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];

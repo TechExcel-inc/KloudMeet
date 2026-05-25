@@ -4,6 +4,7 @@ import {
   listActiveRoomNames,
 } from '@/lib/livekitRooms';
 import {
+  getMeetingIsActiveByRoomName,
   isRoomLiveInList,
   type MeetingRecordForActiveCheck,
 } from '@/lib/meetingRoomIsActive';
@@ -34,42 +35,20 @@ export type ResolvedMeetingPayload = {
 
 export type RoomEntryResolution =
   | { kind: 'not_found' }
-  | {
-      kind: 'direct_join';
-      roomName: string;
-      redirectTo: string;
-    }
+  | { kind: 'direct_join'; roomName: string }
   | {
       kind: 'join_live';
       personalRoomId: string;
       effectiveRoomName: string;
       isPersonalSession: boolean;
-      redirectTo: string;
       meeting: ResolvedMeetingPayload;
       owner: { id: number; displayName: string };
     }
   | {
       kind: 'open_personal_idle';
       personalRoomId: string;
-      redirectTo: string;
       owner: { id: number; displayName: string };
     };
-
-function buildPersonalRoomRedirectPath(
-  effectiveRoomName: string,
-  personalRoomId: string,
-  action: 'join' | 'start' = 'join',
-): string {
-  const params = new URLSearchParams({ action, via: personalRoomId });
-  return `/rooms/${encodeURIComponent(effectiveRoomName)}?${params.toString()}`;
-}
-
-function buildDirectMeetingJoinPath(
-  roomName: string,
-  action: 'join' | 'start' = 'join',
-): string {
-  return `/rooms/${encodeURIComponent(roomName)}?action=${action}`;
-}
 
 function roomNameVariants(roomName: string): string[] {
   const trimmed = roomName.trim();
@@ -276,7 +255,82 @@ async function resolvePersonalRoomOccupiedByOther(
   return null;
 }
 
-/** 登记人在「其它」LiveKit 房间进行中的会（个人房链接跟到真实会场，如 yieg-kgxf） */
+/**
+ * 是否在线：优先用已拉取的 activeRooms（与 listActiveRoomNames 同源，内存匹配）。
+ * 仅当 LiveKit 列表拉取失败（空数组）时才按房间名单独查 LiveKit，避免 N 条会议 × 多次 RPC。
+ */
+async function isMeetingLiveNow(
+  roomName: string,
+  activeRooms: string[],
+): Promise<boolean> {
+  if (activeRooms.length > 0) {
+    return isRoomLiveInList(roomName, activeRooms);
+  }
+  return getMeetingIsActiveByRoomName(roomName);
+}
+
+/**
+ * 从 DB 查登记人主持的会议，再用 LiveKit 校验是否在线（避免 listRooms 漏房间）。
+ * 优先非 personalRoomId 的会场（如 yieg-kgxf），其次个人房号码本身。
+ */
+async function findOwnerJoinableMeetingFromDb(
+  ownerId: number,
+  personalRoomId: string,
+  activeRooms: string[],
+): Promise<LiveSessionResult | null> {
+  const meetings = await prisma.meeting.findMany({
+    where: {
+      createdByMemberId: ownerId,
+      deletedAt: null,
+      status: { notIn: ['ENDED', 'CANCELED'] },
+    },
+    orderBy: [{ actualStartedAt: 'desc' }, { startedAt: 'desc' }],
+    take: 10,
+  });
+
+  let bestOther: {
+    record: MeetingRecordForActiveCheck;
+    startedMs: number;
+  } | null = null;
+  let bestPersonal: {
+    record: MeetingRecordForActiveCheck;
+    startedMs: number;
+  } | null = null;
+
+  for (const record of meetings) {
+    if (!isJoinableMeeting(record)) {
+      continue;
+    }
+    if (!(await isMeetingLiveNow(record.roomName, activeRooms))) {
+      continue;
+    }
+
+    const startedMs = meetingStartedAtMs(record);
+    const isPersonal = isSameRoom(record.roomName, personalRoomId);
+
+    if (isPersonal) {
+      if (!bestPersonal || startedMs > bestPersonal.startedMs) {
+        bestPersonal = { record, startedMs };
+      }
+    } else if (!bestOther || startedMs > bestOther.startedMs) {
+      bestOther = { record, startedMs };
+    }
+  }
+
+  const pick = bestOther ?? bestPersonal;
+  if (!pick) {
+    return null;
+  }
+
+  return {
+    effectiveRoomName: pick.record.roomName,
+    isPersonalSession: isSameRoom(pick.record.roomName, personalRoomId),
+    meeting: toResolvedMeeting(pick.record),
+    hostMemberId: ownerId,
+  };
+}
+
+/** 补充：LiveKit 在线房间与 DB 登记人会议匹配（list 扫描） */
 async function resolveRegisteredOwnerOtherLiveSession(
   ownerId: number,
   personalRoomId: string,
@@ -320,6 +374,26 @@ async function resolveRegisteredOwnerOtherLiveSession(
   };
 }
 
+async function resolveOwnerActiveSession(
+  ownerId: number,
+  personalRoomId: string,
+  activeRooms: string[],
+): Promise<LiveSessionResult | null> {
+  const fromDb = await findOwnerJoinableMeetingFromDb(
+    ownerId,
+    personalRoomId,
+    activeRooms,
+  );
+  if (fromDb) {
+    return fromDb;
+  }
+  return resolveRegisteredOwnerOtherLiveSession(
+    ownerId,
+    personalRoomId,
+    activeRooms,
+  );
+}
+
 /**
  * /api/rooms/[roomName]/resolve 统一入口：
  * - 非任何人的 personalRoomId → direct_join，直接进该会议号
@@ -336,11 +410,7 @@ export async function resolveRoomEntry(
   try {
     const registeredOwner = await findPersonalRoomOwner(trimmed);
     if (!registeredOwner) {
-      return {
-        kind: 'direct_join',
-        roomName: trimmed,
-        redirectTo: buildDirectMeetingJoinPath(trimmed, 'join'),
-      };
+      return { kind: 'direct_join', roomName: trimmed };
     }
 
     return resolvePersonalRoomIdEntry(trimmed, registeredOwner);
@@ -353,10 +423,7 @@ export async function resolveRoomEntry(
   }
 }
 
-/**
- * 个人会议室入口（如 A999）→ 登记人当前真实会场。
- * redirectTo 形如 /rooms/yieg-kgxf?action=join&via=A999（via 永远是入口个人房号）
- */
+/** 个人会议室入口（如 A999）→ 登记人当前真实会场 */
 async function resolvePersonalRoomIdEntry(
   personalRoomId: string,
   registeredOwner: {
@@ -370,29 +437,23 @@ async function resolvePersonalRoomIdEntry(
   try {
     const activeRooms = await listActiveRoomNames();
 
-    const other = await resolveRegisteredOwnerOtherLiveSession(
+    const ownerActive = await resolveOwnerActiveSession(
       registeredOwner.id,
       trimmed,
       activeRooms,
     );
-    if (other) {
+    if (ownerActive) {
       const hostInfo =
-        (await memberHostInfo(other.hostMemberId)) ?? {
+        (await memberHostInfo(ownerActive.hostMemberId)) ?? {
           id: registeredOwner.id,
           displayName: ownerDisplayName(registeredOwner),
         };
-      const redirectTo = buildPersonalRoomRedirectPath(
-        other.effectiveRoomName,
-        trimmed,
-        'join',
-      );
       return {
         kind: 'join_live',
         personalRoomId: trimmed,
-        effectiveRoomName: other.effectiveRoomName,
-        isPersonalSession: false,
-        redirectTo,
-        meeting: other.meeting,
+        effectiveRoomName: ownerActive.effectiveRoomName,
+        isPersonalSession: ownerActive.isPersonalSession,
+        meeting: ownerActive.meeting,
         owner: hostInfo,
       };
     }
@@ -409,17 +470,11 @@ async function resolvePersonalRoomIdEntry(
           id: registeredOwner.id,
           displayName: ownerDisplayName(registeredOwner),
         };
-      const redirectTo = buildPersonalRoomRedirectPath(
-        ownerInPersonal.effectiveRoomName,
-        trimmed,
-        'join',
-      );
       return {
         kind: 'join_live',
         personalRoomId: trimmed,
         effectiveRoomName: ownerInPersonal.effectiveRoomName,
         isPersonalSession: true,
-        redirectTo,
         meeting: ownerInPersonal.meeting,
         owner: hostInfo,
       };
@@ -436,17 +491,11 @@ async function resolvePersonalRoomIdEntry(
           id: occupied.hostMemberId,
           displayName: 'Host',
         };
-      const redirectTo = buildPersonalRoomRedirectPath(
-        occupied.effectiveRoomName,
-        trimmed,
-        'join',
-      );
       return {
         kind: 'join_live',
         personalRoomId: trimmed,
         effectiveRoomName: occupied.effectiveRoomName,
         isPersonalSession: true,
-        redirectTo,
         meeting: occupied.meeting,
         owner: hostInfo,
       };
@@ -455,7 +504,6 @@ async function resolvePersonalRoomIdEntry(
     return {
       kind: 'open_personal_idle',
       personalRoomId: trimmed,
-      redirectTo: buildPersonalRoomRedirectPath(trimmed, trimmed, 'join'),
       owner: {
         id: registeredOwner.id,
         displayName: ownerDisplayName(registeredOwner),

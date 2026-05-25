@@ -11,6 +11,17 @@ export function parseKloudMemberIdFromMetadata(metadata?: string | null): string
   }
 }
 
+/** 当前登录用户是否为该会场 DB 发起人（PreJoin / resolve 跳过用） */
+export function isCurrentUserMeetingCreator(
+  meetingInfo: { createdByMemberId?: number | string | null } | null | undefined,
+  currentUser: { id?: number | string | null } | null | undefined,
+): boolean {
+  if (meetingInfo?.createdByMemberId == null || currentUser?.id == null) {
+    return false;
+  }
+  return String(meetingInfo.createdByMemberId) === String(currentUser.id);
+}
+
 /** True when the local participant is `Meeting.createdByMemberId` (may update meeting via API). */
 export function isDbMeetingOwner(
   meetingOwnerMemberId: string | null | undefined,
