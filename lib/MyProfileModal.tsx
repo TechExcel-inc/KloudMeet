@@ -520,7 +520,7 @@ export function MyProfileModal({
                 </div>
               </div>
 
-              <div className={styles.formRow}>
+              <div className={`${styles.formRow} ${styles.personalRoomFormRow}`}>
                 <div className={styles.formLabel} aria-hidden="true" />
                 <div className={styles.formField}>
                   <div className={styles.personalRoomRow}>
@@ -533,10 +533,11 @@ export function MyProfileModal({
                       {t('profile.supportPersonalRoom')}
                     </label>
                     {personalRoomEnabled && (
-                      <div className={styles.roomIdFieldRow}>
+                      <>
                         <input
                           className={`${styles.inputBox} ${styles.inputBoxReadOnly}`}
                           readOnly
+                          aria-readonly="true"
                           placeholder={t('profile.roomIdHint')}
                           value={personalRoomId}
                           tabIndex={-1}
@@ -554,7 +555,7 @@ export function MyProfileModal({
                             <circle cx="19" cy="12" r="2" />
                           </svg>
                         </button>
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>

@@ -318,23 +318,46 @@
   cursor: not-allowed;
 }
 
+.personalRoomFormRow {
+  align-items: center;
+}
+
 .inputBoxReadOnly {
-  flex: 1;
-  min-width: 0;
+  width: 120px;
+  min-width: 120px;
+  max-width: 120px;
+  flex: 0 0 auto;
+  padding: 9px 10px;
+  background: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
   cursor: default;
+  pointer-events: none;
+  user-select: none;
+}
+
+.inputBoxReadOnly:focus {
+  border-color: #e2e8f0;
+  background: #f1f5f9;
+  box-shadow: none;
+  outline: none;
 }
 
 .personalRoomRow {
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
   width: 100%;
+  flex-wrap: nowrap;
 }
 
 .personalRoomCheckbox {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
   cursor: pointer;
   user-select: none;
   font-size: 0.9rem;
@@ -381,14 +404,6 @@
 .personalRoomCheckbox input[type='checkbox']:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
-}
-
-.roomIdFieldRow {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
 }
 
 .roomIdMoreBtn {
