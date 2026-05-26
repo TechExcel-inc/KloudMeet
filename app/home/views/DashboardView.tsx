@@ -197,9 +197,8 @@ export function DashboardView({
       const diffMs = target - Date.now();
       if (diffMs <= 0) {
         setCountdown("00:00");
-        const action = scheduledModalData.createdByMemberId === user.id ? 'start' : 'join';
         toast.show(t('dash.meetingStarting'));
-        router.push(`/rooms/${scheduledModalData.roomName}?action=${action}`);
+        router.push(`/rooms/${scheduledModalData.roomName}`);
         setScheduledModalData(null);
         return;
       }
@@ -291,11 +290,11 @@ export function DashboardView({
   const executeMeetingIntent = useCallback(
     async (intent: MeetingStartIntent) => {
       if (intent.type === 'personalRoom') {
-        router.push(`/rooms/${intent.roomName}?action=start`);
+        router.push(`/rooms/${intent.roomName}`);
         return;
       }
       if (intent.type === 'startScheduled') {
-        router.push(`/rooms/${intent.roomName}?action=start`);
+        router.push(`/rooms/${intent.roomName}`);
         return;
       }
 
@@ -321,7 +320,7 @@ export function DashboardView({
             return;
           }
         }
-        router.push(`/rooms/${roomId}?action=start`);
+        router.push(`/rooms/${roomId}`);
       } catch (e) {
         console.error('Failed to register meeting:', e);
         toast.show(t('dash.networkError'));
@@ -349,7 +348,7 @@ export function DashboardView({
               /* ignore */
             }
           }
-          router.push(`/rooms/${result.roomName}?action=${result.joinAction}`);
+          router.push(`/rooms/${result.roomName}`);
           return true;
         }
         if (result.action === 'conflict') {
@@ -406,7 +405,7 @@ export function DashboardView({
     } catch {
       /* ignore */
     }
-    router.push(`/rooms/${roomName}?action=join`);
+    router.push(`/rooms/${roomName}`);
   };
 
   const handleConflictStartNew = async () => {
@@ -480,9 +479,6 @@ export function DashboardView({
       }
       
       const data = await res.json();
-      const isHost = data.createdByMemberId === user.id;
-      const targetAction = isHost && !data.isActive ? 'start' : 'join';
-      
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
       if (data.status === 'ENDED' && !data.isPersonalRoom) {
         setWarningMessage('This meeting has already ended and is no longer available.');
@@ -492,7 +488,7 @@ export function DashboardView({
       
       // 6. Already In Progress
       if (data.isActive) {
-        router.push(`/rooms/${roomId}?action=${targetAction}`);
+        router.push(`/rooms/${roomId}`);
         return;
       }
 
@@ -508,13 +504,13 @@ export function DashboardView({
         } else {
           // 3. Past Start Date (But Not Started)
           toast.show('The scheduled start time has passed. We are waiting for the Host to begin.');
-          router.push(`/rooms/${roomId}?action=${targetAction}`);
+          router.push(`/rooms/${roomId}`);
           return;
         }
       }
       
       // Valid routing
-      router.push(`/rooms/${roomId}?action=${targetAction}`);
+      router.push(`/rooms/${roomId}`);
     } catch(e) {
       console.error(e);
       setWarningMessage('An error occurred connecting to the API. Please try again.');
@@ -813,7 +809,7 @@ export function DashboardView({
                             {isLive && (
                               <button
                                 className={styles.joinNowBtn}
-                                onClick={() => router.push(`/rooms/${m.roomName}?action=${isHost ? 'start' : 'join'}`)}
+                                onClick={() => router.push(`/rooms/${m.roomName}`)}
                               >
                                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
                                   <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
@@ -867,7 +863,7 @@ export function DashboardView({
                                     if (isHost) {
                                       handleStartMeetingClick(m);
                                     } else {
-                                      router.push(`/rooms/${m.roomName}?action=join`);
+                                      router.push(`/rooms/${m.roomName}`);
                                     }
                                   }}
                                 >
@@ -995,7 +991,7 @@ export function DashboardView({
                                   if (isHost) {
                                     handleStartMeetingClick(m);
                                   } else {
-                                    router.push(`/rooms/${m.roomName}?action=join`);
+                                    router.push(`/rooms/${m.roomName}`);
                                   }
                                 }}
                               >
@@ -1156,10 +1152,8 @@ export function DashboardView({
               {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
                 <button 
                   onClick={() => {
-                    const isHost = scheduledModalData.createdByMemberId === user.id;
-                    const action = isHost ? 'start' : 'join';
                     setScheduledModalData(null);
-                    router.push(`/rooms/${scheduledModalData.roomName}?action=${action}`);
+                    router.push(`/rooms/${scheduledModalData.roomName}`);
                   }} 
                   className={styles.dashJoinBtn} 
                   style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}

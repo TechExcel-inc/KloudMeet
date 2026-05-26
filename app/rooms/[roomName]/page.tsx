@@ -1,5 +1,7 @@
 import * as React from 'react';
+import { Suspense } from 'react';
 import { PageClientImpl } from './PageClientImpl';
+import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
 import { isVideoCodec } from '@/lib/types';
 
 export default async function Page({
@@ -22,11 +24,13 @@ export default async function Page({
   const hq = _searchParams.hq === 'true' ? true : false;
 
   return (
-    <PageClientImpl
-      roomName={_params.roomName}
-      region={_searchParams.region}
-      hq={hq}
-      codec={codec}
-    />
+    <Suspense fallback={<RoomEntryLoading />}>
+      <PageClientImpl
+        roomName={_params.roomName}
+        region={_searchParams.region}
+        hq={hq}
+        codec={codec}
+      />
+    </Suspense>
   );
 }

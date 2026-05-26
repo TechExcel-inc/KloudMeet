@@ -9,12 +9,22 @@ export function getRoomServiceClient(): RoomServiceClient | null {
   return new RoomServiceClient(LIVEKIT_URL, API_KEY, API_SECRET);
 }
 
+const LIVEKIT_LIST_ROOMS_TIMEOUT_MS = 8_000;
+
 /** Returns LiveKit room names that currently have an active session. */
 export async function listActiveRoomNames(): Promise<string[]> {
   const client = getRoomServiceClient();
   if (!client) return [];
   try {
-    const rooms = await client.listRooms();
+    const rooms = await Promise.race([
+      client.listRooms(),
+      new Promise<never>((_, reject) => {
+        setTimeout(
+          () => reject(new Error('LiveKit listRooms timed out')),
+          LIVEKIT_LIST_ROOMS_TIMEOUT_MS,
+        );
+      }),
+    ]);
     return rooms.map((r) => r.name);
   } catch (e) {
     console.error('[livekitRooms] listRooms failed', e);

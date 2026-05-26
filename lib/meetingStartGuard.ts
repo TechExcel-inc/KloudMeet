@@ -21,7 +21,6 @@ export type ActiveMeetingCheckResult =
   | {
       action: 'redirect';
       roomName: string;
-      joinAction: 'join' | 'start';
       meetingId?: number;
     }
   | {

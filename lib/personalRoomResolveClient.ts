@@ -1,3 +1,5 @@
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+
 /** resolve API 响应（客户端仅消费 join_live.effectiveRoomName） */
 export type PersonalRoomResolveResponse =
   | { kind: 'not_found' }
@@ -22,8 +24,10 @@ export async function fetchPersonalRoomResolve(
   const trimmed = roomId.trim();
   if (!trimmed) return null;
 
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `/api/rooms/${encodeURIComponent(trimmed)}/resolve`,
+    undefined,
+    12_000,
   );
   if (res.status === 404) {
     return { kind: 'not_found' };

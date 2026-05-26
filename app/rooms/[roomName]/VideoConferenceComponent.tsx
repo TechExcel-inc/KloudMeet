@@ -53,7 +53,7 @@ import {
   Track,
   DataPacket_Kind,
 } from 'livekit-client';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
@@ -70,6 +70,7 @@ import {
   parseKloudMemberIdFromMetadata,
 } from './roomVideoLayouts';
 import { isDbMeetingOwner } from '@/lib/meetingOwner';
+import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
 import { authHeaders, connectionDetailsFetchInit } from '@/lib/kloudSession';
 import {
   isMeetingEnded,
@@ -113,9 +114,6 @@ export function VideoConferenceComponent(props: {
   const keyProvider = new ExternalE2EEKeyProvider();
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
-
-  const searchParams = useSearchParams();
-  const isActionStart = searchParams?.get('action') === 'start';
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
   const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
@@ -376,23 +374,36 @@ export function VideoConferenceComponent(props: {
   );
 
   React.useEffect(() => {
-    if (e2eeEnabled) {
-      keyProvider
-        .setKey(decodePassphrase(e2eePassphrase))
-        .then(() => {
-          room.setE2EEEnabled(true).catch((e) => {
-            if (e instanceof DeviceUnsupportedError) {
-              console.error('[KloudMeet] E2EE not supported by browser:', e);
-              setConnectError('您的浏览器不支持加密会议，请更新到最新版本后重试。');
-            } else {
-              throw e;
-            }
-          });
-        })
-        .then(() => setE2eeSetupComplete(true));
-    } else {
+    if (!e2eeEnabled) {
       setE2eeSetupComplete(true);
+      return;
     }
+
+    let cancelled = false;
+    keyProvider
+      .setKey(decodePassphrase(e2eePassphrase))
+      .then(() =>
+        room.setE2EEEnabled(true).catch((e) => {
+          if (e instanceof DeviceUnsupportedError) {
+            console.error('[KloudMeet] E2EE not supported by browser:', e);
+            setConnectError('您的浏览器不支持加密会议，请更新到最新版本后重试。');
+            return;
+          }
+          throw e;
+        }),
+      )
+      .catch((e) => {
+        console.error('[KloudMeet] E2EE setup failed, continuing without E2EE:', e);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setE2eeSetupComplete(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [e2eeEnabled, room, e2eePassphrase]);
 
   const connectOptions = React.useMemo((): RoomConnectOptions => {
@@ -595,10 +606,21 @@ export function VideoConferenceComponent(props: {
             .then(() => {
               hasConnectedOnceRef.current = true;
               intentionalDisconnectRef.current = false;
-              if (isActionStart) {
-                const wasRefresh = typeof window !== 'undefined' && sessionStorage.getItem('activeKloudRoom') === window.location.pathname.split('/').filter(Boolean).pop();
-                if (!wasRefresh) setShowMeetingReadyModal(true);
+              const rn = props.connectionDetails.roomName;
+              replaceBrowserRoomUrl(rn, props.region);
+
+              const isMeetingOwner = isDbMeetingOwner(
+                props.meetingOwnerMemberId,
+                room.localParticipant.metadata,
+              );
+              const wasRefresh =
+                typeof window !== 'undefined' &&
+                sessionStorage.getItem('activeKloudRoom') ===
+                  window.location.pathname.split('/').filter(Boolean).pop();
+              if (isMeetingOwner && !wasRefresh) {
+                setShowMeetingReadyModal(true);
               }
+
               const canAutoCopyMeetingUrl =
                 typeof window !== 'undefined' &&
                 typeof document !== 'undefined' &&
@@ -620,13 +642,7 @@ export function VideoConferenceComponent(props: {
               }
 
               // Fallback: only DB meeting owner may update (matches PUT /api/meetings auth).
-              const rn = props.connectionDetails.roomName;
-              if (
-                isDbMeetingOwner(
-                  props.meetingOwnerMemberId,
-                  room.localParticipant.metadata,
-                )
-              ) {
+              if (isMeetingOwner) {
                 fetch(`/api/meetings/${rn}`, {
                   method: 'PUT',
                   headers: authHeaders({ 'Content-Type': 'application/json' }),

@@ -16,6 +16,7 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
+import { pickRoomTechSearchParams, roomPathWithTechParams } from '@/lib/roomUrl';
 
 export function AnonymousView({
   onSignIn,
@@ -75,10 +76,11 @@ export function AnonymousView({
       return;
     }
     
-    // Preserve query string if they pasted a full URL with ?action=...
-    let query = '';
+    // Preserve only tech params (region/codec/hq) when a full room URL was pasted.
+    let roomPath = `/rooms/${encodeURIComponent(roomId)}`;
     if (raw.includes('?')) {
-      query = raw.substring(raw.indexOf('?'));
+      const tech = pickRoomTechSearchParams(raw.substring(raw.indexOf('?')));
+      roomPath = roomPathWithTechParams(roomId, tech);
     }
 
     setIsJoining(true);
@@ -104,7 +106,7 @@ export function AnonymousView({
       
       // 6. Already In Progress
       if (data.isActive) {
-        router.push(`/rooms/${roomId}${query}`);
+        router.push(roomPath);
         return;
       }
 
@@ -120,13 +122,13 @@ export function AnonymousView({
         } else {
           // 3. Past Start Date (But Not Started)
           toast.show(t('anon.pastStartTime'));
-          router.push(`/rooms/${roomId}${query}`);
+          router.push(roomPath);
           return;
         }
       }
       
       // Valid Path (3, 4, 5, 6)
-      router.push(`/rooms/${roomId}${query}`);
+      router.push(roomPath);
     } catch(e) {
       console.error(e);
       setWarningMessage(t('anon.apiError'));
@@ -297,7 +299,7 @@ export function AnonymousView({
               {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
                 <button 
                   onClick={() => {
-                    router.push(`/rooms/${scheduledModalData.roomName}?action=join`);
+                    router.push(`/rooms/${scheduledModalData.roomName}`);
                     setScheduledModalData(null);
                   }}
                   className={styles.modalBtnSubmit} 

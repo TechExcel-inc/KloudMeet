@@ -318,6 +318,198 @@
   cursor: not-allowed;
 }
 
+.inputBoxReadOnly {
+  flex: 1;
+  min-width: 0;
+  cursor: default;
+}
+
+.personalRoomRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.personalRoomCheckbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.9rem;
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.personalRoomCheckbox input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.personalRoomCheckbox input[type='checkbox']:hover {
+  border-color: #94a3b8;
+}
+
+.personalRoomCheckbox input[type='checkbox']:checked {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.personalRoomCheckbox input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.personalRoomCheckbox input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.roomIdFieldRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.roomIdMoreBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.roomIdMoreBtn:hover {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #4f46e5;
+}
+
+.roomIdSubOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10001;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.roomIdSubDialog {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 560px;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.2);
+  animation: slideDown 0.25s ease;
+}
+
+.roomIdSubHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.roomIdSubTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.roomIdSubHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.roomIdSubBody {
+  padding: 1.5rem 1.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.roomIdSubRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.roomIdSubLabel {
+  width: 140px;
+  min-width: 140px;
+  text-align: right;
+  color: #64748b;
+  font-size: 0.9rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.roomIdRequired {
+  color: #ef4444;
+  margin-right: 2px;
+}
+
+.roomIdSubCurrentValue {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.roomIdSubRow .inputBox {
+  flex: 1;
+  min-width: 0;
+}
+
+.roomIdSubError {
+  margin-left: calc(140px + 1rem);
+  padding: 8px 12px;
+  background: #fef2f2;
+  color: #dc2626;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: 1px solid #fecaca;
+}
+
 /* ── Textarea ── */
 .textareaWrap {
   width: 100%;
@@ -664,5 +856,23 @@
   }
   .passwordForm {
     max-width: 100%;
+  }
+  .roomIdSubHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .roomIdSubRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .roomIdSubLabel {
+    width: auto;
+    min-width: auto;
+    text-align: left;
+  }
+  .roomIdSubError {
+    margin-left: 0;
   }
 }

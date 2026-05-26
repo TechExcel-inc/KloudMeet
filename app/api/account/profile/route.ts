@@ -36,9 +36,9 @@ export async function PUT(request: NextRequest) {
     
     // Validate personalRoomId
     if (personalRoomId) {
-      if (!/^[a-zA-Z0-9]{3,12}$/.test(personalRoomId)) {
+      if (!/^(?=.*[a-zA-Z])[a-zA-Z0-9]{3,12}$/.test(personalRoomId)) {
         return NextResponse.json(
-          { error: 'Room ID must be 3-12 letters or digits', code: 'PERSONAL_ROOM_ID_INVALID' },
+          { error: 'Room ID must be 3-12 letters and digits with at least one letter', code: 'PERSONAL_ROOM_ID_INVALID' },
           { status: 400 },
         );
       }

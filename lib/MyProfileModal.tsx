@@ -51,6 +51,11 @@ export function MyProfileModal({
   const [email, setEmail] = useState('');
   const [biography, setBiography] = useState('');
   const [personalRoomId, setPersonalRoomId] = useState('');
+  const [personalRoomEnabled, setPersonalRoomEnabled] = useState(false);
+  const [showRoomIdDialog, setShowRoomIdDialog] = useState(false);
+  const [draftRoomId, setDraftRoomId] = useState('');
+  const [roomIdDialogError, setRoomIdDialogError] = useState('');
+  const [roomIdDialogSaving, setRoomIdDialogSaving] = useState(false);
   const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
@@ -96,7 +101,9 @@ export function MyProfileModal({
           setUsername(data.username || '');
           setPhone(data.phone || '');
           setBiography(data.biography || '');
-          setPersonalRoomId(data.personalRoomId || '');
+          const roomId = data.personalRoomId || '';
+          setPersonalRoomId(roomId);
+          setPersonalRoomEnabled(!!roomId);
           setAvatarUrl(data.avatarUrl || '');
           setEmailVerified(data.emailVerified || false);
           setPhoneVerified(data.phoneVerified || false);
@@ -114,6 +121,12 @@ export function MyProfileModal({
     setSaving(true);
     setError('');
 
+    if (personalRoomEnabled && !personalRoomId.trim()) {
+      setError(t('profile.roomIdRequired'));
+      setSaving(false);
+      return;
+    }
+
     try {
       const res = await fetch('/api/account/profile', {
         method: 'PUT',
@@ -126,7 +139,7 @@ export function MyProfileModal({
           middleName,
           lastName,
           biography,
-          personalRoomId,
+          personalRoomId: personalRoomEnabled ? personalRoomId : null,
           phone,
           email,
         }),
@@ -141,7 +154,11 @@ export function MyProfileModal({
       
       // Notify parent with new data so UI updates in real-time
       const newDisplayName = [firstName, lastName].filter(Boolean).join(' ') || username;
-      onSave?.({ personalRoomId, avatarUrl: avatarUrl || undefined, displayName: newDisplayName });
+      onSave?.({
+        personalRoomId: personalRoomEnabled ? personalRoomId : '',
+        avatarUrl: avatarUrl || undefined,
+        displayName: newDisplayName,
+      });
       
       // Sync into localStorage so avatar persists after page refresh
       try {
@@ -288,6 +305,64 @@ export function MyProfileModal({
   const handleClose = () => {
     setVisible(false);
     setTimeout(onClose, 200);
+  };
+
+  const openRoomIdDialog = () => {
+    setDraftRoomId('');
+    setRoomIdDialogError('');
+    setShowRoomIdDialog(true);
+  };
+
+  const closeRoomIdDialog = () => {
+    setShowRoomIdDialog(false);
+    setDraftRoomId('');
+    setRoomIdDialogError('');
+  };
+
+  const validateRoomId = (id: string) =>
+    /^(?=.*[a-zA-Z])[a-zA-Z0-9]{3,12}$/.test(id);
+
+  const handleConfirmRoomId = async () => {
+    const trimmed = draftRoomId.trim();
+    if (!trimmed) {
+      setRoomIdDialogError(t('profile.roomIdRequired'));
+      return;
+    }
+    if (!validateRoomId(trimmed)) {
+      setRoomIdDialogError(t('profile.roomIdInvalid'));
+      return;
+    }
+    if (trimmed === personalRoomId) {
+      closeRoomIdDialog();
+      return;
+    }
+
+    setRoomIdDialogSaving(true);
+    setRoomIdDialogError('');
+    try {
+      const res = await fetch('/api/account/profile', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ personalRoomId: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRoomIdDialogError(profilePutErrorMessage(data, t));
+        return;
+      }
+      setPersonalRoomId(trimmed);
+      onSave?.({ personalRoomId: trimmed, avatarUrl: avatarUrl || undefined });
+      closeRoomIdDialog();
+      toast?.show(t('profile.saved'));
+    } catch (err) {
+      console.error(err);
+      setRoomIdDialogError(t('profile.networkError'));
+    } finally {
+      setRoomIdDialogSaving(false);
+    }
   };
 
   const displayName = [firstName, lastName].filter(Boolean).join(' ') || username;
@@ -446,18 +521,42 @@ export function MyProfileModal({
               </div>
 
               <div className={styles.formRow}>
-                <div className={styles.formLabel}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                  {t('profile.meetingRoomId')}
-                </div>
+                <div className={styles.formLabel} aria-hidden="true" />
                 <div className={styles.formField}>
-                  <input 
-                    className={styles.inputBox} 
-                    placeholder={t('profile.roomIdHint')} 
-                    maxLength={12}
-                    value={personalRoomId} 
-                    onChange={e => setPersonalRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))} 
-                  />
+                  <div className={styles.personalRoomRow}>
+                    <label className={styles.personalRoomCheckbox}>
+                      <input
+                        type="checkbox"
+                        checked={personalRoomEnabled}
+                        onChange={(e) => setPersonalRoomEnabled(e.target.checked)}
+                      />
+                      {t('profile.supportPersonalRoom')}
+                    </label>
+                    {personalRoomEnabled && (
+                      <div className={styles.roomIdFieldRow}>
+                        <input
+                          className={`${styles.inputBox} ${styles.inputBoxReadOnly}`}
+                          readOnly
+                          placeholder={t('profile.roomIdHint')}
+                          value={personalRoomId}
+                          tabIndex={-1}
+                        />
+                        <button
+                          type="button"
+                          className={styles.roomIdMoreBtn}
+                          onClick={openRoomIdDialog}
+                          title={t('profile.changeRoomIdTitle')}
+                          aria-label={t('profile.changeRoomIdTitle')}
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <circle cx="5" cy="12" r="2" />
+                            <circle cx="12" cy="12" r="2" />
+                            <circle cx="19" cy="12" r="2" />
+                          </svg>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -671,6 +770,72 @@ export function MyProfileModal({
           </div>
 
         </div>
+
+        {showRoomIdDialog && (
+          <div
+            className={styles.roomIdSubOverlay}
+            onClick={closeRoomIdDialog}
+          >
+            <div
+              className={styles.roomIdSubDialog}
+              onClick={(e) => e.stopPropagation()}
+              role="dialog"
+              aria-labelledby="change-room-id-title"
+            >
+              <div className={styles.roomIdSubHeader}>
+                <h3 id="change-room-id-title" className={styles.roomIdSubTitle}>
+                  {t('profile.changeRoomIdTitle')}
+                </h3>
+                <div className={styles.roomIdSubHeaderActions}>
+                  <button
+                    type="button"
+                    className={styles.btnSave}
+                    onClick={handleConfirmRoomId}
+                    disabled={roomIdDialogSaving}
+                  >
+                    {roomIdDialogSaving ? t('common.saving') : t('common.change')}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.btnCancel}
+                    onClick={closeRoomIdDialog}
+                    disabled={roomIdDialogSaving}
+                  >
+                    {t('common.cancel')}
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.roomIdSubBody}>
+                <div className={styles.roomIdSubRow}>
+                  <div className={styles.roomIdSubLabel}>{t('profile.currentRoomId')}</div>
+                  <div className={styles.roomIdSubCurrentValue}>
+                    {personalRoomId || '—'}
+                  </div>
+                </div>
+                <div className={styles.roomIdSubRow}>
+                  <div className={styles.roomIdSubLabel}>
+                    <span className={styles.roomIdRequired}>*</span>
+                    {t('profile.newRoomId')}
+                  </div>
+                  <input
+                    className={styles.inputBox}
+                    placeholder={t('profile.roomIdNewHint')}
+                    maxLength={12}
+                    value={draftRoomId}
+                    onChange={(e) =>
+                      setDraftRoomId(e.target.value.replace(/[^a-zA-Z0-9]/g, ''))
+                    }
+                    autoFocus
+                  />
+                </div>
+                {roomIdDialogError && (
+                  <div className={styles.roomIdSubError}>{roomIdDialogError}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

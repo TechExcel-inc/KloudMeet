@@ -65,33 +65,19 @@ import {
   getResolvedLiveRoomName,
 } from '@/lib/personalRoomResolveClient';
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
+import {
+  pickRoomTechSearchParams,
+  replaceBrowserRoomUrl,
+  roomPathWithTechParams,
+} from '@/lib/roomUrl';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
-
-function RoomEntryLoading() {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        background: '#f8f9fb',
-        fontFamily: 'Inter, sans-serif',
-        color: '#6b7280',
-        fontSize: '0.95rem',
-      }}
-      aria-busy="true"
-      aria-live="polite"
-    >
-      Loading meeting…
-    </div>
-  );
-}
 
 export function PageClientImpl(props: {
   roomName: string;
@@ -109,6 +95,8 @@ export function PageClientImpl(props: {
 
   const [prejoinReady, setPrejoinReady] = React.useState(false);
   const [resolveReady, setResolveReady] = React.useState(false);
+  const [entryLoadError, setEntryLoadError] = React.useState<string | null>(null);
+  const [resolveEpoch, setResolveEpoch] = React.useState(0);
   /** 个人房入口解析出的真实会场；非 null 时访客一次 Join 直连该 room */
   const [resolvedLiveRoom, setResolvedLiveRoom] = React.useState<string | null>(
     null,
@@ -140,6 +128,14 @@ export function PageClientImpl(props: {
     } catch (_) { /* ignore */ }
     setPrejoinReady(true);
   }, []); // runs once on mount, before PreJoin reads localStorage
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const u = new URL(window.location.href);
+    if (u.searchParams.has('action') || u.searchParams.has('via')) {
+      replaceBrowserRoomUrl(props.roomName, props.region);
+    }
+  }, [props.roomName, props.region]);
 
   const preJoinDefaults = React.useMemo(() => {
     let defaultUsername = '';
@@ -195,8 +191,10 @@ export function PageClientImpl(props: {
   const loadMeetingInfo = React.useCallback(
     async (roomName: string) => {
       try {
-        const res = await fetch(
+        const res = await fetchWithTimeout(
           `/api/meetings/${encodeURIComponent(roomName)}`,
+          undefined,
+          12_000,
         );
         const data = await res.json();
         applyMeetingInfo(data);
@@ -209,57 +207,75 @@ export function PageClientImpl(props: {
     [applyMeetingInfo],
   );
 
+  const retryEntryLoad = React.useCallback(() => {
+    setEntryLoadError(null);
+    setResolveReady(false);
+    setResolveEpoch((n) => n + 1);
+  }, []);
+
   React.useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      let kloudUser: { id?: number | string } | null = null;
-      if (typeof window !== 'undefined') {
-        try {
-          const stored = localStorage.getItem('kloudUser');
-          if (stored) {
-            kloudUser = JSON.parse(stored);
-            if (!cancelled) setCurrentUser(kloudUser);
+      try {
+        setEntryLoadError(null);
+
+        let kloudUser: { id?: number | string } | null = null;
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem('kloudUser');
+            if (stored) {
+              kloudUser = JSON.parse(stored);
+              if (!cancelled) setCurrentUser(kloudUser);
+            }
+            if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
+              if (!cancelled) setIsSameTabRefresh(true);
+            }
+          } catch {
+            /* ignore */
           }
-          if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
-            if (!cancelled) setIsSameTabRefresh(true);
-          }
-        } catch {
-          /* ignore */
+        }
+
+        const initialMeeting = await loadMeetingInfo(props.roomName);
+        if (cancelled) return;
+
+        // 发起人已在真实会场（如 /rooms/yieg-kgxf）：不调用 resolve，直接按原逻辑入会
+        if (isCurrentUserMeetingCreator(initialMeeting, kloudUser)) {
+          setResolvedLiveRoom(null);
+          return;
+        }
+
+        const resolved = await fetchPersonalRoomResolve(props.roomName);
+        if (cancelled) return;
+
+        setResolvedLiveRoom(getResolvedLiveRoomName(props.roomName, resolved));
+        const infoRoom =
+          resolved?.kind === 'join_live'
+            ? resolved.effectiveRoomName
+            : props.roomName;
+        if (
+          infoRoom.toLowerCase() !== props.roomName.toLowerCase() ||
+          !initialMeeting?.createdByMemberId
+        ) {
+          await loadMeetingInfo(infoRoom);
+        }
+      } catch (e) {
+        console.error('[PageClientImpl] meeting entry init failed', e);
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          setEntryLoadError(msg);
+        }
+      } finally {
+        if (!cancelled) {
+          setResolveReady(true);
         }
       }
-
-      const initialMeeting = await loadMeetingInfo(props.roomName);
-      if (cancelled) return;
-
-      // 发起人已在真实会场（如 /rooms/yieg-kgxf）：不调用 resolve，直接按原逻辑入会
-      if (isCurrentUserMeetingCreator(initialMeeting, kloudUser)) {
-        setResolvedLiveRoom(null);
-        setResolveReady(true);
-        return;
-      }
-
-      const resolved = await fetchPersonalRoomResolve(props.roomName);
-      if (cancelled) return;
-
-      setResolvedLiveRoom(getResolvedLiveRoomName(props.roomName, resolved));
-      const infoRoom =
-        resolved?.kind === 'join_live'
-          ? resolved.effectiveRoomName
-          : props.roomName;
-      if (
-        infoRoom.toLowerCase() !== props.roomName.toLowerCase() ||
-        !initialMeeting?.createdByMemberId
-      ) {
-        await loadMeetingInfo(infoRoom);
-      }
-      setResolveReady(true);
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [props.roomName, loadMeetingInfo]);
+  }, [props.roomName, loadMeetingInfo, resolveEpoch]);
 
   React.useEffect(() => {
     if (!meetingInfo?.startedAt) return;
@@ -337,9 +353,10 @@ export function PageClientImpl(props: {
         if (props.region) {
           url.searchParams.append('region', props.region);
         }
-        const connectionDetailsResp = await fetch(
+        const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
           connectionDetailsFetchInit(),
+          15_000,
         );
         if (connectionDetailsResp.status === 401) {
           handleKloudSessionExpired();
@@ -356,10 +373,7 @@ export function PageClientImpl(props: {
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('activeKloudRoom', roomToJoin);
           if (resolvedLiveRoom) {
-            const q = new URLSearchParams({
-              action: 'join',
-              via: props.roomName,
-            });
+            const q = pickRoomTechSearchParams(searchParams ?? '');
             if (props.region) {
               q.set('region', props.region);
             }
@@ -373,7 +387,7 @@ export function PageClientImpl(props: {
             window.history.replaceState(
               null,
               '',
-              `/rooms/${encodeURIComponent(resolvedLiveRoom)}?${q.toString()}`,
+              roomPathWithTechParams(resolvedLiveRoom, q),
             );
           }
         }
@@ -423,7 +437,7 @@ export function PageClientImpl(props: {
     }
   }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
 
-  const canShowPreJoin = prejoinReady && resolveReady;
+  const canShowPreJoin = prejoinReady && resolveReady && !entryLoadError;
 
   if (
     (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
@@ -997,7 +1011,10 @@ export function PageClientImpl(props: {
           )}
         </div>
         ) : (
-          <RoomEntryLoading />
+          <RoomEntryLoading
+            error={entryLoadError}
+            onRetry={entryLoadError ? retryEntryLoad : undefined}
+          />
         )
       ) : (
         <div data-lk-theme="default" style={{ height: '100%' }}>
