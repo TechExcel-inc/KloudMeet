@@ -67,6 +67,7 @@ import {
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
+import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 import {
   pickRoomTechSearchParams,
@@ -941,11 +942,14 @@ export function PageClientImpl(props: {
             <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
           {!isBot && prejoinReady && (
-            <PreJoin
-              defaults={preJoinDefaults}
-              onSubmit={handlePreJoinSubmit}
-              onError={handlePreJoinError}
-            />
+            <>
+              <PreJoin
+                defaults={preJoinDefaults}
+                onSubmit={handlePreJoinSubmit}
+                onError={handlePreJoinError}
+              />
+              <PrejoinPersonalRoomCheckbox active />
+            </>
           )}
           {!isBot && (
             <div

@@ -236,6 +236,68 @@ h2 a {
   outline: none !important;
 }
 
+/* ── Personal room checkbox (below username) ── */
+.kloud-prejoin-wrapper .lk-username-container {
+  gap: 0.65rem !important;
+}
+
+.kloud-prejoin-personal-room {
+  width: 100%;
+}
+
+.kloud-prejoin-personal-room-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  color: #334155;
+  font-family: 'Inter', sans-serif;
+}
+
+.kloud-prejoin-personal-room-checkbox input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+}
+
+.kloud-prejoin-personal-room-checkbox input[type='checkbox']:hover {
+  border-color: #94a3b8;
+}
+
+.kloud-prejoin-personal-room-checkbox input[type='checkbox']:checked {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.kloud-prejoin-personal-room-checkbox input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.kloud-prejoin-personal-room-checkbox input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
 /* ── Join Room button ───────────────────────── */
 .kloud-prejoin-wrapper .lk-join-button,
 .kloud-prejoin-wrapper button[type="submit"].lk-button,
