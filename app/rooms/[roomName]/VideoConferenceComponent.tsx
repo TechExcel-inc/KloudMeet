@@ -259,12 +259,12 @@ export function VideoConferenceComponent(props: {
     (t) => t.participant?.identity === room.localParticipant.identity,
   );
 
-  // 手机端观看他人共享时默认折叠头像栏，优先看到共享画面
+  // 屏幕共享时默认收起左侧参会者列表，优先展示共享画面
   React.useEffect(() => {
-    if (isToolbarMobile && hasScreenShare && !screenShareActive) {
+    if (hasScreenShare) {
       setIsWebcamSidebarCollapsed(true);
     }
-  }, [isToolbarMobile, hasScreenShare, screenShareActive]);
+  }, [hasScreenShare]);
 
   // Auto-collapse webcam sidebar when entering remote control mode for maximum screen visibility
   React.useEffect(() => {
