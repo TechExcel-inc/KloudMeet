@@ -3,49 +3,73 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useI18n } from './i18n';
+import { authHeaders, getKloudSessionBearer } from './kloudSession';
+import { writePrejoinPersonalRoomEnabled } from './prejoinPersonalRoom';
 
-const STORAGE_KEY = 'kloud-prejoin-personal-room-enabled';
-
-export function PrejoinPersonalRoomCheckbox({ active }: { active: boolean }) {
+export function PrejoinPersonalRoomCheckbox({
+  active,
+  routeRoomName,
+  syncEnabled,
+  onEnabledChange,
+  onPersonalRoomIdLoaded,
+}: {
+  active: boolean;
+  /** Next 路由入口会议号；仅当入口已是个人房号时隐藏（勾选切过去的仍可取消）。 */
+  routeRoomName: string;
+  syncEnabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  onPersonalRoomIdLoaded: (personalRoomId: string) => void;
+}) {
   const { t } = useI18n();
   const [mountEl, setMountEl] = React.useState<HTMLElement | null>(null);
   const [enabled, setEnabled] = React.useState(false);
+  /** null = loading; '' = no personal room; non-empty = show checkbox */
+  const [personalRoomId, setPersonalRoomId] = React.useState<string | null>(null);
+
+  const enteredViaPersonalRoom =
+    personalRoomId &&
+    routeRoomName.trim().toLowerCase() === personalRoomId.toLowerCase();
 
   React.useEffect(() => {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored === 'true' || stored === 'false') {
-        setEnabled(stored === 'true');
+    let cancelled = false;
+
+    const load = async () => {
+      if (!getKloudSessionBearer()) {
+        if (!cancelled) setPersonalRoomId('');
         return;
       }
-    } catch {
-      /* ignore */
-    }
 
-    try {
-      const raw = localStorage.getItem('kloudUser');
-      if (!raw) return;
-      const user = JSON.parse(raw);
-      if (!user?.token) return;
+      try {
+        const res = await fetch('/api/account/profile', {
+          headers: authHeaders(),
+        });
+        const data = await res.json();
+        if (cancelled) return;
 
-      fetch('/api/account/profile', {
-        headers: { Authorization: `Bearer ${user.token}` },
-      })
-        .then((res) => res.json())
-        .then((data) => {
-          if (!data.error && data.personalRoomId) {
-            setEnabled(true);
-            localStorage.setItem(STORAGE_KEY, 'true');
-          }
-        })
-        .catch(() => {});
-    } catch {
-      /* ignore */
-    }
-  }, []);
+        const roomId =
+          typeof data?.personalRoomId === 'string' ? data.personalRoomId.trim() : '';
+        setPersonalRoomId(roomId);
+
+        if (!roomId) return;
+
+        onPersonalRoomIdLoaded(roomId);
+      } catch {
+        if (!cancelled) setPersonalRoomId('');
+      }
+    };
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [onPersonalRoomIdLoaded]);
 
   React.useEffect(() => {
-    if (!active) {
+    setEnabled(syncEnabled);
+  }, [syncEnabled]);
+
+  React.useEffect(() => {
+    if (!active || !personalRoomId || enteredViaPersonalRoom) {
       setMountEl(null);
       return;
     }
@@ -101,18 +125,15 @@ export function PrejoinPersonalRoomCheckbox({ active }: { active: boolean }) {
       observer?.disconnect();
       detach();
     };
-  }, [active]);
+  }, [active, personalRoomId, enteredViaPersonalRoom]);
 
   const handleChange = (checked: boolean) => {
     setEnabled(checked);
-    try {
-      localStorage.setItem(STORAGE_KEY, checked ? 'true' : 'false');
-    } catch {
-      /* ignore */
-    }
+    onEnabledChange(checked);
+    writePrejoinPersonalRoomEnabled(checked);
   };
 
-  if (!mountEl) return null;
+  if (!personalRoomId || enteredViaPersonalRoom || !mountEl) return null;
 
   return createPortal(
     <label className="kloud-prejoin-personal-room-checkbox">

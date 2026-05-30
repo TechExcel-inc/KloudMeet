@@ -3,6 +3,10 @@ import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
 import { archivePersonalRoomMeeting } from '@/lib/personalRoom';
+import {
+  computeRejoinableUntil,
+  MEETING_END_REASON,
+} from '@/lib/meetingRejoin';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -72,12 +76,16 @@ export async function POST(request: NextRequest) {
       
       const meeting = await prisma.meeting.findUnique({ where: { roomName } });
       if (meeting && meeting.status !== 'ENDED') {
+        const data: {
+          actualStartedAt?: Date;
+          status: string;
+        } = { status: 'ACTIVE' };
+        if (!meeting.actualStartedAt) {
+          data.actualStartedAt = actualStartedAt;
+        }
         await prisma.meeting.update({
           where: { roomName },
-          data: {
-            actualStartedAt,
-            status: 'ACTIVE'
-          }
+          data,
         });
       }
     }
@@ -97,7 +105,9 @@ export async function POST(request: NextRequest) {
           data: {
             endedAt,
             actualDurationMinutes,
-            status: 'ENDED'
+            status: 'ENDED',
+            endedReason: MEETING_END_REASON.ROOM_EMPTY,
+            rejoinableUntil: computeRejoinableUntil(endedAt),
           }
         });
         await archivePersonalRoomMeeting(updated);

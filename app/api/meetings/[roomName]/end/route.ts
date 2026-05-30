@@ -11,6 +11,7 @@ import {
   archivePersonalRoomMeeting,
   findPersonalRoomOwner,
 } from '@/lib/personalRoom';
+import { MEETING_END_REASON } from '@/lib/meetingRejoin';
 
 export async function POST(
   request: NextRequest,
@@ -66,6 +67,8 @@ export async function POST(
       data: {
         status: 'ENDED',
         endedAt,
+        endedReason: MEETING_END_REASON.HOST_ENDED,
+        rejoinableUntil: null,
         actualDurationMinutes: meeting.actualDurationMinutes ?? actualDurationMinutes,
       },
     });

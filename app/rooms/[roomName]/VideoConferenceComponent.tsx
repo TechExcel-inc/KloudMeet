@@ -607,7 +607,7 @@ export function VideoConferenceComponent(props: {
               hasConnectedOnceRef.current = true;
               intentionalDisconnectRef.current = false;
               const rn = props.connectionDetails.roomName;
-              replaceBrowserRoomUrl(rn, props.region);
+              replaceBrowserRoomUrl(rn);
 
               const isMeetingOwner = isDbMeetingOwner(
                 props.meetingOwnerMemberId,

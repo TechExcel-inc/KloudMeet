@@ -16,7 +16,7 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
-import { pickRoomTechSearchParams, roomPathWithTechParams } from '@/lib/roomUrl';
+import { roomPath } from '@/lib/roomUrl';
 
 export function AnonymousView({
   onSignIn,
@@ -76,12 +76,7 @@ export function AnonymousView({
       return;
     }
     
-    // Preserve only tech params (region/codec/hq) when a full room URL was pasted.
-    let roomPath = `/rooms/${encodeURIComponent(roomId)}`;
-    if (raw.includes('?')) {
-      const tech = pickRoomTechSearchParams(raw.substring(raw.indexOf('?')));
-      roomPath = roomPathWithTechParams(roomId, tech);
-    }
+    const roomPathTarget = roomPath(roomId);
 
     setIsJoining(true);
 
@@ -106,7 +101,7 @@ export function AnonymousView({
       
       // 6. Already In Progress
       if (data.isActive) {
-        router.push(roomPath);
+        router.push(roomPathTarget);
         return;
       }
 
@@ -122,13 +117,13 @@ export function AnonymousView({
         } else {
           // 3. Past Start Date (But Not Started)
           toast.show(t('anon.pastStartTime'));
-          router.push(roomPath);
+          router.push(roomPathTarget);
           return;
         }
       }
       
       // Valid Path (3, 4, 5, 6)
-      router.push(roomPath);
+      router.push(roomPathTarget);
     } catch(e) {
       console.error(e);
       setWarningMessage(t('anon.apiError'));

@@ -13,6 +13,10 @@ import {
   requireSession,
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
+import {
+  MEETING_END_REASON,
+  withHostRejoinable,
+} from '@/lib/meetingRejoin';
 
 export async function GET(
   request: NextRequest,
@@ -75,13 +79,16 @@ export async function GET(
 
     const payload = { ...meeting, status: currentStatus, isActive };
     const sessionMember = await getSessionTeamMember(request);
+    const payloadWithRejoin = withHostRejoinable(payload, sessionMember?.id ?? null);
     if (
       sessionMember &&
       canManageMeeting(sessionMember.id, { createdByMemberId: meeting.createdByMemberId })
     ) {
-      return NextResponse.json(payload);
+      return NextResponse.json(payloadWithRejoin);
     }
-    return NextResponse.json(publicMeetingPayload(payload as Record<string, unknown>));
+    return NextResponse.json(
+      publicMeetingPayload(payloadWithRejoin as Record<string, unknown>),
+    );
   } catch (error) {
     console.error('[meetings GET]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
@@ -126,6 +133,8 @@ export async function PUT(
     if (endedAt && current.status !== 'ENDED') {
       data.endedAt = new Date(endedAt);
       data.status = 'ENDED';
+      data.endedReason = MEETING_END_REASON.HOST_ENDED;
+      data.rejoinableUntil = null;
       const startMs = (current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime
         ? new Date(current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime()
         : Date.now();

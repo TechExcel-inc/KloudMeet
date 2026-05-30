@@ -20,6 +20,8 @@ const meetingSelect = {
   scheduledFor: true,
   createdByMemberId: true,
   deletedAt: true,
+  endedReason: true,
+  rejoinableUntil: true,
 } as const;
 
 export type ResolvedMeetingPayload = {

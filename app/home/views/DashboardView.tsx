@@ -469,7 +469,9 @@ export function DashboardView({
     setIsJoining(true);
 
     try {
-      const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`);
+      const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`, {
+        headers: authHeaders(),
+      });
       
       // 1. Non-Existing
       if (!res.ok) {
@@ -480,7 +482,7 @@ export function DashboardView({
       
       const data = await res.json();
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
-      if (data.status === 'ENDED' && !data.isPersonalRoom) {
+      if (data.status === 'ENDED' && !data.isPersonalRoom && !data.hostRejoinable) {
         setWarningMessage('This meeting has already ended and is no longer available.');
         setIsJoining(false);
         return;

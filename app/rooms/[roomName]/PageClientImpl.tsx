@@ -59,7 +59,7 @@ import { getInitials } from '@/lib/getInitials';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { VideoConferenceComponent } from './VideoConferenceComponent';
-import { connectionDetailsFetchInit } from '@/lib/kloudSession';
+import { connectionDetailsFetchInit, authHeaders } from '@/lib/kloudSession';
 import {
   fetchPersonalRoomResolve,
   getResolvedLiveRoomName,
@@ -68,12 +68,9 @@ import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
+import { PREJOIN_ORIGINAL_ROOM_SESSION_KEY, cancelAbandonedInstantMeeting } from '@/lib/prejoinPersonalRoom';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
-import {
-  pickRoomTechSearchParams,
-  replaceBrowserRoomUrl,
-  roomPathWithTechParams,
-} from '@/lib/roomUrl';
+import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -102,6 +99,9 @@ export function PageClientImpl(props: {
   const [resolvedLiveRoom, setResolvedLiveRoom] = React.useState<string | null>(
     null,
   );
+  /** 地址栏 / PreJoin 当前生效会议号（replaceState 后与 Next 路由 props.roomName 可能不同）。 */
+  const [effectiveRoomName, setEffectiveRoomName] = React.useState(props.roomName);
+  const routeRoomName = props.roomName;
 
   React.useEffect(() => {
     try {
@@ -133,10 +133,10 @@ export function PageClientImpl(props: {
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
     const u = new URL(window.location.href);
-    if (u.searchParams.has('action') || u.searchParams.has('via')) {
-      replaceBrowserRoomUrl(props.roomName, props.region);
+    if (u.search) {
+      replaceBrowserRoomUrl(effectiveRoomName);
     }
-  }, [props.roomName, props.region]);
+  }, [effectiveRoomName]);
 
   const preJoinDefaults = React.useMemo(() => {
     let defaultUsername = '';
@@ -177,6 +177,8 @@ export function PageClientImpl(props: {
   const { t, locale, setLocale } = useI18n();
   const [showLangMenu, setShowLangMenu] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
+  const [personalRoomUrlEnabled, setPersonalRoomUrlEnabled] = React.useState(false);
+  const [hostPersonalRoomId, setHostPersonalRoomId] = React.useState('');
 
   const applyMeetingInfo = React.useCallback((data: Record<string, unknown>) => {
     if (data.error) return;
@@ -194,7 +196,7 @@ export function PageClientImpl(props: {
       try {
         const res = await fetchWithTimeout(
           `/api/meetings/${encodeURIComponent(roomName)}`,
-          undefined,
+          { headers: authHeaders() },
           12_000,
         );
         const data = await res.json();
@@ -217,6 +219,11 @@ export function PageClientImpl(props: {
   React.useEffect(() => {
     let cancelled = false;
 
+    setResolveReady(false);
+    setResolvedLiveRoom(null);
+    setMeetingInfo(null);
+    setEntryLoadError(null);
+
     (async () => {
       try {
         setEntryLoadError(null);
@@ -229,7 +236,7 @@ export function PageClientImpl(props: {
               kloudUser = JSON.parse(stored);
               if (!cancelled) setCurrentUser(kloudUser);
             }
-            if (sessionStorage.getItem('activeKloudRoom') === props.roomName) {
+            if (sessionStorage.getItem('activeKloudRoom') === routeRoomName) {
               if (!cancelled) setIsSameTabRefresh(true);
             }
           } catch {
@@ -276,7 +283,7 @@ export function PageClientImpl(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.roomName, loadMeetingInfo, resolveEpoch]);
+  }, [routeRoomName, loadMeetingInfo, resolveEpoch]);
 
   React.useEffect(() => {
     if (!meetingInfo?.startedAt) return;
@@ -303,6 +310,58 @@ export function PageClientImpl(props: {
   );
 
   const isHost = isMeetingCreator;
+
+  React.useEffect(() => {
+    setEffectiveRoomName(routeRoomName);
+    setPersonalRoomUrlEnabled(false);
+    try {
+      sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
+  }, [routeRoomName]);
+
+  React.useEffect(() => {
+    if (!hostPersonalRoomId || !isHost || connectionDetails) {
+      return;
+    }
+
+    if (personalRoomUrlEnabled) {
+      if (effectiveRoomName.toLowerCase() === hostPersonalRoomId.toLowerCase()) {
+        return;
+      }
+      try {
+        sessionStorage.setItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY, routeRoomName);
+      } catch {
+        /* ignore */
+      }
+      replaceBrowserRoomUrl(hostPersonalRoomId);
+      setEffectiveRoomName(hostPersonalRoomId);
+      void loadMeetingInfo(hostPersonalRoomId);
+      return;
+    }
+
+    try {
+      const original = sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+      if (!original) {
+        return;
+      }
+      sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+      replaceBrowserRoomUrl(original);
+      setEffectiveRoomName(original);
+      void loadMeetingInfo(original);
+    } catch {
+      /* ignore */
+    }
+  }, [
+    hostPersonalRoomId,
+    personalRoomUrlEnabled,
+    isHost,
+    connectionDetails,
+    routeRoomName,
+    effectiveRoomName,
+    loadMeetingInfo,
+  ]);
 
   const isActive = meetingInfo?.isActive === true;
 
@@ -342,9 +401,11 @@ export function PageClientImpl(props: {
       }
 
       const roomToJoin =
-        !isMeetingCreator && resolvedLiveRoom
-          ? resolvedLiveRoom
-          : props.roomName;
+        isMeetingCreator && personalRoomUrlEnabled && hostPersonalRoomId
+          ? hostPersonalRoomId
+          : !isMeetingCreator && resolvedLiveRoom
+            ? resolvedLiveRoom
+            : effectiveRoomName;
 
       try {
         setPreJoinChoices(values);
@@ -373,24 +434,22 @@ export function PageClientImpl(props: {
 
         if (typeof window !== 'undefined') {
           sessionStorage.setItem('activeKloudRoom', roomToJoin);
-          if (resolvedLiveRoom) {
-            const q = pickRoomTechSearchParams(searchParams ?? '');
-            if (props.region) {
-              q.set('region', props.region);
-            }
-            const codec = searchParams?.get('codec');
-            if (codec) {
-              q.set('codec', codec);
-            }
-            if (searchParams?.get('hq') === 'true') {
-              q.set('hq', 'true');
-            }
-            window.history.replaceState(
-              null,
-              '',
-              roomPathWithTechParams(resolvedLiveRoom, q),
-            );
+          const abandonedRoom = sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+          try {
+            sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+          } catch {
+            /* ignore */
           }
+          if (
+            abandonedRoom &&
+            hostPersonalRoomId &&
+            abandonedRoom.toLowerCase() !== roomToJoin.toLowerCase() &&
+            roomToJoin.toLowerCase() === hostPersonalRoomId.toLowerCase()
+          ) {
+            void cancelAbandonedInstantMeeting(abandonedRoom);
+          }
+          replaceBrowserRoomUrl(roomToJoin);
+          setEffectiveRoomName(roomToJoin);
         }
       } catch (error: any) {
         console.error('Failed to get connection details:', error);
@@ -399,10 +458,11 @@ export function PageClientImpl(props: {
     },
     [
       isMeetingCreator,
+      personalRoomUrlEnabled,
+      hostPersonalRoomId,
       resolvedLiveRoom,
-      props.roomName,
+      effectiveRoomName,
       props.region,
-      searchParams,
       t,
     ],
   );
@@ -442,7 +502,8 @@ export function PageClientImpl(props: {
 
   if (
     (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
-    !meetingInfo?.isPersonalRoom
+    !meetingInfo?.isPersonalRoom &&
+    !meetingInfo?.hostRejoinable
   ) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>
@@ -948,7 +1009,15 @@ export function PageClientImpl(props: {
                 onSubmit={handlePreJoinSubmit}
                 onError={handlePreJoinError}
               />
-              <PrejoinPersonalRoomCheckbox active />
+              {isHost && (
+                <PrejoinPersonalRoomCheckbox
+                  active
+                  routeRoomName={routeRoomName}
+                  syncEnabled={personalRoomUrlEnabled}
+                  onEnabledChange={setPersonalRoomUrlEnabled}
+                  onPersonalRoomIdLoaded={setHostPersonalRoomId}
+                />
+              )}
             </>
           )}
           {!isBot && (

@@ -1,3 +1,5 @@
+import { authHeaders } from '@/lib/kloudSession';
+
 const MEETING_CLOSED_NOTICE_KEY = 'kloudMeetingClosedNotice';
 
 /** Persist a short message shown on the home page after redirect. */
@@ -27,10 +29,17 @@ export async function isMeetingEnded(roomName: string, maxAttempts = 4): Promise
   const encoded = encodeURIComponent(roomName);
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const res = await fetch(`/api/meetings/${encoded}`, { cache: 'no-store' });
+      const res = await fetch(`/api/meetings/${encoded}`, {
+        cache: 'no-store',
+        headers: authHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
-        if (data?.status === 'ENDED') return true;
+        if (data?.status === 'ENDED') {
+          // Host may still rejoin within grace period after accidental room empty.
+          if (data?.hostRejoinable) return false;
+          return true;
+        }
       }
     } catch {
       /* retry */

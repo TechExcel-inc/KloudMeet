@@ -64,6 +64,8 @@ const meetingSelect = {
   scheduledFor: true,
   createdByMemberId: true,
   deletedAt: true,
+  endedReason: true,
+  rejoinableUntil: true,
 } as const;
 
 export type MeetingRecordForActiveCheck = {
@@ -76,6 +78,8 @@ export type MeetingRecordForActiveCheck = {
   scheduledFor: Date | null;
   createdByMemberId: number;
   deletedAt: Date | null;
+  endedReason: string | null;
+  rejoinableUntil: Date | null;
 };
 
 /** 只读查询，不会在 GET 时自动创建新专属会议室场次 */
