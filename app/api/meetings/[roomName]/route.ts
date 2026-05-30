@@ -14,8 +14,10 @@ import {
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import {
+  expireIdleMeetingIfNeeded,
   MEETING_END_REASON,
-  withHostRejoinable,
+  MEETING_STATUS,
+  withMeetingLifecycleMeta,
 } from '@/lib/meetingRejoin';
 
 export async function GET(
@@ -62,11 +64,18 @@ export async function GET(
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
 
+    const afterIdle = await expireIdleMeetingIfNeeded(meeting);
+    meeting = { ...meeting, ...afterIdle };
+
     const isActive = await getMeetingIsActiveByRoomName(roomName);
 
     // Auto update status to PAST_DUE if scheduled time has passed and not currently active
     let currentStatus = meeting.status;
-    if (currentStatus === 'ACTIVE' && !isActive && meeting.scheduledFor) {
+    if (
+      currentStatus === MEETING_STATUS.ACTIVE &&
+      !isActive &&
+      meeting.scheduledFor
+    ) {
       const isPast = meeting.scheduledFor < new Date(Date.now() - 5 * 60000); // 5 minutes grace period
       if (isPast) {
         await prisma.meeting.update({
@@ -79,15 +88,18 @@ export async function GET(
 
     const payload = { ...meeting, status: currentStatus, isActive };
     const sessionMember = await getSessionTeamMember(request);
-    const payloadWithRejoin = withHostRejoinable(payload, sessionMember?.id ?? null);
+    const payloadWithMeta = withMeetingLifecycleMeta(
+      payload,
+      sessionMember?.id ?? null,
+    );
     if (
       sessionMember &&
       canManageMeeting(sessionMember.id, { createdByMemberId: meeting.createdByMemberId })
     ) {
-      return NextResponse.json(payloadWithRejoin);
+      return NextResponse.json(payloadWithMeta);
     }
     return NextResponse.json(
-      publicMeetingPayload(payloadWithRejoin as Record<string, unknown>),
+      publicMeetingPayload(payloadWithMeta as Record<string, unknown>),
     );
   } catch (error) {
     console.error('[meetings GET]', error);
@@ -130,11 +142,12 @@ export async function PUT(
     }
 
     // Calculate actualDurationMinutes when ending a meeting
-    if (endedAt && current.status !== 'ENDED') {
+    if (endedAt && current.status !== MEETING_STATUS.ENDED) {
       data.endedAt = new Date(endedAt);
-      data.status = 'ENDED';
+      data.status = MEETING_STATUS.ENDED;
       data.endedReason = MEETING_END_REASON.HOST_ENDED;
       data.rejoinableUntil = null;
+      data.roomEmptyAt = null;
       const startMs = (current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime
         ? new Date(current.actualStartedAt || data.actualStartedAt || current.startedAt).getTime()
         : Date.now();

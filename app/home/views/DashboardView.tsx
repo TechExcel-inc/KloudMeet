@@ -482,7 +482,7 @@ export function DashboardView({
       
       const data = await res.json();
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
-      if (data.status === 'ENDED' && !data.isPersonalRoom && !data.hostRejoinable) {
+      if (data.status === 'ENDED' && !data.isPersonalRoom) {
         setWarningMessage('This meeting has already ended and is no longer available.');
         setIsJoining(false);
         return;

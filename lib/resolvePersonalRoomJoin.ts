@@ -22,6 +22,7 @@ const meetingSelect = {
   deletedAt: true,
   endedReason: true,
   rejoinableUntil: true,
+  roomEmptyAt: true,
 } as const;
 
 export type ResolvedMeetingPayload = {

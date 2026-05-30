@@ -571,7 +571,8 @@ export function VideoConferenceComponent(props: {
             )
           ) {
             hostEndedHandledRef.current = true;
-            router.push('/');
+            intentionalDisconnectRef.current = false;
+            handleError(new Error('LiveKit connection disconnected unexpectedly'));
             return;
           }
           handleClosedByHostExit();

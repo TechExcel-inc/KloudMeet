@@ -5,8 +5,8 @@ import { getLiveKitURL } from '@/lib/getLiveKitURL';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { ConnectionDetails } from '@/lib/types';
 import {
-  canHostRejoinMeeting,
-  restoreMeetingForHostRejoin,
+  isMeetingPermanentlyClosed,
+  prepareMeetingForJoin,
 } from '@/lib/meetingRejoin';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
@@ -56,18 +56,14 @@ export async function GET(request: NextRequest) {
     const clientClaimsLoggedIn = bearerToken.length > 0;
 
     const member = await getSessionTeamMember(request);
-    // 客户端带了会话却无效时，不要静默降级为访客（否则会换随机 identity，与已登录稳定身份预期相反）。
     if (clientClaimsLoggedIn && !member) {
       return new NextResponse('Session expired or invalid', { status: 401 });
     }
 
-    // Only block ENDED for regular meetings; personal rooms always start a new session above
-    if (meeting.status === 'ENDED' && !isPersonalRoom) {
-      if (member && canHostRejoinMeeting(meeting, member.id)) {
-        meeting = await restoreMeetingForHostRejoin(meeting.id);
-      } else {
-        return new NextResponse('Meeting has already ended', { status: 403 });
-      }
+    meeting = await prepareMeetingForJoin(meeting);
+
+    if (isMeetingPermanentlyClosed(meeting.status) && !isPersonalRoom) {
+      return new NextResponse('Meeting has already ended', { status: 403 });
     }
 
     let identity: string;
@@ -75,11 +71,9 @@ export async function GET(request: NextRequest) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     if (member) {
-      // Logged-in: stable LiveKit identity across reconnects (host / co-host lists bind to identity).
       identity = `km_${member.id}`;
       tokenMetadata = JSON.stringify({ kloudMemberId: member.id });
     } else {
-      // Guest: unchanged — random postfix persisted in HttpOnly cookie.
       if (!randomParticipantPostfix) {
         randomParticipantPostfix = randomString(4);
       }
@@ -96,7 +90,6 @@ export async function GET(request: NextRequest) {
       roomName,
     );
 
-    // Return connection details
     const data: ConnectionDetails = {
       serverUrl: livekitServerUrl,
       roomName: roomName,

@@ -24,7 +24,7 @@ export function consumeMeetingClosedNotice(): string | null {
   }
 }
 
-/** Poll meeting API — handles brief race after remote end (LiveKit vs DB). */
+/** True only when meeting is permanently closed (ENDED / CANCELED), not IDLE. */
 export async function isMeetingEnded(roomName: string, maxAttempts = 4): Promise<boolean> {
   const encoded = encodeURIComponent(roomName);
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -35,9 +35,7 @@ export async function isMeetingEnded(roomName: string, maxAttempts = 4): Promise
       });
       if (res.ok) {
         const data = await res.json();
-        if (data?.status === 'ENDED') {
-          // Host may still rejoin within grace period after accidental room empty.
-          if (data?.hostRejoinable) return false;
+        if (data?.status === 'ENDED' || data?.status === 'CANCELED') {
           return true;
         }
       }

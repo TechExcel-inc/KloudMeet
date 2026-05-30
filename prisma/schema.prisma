@@ -187,9 +187,10 @@ model Meeting {
   actualDurationMinutes Int?
   description           String?
   maxParticipants   Int       @default(0)
-  status            String    @default("ACTIVE") // ACTIVE, ENDED, ARCHIVED
-  endedReason       String?   // ROOM_EMPTY (webhook), HOST_ENDED (explicit end)
-  rejoinableUntil   DateTime? // host may restore to ACTIVE before this time (ROOM_EMPTY only)
+  status            String    @default("ACTIVE") // ACTIVE, IDLE, ENDED, CANCELED, PAST_DUE
+  endedReason       String?   // ROOM_EMPTY (→ IDLE), HOST_ENDED (→ ENDED)
+  roomEmptyAt       DateTime? // when LiveKit room became empty (start of IDLE)
+  rejoinableUntil   DateTime? // after this, IDLE lazily becomes ENDED
   kloudMeetingId    Int?      // 对应 Kloud Java Server 的 meetingId（用于字幕/摘要关联）
   createdAt         DateTime  @default(now())
   createdBy         String?

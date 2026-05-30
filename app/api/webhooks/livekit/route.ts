@@ -2,10 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
-import { archivePersonalRoomMeeting } from '@/lib/personalRoom';
 import {
-  computeRejoinableUntil,
-  MEETING_END_REASON,
+  markMeetingIdleFromEmptyRoom,
+  MEETING_STATUS,
 } from '@/lib/meetingRejoin';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -75,13 +74,21 @@ export async function POST(request: NextRequest) {
       const actualStartedAt = new Date(Number(event.room.creationTime) * 1000);
       
       const meeting = await prisma.meeting.findUnique({ where: { roomName } });
-      if (meeting && meeting.status !== 'ENDED') {
+      if (meeting && meeting.status !== MEETING_STATUS.ENDED) {
         const data: {
           actualStartedAt?: Date;
           status: string;
-        } = { status: 'ACTIVE' };
+          roomEmptyAt?: null;
+          endedReason?: null;
+          rejoinableUntil?: null;
+        } = { status: MEETING_STATUS.ACTIVE };
         if (!meeting.actualStartedAt) {
           data.actualStartedAt = actualStartedAt;
+        }
+        if (meeting.status === MEETING_STATUS.IDLE) {
+          data.roomEmptyAt = null;
+          data.endedReason = null;
+          data.rejoinableUntil = null;
         }
         await prisma.meeting.update({
           where: { roomName },
@@ -90,27 +97,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Capture Exact End Time when the final user leaves the meeting
+    // Room empty → IDLE (not ENDED); lazy transition to ENDED after grace on next read
     if (event.event === 'room_finished' && event.room) {
       const roomName = event.room.name;
-      const endedAt = new Date();
-      
+
       const meeting = await prisma.meeting.findUnique({ where: { roomName } });
-      if (meeting && meeting.status !== 'ENDED') {
-        const startedTimeMs = meeting.actualStartedAt ? meeting.actualStartedAt.getTime() : meeting.startedAt.getTime();
-        const actualDurationMinutes = Math.max(1, Math.round((endedAt.getTime() - startedTimeMs) / 60000));
-        
-        const updated = await prisma.meeting.update({
-          where: { roomName },
-          data: {
-            endedAt,
-            actualDurationMinutes,
-            status: 'ENDED',
-            endedReason: MEETING_END_REASON.ROOM_EMPTY,
-            rejoinableUntil: computeRejoinableUntil(endedAt),
-          }
-        });
-        await archivePersonalRoomMeeting(updated);
+      if (
+        meeting &&
+        meeting.status !== MEETING_STATUS.ENDED &&
+        meeting.status !== MEETING_STATUS.IDLE
+      ) {
+        await markMeetingIdleFromEmptyRoom(meeting.id);
       }
     }
 

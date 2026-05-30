@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { listActiveRoomNames } from '@/lib/livekitRooms';
 import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
+import {
+  expireIdleMeetingIfNeeded,
+  isMeetingPermanentlyClosed,
+} from '@/lib/meetingRejoin';
 
 export async function GET(request: NextRequest) {
   try {
@@ -11,11 +15,10 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.split(' ')[1];
-    
-    // Fetch session
+
     const session = await prisma.session.findUnique({
       where: { token },
-      include: { teamMember: true }
+      include: { teamMember: true },
     });
 
     if (!session || !session.teamMember) {
@@ -24,7 +27,6 @@ export async function GET(request: NextRequest) {
 
     const member = session.teamMember;
 
-    // Parse pagination
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
@@ -58,30 +60,36 @@ export async function GET(request: NextRequest) {
               status: true,
               storageUrl: true,
               durationSeconds: true,
-            }
+            },
           },
           createdByMember: {
-            select: { fullName: true, username: true }
+            select: { fullName: true, username: true },
           },
           _count: {
-            select: { participants: true }
-          }
-        }
-      })
+            select: { participants: true },
+          },
+        },
+      }),
     ]);
 
     const activeRooms = await listActiveRoomNames();
 
-    const enhancedMeetings = meetings.map(m => {
+    const meetingsAfterIdle = await Promise.all(
+      meetings.map((m) => expireIdleMeetingIfNeeded(m)),
+    );
+
+    const enhancedMeetings = meetingsAfterIdle.map((m) => {
       const mx = m as any;
       const isLive = isRoomLiveInList(m.roomName, activeRooms);
-      // DB 已结束则一律不算进行中（避免 LiveKit 延迟回收导致误显示 Live）
-      const isActive =
-        m.status === 'ENDED' || m.status === 'CANCELED' ? false : isLive;
+      const isActive = isMeetingPermanentlyClosed(m.status) ? false : isLive;
       return {
         ...mx,
         isActive,
-        actualStartedAt: isActive && !mx.actualStartedAt ? new Date(mx.startedAt) : mx.actualStartedAt
+        isIdle: m.status === 'IDLE',
+        actualStartedAt:
+          isActive && !mx.actualStartedAt
+            ? new Date(mx.startedAt)
+            : mx.actualStartedAt,
       };
     });
 
@@ -90,7 +98,7 @@ export async function GET(request: NextRequest) {
       total,
       page,
       pageSize,
-      totalPages: Math.ceil(total / pageSize)
+      totalPages: Math.ceil(total / pageSize),
     });
   } catch (error) {
     console.error('[account meetings GET]', error);

@@ -502,8 +502,7 @@ export function PageClientImpl(props: {
 
   if (
     (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
-    !meetingInfo?.isPersonalRoom &&
-    !meetingInfo?.hostRejoinable
+    !meetingInfo?.isPersonalRoom
   ) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>

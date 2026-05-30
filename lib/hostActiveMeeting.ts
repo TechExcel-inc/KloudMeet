@@ -18,6 +18,7 @@ const meetingSelect = {
   deletedAt: true,
   endedReason: true,
   rejoinableUntil: true,
+  roomEmptyAt: true,
 } as const;
 
 function toPayload(meeting: MeetingRecordForActiveCheck, isActive: boolean) {
@@ -105,6 +106,7 @@ async function payloadForActiveLiveRoom(
         deletedAt: null,
         endedReason: null,
         rejoinableUntil: null,
+        roomEmptyAt: null,
       },
       true,
     );

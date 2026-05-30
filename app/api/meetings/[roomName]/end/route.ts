@@ -11,7 +11,7 @@ import {
   archivePersonalRoomMeeting,
   findPersonalRoomOwner,
 } from '@/lib/personalRoom';
-import { MEETING_END_REASON } from '@/lib/meetingRejoin';
+import { MEETING_END_REASON, MEETING_STATUS } from '@/lib/meetingRejoin';
 
 export async function POST(
   request: NextRequest,
@@ -43,7 +43,7 @@ export async function POST(
       return forbidden('Only the meeting host can end this meeting');
     }
 
-    if (meeting.status === 'ENDED') {
+    if (meeting.status === MEETING_STATUS.ENDED) {
       await deleteLiveKitRoom(roomName);
       await archivePersonalRoomMeeting(meeting);
       const archived = await prisma.meeting.findUnique({ where: { id: meeting.id } });
@@ -65,10 +65,11 @@ export async function POST(
     const updated = await prisma.meeting.update({
       where: { roomName },
       data: {
-        status: 'ENDED',
+        status: MEETING_STATUS.ENDED,
         endedAt,
         endedReason: MEETING_END_REASON.HOST_ENDED,
         rejoinableUntil: null,
+        roomEmptyAt: null,
         actualDurationMinutes: meeting.actualDurationMinutes ?? actualDurationMinutes,
       },
     });
