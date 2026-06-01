@@ -179,7 +179,6 @@
   "meeting.closedByHostDesc": "호스트가 이 회의를 종료했습니다. 홈으로 돌아갑니다…",
   "meeting.closedByHostToast": "호스트가 이 회의를 종료했습니다.",
   "meeting.returnHomeNow": "홈으로 돌아가기",
-  "prejoin.profile": "프로필",
   "prejoin.loadingMeeting": "회의 로딩 중…",
   "prejoin.entryLoadError": "회의 정보를 불러오지 못했습니다. 네트워크를 확인한 후 다시 시도하세요.",
   "prejoin.entryRetry": "다시 시도",

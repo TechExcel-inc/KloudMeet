@@ -193,7 +193,6 @@
   "meeting.closedByHostDesc": "The host has ended this meeting. Returning to home…",
   "meeting.closedByHostToast": "The host has ended this meeting.",
   "meeting.returnHomeNow": "Return Home Now",
-  "prejoin.profile": "Profile",
   "prejoin.loadingMeeting": "Loading meeting…",
   "prejoin.entryLoadError": "Could not load meeting info. Check your network and try again.",
   "prejoin.entryRetry": "Retry",

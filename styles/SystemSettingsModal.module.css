@@ -31,6 +31,8 @@
   flex-direction: column;
   max-height: calc(100vh - 96px);
   flex-shrink: 0;
+  /* Room 页 globals 为 color-scheme: dark，需在此隔离浅色表单 */
+  color-scheme: light;
 }
 
 .header {
@@ -167,6 +169,7 @@
   border-radius: 8px;
   font-size: 0.95rem;
   color: #0f172a;
+  background: #fff;
   transition: border-color 0.2s;
   font-family: inherit;
 }

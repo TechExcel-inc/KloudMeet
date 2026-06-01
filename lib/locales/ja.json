@@ -179,7 +179,6 @@
   "meeting.closedByHostDesc": "ホストがこのミーティングを終了しました。ホームに戻ります…",
   "meeting.closedByHostToast": "ホストがこのミーティングを終了しました。",
   "meeting.returnHomeNow": "ホームに戻る",
-  "prejoin.profile": "プロフィール",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",
   "prejoin.entryLoadError": "会議情報の読み込みに失敗しました。ネットワークを確認して再試行してください。",
   "prejoin.entryRetry": "再試行",

@@ -8,6 +8,10 @@ import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { HelpModal } from '@/lib/HelpModal';
+import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
+import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
+import { MyProfileModal } from '@/lib/MyProfileModal';
+import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
@@ -170,13 +174,14 @@ export function PageClientImpl(props: {
   );
 
   const [meetingInfo, setMeetingInfo] = React.useState<any>(null);
-  const [currentUser, setCurrentUser] = React.useState<any>(null);
+  const [currentUser, setCurrentUser] = React.useState<AuthUser | null>(null);
   const [isSameTabRefresh, setIsSameTabRefresh] = React.useState(false);
   const [elapsedTime, setElapsedTime] = React.useState('');
-  const [showAvatarMenu, setShowAvatarMenu] = React.useState(false);
   const { t, locale, setLocale } = useI18n();
   const [showLangMenu, setShowLangMenu] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
+  const [showSettingsModal, setShowSettingsModal] = React.useState(false);
+  const [showProfileModal, setShowProfileModal] = React.useState(false);
   const [personalRoomUrlEnabled, setPersonalRoomUrlEnabled] = React.useState(false);
   const [hostPersonalRoomId, setHostPersonalRoomId] = React.useState('');
 
@@ -234,7 +239,7 @@ export function PageClientImpl(props: {
             const stored = localStorage.getItem('kloudUser');
             if (stored) {
               kloudUser = JSON.parse(stored);
-              if (!cancelled) setCurrentUser(kloudUser);
+              if (!cancelled) setCurrentUser(kloudUser as AuthUser);
             }
             if (sessionStorage.getItem('activeKloudRoom') === routeRoomName) {
               if (!cancelled) setIsSameTabRefresh(true);
@@ -310,6 +315,15 @@ export function PageClientImpl(props: {
   );
 
   const isHost = isMeetingCreator;
+
+  const handlePrejoinSignOut = React.useCallback(() => {
+    try {
+      localStorage.removeItem('kloudUser');
+    } catch {
+      /* ignore */
+    }
+    window.location.href = '/';
+  }, []);
 
   React.useEffect(() => {
     setEffectiveRoomName(routeRoomName);
@@ -717,15 +731,6 @@ export function PageClientImpl(props: {
               font-size: 1.25rem;
               font-family: 'Inter', sans-serif;
             }
-            .kloud-prejoin-logo-icon-toolbar {
-              width: 32px;
-              height: 32px;
-              border-radius: 9px;
-              background: linear-gradient(135deg, #7c3aed, #5b21b6);
-              display: inline-flex;
-              align-items: center;
-              justify-content: center;
-            }
             .ead-toolbar-right {
               display: flex;
               align-items: center;
@@ -750,7 +755,7 @@ export function PageClientImpl(props: {
               border-color: #9ca3af;
               color: #111827;
             }
-            .ead-icon-btn, .ead-avatar-btn {
+            .ead-icon-btn {
               width: 38px;
               border-radius: 50%;
               padding: 0;
@@ -767,25 +772,6 @@ export function PageClientImpl(props: {
               color: #fff !important;
               border-color: #f59e0b !important;
               box-shadow: 0 0 0 1px #f59e0b !important;
-            }
-            .ead-avatar-fallback {
-              width: 100%;
-              height: 100%;
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              overflow: hidden;
-            }
-            .ead-avatar-fallback svg {
-              width: 18px;
-              height: 18px;
-            }
-            .ead-avatar-btn img {
-              width: 100%;
-              height: 100%;
-              border-radius: 50%;
-              object-fit: cover;
             }
             .ead-dropdown-container {
               position: relative;
@@ -866,17 +852,13 @@ export function PageClientImpl(props: {
                 font-size: 0; /* Hide Kloud Meet text */
                 gap: 0;
               }
-              .kloud-prejoin-logo-icon-toolbar {
-                width: 32px;
-                height: 32px;
-              }
               .ead-toolbar-right {
                 gap: 0.4rem;
               }
               .ead-btn {
                 height: 36px;
               }
-              .ead-icon-btn, .ead-avatar-btn {
+              .ead-icon-btn {
                 width: 36px;
               }
               .ead-pill-btn {
@@ -909,7 +891,7 @@ export function PageClientImpl(props: {
 
             <div className="ead-toolbar-right">
               {/* Help Button */}
-              <button className="ead-btn ead-icon-btn" title={t('nav.help')} onClick={() => { setShowLangMenu(false); setShowAvatarMenu(false); setShowHelp(true); }}>
+              <button className="ead-btn ead-icon-btn" title={t('nav.help')} onClick={() => { setShowLangMenu(false); setShowHelp(true); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
                   <circle cx="12" cy="12" r="10"></circle>
                   <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
@@ -921,7 +903,7 @@ export function PageClientImpl(props: {
               <div className="ead-dropdown-container">
                 <button
                   className={`ead-btn ead-pill-btn ${showLangMenu ? 'ead-btn-active' : ''}`}
-                  onClick={() => { setShowLangMenu(!showLangMenu); setShowAvatarMenu(false); }}
+                  onClick={() => setShowLangMenu(!showLangMenu)}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
                     <circle cx="12" cy="12" r="10" />
@@ -964,36 +946,26 @@ export function PageClientImpl(props: {
                 )}
               </div>
 
-              {/* Avatar Button */}
-              <div className="ead-dropdown-container">
-                <button
-                  className={`ead-btn ead-avatar-btn ${showAvatarMenu ? 'ead-btn-active' : ''}`}
-                  onClick={() => { setShowAvatarMenu(!showAvatarMenu); setShowLangMenu(false); }}
-                >
-                  {currentUser?.avatarUrl ? (
-                    <img src={currentUser.avatarUrl} alt="Avatar" />
-                  ) : (
-                    <div className="ead-avatar-fallback">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
-                    </div>
-                  )}
-                </button>
-                {showAvatarMenu && (
-                  <div className="ead-dropdown-menu">
-                    <button onClick={() => alert('Profile coming soon')} className="ead-menu-item">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>
-                      {t('prejoin.profile')}
-                    </button>
-                    <button onClick={() => alert('System Settings coming soon')} className="ead-menu-item">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="18" height="18"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-                      {t('nav.systemSettings')}
-                    </button>
-                  </div>
-                )}
-              </div>
+              <UserAvatarMenu
+                user={
+                  currentUser
+                    ? {
+                        displayName: currentUser.displayName || currentUser.username,
+                        avatarUrl: currentUser.avatarUrl,
+                      }
+                    : undefined
+                }
+                onSignIn={() => { window.location.href = '/'; }}
+                onOpenProfile={() => setShowProfileModal(true)}
+                onOpenSettings={() => setShowSettingsModal(true)}
+                onOpenDesktopApp={() => openDesktopEntry('prejoin')}
+                onSignOut={handlePrejoinSignOut}
+                mobileOrgLabel={
+                  currentUser
+                    ? `${currentUser.displayName || currentUser.username}@Kloud Corp`
+                    : undefined
+                }
+              />
             </div>
           </header>
 
@@ -1102,6 +1074,34 @@ export function PageClientImpl(props: {
             options={{ codec: props.codec, hq: props.hq }}
           />
         </div>
+      )}
+
+      {showSettingsModal && (
+        <SystemSettingsModal
+          onClose={() => setShowSettingsModal(false)}
+          onSave={() => setShowSettingsModal(false)}
+        />
+      )}
+      {showProfileModal && currentUser && (
+        <MyProfileModal
+          user={currentUser}
+          onClose={() => setShowProfileModal(false)}
+          onSave={({ avatarUrl: newAvatar, displayName: newName }) => {
+            if (newAvatar || newName) {
+              const updated = {
+                ...currentUser,
+                ...(newAvatar ? { avatarUrl: newAvatar } : {}),
+                ...(newName ? { displayName: newName } : {}),
+              };
+              try {
+                localStorage.setItem('kloudUser', JSON.stringify(updated));
+              } catch {
+                /* ignore */
+              }
+              setCurrentUser(updated);
+            }
+          }}
+        />
       )}
 
       {/* Help Modal — always available (pre-join + in-meeting) */}

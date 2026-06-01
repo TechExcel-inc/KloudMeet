@@ -185,7 +185,6 @@
   "meeting.closedByHostDesc": "主持人已关闭本次会议，正在返回主页…",
   "meeting.closedByHostToast": "主持人已关闭本次会议。",
   "meeting.returnHomeNow": "立即返回主页",
-  "prejoin.profile": "个人资料",
   "prejoin.loadingMeeting": "正在加载会议…",
   "prejoin.entryLoadError": "加载会议信息失败，请检查网络后重试。",
   "prejoin.entryRetry": "重试",

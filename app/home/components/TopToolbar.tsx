@@ -5,12 +5,10 @@ import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser } from '../types';
 import { KloudLogo } from './KloudLogo';
+import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
 
 export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, onOpenHelp, onOpenDesktopApp, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, onOpenHelp?: () => void, onOpenDesktopApp?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const { t, locale, setLocale } = useI18n();
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = React.useRef<HTMLDivElement>(null);
-  
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const orgMenuRef = React.useRef<HTMLDivElement>(null);
@@ -18,9 +16,6 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-      }
       if (orgMenuRef.current && !orgMenuRef.current.contains(event.target as Node)) {
         setOrgMenuOpen(false);
       }
@@ -139,77 +134,16 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
           </div>
 
           {/* Avatar / Sign-in */}
-          {!hideAvatar && (user ? (
-            <div style={{ position: 'relative' }} ref={menuRef}>
-              <button 
-                className={styles.avatarBtn} 
-                onClick={() => setMenuOpen(!menuOpen)} 
-                aria-label="User Menu" 
-                title="User Menu"
-                style={{ overflow: 'hidden' }}
-              >
-                {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user.displayName.charAt(0).toUpperCase()}</span>
-                )}
-              </button>
-              {menuOpen && (
-                <div className={styles.dropdownMenu}>
-                  {/* Mobile: show org identity at top of avatar menu */}
-                  <div className={styles.navAvatarMenuMobileHeader}>
-                    <span className={styles.navAvatarMenuOrgName}>{user.displayName}@Kloud Corp</span>
-                  </div>
-                  <button 
-                    className={styles.dropdownItem} 
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onOpenProfile && onOpenProfile();
-                    }}
-                    style={{ borderBottom: '1px solid #f1f5f9' }}
-                  >
-                    {t('nav.myProfile')}
-                  </button>
-                  <button
-                    className={styles.dropdownItem}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onOpenSettings && onOpenSettings();
-                    }}
-                    style={{ borderBottom: '1px solid #f1f5f9' }}
-                  >
-                    {t('nav.systemSettings')}
-                  </button>
-                  <button
-                    className={styles.dropdownItem}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onOpenDesktopApp && onOpenDesktopApp();
-                    }}
-                    style={{ borderBottom: '1px solid #f1f5f9' }}
-                  >
-                    {t('toolbar.openDesktop.menuItem')}
-                  </button>
-                  <button 
-                    className={styles.dropdownItem} 
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onSignOut && onSignOut();
-                    }}
-                  >
-                    {t('nav.signOut')}
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : onSignIn && (
-            <button className={styles.avatarBtn} onClick={onSignIn} aria-label="Sign In via User Profile">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"></path>
-                <circle cx="12" cy="7" r="4"></circle>
-              </svg>
-            </button>
-          ))}
+          {!hideAvatar && (
+            <UserAvatarMenu
+              user={user}
+              onSignIn={onSignIn}
+              onOpenProfile={onOpenProfile}
+              onOpenSettings={onOpenSettings}
+              onOpenDesktopApp={onOpenDesktopApp}
+              onSignOut={onSignOut}
+            />
+          )}
         </div>
       </div>
     </nav>
