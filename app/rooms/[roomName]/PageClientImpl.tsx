@@ -446,8 +446,13 @@ export function PageClientImpl(props: {
         const connectionDetailsData = await connectionDetailsResp.json();
         setConnectionDetails(connectionDetailsData);
 
+        const joinedRoomName =
+          typeof connectionDetailsData?.roomName === 'string'
+            ? connectionDetailsData.roomName
+            : roomToJoin;
+
         if (typeof window !== 'undefined') {
-          sessionStorage.setItem('activeKloudRoom', roomToJoin);
+          sessionStorage.setItem('activeKloudRoom', joinedRoomName);
           const abandonedRoom = sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
           try {
             sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
@@ -457,13 +462,13 @@ export function PageClientImpl(props: {
           if (
             abandonedRoom &&
             hostPersonalRoomId &&
-            abandonedRoom.toLowerCase() !== roomToJoin.toLowerCase() &&
-            roomToJoin.toLowerCase() === hostPersonalRoomId.toLowerCase()
+            abandonedRoom.toLowerCase() !== joinedRoomName.toLowerCase() &&
+            joinedRoomName.toLowerCase() === hostPersonalRoomId.toLowerCase()
           ) {
             void cancelAbandonedInstantMeeting(abandonedRoom);
           }
-          replaceBrowserRoomUrl(roomToJoin);
-          setEffectiveRoomName(roomToJoin);
+          replaceBrowserRoomUrl(joinedRoomName);
+          setEffectiveRoomName(joinedRoomName);
         }
       } catch (error: any) {
         console.error('Failed to get connection details:', error);

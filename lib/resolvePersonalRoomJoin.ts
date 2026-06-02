@@ -180,10 +180,13 @@ async function resolveRegisteredOwnerLiveInPersonalRoom(
     preferredLiveRoomName(personalRoomId, activeRooms) ?? personalRoomId;
   const record = await findRegisteredOwnerMeetingByLiveRoom(liveRn, ownerId);
   if (record) {
+    const effectiveRoomName = isSameRoom(record.roomName, personalRoomId)
+      ? personalRoomId
+      : record.roomName;
     return {
-      effectiveRoomName: record.roomName,
-      isPersonalSession: true,
-      meeting: toResolvedMeeting(record),
+      effectiveRoomName,
+      isPersonalSession: isSameRoom(effectiveRoomName, personalRoomId),
+      meeting: toResolvedMeeting({ ...record, roomName: effectiveRoomName }),
       hostMemberId: ownerId,
     };
   }
@@ -194,11 +197,11 @@ async function resolveRegisteredOwnerLiveInPersonalRoom(
   }
 
   return {
-    effectiveRoomName: liveRn,
+    effectiveRoomName: personalRoomId,
     isPersonalSession: true,
     meeting: {
       id: 0,
-      roomName: liveRn,
+      roomName: personalRoomId,
       title: `${ownerDisplayName(owner)}'s Room`,
       status: 'ACTIVE',
       actualStartedAt: null,
@@ -325,10 +328,14 @@ async function findOwnerJoinableMeetingFromDb(
     return null;
   }
 
+  const effectiveRoomName = isSameRoom(pick.record.roomName, personalRoomId)
+    ? personalRoomId
+    : pick.record.roomName;
+
   return {
-    effectiveRoomName: pick.record.roomName,
-    isPersonalSession: isSameRoom(pick.record.roomName, personalRoomId),
-    meeting: toResolvedMeeting(pick.record),
+    effectiveRoomName,
+    isPersonalSession: isSameRoom(effectiveRoomName, personalRoomId),
+    meeting: toResolvedMeeting({ ...pick.record, roomName: effectiveRoomName }),
     hostMemberId: ownerId,
   };
 }
@@ -433,16 +440,17 @@ async function resolvePersonalRoomIdEntry(
     id: number;
     fullName: string | null;
     username: string;
+    personalRoomId: string | null;
   },
 ): Promise<RoomEntryResolution> {
-  const trimmed = personalRoomId.trim();
+  const canonicalId = registeredOwner.personalRoomId?.trim() || personalRoomId.trim();
 
   try {
     const activeRooms = await listActiveRoomNames();
 
     const ownerActive = await resolveOwnerActiveSession(
       registeredOwner.id,
-      trimmed,
+      canonicalId,
       activeRooms,
     );
     if (ownerActive) {
@@ -453,7 +461,7 @@ async function resolvePersonalRoomIdEntry(
         };
       return {
         kind: 'join_live',
-        personalRoomId: trimmed,
+        personalRoomId: canonicalId,
         effectiveRoomName: ownerActive.effectiveRoomName,
         isPersonalSession: ownerActive.isPersonalSession,
         meeting: ownerActive.meeting,
@@ -462,7 +470,7 @@ async function resolvePersonalRoomIdEntry(
     }
 
     const ownerInPersonal = await resolveRegisteredOwnerLiveInPersonalRoom(
-      trimmed,
+      canonicalId,
       registeredOwner.id,
       registeredOwner,
       activeRooms,
@@ -475,7 +483,7 @@ async function resolvePersonalRoomIdEntry(
         };
       return {
         kind: 'join_live',
-        personalRoomId: trimmed,
+        personalRoomId: canonicalId,
         effectiveRoomName: ownerInPersonal.effectiveRoomName,
         isPersonalSession: true,
         meeting: ownerInPersonal.meeting,
@@ -484,7 +492,7 @@ async function resolvePersonalRoomIdEntry(
     }
 
     const occupied = await resolvePersonalRoomOccupiedByOther(
-      trimmed,
+      canonicalId,
       registeredOwner.id,
       activeRooms,
     );
@@ -496,7 +504,7 @@ async function resolvePersonalRoomIdEntry(
         };
       return {
         kind: 'join_live',
-        personalRoomId: trimmed,
+        personalRoomId: canonicalId,
         effectiveRoomName: occupied.effectiveRoomName,
         isPersonalSession: true,
         meeting: occupied.meeting,
@@ -506,7 +514,7 @@ async function resolvePersonalRoomIdEntry(
 
     return {
       kind: 'open_personal_idle',
-      personalRoomId: trimmed,
+      personalRoomId: canonicalId,
       owner: {
         id: registeredOwner.id,
         displayName: ownerDisplayName(registeredOwner),

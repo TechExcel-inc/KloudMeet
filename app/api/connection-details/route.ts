@@ -1,5 +1,8 @@
 import { ensurePersonalRoomMeeting } from '@/lib/meetingRoomIsActive';
-import { findPersonalRoomOwner } from '@/lib/personalRoom';
+import {
+  findPersonalRoomOwner,
+  resolveCanonicalRoomName,
+} from '@/lib/personalRoom';
 import { randomString } from '@/lib/client-utils';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
@@ -40,8 +43,10 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Missing required query parameter: participantName', { status: 400 });
     }
 
-    let meeting = await ensurePersonalRoomMeeting(roomName);
-    const personalOwner = await findPersonalRoomOwner(roomName);
+    const livekitRoomName = await resolveCanonicalRoomName(roomName);
+
+    let meeting = await ensurePersonalRoomMeeting(livekitRoomName);
+    const personalOwner = await findPersonalRoomOwner(livekitRoomName);
     const isPersonalRoom = Boolean(
       meeting && personalOwner && personalOwner.id === meeting.createdByMemberId,
     );
@@ -87,12 +92,12 @@ export async function GET(request: NextRequest) {
         name: participantName,
         metadata: tokenMetadata,
       },
-      roomName,
+      livekitRoomName,
     );
 
     const data: ConnectionDetails = {
       serverUrl: livekitServerUrl,
-      roomName: roomName,
+      roomName: livekitRoomName,
       participantToken: participantToken,
       participantName: participantName,
     };

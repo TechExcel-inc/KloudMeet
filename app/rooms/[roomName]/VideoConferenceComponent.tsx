@@ -2466,16 +2466,15 @@ export function VideoConferenceComponent(props: {
     [cancelFloatingXAnimation, clampFloatingPosition],
   );
 
-  const handleFloatingMouseDown = React.useCallback(
-    (e: React.MouseEvent) => {
-      const target = e.target as Element;
-      if (
-        target.closest('.kloud-custom-mic-indicator') ||
+  const shouldIgnoreFloatingDragTarget = (target: Element) =>
+    Boolean(
+      target.closest('.kloud-custom-mic-indicator') ||
         target.closest('.floating-chevron-btn') ||
-        target.closest('button')
-      ) {
-        return;
-      }
+        target.closest('button'),
+    );
+
+  const beginFloatingDrag = React.useCallback(
+    (clientX: number, clientY: number) => {
       isDragging.current = true;
       setIsFloatingDragging(true);
       cancelFloatingXAnimation();
@@ -2493,39 +2492,70 @@ export function VideoConferenceComponent(props: {
           if (activeView === 'liveDoc' && !hasScreenShare) {
             rememberedRightInsetRef.current = getInsetFromParentRight(clamped.x);
           }
-          dragOffset.current = { x: e.clientX - clamped.x, y: e.clientY - clamped.y };
+          dragOffset.current = { x: clientX - clamped.x, y: clientY - clamped.y };
         } else {
           const p = floatingPosRef.current;
-          dragOffset.current = { x: e.clientX - p.x, y: e.clientY - p.y };
+          dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
           setFloatingPosLayout('coordinates');
         }
       } else {
         const p = floatingPosRef.current;
-        dragOffset.current = { x: e.clientX - p.x, y: e.clientY - p.y };
+        dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
       }
-      e.preventDefault();
     },
     [activeView, cancelFloatingXAnimation, clampFloatingPosition, floatingPosLayout, getInsetFromParentRight, hasScreenShare],
   );
 
+  const handleFloatingMouseDown = React.useCallback(
+    (e: React.MouseEvent) => {
+      if (shouldIgnoreFloatingDragTarget(e.target as Element)) return;
+      beginFloatingDrag(e.clientX, e.clientY);
+      e.preventDefault();
+    },
+    [beginFloatingDrag],
+  );
+
+  const handleFloatingTouchStart = React.useCallback(
+    (e: React.TouchEvent) => {
+      if (shouldIgnoreFloatingDragTarget(e.target as Element)) return;
+      if (e.touches.length !== 1) return;
+      beginFloatingDrag(e.touches[0].clientX, e.touches[0].clientY);
+    },
+    [beginFloatingDrag],
+  );
+
   React.useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const applyFloatingDragMove = (clientX: number, clientY: number) => {
       if (!isDragging.current) return;
-      const next = clampFloatingPosition(e.clientX - dragOffset.current.x, e.clientY - dragOffset.current.y);
+      const next = clampFloatingPosition(clientX - dragOffset.current.x, clientY - dragOffset.current.y);
       setFloatingPos(next);
       if (isDragging.current && activeView === 'liveDoc' && !hasScreenShare) {
         rememberedRightInsetRef.current = getInsetFromParentRight(next.x);
       }
     };
-    const handleMouseUp = () => {
+    const handleMouseMove = (e: MouseEvent) => {
+      applyFloatingDragMove(e.clientX, e.clientY);
+    };
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!isDragging.current || e.touches.length !== 1) return;
+      e.preventDefault();
+      applyFloatingDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    };
+    const finishFloatingDrag = () => {
       isDragging.current = false;
       setIsFloatingDragging(false);
     };
     window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
+    window.addEventListener('mouseup', finishFloatingDrag);
+    window.addEventListener('touchmove', handleTouchMove, { passive: false });
+    window.addEventListener('touchend', finishFloatingDrag);
+    window.addEventListener('touchcancel', finishFloatingDrag);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('mouseup', finishFloatingDrag);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('touchend', finishFloatingDrag);
+      window.removeEventListener('touchcancel', finishFloatingDrag);
     };
   }, [activeView, clampFloatingPosition, getInsetFromParentRight, hasScreenShare]);
 
@@ -3695,6 +3725,7 @@ export function VideoConferenceComponent(props: {
                   ref={floatingRef}
                   className={`floating-webcam-panel ${floatingExpanded ? 'expanded' : ''}`}
                   onMouseDown={handleFloatingMouseDown}
+                  onTouchStart={handleFloatingTouchStart}
                   style={{
                     position: 'absolute',
                     top: floatingPos.y,
@@ -3704,6 +3735,7 @@ export function VideoConferenceComponent(props: {
                     zIndex: floatingExpanded ? 350 : 200,
                     cursor: isFloatingDragging ? 'grabbing' : 'grab',
                     userSelect: 'none',
+                    touchAction: 'none',
                     transition: isFloatingDragging
                       ? 'none'
                       : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out',
@@ -3751,6 +3783,7 @@ export function VideoConferenceComponent(props: {
                           setFloatingExpanded(true);
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
+                        onTouchStart={(e) => e.stopPropagation()}
                         title={t('toolbar.expandWebcams')}
                       >
                         <svg
@@ -3780,6 +3813,7 @@ export function VideoConferenceComponent(props: {
                                 setFloatingExpanded(false);
                               }}
                               onMouseDown={(e) => e.stopPropagation()}
+                              onTouchStart={(e) => e.stopPropagation()}
                               title={t('toolbar.collapseWebcams')}
                             >
                               <svg
@@ -4210,6 +4244,8 @@ export function VideoConferenceComponent(props: {
                border-radius: 20px;
                padding: 6px 8px;
                box-shadow: 0 8px 32px rgba(0,0,0,0.45);
+               touch-action: none;
+               -webkit-user-select: none;
             }
             .floating-webcam-panel.expanded {
                border-radius: 16px;

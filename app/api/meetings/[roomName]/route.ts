@@ -4,7 +4,7 @@ import {
   findMeetingByRoomName,
   getMeetingIsActiveByRoomName,
 } from '@/lib/meetingRoomIsActive';
-import { findPersonalRoomOwner } from '@/lib/personalRoom';
+import { findPersonalRoomOwner, resolveCanonicalRoomName } from '@/lib/personalRoom';
 import {
   canManageMeeting,
   forbidden,
@@ -28,12 +28,15 @@ export async function GET(
     const resolvedParams = await params;
     
     // Explicitly parse string properly as Next.js passes dynamic param objects
-    const roomName = resolvedParams?.roomName;
+    const roomName = await resolveCanonicalRoomName(resolvedParams?.roomName ?? '');
     if (!roomName) {
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
     let meetingCore = await findMeetingByRoomName(roomName);
+    if (!meetingCore && resolvedParams?.roomName?.trim()) {
+      meetingCore = await findMeetingByRoomName(resolvedParams.roomName.trim());
+    }
     if (!meetingCore) {
       const owner = await findPersonalRoomOwner(roomName);
       if (!owner) {

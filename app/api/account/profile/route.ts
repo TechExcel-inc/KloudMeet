@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { resolvePersonalRoomIdForSave } from '@/lib/personalRoom';
 
 async function getAuthMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -35,21 +36,25 @@ export async function PUT(request: NextRequest) {
     const { firstName, middleName, lastName, biography, personalRoomId, phone, email, avatarUrl } = body;
     
     // Validate personalRoomId
-    if (personalRoomId) {
-      if (!/^(?=.*[a-zA-Z])[a-zA-Z0-9]{3,12}$/.test(personalRoomId)) {
-        return NextResponse.json(
-          { error: 'Room ID must be 3-12 letters and digits with at least one letter', code: 'PERSONAL_ROOM_ID_INVALID' },
-          { status: 400 },
-        );
-      }
-      const existing = await prisma.teamMember.findFirst({
-        where: { personalRoomId, id: { not: member.id } }
-      });
-      if (existing) {
-        return NextResponse.json(
-          { error: 'This Room ID is already taken.', code: 'PERSONAL_ROOM_ID_TAKEN' },
-          { status: 400 },
-        );
+    let personalRoomIdToSave: string | null | undefined = undefined;
+    if (personalRoomId !== undefined) {
+      if (personalRoomId === null || personalRoomId === '') {
+        personalRoomIdToSave = null;
+      } else {
+        if (!/^(?=.*[a-zA-Z])[a-zA-Z0-9]{3,12}$/.test(personalRoomId)) {
+          return NextResponse.json(
+            { error: 'Room ID must be 3-12 letters and digits with at least one letter', code: 'PERSONAL_ROOM_ID_INVALID' },
+            { status: 400 },
+          );
+        }
+        const resolved = await resolvePersonalRoomIdForSave(personalRoomId, member.id);
+        if (!resolved.ok) {
+          return NextResponse.json(
+            { error: 'This Room ID is already taken.', code: 'PERSONAL_ROOM_ID_TAKEN' },
+            { status: 400 },
+          );
+        }
+        personalRoomIdToSave = resolved.personalRoomId;
       }
     }
 
@@ -97,7 +102,7 @@ export async function PUT(request: NextRequest) {
         lastName: lastName !== undefined ? lastName : undefined,
         fullName,
         biography: biography !== undefined ? biography : undefined,
-        personalRoomId: personalRoomId !== undefined ? personalRoomId : undefined,
+        personalRoomId: personalRoomIdToSave,
         phone: phone !== undefined ? (phone || null) : undefined,
         email: email !== undefined ? (email || null) : undefined,
         avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,

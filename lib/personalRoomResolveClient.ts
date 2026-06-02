@@ -46,6 +46,15 @@ export function getResolvedLiveRoomName(
   if (resolved?.kind !== 'join_live') {
     return null;
   }
+  const canonicalPersonal =
+    resolved.personalRoomId?.trim() ||
+    (resolved.isPersonalSession ? resolved.effectiveRoomName : null);
+  if (
+    canonicalPersonal &&
+    canonicalPersonal.toLowerCase() === roomName.trim().toLowerCase()
+  ) {
+    return null;
+  }
   if (
     resolved.effectiveRoomName.toLowerCase() === roomName.trim().toLowerCase()
   ) {

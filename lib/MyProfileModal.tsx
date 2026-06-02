@@ -332,7 +332,7 @@ export function MyProfileModal({
       setRoomIdDialogError(t('profile.roomIdInvalid'));
       return;
     }
-    if (trimmed === personalRoomId) {
+    if (trimmed.toLowerCase() === personalRoomId.trim().toLowerCase()) {
       closeRoomIdDialog();
       return;
     }

@@ -1,5 +1,8 @@
 import { prisma } from '@/lib/db';
-import { findPersonalRoomOwner } from '@/lib/personalRoom';
+import {
+  findPersonalRoomOwner,
+  resolveCanonicalRoomName,
+} from '@/lib/personalRoom';
 import { RoomServiceClient } from 'livekit-server-sdk';
 
 const LIVEKIT_URL =
@@ -106,7 +109,25 @@ export async function ensurePersonalRoomMeeting(
   const trimmed = roomName.trim();
   if (!trimmed) return null;
 
-  let meeting = await findMeetingByRoomName(trimmed);
+  const canonical = await resolveCanonicalRoomName(trimmed);
+  const owner = await findPersonalRoomOwner(canonical);
+
+  let meeting =
+    (await findMeetingByRoomName(canonical)) ??
+    (canonical !== trimmed ? await findMeetingByRoomName(trimmed) : null);
+
+  if (
+    meeting &&
+    owner &&
+    meeting.roomName !== canonical &&
+    meeting.roomName.toLowerCase() === canonical.toLowerCase()
+  ) {
+    meeting = await prisma.meeting.update({
+      where: { id: meeting.id },
+      data: { roomName: canonical },
+      select: meetingSelect,
+    });
+  }
 
   const recycleStatuses = ['ENDED', 'CANCELED'];
   const shouldRecyclePersonalRoom =
@@ -115,21 +136,21 @@ export async function ensurePersonalRoomMeeting(
       recycleStatuses.includes(meeting.status));
 
   if (shouldRecyclePersonalRoom) {
-    const owner = await findPersonalRoomOwner(trimmed);
     if (owner) {
       if (
         meeting &&
         typeof meeting.status === 'string' &&
         recycleStatuses.includes(meeting.status)
       ) {
+        const archiveFrom = meeting.roomName;
         await prisma.meeting.update({
           where: { id: meeting.id },
-          data: { roomName: `${trimmed}_${meeting.id}` },
+          data: { roomName: `${archiveFrom}_${meeting.id}` },
         });
       }
       meeting = await prisma.meeting.create({
         data: {
-          roomName: trimmed,
+          roomName: canonical,
           createdByMemberId: owner.id,
           title: `${owner.fullName || owner.username}'s Room`,
           status: 'ACTIVE',
