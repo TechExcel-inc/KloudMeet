@@ -11,6 +11,10 @@ import {
   isMeetingPermanentlyClosed,
   prepareMeetingForJoin,
 } from '@/lib/meetingRejoin';
+import {
+  buildKloudMemberIdentity,
+  sanitizeKloudDeviceId,
+} from '@/lib/meetingOwner';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -19,6 +23,7 @@ const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
 const COOKIE_KEY = 'random-participant-postfix';
+const DEVICE_COOKIE_KEY = 'kloud-device-id';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,6 +31,7 @@ export async function GET(request: NextRequest) {
     const roomName = request.nextUrl.searchParams.get('roomName');
     const participantName = request.nextUrl.searchParams.get('participantName');
     const metadata = request.nextUrl.searchParams.get('metadata') ?? '';
+    const deviceIdParam = request.nextUrl.searchParams.get('deviceId');
     const region = request.nextUrl.searchParams.get('region');
     if (!LIVEKIT_URL) {
       throw new Error('LIVEKIT_URL is not defined');
@@ -76,13 +82,23 @@ export async function GET(request: NextRequest) {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     if (member) {
-      identity = `km_${member.id}`;
-      tokenMetadata = JSON.stringify({ kloudMemberId: member.id });
+      let deviceId =
+        sanitizeKloudDeviceId(deviceIdParam) ??
+        sanitizeKloudDeviceId(request.cookies.get(DEVICE_COOKIE_KEY)?.value);
+      if (!deviceId) {
+        deviceId = randomString(8);
+      }
+      identity = buildKloudMemberIdentity(member.id, deviceId);
+      tokenMetadata = JSON.stringify({ kloudMemberId: member.id, kloudDeviceId: deviceId });
+      headers['Set-Cookie'] = `${DEVICE_COOKIE_KEY}=${deviceId}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
     } else {
+      const guestDeviceId = sanitizeKloudDeviceId(deviceIdParam);
       if (!randomParticipantPostfix) {
         randomParticipantPostfix = randomString(4);
       }
-      identity = `${participantName}__${randomParticipantPostfix}`;
+      identity = guestDeviceId
+        ? `${participantName}__${randomParticipantPostfix}_${guestDeviceId}`
+        : `${participantName}__${randomParticipantPostfix}`;
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
     }
 

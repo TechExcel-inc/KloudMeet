@@ -71,6 +71,7 @@ import {
 } from './roomVideoLayouts';
 import { isDbMeetingOwner } from '@/lib/meetingOwner';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
+import { appendKloudDeviceId } from '@/lib/kloudDeviceId';
 import { authHeaders, connectionDetailsFetchInit } from '@/lib/kloudSession';
 import {
   isMeetingEnded,
@@ -440,6 +441,7 @@ export function VideoConferenceComponent(props: {
     const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
     url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
     url.searchParams.append('participantName', participantName);
+    appendKloudDeviceId(url);
     if (props.region) {
       url.searchParams.append('region', props.region);
     }

@@ -75,6 +75,7 @@ import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import { PREJOIN_ORIGINAL_ROOM_SESSION_KEY, cancelAbandonedInstantMeeting } from '@/lib/prejoinPersonalRoom';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
+import { appendKloudDeviceId } from '@/lib/kloudDeviceId';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -426,6 +427,7 @@ export function PageClientImpl(props: {
         const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
         url.searchParams.append('roomName', roomToJoin);
         url.searchParams.append('participantName', values.username);
+        appendKloudDeviceId(url);
         if (props.region) {
           url.searchParams.append('region', props.region);
         }

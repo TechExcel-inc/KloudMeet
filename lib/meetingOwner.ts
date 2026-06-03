@@ -11,6 +11,28 @@ export function parseKloudMemberIdFromMetadata(metadata?: string | null): string
   }
 }
 
+/** Parse member id from LiveKit identity (`km_42` or `km_42_a1b2c3d4`). */
+export function parseKloudMemberIdFromIdentity(identity?: string | null): number | null {
+  if (!identity) return null;
+  const match = identity.match(/^km_(\d+)(?:_|$)/);
+  if (!match) return null;
+  const id = parseInt(match[1], 10);
+  return Number.isFinite(id) ? id : null;
+}
+
+/** Sanitize client device id for LiveKit identity suffix. */
+export function sanitizeKloudDeviceId(raw: string | null | undefined): string | null {
+  const trimmed = raw?.trim().toLowerCase() ?? '';
+  if (!trimmed || !/^[a-z0-9]{4,32}$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+/** Build logged-in LiveKit identity: km_{memberId}_{deviceId} */
+export function buildKloudMemberIdentity(memberId: number, deviceId: string): string {
+  const safeDevice = sanitizeKloudDeviceId(deviceId) ?? 'legacy';
+  return `km_${memberId}_${safeDevice}`;
+}
+
 /** 当前登录用户是否为该会场 DB 发起人（PreJoin / resolve 跳过用） */
 export function isCurrentUserMeetingCreator(
   meetingInfo: { createdByMemberId?: number | string | null } | null | undefined,

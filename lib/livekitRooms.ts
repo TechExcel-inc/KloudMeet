@@ -1,4 +1,5 @@
 import { RoomServiceClient } from 'livekit-server-sdk';
+import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -37,7 +38,7 @@ function roomNameVariants(roomName: string): string[] {
   return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];
 }
 
-/** 从 LiveKit 参与者 identity（km_{memberId}）推断当前房间内的 Kloud 主持人 memberId */
+/** 从 LiveKit 参与者 identity（km_{memberId} 或 km_{memberId}_{deviceId}）推断 Kloud 主持人 memberId */
 export async function findKloudMemberHostInLiveRoom(
   roomName: string,
 ): Promise<number | null> {
@@ -48,9 +49,9 @@ export async function findKloudMemberHostInLiveRoom(
     try {
       const participants = await client.listParticipants(rn);
       for (const p of participants) {
-        const match = p.identity?.match(/^km_(\d+)$/);
-        if (match) {
-          return parseInt(match[1], 10);
+        const memberId = parseKloudMemberIdFromIdentity(p.identity);
+        if (memberId != null) {
+          return memberId;
         }
       }
     } catch (e) {
