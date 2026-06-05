@@ -16,20 +16,6 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // 鉴权检查：需要登录用户才能访问录制回放
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-    const token = authHeader.split(' ')[1];
-    const session = await prisma.session.findUnique({
-      where: { token },
-      select: { id: true, expiresAt: true, teamMemberId: true },
-    });
-    if (!session || session.expiresAt < new Date()) {
-      return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
-    }
-
     const { id } = await params;
     const recordingId = parseInt(id);
     if (isNaN(recordingId)) {

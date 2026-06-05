@@ -684,10 +684,6 @@ export default function ReplayPage() {
         const res = await fetch(`/api/recordings/${id}/summary`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
-        if (res.status === 401) {
-          setError('请登录后再查看回放');
-          return;
-        }
         if (!res.ok) {
           const d = await res.json();
           setError(d.error || '加载失败');

@@ -2402,6 +2402,13 @@ export function VideoConferenceComponent(props: {
         FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
       : FLOATING_WEBCAM_RIGHT_INSET;
   const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
+  /** 共享方 LiveDoc / 纯 LiveDoc / 非共享方且左侧栏已折叠时显示浮窗 */
+  const shouldShowFloatingWebcamPanel =
+    activeView !== 'webcam' &&
+    !showWebcamSidebar &&
+    (screenShareActive ||
+      (activeView === 'liveDoc' && !hasScreenShare) ||
+      (hasScreenShare && !screenShareActive && isWebcamSidebarCollapsed));
 
   const getInsetFromParentRight = React.useCallback((x: number) => {
     const el = floatingRef.current;
@@ -3698,8 +3705,7 @@ export function VideoConferenceComponent(props: {
           </div>
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
-          {activeView !== 'webcam' && !showWebcamSidebar &&
-            (screenShareActive || (activeView === 'liveDoc' && !hasScreenShare)) &&
+          {shouldShowFloatingWebcamPanel &&
             (() => {
               const allParticipants = [
                 { id: 'local', name: props.userChoices.username || t('toolbar.you') },

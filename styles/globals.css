@@ -298,6 +298,12 @@ h2 a {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
+.kloud-prejoin-personal-room-checkbox--disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 /* ── Join Room button ───────────────────────── */
 .kloud-prejoin-wrapper .lk-join-button,
 .kloud-prejoin-wrapper button[type="submit"].lk-button,

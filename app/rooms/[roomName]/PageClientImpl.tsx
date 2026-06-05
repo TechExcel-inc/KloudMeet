@@ -72,7 +72,11 @@ import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
-import { PREJOIN_ORIGINAL_ROOM_SESSION_KEY, cancelAbandonedInstantMeeting } from '@/lib/prejoinPersonalRoom';
+import {
+  PREJOIN_ORIGINAL_ROOM_SESSION_KEY,
+  cancelAbandonedInstantMeeting,
+  createInstantMeetingRoom,
+} from '@/lib/prejoinPersonalRoom';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
 import { appendKloudDeviceId } from '@/lib/kloudDeviceId';
@@ -185,6 +189,26 @@ export function PageClientImpl(props: {
   const [showProfileModal, setShowProfileModal] = React.useState(false);
   const [personalRoomUrlEnabled, setPersonalRoomUrlEnabled] = React.useState(false);
   const [hostPersonalRoomId, setHostPersonalRoomId] = React.useState('');
+  const creatingNewMeetingRef = React.useRef(false);
+  const personalRoomAutoEnabledRef = React.useRef(false);
+  const personalRoomSwitchCountRef = React.useRef(0);
+  const [personalRoomSwitching, setPersonalRoomSwitching] = React.useState(false);
+
+  const beginPersonalRoomSwitch = React.useCallback(() => {
+    personalRoomSwitchCountRef.current += 1;
+    setPersonalRoomSwitching(true);
+  }, []);
+
+  const endPersonalRoomSwitch = React.useCallback(() => {
+    personalRoomSwitchCountRef.current = Math.max(0, personalRoomSwitchCountRef.current - 1);
+    if (personalRoomSwitchCountRef.current === 0) {
+      setPersonalRoomSwitching(false);
+    }
+  }, []);
+
+  const handlePersonalRoomIdLoaded = React.useCallback((personalRoomId: string) => {
+    setHostPersonalRoomId(personalRoomId);
+  }, []);
 
   const applyMeetingInfo = React.useCallback((data: Record<string, unknown>) => {
     if (data.error) return;
@@ -214,6 +238,65 @@ export function PageClientImpl(props: {
       }
     },
     [applyMeetingInfo],
+  );
+
+  /** 仅用户手动取消勾选时，从个人房入口切到新建随机会议（页面加载自动勾选不触发）。 */
+  const handlePersonalRoomEnabledChange = React.useCallback(
+    (enabled: boolean) => {
+      setPersonalRoomUrlEnabled(enabled);
+      if (enabled || !hostPersonalRoomId || connectionDetails || creatingNewMeetingRef.current) {
+        return;
+      }
+
+      const personalKey = hostPersonalRoomId.toLowerCase();
+
+      try {
+        if (sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY)) {
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (
+        routeRoomName.toLowerCase() !== personalKey ||
+        effectiveRoomName.toLowerCase() !== personalKey
+      ) {
+        return;
+      }
+
+      creatingNewMeetingRef.current = true;
+      beginPersonalRoomSwitch();
+      void (async () => {
+        try {
+          const newRoomId = await createInstantMeetingRoom();
+          if (!newRoomId) {
+            setPersonalRoomUrlEnabled(true);
+            return;
+          }
+          try {
+            sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+          } catch {
+            /* ignore */
+          }
+          replaceBrowserRoomUrl(newRoomId);
+          setEffectiveRoomName(newRoomId);
+          await loadMeetingInfo(newRoomId);
+        } finally {
+          creatingNewMeetingRef.current = false;
+          endPersonalRoomSwitch();
+        }
+      })();
+    },
+    [
+      hostPersonalRoomId,
+      connectionDetails,
+      routeRoomName,
+      effectiveRoomName,
+      loadMeetingInfo,
+      beginPersonalRoomSwitch,
+      endPersonalRoomSwitch,
+    ],
   );
 
   const retryEntryLoad = React.useCallback(() => {
@@ -328,43 +411,91 @@ export function PageClientImpl(props: {
 
   React.useEffect(() => {
     setEffectiveRoomName(routeRoomName);
-    setPersonalRoomUrlEnabled(false);
+    creatingNewMeetingRef.current = false;
+    personalRoomAutoEnabledRef.current = false;
     try {
       sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
     } catch {
       /* ignore */
     }
-  }, [routeRoomName]);
+    if (
+      !hostPersonalRoomId ||
+      routeRoomName.toLowerCase() !== hostPersonalRoomId.toLowerCase()
+    ) {
+      setPersonalRoomUrlEnabled(false);
+    }
+  }, [routeRoomName, hostPersonalRoomId]);
+
+  /** 直接进入个人房 URL 时默认勾选个人会议室（仅首次进入，不覆盖用户手动取消）。 */
+  React.useEffect(() => {
+    if (!hostPersonalRoomId || connectionDetails || personalRoomAutoEnabledRef.current) {
+      return;
+    }
+    if (routeRoomName.toLowerCase() !== hostPersonalRoomId.toLowerCase()) return;
+    if (effectiveRoomName.toLowerCase() !== routeRoomName.toLowerCase()) return;
+    personalRoomAutoEnabledRef.current = true;
+    setPersonalRoomUrlEnabled(true);
+  }, [hostPersonalRoomId, routeRoomName, effectiveRoomName, connectionDetails]);
 
   React.useEffect(() => {
     if (!hostPersonalRoomId || !isHost || connectionDetails) {
       return;
     }
 
+    const personalKey = hostPersonalRoomId.toLowerCase();
+    const effectiveKey = effectiveRoomName.toLowerCase();
+
     if (personalRoomUrlEnabled) {
-      if (effectiveRoomName.toLowerCase() === hostPersonalRoomId.toLowerCase()) {
+      if (effectiveKey === personalKey) {
         return;
       }
       try {
-        sessionStorage.setItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY, routeRoomName);
+        if (!sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY)) {
+          sessionStorage.setItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY, effectiveRoomName);
+        }
       } catch {
         /* ignore */
       }
-      replaceBrowserRoomUrl(hostPersonalRoomId);
-      setEffectiveRoomName(hostPersonalRoomId);
-      void loadMeetingInfo(hostPersonalRoomId);
+      beginPersonalRoomSwitch();
+      void (async () => {
+        try {
+          replaceBrowserRoomUrl(hostPersonalRoomId);
+          setEffectiveRoomName(hostPersonalRoomId);
+          await loadMeetingInfo(hostPersonalRoomId);
+        } finally {
+          endPersonalRoomSwitch();
+        }
+      })();
       return;
     }
 
     try {
       const original = sessionStorage.getItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
-      if (!original) {
+      if (original) {
+        if (effectiveKey === original.toLowerCase()) {
+          return;
+        }
+        // 个人房入口取消勾选后不应把个人房号当作「原始房间」恢复（否则会覆盖新建随机会议 URL）
+        if (
+          routeRoomName.toLowerCase() === personalKey &&
+          original.toLowerCase() === personalKey
+        ) {
+          sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+          return;
+        }
+        beginPersonalRoomSwitch();
+        void (async () => {
+          try {
+            sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
+            replaceBrowserRoomUrl(original);
+            setEffectiveRoomName(original);
+            await loadMeetingInfo(original);
+          } finally {
+            endPersonalRoomSwitch();
+          }
+        })();
         return;
       }
-      sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
-      replaceBrowserRoomUrl(original);
-      setEffectiveRoomName(original);
-      void loadMeetingInfo(original);
     } catch {
       /* ignore */
     }
@@ -376,6 +507,8 @@ export function PageClientImpl(props: {
     routeRoomName,
     effectiveRoomName,
     loadMeetingInfo,
+    beginPersonalRoomSwitch,
+    endPersonalRoomSwitch,
   ]);
 
   const isActive = meetingInfo?.isActive === true;
@@ -395,13 +528,41 @@ export function PageClientImpl(props: {
   }, [isHost, isActive, meetingInfo, elapsedTime, t]);
 
   const preJoinButtonText = React.useMemo(() => {
+    if (personalRoomSwitching) return t('common.loading');
     if (isHost && !isActive) return t('prejoin.startNow');
     if (isHost && isActive) return t('prejoin.joinAsHost');
     return t('prejoin.joinNow');
-  }, [isHost, isActive, t]);
+  }, [isHost, isActive, personalRoomSwitching, t]);
+
+  React.useEffect(() => {
+    if (!prejoinReady || isBot) return;
+
+    const syncJoinButtons = () => {
+      const buttons = document.querySelectorAll<HTMLButtonElement>(
+        '.kloud-prejoin-wrapper button[type="submit"].lk-button, .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type',
+      );
+      buttons.forEach((btn) => {
+        btn.disabled = personalRoomSwitching;
+        if (personalRoomSwitching) {
+          btn.setAttribute('aria-busy', 'true');
+        } else {
+          btn.removeAttribute('aria-busy');
+        }
+      });
+    };
+
+    syncJoinButtons();
+    const root = document.querySelector('.kloud-prejoin-wrapper');
+    if (!root) return;
+
+    const observer = new MutationObserver(syncJoinButtons);
+    observer.observe(root, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [personalRoomSwitching, prejoinReady, isBot]);
 
   const handlePreJoinSubmit = React.useCallback(
     async (values: LocalUserChoices) => {
+      if (personalRoomSwitching) return;
       try {
         localStorage.setItem(
           'lk-user-choices',
@@ -485,6 +646,7 @@ export function PageClientImpl(props: {
       effectiveRoomName,
       props.region,
       t,
+      personalRoomSwitching,
     ],
   );
   const handlePreJoinError = React.useCallback((error: any) => {
@@ -555,7 +717,10 @@ export function PageClientImpl(props: {
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
         canShowPreJoin ? (
-        <div className="kloud-prejoin-wrapper" style={{ display: isBot ? 'none' : undefined }}>
+        <div
+          className={`kloud-prejoin-wrapper${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
+          style={{ display: isBot ? 'none' : undefined }}
+        >
           <style>{`
             .kloud-prejoin-wrapper button[type="submit"].lk-button,
             .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type {
@@ -578,6 +743,31 @@ export function PageClientImpl(props: {
               font-size: 1rem !important;
               font-weight: 600 !important;
               pointer-events: none !important;
+            }
+            .kloud-prejoin-wrapper.kloud-prejoin-room-switching button[type="submit"].lk-button,
+            .kloud-prejoin-wrapper.kloud-prejoin-room-switching .lk-prejoin > button.lk-button:last-of-type {
+              opacity: 0.65 !important;
+              cursor: not-allowed !important;
+              pointer-events: none !important;
+              transform: none !important;
+              box-shadow: none !important;
+            }
+            .kloud-prejoin-wrapper.kloud-prejoin-room-switching button[type="submit"].lk-button::before,
+            .kloud-prejoin-wrapper.kloud-prejoin-room-switching .lk-prejoin > button.lk-button:last-of-type::before {
+              content: "";
+              position: absolute !important;
+              left: calc(50% - 3.6rem);
+              top: 50%;
+              width: 14px;
+              height: 14px;
+              margin-top: -7px;
+              border: 2px solid rgba(255, 255, 255, 0.35);
+              border-top-color: #fff;
+              border-radius: 50%;
+              animation: kloud-prejoin-btn-spin 0.7s linear infinite;
+            }
+            @keyframes kloud-prejoin-btn-spin {
+              to { transform: rotate(360deg); }
             }
 
             /* Make dropdown arrow backgrounds match the main purple backgrounds precisely */
@@ -990,10 +1180,10 @@ export function PageClientImpl(props: {
               {isHost && (
                 <PrejoinPersonalRoomCheckbox
                   active
-                  routeRoomName={routeRoomName}
                   syncEnabled={personalRoomUrlEnabled}
-                  onEnabledChange={setPersonalRoomUrlEnabled}
-                  onPersonalRoomIdLoaded={setHostPersonalRoomId}
+                  switching={personalRoomSwitching}
+                  onEnabledChange={handlePersonalRoomEnabledChange}
+                  onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
                 />
               )}
             </>

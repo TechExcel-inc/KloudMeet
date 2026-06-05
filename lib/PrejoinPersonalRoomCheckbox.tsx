@@ -8,15 +8,14 @@ import { writePrejoinPersonalRoomEnabled } from './prejoinPersonalRoom';
 
 export function PrejoinPersonalRoomCheckbox({
   active,
-  routeRoomName,
   syncEnabled,
+  switching = false,
   onEnabledChange,
   onPersonalRoomIdLoaded,
 }: {
   active: boolean;
-  /** Next 路由入口会议号；仅当入口已是个人房号时隐藏（勾选切过去的仍可取消）。 */
-  routeRoomName: string;
   syncEnabled: boolean;
+  switching?: boolean;
   onEnabledChange: (enabled: boolean) => void;
   onPersonalRoomIdLoaded: (personalRoomId: string) => void;
 }) {
@@ -25,10 +24,6 @@ export function PrejoinPersonalRoomCheckbox({
   const [enabled, setEnabled] = React.useState(false);
   /** null = loading; '' = no personal room; non-empty = show checkbox */
   const [personalRoomId, setPersonalRoomId] = React.useState<string | null>(null);
-
-  const enteredViaPersonalRoom =
-    personalRoomId &&
-    routeRoomName.trim().toLowerCase() === personalRoomId.toLowerCase();
 
   React.useEffect(() => {
     let cancelled = false;
@@ -69,7 +64,7 @@ export function PrejoinPersonalRoomCheckbox({
   }, [syncEnabled]);
 
   React.useEffect(() => {
-    if (!active || !personalRoomId || enteredViaPersonalRoom) {
+    if (!active || !personalRoomId) {
       setMountEl(null);
       return;
     }
@@ -125,21 +120,25 @@ export function PrejoinPersonalRoomCheckbox({
       observer?.disconnect();
       detach();
     };
-  }, [active, personalRoomId, enteredViaPersonalRoom]);
+  }, [active, personalRoomId]);
 
   const handleChange = (checked: boolean) => {
+    if (switching) return;
     setEnabled(checked);
     onEnabledChange(checked);
     writePrejoinPersonalRoomEnabled(checked);
   };
 
-  if (!personalRoomId || enteredViaPersonalRoom || !mountEl) return null;
+  if (!personalRoomId || !mountEl) return null;
 
   return createPortal(
-    <label className="kloud-prejoin-personal-room-checkbox">
+    <label
+      className={`kloud-prejoin-personal-room-checkbox${switching ? ' kloud-prejoin-personal-room-checkbox--disabled' : ''}`}
+    >
       <input
         type="checkbox"
         checked={enabled}
+        disabled={switching}
         onChange={(e) => handleChange(e.target.checked)}
       />
       <span>{t('profile.supportPersonalRoom')}</span>
