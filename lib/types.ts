@@ -25,4 +25,7 @@ export type ConnectionDetails = {
   roomName: string;
   participantName: string;
   participantToken: string;
+  /** SkyMeet meeting.id for this session; used to scope LiveDoc per personal-room session */
+  meetingId: number;
+  isPersonalRoom: boolean;
 };

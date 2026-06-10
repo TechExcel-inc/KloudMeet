@@ -8,7 +8,11 @@ import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { HelpModal } from '@/lib/HelpModal';
-import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
+import {
+  createLivedocInstance,
+  createOrUpdateInstantAccount,
+  resolveJitsiInstanceId,
+} from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
@@ -1281,6 +1285,11 @@ export function VideoConferenceComponent(props: {
   const canSwitchViews = true;
 
   const meetingRoomName = props.connectionDetails.roomName;
+  const jitsiInstanceId = resolveJitsiInstanceId({
+    roomName: meetingRoomName,
+    meetingId: props.connectionDetails.meetingId,
+    isPersonalRoom: props.connectionDetails.isPersonalRoom,
+  });
   const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
@@ -1495,7 +1504,7 @@ export function VideoConferenceComponent(props: {
         const userToken = await createOrUpdateInstantAccount(props.userChoices.username);
         const id = await createLivedocInstance({
           userToken,
-          jitsiInstanceId: meetingRoomName,
+          jitsiInstanceId,
         });
         if (cancelled) return;
         livedocHostBootstrappedRef.current = true;
@@ -1516,7 +1525,14 @@ export function VideoConferenceComponent(props: {
     return () => {
       cancelled = true;
     };
-  }, [shouldMountLiveDoc, livekitConnected, isHost, meetingRoomName, props.userChoices.username, sendMeetingMsg]);
+  }, [
+    shouldMountLiveDoc,
+    livekitConnected,
+    isHost,
+    jitsiInstanceId,
+    props.userChoices.username,
+    sendMeetingMsg,
+  ]);
 
   React.useEffect(() => {
     if (!isHost) return;

@@ -113,6 +113,25 @@ export async function createOrUpdateInstantAccount(userName: string): Promise<st
   return token;
 }
 
+/**
+ * Personal rooms reuse the same roomName across sessions; suffix meetingId so each
+ * session gets its own LiveDoc instance while staying stable within one session.
+ */
+export function resolveJitsiInstanceId({
+  roomName,
+  meetingId,
+  isPersonalRoom,
+}: {
+  roomName: string;
+  meetingId: number;
+  isPersonalRoom: boolean;
+}): string {
+  if (isPersonalRoom) {
+    return `${roomName}_${meetingId}`;
+  }
+  return roomName;
+}
+
 export async function createLivedocInstance({
   userToken,
   jitsiInstanceId,

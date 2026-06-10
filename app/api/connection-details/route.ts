@@ -116,6 +116,8 @@ export async function GET(request: NextRequest) {
       roomName: livekitRoomName,
       participantToken: participantToken,
       participantName: participantName,
+      meetingId: meeting.id,
+      isPersonalRoom,
     };
     return new NextResponse(JSON.stringify(data), {
       headers,
