@@ -11,23 +11,35 @@ export const metadata: Metadata = {
     template: '%s',
   },
   description:
-    'LiveKit is an open source WebRTC project that gives you everything needed to build scalable and real-time audio and/or video experiences in your applications.',
-  twitter: {
-    creator: '@livekitted',
-    site: '@livekitted',
-    card: 'summary_large_image',
-  },
+    'Kloud Meet is an open source WebRTC project that gives you everything needed to build scalable and real-time audio and/or video experiences in your applications.',
+  // twitter: {
+  //   creator: '@livekitted',
+  //   site: '@livekitted',
+  //   card: 'summary_large_image',
+  // },
+  // openGraph: {
+  //   url: 'https://meet.livekit.io',
+  //   images: [
+  //     {
+  //       url: 'https://meet.livekit.io/images/livekit-meet-open-graph.png',
+  //       width: 2000,
+  //       height: 1000,
+  //       type: 'image/png',
+  //     },
+  //   ],
+  //   siteName: 'LiveKit Meet',
+  // },
   openGraph: {
-    url: 'https://meet.livekit.io',
+    url: 'https://meet.kloud.cn',
     images: [
       {
-        url: 'https://meet.livekit.io/images/livekit-meet-open-graph.png',
+        url: 'https://meet.kloud.cn/images/KloudMeet-open-graph.png',
         width: 2000,
         height: 1000,
         type: 'image/png',
       },
     ],
-    siteName: 'LiveKit Meet',
+    siteName: 'Kloud Meet',
   },
 };
 
