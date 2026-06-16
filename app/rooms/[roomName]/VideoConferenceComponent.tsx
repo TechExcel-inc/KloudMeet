@@ -358,6 +358,8 @@ export function VideoConferenceComponent(props: {
 
   // Ref for broadcast function (defined later in DataChannel sync block)
   const broadcastViewChangeRef = React.useRef<((view: ViewMode) => void) | null>(null);
+  // Only host / co-host / presenter roles may broadcast view changes to the room
+  const canBroadcastViewChangeRef = React.useRef(false);
 
   const handleViewChange = React.useCallback(
     (view: ViewMode) => {
@@ -372,8 +374,9 @@ export function VideoConferenceComponent(props: {
         }
       }
       setActiveView(view);
-      // Broadcast view change to all participants
-      broadcastViewChangeRef.current?.(view);
+      if (canBroadcastViewChangeRef.current) {
+        broadcastViewChangeRef.current?.(view);
+      }
     },
     [screenShareActive, room],
   );
@@ -1281,8 +1284,11 @@ export function VideoConferenceComponent(props: {
     ? (screenShareTracks[0].participant?.identity ?? null)
     : null;
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
-  // Interactive meetings: everyone can switch views by default
+  // Interactive meetings: everyone can switch views locally; only privileged roles sync to the room
   const canSwitchViews = true;
+  const canBroadcastViewChange =
+    isHost || isCohost || isCopresenter || isAutoPresenter;
+  canBroadcastViewChangeRef.current = canBroadcastViewChange;
 
   const meetingRoomName = props.connectionDetails.roomName;
   const jitsiInstanceId = resolveJitsiInstanceId({
@@ -1330,19 +1336,29 @@ export function VideoConferenceComponent(props: {
   // Host's authoritative state (only used when isHost)
   const authState = React.useRef<{
     view: ViewMode;
-    presenter: string | null;
+    presenter: string[];
     livedocInstanceId: string | null;
     muteAllActive: boolean;
     hostMutedIdentities: string[];
     captionsOn: boolean;
   }>({
     view: activeView,
-    presenter: null,
+    presenter: [],
     livedocInstanceId: null,
     muteAllActive: false,
     hostMutedIdentities: [],
     captionsOn: false,
   });
+
+  const presenterListsEqual = React.useCallback(
+    (a: string[] | null | undefined, b: string[] | null | undefined) => {
+      const left = a ?? [];
+      const right = b ?? [];
+      if (left.length !== right.length) return false;
+      return left.every((id, index) => id === right[index]);
+    },
+    [],
+  );
 
   // Keep authState in sync when host changes view locally
   // Note: when host is the presenter (isLocalScreenShare), their local view is 'liveDoc'
@@ -1360,6 +1376,12 @@ export function VideoConferenceComponent(props: {
       authState.current.livedocInstanceId = livedocInstanceId;
     }
   }, [isHost, livedocInstanceId]);
+
+  React.useEffect(() => {
+    if (isHost) {
+      authState.current.presenter = copresenterIdentities;
+    }
+  }, [isHost, copresenterIdentities]);
 
   // Keep mute state in authState so late-joining participants receive it via CORRECTION
   React.useEffect(() => {
@@ -1560,14 +1582,14 @@ export function VideoConferenceComponent(props: {
   }, [room, isHost, sendMeetingMsg]);
 
   // Host/Presenter/Co-host: broadcast VIEW_CHANGE to all participants
-  // Always update authState so the latest view is available for late-joining correction.
   const broadcastViewChange = React.useCallback(
     (view: ViewMode) => {
-      // All privileged roles update authState so new-joiner CORRECTION has the right view.
-      authState.current.view = view;
+      if (isHost) {
+        authState.current.view = view;
+      }
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
     },
-    [sendMeetingMsg],
+    [sendMeetingMsg, isHost],
   );
 
   // Keep the ref in sync for handleViewChange
@@ -1749,9 +1771,14 @@ export function VideoConferenceComponent(props: {
           const authCaptionsOn = auth.captionsOn;
           const captionsMismatch = guestCaptionsOn !== authCaptionsOn;
 
+          const guestPresenters = Array.isArray(msg.presenter)
+            ? msg.presenter
+            : msg.presenter
+              ? [msg.presenter]
+              : [];
           if (
             msg.view !== auth.view ||
-            msg.presenter !== (auth.presenter || null) ||
+            !presenterListsEqual(guestPresenters, auth.presenter) ||
             livedocMismatch ||
             captionsMismatch
           ) {
@@ -1796,8 +1823,75 @@ export function VideoConferenceComponent(props: {
     micEnabled,
     props.meetingOwnerMemberId,
     handleClosedByHostExit,
+    presenterListsEqual,
   ]);
 
+  // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.
+  const wasHostRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!livekitConnected) return;
+    if (isHost && !wasHostRef.current) {
+      const auth = authState.current;
+      auth.view =
+        activeView === 'liveDoc' && isLocalScreenShare ? 'shareScreen' : activeView;
+      auth.presenter = copresenterIdentities;
+      auth.livedocInstanceId = livedocInstanceId;
+      for (const [, participant] of room.remoteParticipants) {
+        sendMeetingMsg(
+          {
+            type: 'CORRECTION',
+            view: auth.view,
+            presenter: auth.presenter,
+            livedocInstanceId: auth.livedocInstanceId,
+            muteAllActive: auth.muteAllActive,
+            hostMutedIdentities: auth.hostMutedIdentities,
+            captionsOn: auth.captionsOn,
+          },
+          [participant.identity],
+        );
+      }
+    }
+    wasHostRef.current = isHost;
+  }, [
+    isHost,
+    livekitConnected,
+    activeView,
+    isLocalScreenShare,
+    copresenterIdentities,
+    livedocInstanceId,
+    room,
+    sendMeetingMsg,
+  ]);
+
+  // All participants: send heartbeat every 5s to the authoritative host identity
+  React.useEffect(() => {
+    if (!room.localParticipant.identity) return;
+
+    const interval = setInterval(() => {
+      if (hostIdentity === room.localParticipant.identity) return;
+      sendMeetingMsg(
+        {
+          type: 'HEARTBEAT',
+          view: (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
+          presenter: copresenterIdentities,
+          identity: room.localParticipant.identity,
+          livedocInstanceId,
+          captionsOn: captionsRunningRef.current,
+        },
+        [hostIdentity],
+      );
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [
+    room,
+    hostIdentity,
+    activeView,
+    isLocalScreenShare,
+    copresenterIdentities,
+    livedocInstanceId,
+    sendMeetingMsg,
+  ]);
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
   // Event delegation on document (capture phase) so it fires before LiveKit's own handlers.
   // Detects clicks on the mic-indicator region of a remote participant tile,
@@ -2042,43 +2136,6 @@ export function VideoConferenceComponent(props: {
     },
     [sendMeetingMsg],
   );
-
-  // All participants: send heartbeat every 5s
-  React.useEffect(() => {
-    if (!room.localParticipant.identity) return;
-
-    // Find host identity (earliest joiner)
-    const getHostIdentity = () => {
-      let earliestTime = room.localParticipant.joinedAt?.getTime() || Infinity;
-      let hostId = room.localParticipant.identity;
-      for (const [, p] of room.remoteParticipants) {
-        const t = p.joinedAt?.getTime() || Infinity;
-        if (t < earliestTime) {
-          earliestTime = t;
-          hostId = p.identity;
-        }
-      }
-      return hostId;
-    };
-
-    const interval = setInterval(() => {
-      const hostId = getHostIdentity();
-      if (hostId === room.localParticipant.identity) return; // host doesn't heartbeat to itself
-      sendMeetingMsg(
-        {
-          type: 'HEARTBEAT',
-          view: (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
-          presenters: copresenterIdentities,
-          identity: room.localParticipant.identity,
-          livedocInstanceId,
-          captionsOn: captionsRunningRef.current,
-        },
-        [hostId],
-      );
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [room, activeView, isLocalScreenShare, copresenterIdentities, livedocInstanceId, sendMeetingMsg]);
 
   // Sync participant names into placeholder elements so CSS can display name in the center
   // when camera is off (replaces the default SVG avatar with the participant's initials)
