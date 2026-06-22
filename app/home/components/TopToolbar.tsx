@@ -9,10 +9,8 @@ import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
 
 export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpenProfile, onOpenHelp, onOpenDesktopApp, user, hideAvatar }: { onBack?: () => void, onSignIn?: () => void, onSignOut?: () => void, onOpenSettings?: () => void, onOpenProfile?: () => void, onOpenHelp?: () => void, onOpenDesktopApp?: () => void, user?: AuthUser, hideAvatar?: boolean }) {
   const { t, locale, setLocale } = useI18n();
-  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const orgMenuRef = React.useRef<HTMLDivElement>(null);
   const langMenuRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -34,9 +32,6 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (orgMenuRef.current && !orgMenuRef.current.contains(event.target as Node)) {
-        setOrgMenuOpen(false);
-      }
       if (langMenuRef.current && !langMenuRef.current.contains(event.target as Node)) {
         setLangMenuOpen(false);
       }
@@ -65,53 +60,6 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
 
         {/* ── Right: actions ── */}
         <div className={styles.topNavRight}>
-          {/* Org dropdown — desktop only */}
-          {user && (
-            <div className={`${styles.orgDropdownWrapper} ${styles.navOrgDesktop}`} ref={orgMenuRef} style={{ marginRight: '0.5rem' }}>
-              <button 
-                className={styles.orgDropdownBtn} 
-                onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-                style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', fontWeight: 500 }}
-              >
-                {user.displayName}
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" style={{ marginLeft: '6px', opacity: 0.6 }}>
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                </svg>
-              </button>
-              {orgMenuOpen && (
-                <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '1rem' }}>
-                  <div className={styles.orgDropdownSection}>
-                    <div className={styles.orgDropdownTitle}>{t('nav.switchAccount')}</div>
-                    <button className={styles.orgDropdownItemActive}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
-                        {user.displayName}
-                      </div>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                      </svg>
-                    </button>
-                    <button className={styles.orgDropdownItem} onClick={() => setOrgMenuOpen(false)}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>P</div>
-                        KloudMeet Personal
-                      </div>
-                    </button>
-                  </div>
-                  <div className={styles.orgDropdownSection}>
-                    <div className={styles.orgDropdownIdentity}>{t('nav.signedInAs', { name: user.displayName })}</div>
-                    <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onOpenProfile && onOpenProfile(); }}>
-                      {t('nav.myProfile')}
-                    </button>
-                    <button className={styles.orgDropdownItem} onClick={() => { setOrgMenuOpen(false); onSignOut && onSignOut(); }} style={{ color: '#ef4444' }}>
-                      {t('nav.signOut')}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           <button
             className={`${styles.topNavIconBtn} ${theme === 'dark' ? styles.topNavIconBtnActive : ''}`}
             aria-label={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}

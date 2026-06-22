@@ -1268,11 +1268,6 @@ export function PageClientImpl(props: {
                 onOpenSettings={() => setShowSettingsModal(true)}
                 onOpenDesktopApp={() => openDesktopEntry('prejoin')}
                 onSignOut={handlePrejoinSignOut}
-                mobileOrgLabel={
-                  currentUser
-                    ? `${currentUser.displayName || currentUser.username}`
-                    : undefined
-                }
               />
             </div>
           </header>
