@@ -101,6 +101,15 @@
   background: #16a34a;
 }
 
+.controlBtn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.controlBtn:disabled:hover {
+  background: inherit;
+}
+
 .controlBtn svg {
   width: 18px;
   height: 18px;
@@ -156,6 +165,11 @@
   background: transparent;
 }
 
+.chevron:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .chevron svg {
   width: 14px;
   height: 14px;
@@ -188,6 +202,7 @@
   font-weight: 500;
   letter-spacing: 0.02em;
   white-space: nowrap;
+  position: relative;
 }
 
 .tabBtn:hover {
@@ -384,9 +399,10 @@
 .mobileToolbar {
   display: flex;
   align-items: center;
-  justify-content: space-around;
+  justify-content: space-between;
+  gap: 2px;
   width: 100%;
-  padding: 8px 4px;
+  padding: 7px 4px;
 }
 
 .mobileBtn {
@@ -394,27 +410,29 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 0;
   background: transparent;
   border: none;
   color: rgba(255, 255, 255, 0.7);
   font-size: 10px;
   font-weight: 500;
-  padding: 6px 4px;
+  padding: 7px 2px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-  min-width: 52px;
+  min-width: 36px;
+  position: relative;
 }
 .mobileBtn svg {
-  width: 24px;
-  height: 24px;
+  width: 21px;
+  height: 21px;
 }
 .mobileBtn:active {
   background: rgba(255,255,255,0.05);
 }
 .mobileBtn.active {
-  color: #3b82f6;
+  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.16);
 }
 .mobileBtn.danger {
   color: #ef4444;
@@ -425,6 +443,30 @@
 }
 .mobileBtn.off {
   color: #f87171;
+}
+
+.mobileToolbar .controlGroup {
+  min-width: 52px;
+  justify-content: center;
+}
+
+.mobileToolbar .controlGroup .controlBtn {
+  width: 34px !important;
+  height: 34px !important;
+}
+
+.mobileToolbar .controlGroup .controlBtn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.mobileToolbar .controlGroup .chevron {
+  padding: 0 1px !important;
+}
+
+.mobileToolbar .controlGroup .chevron svg {
+  width: 11px;
+  height: 11px;
 }
 
 /* Bottom Sheet */

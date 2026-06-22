@@ -11,6 +11,9 @@ import { HelpModal } from '@/lib/HelpModal';
 import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
 import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
+import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
+import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
+import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
@@ -24,7 +27,6 @@ import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
   formatChatMessageLinks,
   LocalUserChoices,
-  PreJoin,
   RoomContext,
   VideoConference,
   VideoTrack,
@@ -71,7 +73,6 @@ import {
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
-import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import {
   PREJOIN_ORIGINAL_ROOM_SESSION_KEY,
   cancelAbandonedInstantMeeting,
@@ -183,6 +184,7 @@ export function PageClientImpl(props: {
   const [isSameTabRefresh, setIsSameTabRefresh] = React.useState(false);
   const [elapsedTime, setElapsedTime] = React.useState('');
   const { t, locale, setLocale } = useI18n();
+  const [theme, setTheme] = React.useState<'light' | 'dark'>('light');
   const [showLangMenu, setShowLangMenu] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
   const [showSettingsModal, setShowSettingsModal] = React.useState(false);
@@ -193,6 +195,23 @@ export function PageClientImpl(props: {
   const personalRoomAutoEnabledRef = React.useRef(false);
   const personalRoomSwitchCountRef = React.useRef(0);
   const [personalRoomSwitching, setPersonalRoomSwitching] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedTheme = window.localStorage.getItem('kloud-theme');
+    const nextTheme: 'light' | 'dark' = storedTheme === 'light' ? 'light' : 'dark';
+    setTheme(nextTheme);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      window.localStorage.setItem('kloud-theme', theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
 
   const beginPersonalRoomSwitch = React.useCallback(() => {
     personalRoomSwitchCountRef.current += 1;
@@ -534,32 +553,6 @@ export function PageClientImpl(props: {
     return t('prejoin.joinNow');
   }, [isHost, isActive, personalRoomSwitching, t]);
 
-  React.useEffect(() => {
-    if (!prejoinReady || isBot) return;
-
-    const syncJoinButtons = () => {
-      const buttons = document.querySelectorAll<HTMLButtonElement>(
-        '.kloud-prejoin-wrapper button[type="submit"].lk-button, .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type',
-      );
-      buttons.forEach((btn) => {
-        btn.disabled = personalRoomSwitching;
-        if (personalRoomSwitching) {
-          btn.setAttribute('aria-busy', 'true');
-        } else {
-          btn.removeAttribute('aria-busy');
-        }
-      });
-    };
-
-    syncJoinButtons();
-    const root = document.querySelector('.kloud-prejoin-wrapper');
-    if (!root) return;
-
-    const observer = new MutationObserver(syncJoinButtons);
-    observer.observe(root, { childList: true, subtree: true });
-    return () => observer.disconnect();
-  }, [personalRoomSwitching, prejoinReady, isBot]);
-
   const handlePreJoinSubmit = React.useCallback(
     async (values: LocalUserChoices) => {
       if (personalRoomSwitching) return;
@@ -659,6 +652,7 @@ export function PageClientImpl(props: {
     const DEVICE_ERRORS = [
       'notfounderror', 'requested device', 'device not found',
       'overconstrained', 'notreadableerror', 'could not start',
+      'getusermedia', 'enumeratedevices', 'cannot read properties of undefined', 'mediadevices',
     ];
     const isDeviceError = DEVICE_ERRORS.some(k => msg.toLowerCase().includes(k));
     if (isDeviceError) {
@@ -719,86 +713,42 @@ export function PageClientImpl(props: {
         canShowPreJoin ? (
         <div
           className={`kloud-prejoin-wrapper${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
-          style={{ display: isBot ? 'none' : undefined }}
+          style={{
+            display: isBot ? 'none' : undefined,
+          }}
         >
           <style>{`
-            .kloud-prejoin-wrapper button[type="submit"].lk-button,
-            .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type {
-              color: transparent !important;
-              position: relative !important;
-              overflow: hidden !important;
-            }
-            .kloud-prejoin-wrapper button[type="submit"].lk-button::after,
-            .kloud-prejoin-wrapper .lk-prejoin > button.lk-button:last-of-type::after {
-              content: "${preJoinButtonText}";
-              position: absolute !important;
-              left: 0;
-              top: 0;
-              width: 100%;
-              height: 100%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              color: white !important;
-              font-size: 1rem !important;
-              font-weight: 600 !important;
-              pointer-events: none !important;
-            }
-            .kloud-prejoin-wrapper.kloud-prejoin-room-switching button[type="submit"].lk-button,
-            .kloud-prejoin-wrapper.kloud-prejoin-room-switching .lk-prejoin > button.lk-button:last-of-type {
-              opacity: 0.65 !important;
-              cursor: not-allowed !important;
-              pointer-events: none !important;
-              transform: none !important;
-              box-shadow: none !important;
-            }
-            .kloud-prejoin-wrapper.kloud-prejoin-room-switching button[type="submit"].lk-button::before,
-            .kloud-prejoin-wrapper.kloud-prejoin-room-switching .lk-prejoin > button.lk-button:last-of-type::before {
-              content: "";
-              position: absolute !important;
-              left: calc(50% - 3.6rem);
-              top: 50%;
-              width: 14px;
-              height: 14px;
-              margin-top: -7px;
-              border: 2px solid rgba(255, 255, 255, 0.35);
-              border-top-color: #fff;
-              border-radius: 50%;
-              animation: kloud-prejoin-btn-spin 0.7s linear infinite;
-            }
-            @keyframes kloud-prejoin-btn-spin {
-              to { transform: rotate(360deg); }
-            }
 
-            /* Make dropdown arrow backgrounds match the main purple backgrounds precisely */
-            .kloud-prejoin-wrapper .lk-button-group,
-            .kloud-prejoin-wrapper .lk-button-group > button,
-            .kloud-prejoin-wrapper .lk-button-group > div {
+            /* Keep toggle controls purple, but not the dropdown list content. */
+            .kloud-prejoin-wrapper .lk-button-group {
+              background: transparent !important;
+            }
+            .kloud-prejoin-wrapper .lk-button-group > .lk-button,
+            .kloud-prejoin-wrapper .lk-button-group > .lk-button-group-menu > .lk-button-menu {
               background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
             }
-            .kloud-prejoin-wrapper .lk-button-group > button:hover,
-            .kloud-prejoin-wrapper .lk-button-group > div:hover {
+            .kloud-prejoin-wrapper .lk-button-group > .lk-button:hover,
+            .kloud-prejoin-wrapper .lk-button-group > .lk-button-group-menu > .lk-button-menu:hover {
               background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
             }
 
-            /* ── Device selection popup — single container only ── */
-            .kloud-prejoin-wrapper .lk-media-device-menu {
+            /* ── Device selection popup — polished dropdown style ── */
+            .kloud-prejoin-wrapper .lk-device-menu {
               background: #ffffff !important;
-              border: 1px solid #e2e8f0 !important;
-              border-radius: 14px !important;
-              box-shadow: 0 8px 32px rgba(17,24,39,0.13) !important;
+              border: 1px solid #cbd5e1 !important;
+              border-radius: 12px !important;
+              box-shadow: 0 18px 36px rgba(15, 23, 42, 0.22) !important;
               padding: 6px !important;
-              max-height: 260px !important;
+              max-height: 280px !important;
               overflow-y: auto !important;
               overflow-x: hidden !important;
-              min-width: 220px !important;
+              min-width: 300px !important;
               scrollbar-width: thin;
-              scrollbar-color: #c7d2fe transparent;
+              scrollbar-color: #94a3b8 transparent;
             }
 
-            /* Strip border/bg from inner ul — avoid double-box */
-            .kloud-prejoin-wrapper .lk-media-device-menu ul,
-            .kloud-prejoin-wrapper .lk-media-device-menu .lk-list {
+            .kloud-prejoin-wrapper .lk-device-menu ul,
+            .kloud-prejoin-wrapper .lk-device-menu .lk-list {
               background: transparent !important;
               border: none !important;
               box-shadow: none !important;
@@ -810,37 +760,37 @@ export function PageClientImpl(props: {
               list-style: none !important;
             }
 
-            /* Scrollbar webkit */
-            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar { width: 4px; }
-            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar-track { background: transparent; }
-            .kloud-prejoin-wrapper .lk-media-device-menu::-webkit-scrollbar-thumb {
-              background: #c7d2fe;
-              border-radius: 4px;
+            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar { width: 6px; }
+            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-track { background: transparent; }
+            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-thumb {
+              background: #94a3b8;
+              border-radius: 8px;
             }
 
-            /* List items */
-            .kloud-prejoin-wrapper .lk-media-device-menu li {
+            .kloud-prejoin-wrapper .lk-device-menu li {
               padding: 0 !important;
-              margin: 2px 0 !important;
+              margin: 1px 0 !important;
               list-style: none !important;
-              border-radius: 10px !important;
+              border-radius: 8px !important;
               overflow: hidden !important;
             }
 
-            /* Item buttons */
-            .kloud-prejoin-wrapper .lk-media-device-menu li button,
-            .kloud-prejoin-wrapper .lk-media-device-menu button:not([class*="lk-button-group"]) {
+            .kloud-prejoin-wrapper .lk-device-menu li button,
+            .kloud-prejoin-wrapper .lk-device-menu button:not([class*="lk-button-group"]),
+            .kloud-prejoin-wrapper .lk-device-menu .lk-button {
               background: transparent !important;
-              color: #1e293b !important;
-              border-radius: 10px !important;
-              padding: 9px 14px 9px 36px !important;
-              font-size: 0.88rem !important;
+              background-image: none !important;
+              color: #1f2937 !important;
+              border-radius: 8px !important;
+              padding: 11px 14px 11px 40px !important;
+              font-size: 0.92rem !important;
               font-weight: 500 !important;
               text-align: left !important;
               width: 100% !important;
               border: none !important;
+              box-shadow: none !important;
               cursor: pointer !important;
-              transition: background 0.15s, color 0.15s !important;
+              transition: background 0.16s, color 0.16s !important;
               position: relative !important;
               white-space: nowrap !important;
               overflow: hidden !important;
@@ -848,51 +798,82 @@ export function PageClientImpl(props: {
               display: block !important;
             }
 
-            /* Hover */
-            .kloud-prejoin-wrapper .lk-media-device-menu li button:hover {
-              background: #eef2ff !important;
-              color: #5227D3 !important;
+            .kloud-prejoin-wrapper .lk-device-menu li button:hover {
+              background: #eff3ff !important;
+              color: #1e1b4b !important;
             }
 
-            /* Selected item — #5227D3 background, white text */
-            .kloud-prejoin-wrapper .lk-media-device-menu li[aria-selected="true"] button,
-            .kloud-prejoin-wrapper .lk-media-device-menu button[aria-selected="true"],
-            .kloud-prejoin-wrapper .lk-media-device-menu li button[data-lk-active="true"],
-            .kloud-prejoin-wrapper .lk-media-device-menu li.lk-list-item--active button,
-            .kloud-prejoin-wrapper .lk-media-device-menu li button.lk-active {
-              background: #5227D3 !important;
+            .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button,
+            .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"],
+            .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"],
+            .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button,
+            .kloud-prejoin-wrapper .lk-device-menu li button.lk-active {
+              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
               color: #ffffff !important;
-              font-weight: 600 !important;
+              font-weight: 700 !important;
             }
 
-            /* White checkmark before selected item via ::before */
-            .kloud-prejoin-wrapper .lk-media-device-menu li[aria-selected="true"] button::before,
-            .kloud-prejoin-wrapper .lk-media-device-menu button[aria-selected="true"]::before,
-            .kloud-prejoin-wrapper .lk-media-device-menu li button[data-lk-active="true"]::before,
-            .kloud-prejoin-wrapper .lk-media-device-menu li.lk-list-item--active button::before,
-            .kloud-prejoin-wrapper .lk-media-device-menu li button.lk-active::before {
+            .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button::before,
+            .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"]::before,
+            .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"]::before,
+            .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button::before,
+            .kloud-prejoin-wrapper .lk-device-menu li button.lk-active::before {
               content: '';
               position: absolute !important;
-              left: 12px !important;
+              left: 15px !important;
               top: 50% !important;
               transform: translateY(-50%) rotate(45deg) !important;
-              width: 5px !important;
-              height: 9px !important;
+              width: 6px !important;
+              height: 11px !important;
               border-right: 2px solid #ffffff !important;
               border-bottom: 2px solid #ffffff !important;
               display: block !important;
             }
 
-            /* Unselected items: placeholder indent (no checkmark) */
-            .kloud-prejoin-wrapper .lk-media-device-menu li button:not(.lk-active)::before {
+            .kloud-prejoin-wrapper .lk-device-menu li button:not(.lk-active)::before {
               content: '' !important;
               display: none !important;
+            }
+
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu {
+              background: #0b1734 !important;
+              border-color: #374151 !important;
+              box-shadow: 0 24px 46px rgba(2, 6, 23, 0.62) !important;
+              scrollbar-color: #475569 transparent;
+            }
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-thumb {
+              background: #475569;
+            }
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button:not([class*="lk-button-group"]),
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu .lk-button {
+              color: #e5e7eb !important;
+            }
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button:hover {
+              background: #1e293b !important;
+              color: #f8fafc !important;
+            }
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"],
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"],
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button.lk-active {
+              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
+              color: #ffffff !important;
+            }
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button::before,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"]::before,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"]::before,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button::before,
+            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button.lk-active::before {
+              border-right-color: #ffffff !important;
+              border-bottom-color: #ffffff !important;
             }
 
             /* ── Microphone & Camera button group: rounded to match input field ── */
             .kloud-prejoin-wrapper .lk-button-group {
               border-radius: 10px !important;
-              overflow: hidden !important;
+              overflow: visible !important;
             }
             .kloud-prejoin-wrapper .lk-button-group > button:first-child {
               border-radius: 10px 0 0 10px !important;
@@ -901,9 +882,68 @@ export function PageClientImpl(props: {
             .kloud-prejoin-wrapper .lk-button-group > div:last-child {
               border-radius: 0 10px 10px 0 !important;
             }
+            .kloud-prejoin-wrapper .lk-button-group-menu {
+              position: relative;
+              z-index: 5;
+            }
+            .kloud-prejoin-wrapper .lk-device-menu {
+              z-index: 40;
+            }
 
-
-
+            .kloud-prejoin-share-link-block {
+              width: 100%;
+              margin-top: 10px;
+            }
+            .kloud-prejoin-share-link-label {
+              font-size: 0.88rem;
+              font-weight: 600;
+              color: #2f3a4d;
+              margin: 0 0 10px;
+            }
+            .kloud-prejoin-share-link-box {
+              background: linear-gradient(180deg, #f8f9fc 0%, #f3f4f8 100%);
+              border: 1px solid #e4e8f0;
+              border-radius: 12px;
+              padding: 12px 14px;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 12px;
+              font-size: 0.95rem;
+              color: #1f2937;
+              width: 100%;
+              box-sizing: border-box;
+            }
+            .kloud-prejoin-share-link-box button {
+              background: none;
+              border: none;
+              cursor: pointer;
+              color: #4f5b6d;
+              padding: 4px;
+              border-radius: 4px;
+              display: flex;
+              align-items: center;
+              flex-shrink: 0;
+            }
+            .kloud-prejoin-share-link-box button:hover {
+              background: #e7ebf2;
+              color: #111827;
+            }
+            html[data-theme='dark'] .kloud-prejoin-share-link-label {
+              color: #cbd5e1;
+            }
+            html[data-theme='dark'] .kloud-prejoin-share-link-box {
+              background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+              border-color: #374151;
+              color: #e5e7eb;
+            }
+            html[data-theme='dark'] .kloud-prejoin-share-link-box button {
+              color: #94a3b8;
+            }
+            html[data-theme='dark'] .kloud-prejoin-share-link-box button:hover {
+              background: #374151;
+              color: #e5e7eb;
+            }
 
             /* Toolbar CSS - EAD-PFM Aesthetic */
             .kloud-prejoin-toolbar {
@@ -956,6 +996,11 @@ export function PageClientImpl(props: {
               width: 38px;
               border-radius: 50%;
               padding: 0;
+            }
+            .ead-btn-theme-active {
+              background: #e0e7ff;
+              border-color: #818cf8;
+              color: #3730a3;
             }
             .ead-pill-btn {
               padding: 0 12px;
@@ -1039,6 +1084,48 @@ export function PageClientImpl(props: {
               color: #ddd6fe;
             }
 
+            html[data-theme='dark'] .kloud-prejoin-logo-toolbar {
+              color: #e5e7eb;
+              background: rgba(248, 250, 252, 0.95);
+              border-radius: 12px;
+              padding: 6px 10px;
+              box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
+            }
+            html[data-theme='dark'] .ead-btn {
+              background: #0f172a;
+              border-color: #334155;
+              color: #cbd5e1;
+            }
+            html[data-theme='dark'] .ead-btn:hover {
+              background: #1e293b;
+              border-color: #475569;
+              color: #f8fafc;
+            }
+            html[data-theme='dark'] .ead-btn-theme-active {
+              background: #1e3a8a;
+              border-color: #60a5fa;
+              color: #dbeafe;
+            }
+            html[data-theme='dark'] .ead-pill-btn {
+              color: #e2e8f0;
+            }
+            html[data-theme='dark'] .ead-dropdown-menu {
+              background: #0f172a;
+              border-color: #334155;
+              box-shadow: 0 16px 36px rgba(2,6,23,0.6);
+            }
+            html[data-theme='dark'] .ead-menu-header {
+              color: #94a3b8;
+              border-bottom-color: #334155;
+            }
+            html[data-theme='dark'] .ead-menu-item {
+              color: #cbd5e1;
+            }
+            html[data-theme='dark'] .ead-menu-item:hover {
+              background: #1e293b;
+              color: #f8fafc;
+            }
+
             /* --- Mobile Adaptation for Toolbar --- */
             @media (max-width: 768px) {
               .kloud-prejoin-toolbar {
@@ -1087,6 +1174,30 @@ export function PageClientImpl(props: {
             </div>
 
             <div className="ead-toolbar-right">
+              <button
+                className={`ead-btn ead-icon-btn ${theme === 'dark' ? 'ead-btn-theme-active' : ''}`}
+                title={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+              >
+                {theme === 'dark' ? (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+                    <path d="M21 12.79A9 9 0 1111.21 3c0 .28-.01.56-.01.84A7 7 0 0021 12.79z"></path>
+                  </svg>
+                )}
+              </button>
+
               {/* Help Button */}
               <button className="ead-btn ead-icon-btn" title={t('nav.help')} onClick={() => { setShowLangMenu(false); setShowHelp(true); }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
@@ -1159,7 +1270,7 @@ export function PageClientImpl(props: {
                 onSignOut={handlePrejoinSignOut}
                 mobileOrgLabel={
                   currentUser
-                    ? `${currentUser.displayName || currentUser.username}@Kloud Corp`
+                    ? `${currentUser.displayName || currentUser.username}`
                     : undefined
                 }
               />
@@ -1171,11 +1282,20 @@ export function PageClientImpl(props: {
             <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
           </div>
           {!isBot && prejoinReady && (
-            <>
-              <PreJoin
-                defaults={preJoinDefaults}
-                onSubmit={handlePreJoinSubmit}
-                onError={handlePreJoinError}
+            <KloudPreJoin
+              defaults={preJoinDefaults}
+              onSubmit={handlePreJoinSubmit}
+              onError={handlePreJoinError}
+              joinLabel={preJoinButtonText}
+              userLabel={t('prejoin.displayMyNameAs')}
+              micLabel={t('prejoin.microphone')}
+              camLabel={t('prejoin.webcam')}
+              mediaUnavailableLabel={t('prejoin.mediaRequiresSecureContext')}
+              joinButtonDisabled={personalRoomSwitching}
+            >
+              <PrejoinMeetingShareLink
+                active={prejoinReady && !isBot}
+                roomName={effectiveRoomName}
               />
               {isHost && (
                 <PrejoinPersonalRoomCheckbox
@@ -1186,7 +1306,7 @@ export function PageClientImpl(props: {
                   onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
                 />
               )}
-            </>
+            </KloudPreJoin>
           )}
           {!isBot && (
             <div
@@ -1206,7 +1326,7 @@ export function PageClientImpl(props: {
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#5b21b6',
+                  color: theme === 'dark' ? '#a5b4fc' : '#5b21b6',
                   fontWeight: 600,
                   fontSize: '0.9rem',
                   cursor: 'pointer',
@@ -1224,8 +1344,8 @@ export function PageClientImpl(props: {
                   width: '16px',
                   height: '16px',
                   borderRadius: '50%',
-                  border: '1px solid #a78bfa',
-                  color: '#6d28d9',
+                  border: theme === 'dark' ? '1px solid #818cf8' : '1px solid #a78bfa',
+                  color: theme === 'dark' ? '#c7d2fe' : '#6d28d9',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',

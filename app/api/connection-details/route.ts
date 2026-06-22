@@ -15,6 +15,7 @@ import {
   buildKloudMemberIdentity,
   sanitizeKloudDeviceId,
 } from '@/lib/meetingOwner';
+import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -100,6 +101,13 @@ export async function GET(request: NextRequest) {
         ? `${participantName}__${randomParticipantPostfix}_${guestDeviceId}`
         : `${participantName}__${randomParticipantPostfix}`;
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
+    }
+
+    // Evict any existing session for the same member BEFORE issuing the new
+    // token. The old client receives PARTICIPANT_REMOVED and shows the
+    // "Session Moved" popup instead of silently reconnecting.
+    if (member) {
+      await evictParticipantsByMemberId(livekitRoomName, member.id, identity);
     }
 
     const participantToken = await createParticipantToken(

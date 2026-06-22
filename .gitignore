@@ -57,3 +57,6 @@ figma-design/
 
 # local environment config folder (secrets, never commit)
 KloudMeet.env/
+
+# Server access info (local only)
+.server-access

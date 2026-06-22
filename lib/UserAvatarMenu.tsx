@@ -16,7 +16,7 @@ export interface UserAvatarMenuProps {
   onOpenSettings?: () => void;
   onOpenDesktopApp?: () => void;
   onSignOut?: () => void;
-  /** Shown at top of dropdown on mobile (≤640px), e.g. "Name@Kloud Corp" */
+  /** Shown at top of dropdown on mobile (≤640px) */
   mobileOrgLabel?: string;
 }
 
@@ -60,7 +60,7 @@ export function UserAvatarMenu({
     );
   }
 
-  const orgHeaderLabel = mobileOrgLabel ?? `${user.displayName}@Kloud Corp`;
+  const orgHeaderLabel = mobileOrgLabel ?? user.displayName;
 
   return (
     <div style={{ position: 'relative' }} ref={menuRef}>

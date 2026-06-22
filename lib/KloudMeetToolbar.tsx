@@ -238,10 +238,18 @@ export function KloudMeetToolbar({
   }, [inviteMenuOpen]);
 
   const isMobile = useToolbarIsMobile();
+  const canUseMediaDevices =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    !!window.isSecureContext &&
+    !!navigator.mediaDevices?.getUserMedia;
+  const canEnumerateDevices =
+    canUseMediaDevices && !!navigator.mediaDevices?.enumerateDevices;
   const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
   const lastMouseYRef = useRef<number>(window.innerHeight);
   const lastToggleTimeRef = useRef<number>(0);
   const iframeMouseSuppressUntilRef = useRef<number>(0);
+  const explicitToggleUntilRef = useRef<number>(0);
   // 记录插件最后一次告知是否允许显示 SkyMeet 底栏，用于阻止 hoverZone 在 suppress 期间重新激活。
   const lastIframeShowRef = useRef<boolean>(true);
 
@@ -363,13 +371,24 @@ export function KloudMeetToolbar({
           ? String((payload as { type?: unknown }).type ?? '')
           : '';
 
-      if (msgType === 'Kloud-onMouseClick' && isMobile) {
-        // iframe 内部点击，移动端 toggle 菜单显示隐藏。加一个简单的节流防止 touchstart+click 重复触发
+      if (msgType === 'Kloud-onMouseClick') {
         const now = Date.now();
         if (now - lastToggleTimeRef.current > 500) {
           lastToggleTimeRef.current = now;
-          setVisible(prev => !prev);
+          const data =
+            typeof payload === 'object' && payload !== null && 'data' in payload
+              ? (payload as { data?: { show?: unknown } }).data
+              : null;
+          const show = data?.show === 1 || data?.show === true;
+          setVisible(show);
+          explicitToggleUntilRef.current = show ? now + 10000 : 0;
         }
+        return;
+      }
+
+      if (msgType === 'Kloud-DocToolAutoHide') {
+        explicitToggleUntilRef.current = 0;
+        setVisible(false);
         return;
       }
 
@@ -390,6 +409,17 @@ export function KloudMeetToolbar({
       // 由 iframe 决定是否显示 SkyMeet 底栏：plugin 侧已综合判断 liveToolbar 区与底部区域。
       if (msgType === 'mousemove') {
         if (isMobile) return;
+
+        const now = Date.now();
+        if (now < explicitToggleUntilRef.current) {
+          iframeMouseSuppressUntilRef.current = now + 200;
+          if (!iframeMouseActive) setIframeMouseActive(true);
+          if (iframeMouseInactiveTimerRef.current) clearTimeout(iframeMouseInactiveTimerRef.current);
+          iframeMouseInactiveTimerRef.current = setTimeout(() => {
+            setIframeMouseActive(false);
+          }, 250);
+          return;
+        }
 
         const data =
           typeof payload === 'object' && payload !== null && 'data' in payload
@@ -583,6 +613,15 @@ export function KloudMeetToolbar({
     iframe.contentWindow.postMessage({ type: 'Kloud-LiveDocPanelTab', tab }, '*');
   };
 
+  /** Toggle the LiveDoc Popup Modal (centered, with Files/Summary/Transcript tabs) */
+  const postToggleDocPopup = () => {
+    const iframe =
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
+      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage({ type: 'Kloud-ToggleDocPopup' }, '*');
+  };
+
   return (
     <>
       {/* Toast */}
@@ -624,6 +663,7 @@ export function KloudMeetToolbar({
               <button
                 className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''}`}
                 onClick={onToggleMic}
+                disabled={!canUseMediaDevices}
                 style={{ width: '36px', height: '36px' }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px' }}>
@@ -637,9 +677,15 @@ export function KloudMeetToolbar({
                   )}
                 </svg>
               </button>
-              <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
-              </MediaDeviceMenu>
+              {canEnumerateDevices ? (
+                <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                </MediaDeviceMenu>
+              ) : (
+                <button type="button" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')} disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                </button>
+              )}
             </div>
 
             {/* 2. Webcam */}
@@ -647,6 +693,7 @@ export function KloudMeetToolbar({
               <button
                 className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
                 onClick={onToggleCam}
+                disabled={!canUseMediaDevices}
                 style={{ width: '36px', height: '36px' }}
               >
                 <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px' }}>
@@ -660,97 +707,83 @@ export function KloudMeetToolbar({
                   )}
                 </svg>
               </button>
-              <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
-              </MediaDeviceMenu>
-            </div>
-
-            {/* 3. Speaker */}
-            <div className={styles.controlGroup} style={{ gap: '4px' }}>
-              <button
-                className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`}
-                title={t('toolbar.speakerSettings') || 'Speaker Settings'}
-                onClick={() => openSheet('speaker')}
-                style={{ width: '36px', height: '36px' }}
-              >
-                {mobileAudioState === 'speaker' && <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px' }}><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>}
-                {mobileAudioState === 'earpiece' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: '16px', height: '16px' }}><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>}
-                {mobileAudioState === 'bluetooth' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ width: '16px', height: '16px' }}><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>}
-              </button>
-              <button className={styles.chevron} style={{ padding: '0 2px', color: '#fff', border: 'none', background: 'transparent' }} onClick={() => openSheet('speaker')}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
-              </button>
-            </div>
-
-            {/* 4. Views */}
-            {canSwitchViews && (
-              <button
-                className={styles.mobileBtn}
-                onClick={() => openSheet('views')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-                </svg>
-              </button>
-            )}
-
-            {/* 5. Invite — 与会议列表一致：向上弹出「复制链接 / 复制邀请」 */}
-            <div data-invite-menu-anchor="true" className={styles.inviteMenuAnchor}>
-              <button
-                type="button"
-                className={`${styles.mobileBtn} ${inviteMenuOpen ? styles.active : ''}`}
-                onClick={() =>
-                  setInviteMenuOpen((prev) => {
-                    const next = !prev;
-                    if (next) onOpenSheet?.();
-                    return next;
-                  })
-                }
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-                </svg>
-                <span>{t('toolbar.invite')}</span>
-              </button>
-              {inviteMenuOpen && (
-                <div className={styles.inviteDropdown} role="menu">
-                  <button
-                    type="button"
-                    className={styles.inviteDropdownItem}
-                    role="menuitem"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
-                      showInviteToast(t('toolbar.inviteCopied'));
-                      closeInviteMenu();
-                    }}
-                  >
-                    {t('schedule.copyLink')}
-                  </button>
-                  <button
-                    type="button"
-                    className={styles.inviteDropdownItem}
-                    role="menuitem"
-                    onClick={() => {
-                      void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
-                      showInviteToast(t('schedule.inviteCopied'));
-                      closeInviteMenu();
-                    }}
-                  >
-                    {t('schedule.copyInvite')}
-                  </button>
-                </div>
+              {canEnumerateDevices ? (
+                <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                </MediaDeviceMenu>
+              ) : (
+                <button type="button" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')} disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                </button>
               )}
             </div>
+
+            {/* 3. LiveDoc */}
+            <button
+              className={`${styles.mobileBtn} ${activeView === 'liveDoc' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
+              onClick={() => {
+                if (!canSwitchViews) return;
+                if (activeView === 'liveDoc' && liveDocPluginLoaded) {
+                  postToggleDocPopup();
+                } else {
+                  onViewChange('liveDoc');
+                }
+              }}
+              aria-label={t('toolbar.liveDoc')}
+              title={t('toolbar.liveDoc')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              {activeView === 'liveDoc' && liveDocPluginLoaded && (
+                <span style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" style={{ width: '8px', height: '8px' }}>
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
+                </span>
+              )}
+            </button>
+
+            {/* 4. Webcam */}
+            <button
+              className={`${styles.mobileBtn} ${activeView === 'webcam' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
+              onClick={() => {
+                if (!canSwitchViews) return;
+                onViewChange('webcam');
+              }}
+              aria-label={t('toolbar.webcam')}
+              title={t('toolbar.webcam')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
+            </button>
+
+            {/* 5. Screen Share */}
+            <button
+              className={`${styles.mobileBtn} ${activeView === 'shareScreen' || screenShareActive ? styles.active : ''}`}
+              onClick={handleShareScreenClick}
+              aria-label={t('toolbar.shareScreen')}
+              title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
+            >
+              <svg viewBox="0 0 24 24" fill="none"
+                stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                strokeWidth="1.5"
+              >
+                <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </button>
 
             {/* 6. More */}
             <button
               className={styles.mobileBtn}
               onClick={() => openSheet('more')}
+              aria-label={t('toolbar.more')}
+              title={t('toolbar.more')}
             >
               <svg viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
               </svg>
-              <span>{t('toolbar.more')}</span>
             </button>
           </>
         ) : (
@@ -761,6 +794,7 @@ export function KloudMeetToolbar({
                 <button
                   className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''} ${isMutedByHost && !micEnabled ? styles.controlBtnMutedByHost : ''}`}
                   onClick={onToggleMic}
+                  disabled={!canUseMediaDevices}
                   title={isMutedByHost ? 'Muted by host' : (micEnabled ? t('toolbar.muteMic') : t('toolbar.unmuteMic'))}
                 >
                   {micEnabled ? (
@@ -772,15 +806,22 @@ export function KloudMeetToolbar({
                     </svg>
                   )}
                 </button>
-                <MediaDeviceMenu kind="audioinput" className={styles.chevron} title={t('toolbar.micSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
-                </MediaDeviceMenu>
+                {canEnumerateDevices ? (
+                  <MediaDeviceMenu kind="audioinput" className={styles.chevron} title={t('toolbar.micSettings')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </MediaDeviceMenu>
+                ) : (
+                  <button type="button" className={styles.chevron} title={t('toolbar.micSettings')} disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </button>
+                )}
               </div>
 
               <div className={styles.controlGroup}>
                 <button
                   className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
                   onClick={onToggleCam}
+                  disabled={!canUseMediaDevices}
                   title={camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam')}
                 >
                   {camEnabled ? (
@@ -792,18 +833,30 @@ export function KloudMeetToolbar({
                     </svg>
                   )}
                 </button>
-                <MediaDeviceMenu kind="videoinput" className={styles.chevron} title={t('toolbar.camSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
-                </MediaDeviceMenu>
+                {canEnumerateDevices ? (
+                  <MediaDeviceMenu kind="videoinput" className={styles.chevron} title={t('toolbar.camSettings')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </MediaDeviceMenu>
+                ) : (
+                  <button type="button" className={styles.chevron} title={t('toolbar.camSettings')} disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </button>
+                )}
               </div>
 
               <div className={styles.controlGroup}>
                 <button className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title={t('toolbar.speakerSettings')} onClick={() => showComingSoon(t('toolbar.speakerSettings'))}>
                   <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
                 </button>
-                <MediaDeviceMenu kind="audiooutput" className={styles.chevron} title={t('toolbar.speakerSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
-                </MediaDeviceMenu>
+                {canEnumerateDevices ? (
+                  <MediaDeviceMenu kind="audiooutput" className={styles.chevron} title={t('toolbar.speakerSettings')}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </MediaDeviceMenu>
+                ) : (
+                  <button type="button" className={styles.chevron} title={t('toolbar.speakerSettings')} disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -813,12 +866,25 @@ export function KloudMeetToolbar({
                 <>
                   <button
                     className={`${styles.tabBtn} ${activeView === 'liveDoc' ? styles.tabBtnActive : ''}`}
-                    onClick={() => onViewChange('liveDoc')}
+                    onClick={() => {
+                      if (activeView === 'liveDoc' && liveDocPluginLoaded) {
+                        postToggleDocPopup();
+                      } else {
+                        onViewChange('liveDoc');
+                      }
+                    }}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     {t('toolbar.liveDoc')}
+                    {activeView === 'liveDoc' && liveDocPluginLoaded && (
+                      <span style={{ position: 'absolute', top: '2px', right: '2px', width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" style={{ width: '8px', height: '8px' }}>
+                          <path d="M18 15l-6-6-6 6" />
+                        </svg>
+                      </span>
+                    )}
                   </button>
                   {false && activeView === 'liveDoc' && liveDocPluginLoaded && (
                     <button
@@ -1229,6 +1295,27 @@ export function KloudMeetToolbar({
             transition: 'opacity 0.3s ease',
           }}
         >
+          {/* Speaker button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); openSheet('speaker'); }}
+            aria-label={t('toolbar.speakerSettings') || 'Speaker Settings'}
+            title={t('toolbar.speakerSettings') || 'Speaker Settings'}
+            style={{
+              background: 'rgba(17, 24, 39, 0.70)',
+              backdropFilter: 'blur(10px)',
+              color: '#fff', border: 'none', borderRadius: '50%',
+              width: '40px', height: '40px',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+              cursor: 'pointer', flexShrink: 0,
+              transition: 'background 0.2s',
+            }}
+          >
+            {mobileAudioState === 'speaker' && <svg viewBox="0 0 24 24" fill="currentColor" width="19" height="19"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>}
+            {mobileAudioState === 'earpiece' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>}
+            {mobileAudioState === 'bluetooth' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="19" height="19"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>}
+          </button>
+
           {/* Chat button */}
           <button
             onClick={(e) => { e.stopPropagation(); handleToggleChat(); }}
@@ -1432,6 +1519,38 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => {
+              void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+              setToastMsg(t('toolbar.inviteCopied'));
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+              setActiveSheet(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+            </svg>
+            {t('schedule.copyLink')}
+          </button>
+
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => {
+              void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+              setToastMsg(t('schedule.inviteCopied'));
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+              setActiveSheet(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+            </svg>
+            {t('schedule.copyInvite')}
+          </button>
+
           {/*
           <button className={styles.actionSheetItem} onClick={() => handleToggleChat()}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">

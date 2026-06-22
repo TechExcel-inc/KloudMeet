@@ -161,6 +161,11 @@
   color: #4f46e5;
 }
 
+.topNavIconBtnActive {
+  background: rgba(82,39,211, 0.12);
+  color: #4f46e5;
+}
+
 /* Nav inner container */
 .toolbarLeft {
   display: flex;
@@ -718,6 +723,7 @@
   gap: 0.35rem;
   padding: 0.4rem 0.5rem;
   border-radius: 8px;
+  color: #475569;
   transition: background 0.2s;
 }
 
@@ -2973,4 +2979,318 @@
 /* Desktop: hide mobile card action bar */
 .meetingCardMobileActions {
   display: none;
+}
+
+:global(html[data-theme='dark']) .main {
+  color: #e5e7eb;
+}
+
+:global(html[data-theme='dark']) .bgGlow {
+  background: linear-gradient(135deg, #0f172a 0%, #111827 45%, #1f2937 100%);
+}
+
+:global(html[data-theme='dark']) .bgGlow::before {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.26) 0%, rgba(99, 102, 241, 0) 72%);
+}
+
+:global(html[data-theme='dark']) .bgGlow::after {
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0) 72%);
+}
+
+:global(html[data-theme='dark']) .topNav {
+  background: rgba(15, 23, 42, 0.72);
+  border-bottom-color: rgba(71, 85, 105, 0.45);
+  box-shadow: 0 1px 12px rgba(2, 6, 23, 0.35);
+}
+
+:global(html[data-theme='dark']) .topNav .logoRow {
+  background: rgba(248, 250, 252, 0.95);
+  border-radius: 12px;
+  padding: 4px 10px;
+  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
+}
+
+:global(html[data-theme='dark']) .topNavIconBtn,
+:global(html[data-theme='dark']) .iconBtn,
+:global(html[data-theme='dark']) .avatarBtn {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .topNavIconBtn:hover,
+:global(html[data-theme='dark']) .topNavIconBtnActive {
+  background: rgba(99, 102, 241, 0.22);
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .iconBtn,
+:global(html[data-theme='dark']) .avatarBtn {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+:global(html[data-theme='dark']) .quickActionsBar {
+  background: rgba(15, 23, 42, 0.68);
+  border-color: rgba(51, 65, 85, 0.65);
+  box-shadow: 0 10px 26px rgba(2, 6, 23, 0.35);
+}
+
+:global(html[data-theme='dark']) .quickJoinInput,
+:global(html[data-theme='dark']) .meetingSearchInput,
+:global(html[data-theme='dark']) .filterBtn {
+  background: rgba(15, 23, 42, 0.72) !important;
+  border-color: rgba(71, 85, 105, 0.62);
+  color: #e2e8f0;
+  box-shadow: none;
+}
+
+:global(html[data-theme='dark']) .quickJoinInput::placeholder,
+:global(html[data-theme='dark']) .meetingSearchInput::placeholder,
+:global(html[data-theme='dark']) .meetingSearchIcon {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .meetingListTitle,
+:global(html[data-theme='dark']) .meetingDateLabel,
+:global(html[data-theme='dark']) .meetingCardTitle,
+:global(html[data-theme='dark']) .meetingCardTime {
+  color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .meetingDateLine {
+  background: #334155;
+}
+
+:global(html[data-theme='dark']) .meetingCard,
+:global(html[data-theme='dark']) .meetingCardLive {
+  background: rgba(15, 23, 42, 0.72) !important;
+  border-color: rgba(71, 85, 105, 0.58) !important;
+  box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35) !important;
+}
+
+:global(html[data-theme='dark']) .meetingCardMeta,
+:global(html[data-theme='dark']) .meetingCardMetaItem,
+:global(html[data-theme='dark']) .desktopMeta,
+:global(html[data-theme='dark']) .mobileMetaLine,
+:global(html[data-theme='dark']) .mobileTimeLine {
+  color: #94a3b8 !important;
+}
+
+:global(html[data-theme='dark']) .statusBadge {
+  background: rgba(30, 41, 59, 0.86);
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .orgDropdownBtn {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .dropdownMenu,
+:global(html[data-theme='dark']) .orgDropdownMenu {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.5);
+}
+
+:global(html[data-theme='dark']) .dropdownItem,
+:global(html[data-theme='dark']) .orgDropdownItem,
+:global(html[data-theme='dark']) .orgDropdownIdentity,
+:global(html[data-theme='dark']) .orgDropdownTitle {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .orgDropdownItemActive {
+  background: rgba(99, 102, 241, 0.22);
+  color: #c7d2fe;
+}
+
+:global(html[data-theme='dark']) .orgDropdownItemActive svg {
+  color: #a5b4fc;
+}
+
+:global(html[data-theme='dark']) .orgDropdownSection + .orgDropdownSection {
+  border-top-color: #334155;
+}
+
+:global(html[data-theme='dark']) .dropdownItem:hover,
+:global(html[data-theme='dark']) .orgDropdownItem:hover {
+  background: #1e293b;
+  color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .orgDropdownIdentity {
+  background: #111827;
+}
+
+/* ── Dark Theme: Auth + Anonymous pages polish ───────────────────────────── */
+:global(html[data-theme='dark']) .authCard {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(2, 6, 23, 0.92) 100%);
+  border: 1px solid rgba(71, 85, 105, 0.78);
+  box-shadow: 0 24px 46px rgba(2, 6, 23, 0.62), inset 0 1px 0 rgba(148, 163, 184, 0.08);
+}
+
+:global(html[data-theme='dark']) .loginTitle {
+  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:global(html[data-theme='dark']) .fieldLabel,
+:global(html[data-theme='dark']) .signupSubtext,
+:global(html[data-theme='dark']) .registerRow,
+:global(html[data-theme='dark']) .resendRow {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .signupSubtext strong {
+  color: #f8fafc;
+}
+
+:global(html[data-theme='dark']) .fieldHint {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .fieldInput,
+:global(html[data-theme='dark']) .verifyCodeInput {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(71, 85, 105, 0.85);
+  color: #f1f5f9;
+  box-shadow: inset 0 2px 4px rgba(2, 6, 23, 0.28);
+}
+
+:global(html[data-theme='dark']) .fieldInput::placeholder,
+:global(html[data-theme='dark']) .verifyCodeInput::placeholder {
+  color: #64748b;
+}
+
+:global(html[data-theme='dark']) .fieldInput:focus,
+:global(html[data-theme='dark']) .verifyCodeInput:focus {
+  border-color: #818cf8;
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.24), inset 0 2px 4px rgba(2, 6, 23, 0.2);
+}
+
+:global(html[data-theme='dark']) .fieldInputError {
+  border-color: #ef4444;
+  background: rgba(69, 10, 10, 0.45);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+}
+
+:global(html[data-theme='dark']) .linkBtn,
+:global(html[data-theme='dark']) .signupBackBtn {
+  color: #a5b4fc;
+}
+
+:global(html[data-theme='dark']) .linkBtn:hover,
+:global(html[data-theme='dark']) .signupBackBtn:hover {
+  color: #c7d2fe;
+}
+
+:global(html[data-theme='dark']) .passwordToggle {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .passwordToggle:hover {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .ssoDivider {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .ssoDivider::before,
+:global(html[data-theme='dark']) .ssoDivider::after {
+  border-bottom-color: #334155;
+}
+
+:global(html[data-theme='dark']) .anonLink {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: #475569;
+  color: #e5e7eb;
+}
+
+:global(html[data-theme='dark']) .anonLink:hover {
+  background: rgba(30, 41, 59, 0.9);
+  border-color: #818cf8;
+  color: #f8fafc;
+}
+
+:global(html[data-theme='dark']) .errorBanner {
+  background: rgba(127, 29, 29, 0.35);
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fecaca;
+}
+
+:global(html[data-theme='dark']) .devHint {
+  background: rgba(30, 41, 59, 0.86);
+  border-color: #475569;
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .signupStepDot {
+  background: #475569;
+}
+
+:global(html[data-theme='dark']) .signupStepLine {
+  background: #475569;
+}
+
+:global(html[data-theme='dark']) .downloadBtn {
+  background: rgba(15, 23, 42, 0.74);
+  border-color: rgba(71, 85, 105, 0.84);
+  color: #e2e8f0;
+  box-shadow: 0 6px 16px rgba(2, 6, 23, 0.35);
+}
+
+:global(html[data-theme='dark']) .downloadBtn:hover {
+  background: rgba(30, 41, 59, 0.92);
+  border-color: #818cf8;
+  color: #f8fafc;
+}
+
+:global(html[data-theme='dark']) .downloadBtnLabel,
+:global(html[data-theme='dark']) .downloadBtnVersion {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .anonTitle {
+  background: linear-gradient(135deg, #f8fafc 0%, #cbd5e1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+:global(html[data-theme='dark']) .anonSubtitle,
+:global(html[data-theme='dark']) .feedTitle,
+:global(html[data-theme='dark']) .recentCardDate,
+:global(html[data-theme='dark']) .recentCardTime {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .recentCardName {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .anonActionCard,
+:global(html[data-theme='dark']) .recentCard {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(71, 85, 105, 0.72);
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.38);
+}
+
+:global(html[data-theme='dark']) .anonJoinInput {
+  background: rgba(15, 23, 42, 0.8);
+  border-color: rgba(71, 85, 105, 0.8);
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .anonJoinInput::placeholder {
+  color: #64748b;
+}
+
+:global(html[data-theme='dark']) .anonJoinInput:focus {
+  border-color: #818cf8;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.2);
 }

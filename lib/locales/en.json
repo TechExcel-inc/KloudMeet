@@ -29,6 +29,8 @@
   "nav.userMenu": "User Menu",
   "nav.goBack": "Go Back",
   "nav.downloadDesktop": "Download Desktop App",
+  "nav.switchDarkTheme": "Switch to dark theme",
+  "nav.switchLightTheme": "Switch to light theme",
 
   "anon.joinMeeting": "Join Meeting",
   "anon.hostPrivilege": "To host a meeting or join with more privileges",
@@ -181,6 +183,11 @@
   "prejoin.alreadyHosting": "You are already hosting this meeting in another session. Do you want to join?",
   "prejoin.inProgress": "Meeting in progress for {time}",
   "prejoin.startNow": "Start Now",
+  "prejoin.displayMyNameAs": "Display my name as",
+  "prejoin.microphone": "Microphone",
+  "prejoin.webcam": "Webcam",
+  "prejoin.mediaRequiresSecureContext": "Microphone and camera controls require HTTPS in this browser.",
+  "prejoin.shareMeetingUrl": "Share Meeting URL with others:",
   "prejoin.joinAsHost": "Join as Host",
   "prejoin.joinNow": "Join Now",
   "prejoin.orStartNew": "Or start a new meeting instead",
@@ -191,6 +198,8 @@
   "prejoin.returnDashboard": "Return to Dashboard",
   "meeting.closedByHostTitle": "Meeting Ended",
   "meeting.closedByHostDesc": "The host has ended this meeting. Returning to home…",
+  "meeting.duplicateSessionTitle": "Session Moved",
+  "meeting.duplicateSessionDesc": "You have joined this meeting with a new active session. The current session for this meeting will be auto closed.",
   "meeting.closedByHostToast": "The host has ended this meeting.",
   "meeting.returnHomeNow": "Return Home Now",
   "prejoin.loadingMeeting": "Loading meeting…",
@@ -386,7 +395,7 @@
   "profile.middleName": "Middle Name",
   "profile.lastName": "Last Name",
   "profile.meetingRoomId": "My Meeting Room ID:",
-  "profile.supportPersonalRoom": "Support my meeting room ID",
+  "profile.supportPersonalRoom": "Enable my meeting room ID",
   "profile.changeRoomIdTitle": "Change Your Room ID",
   "profile.currentRoomId": "Current Room ID:",
   "profile.newRoomId": "New Room ID:",
@@ -572,5 +581,5 @@
   "livedoc.fetchingToken": "Fetching access token…",
   "livedoc.loadFailed": "Failed to load LiveDoc",
   "livedoc.missingToken": "Missing access token",
-  "livedoc.loading": "Loading document…"
+  "livedoc.loading": "Initializing LiveDoc view, please wait…"
 }

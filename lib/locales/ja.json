@@ -28,6 +28,8 @@
   "nav.userMenu": "ユーザーメニュー",
   "nav.goBack": "戻る",
   "nav.downloadDesktop": "デスクトップアプリをダウンロード",
+  "nav.switchDarkTheme": "ダークテーマに切り替え",
+  "nav.switchLightTheme": "ライトテーマに切り替え",
   "anon.joinMeeting": "ミーティングに参加",
   "anon.hostPrivilege": "ミーティングを主催するには、",
   "anon.signInHere": "こちらからサインイン",
@@ -167,6 +169,11 @@
   "prejoin.alreadyHosting": "別セッションで主催中です。参加しますか？",
   "prejoin.inProgress": "経過時間: {time}",
   "prejoin.startNow": "今すぐ開始",
+  "prejoin.displayMyNameAs": "表示名",
+  "prejoin.microphone": "マイク",
+  "prejoin.webcam": "ウェブカメラ",
+  "prejoin.mediaRequiresSecureContext": "このブラウザでマイクとカメラを使うには HTTPS が必要です。",
+  "prejoin.shareMeetingUrl": "他の参加者とミーティング URL を共有：",
   "prejoin.joinAsHost": "ホストとして参加",
   "prejoin.joinNow": "今すぐ参加",
   "prejoin.orStartNew": "または新しいミーティングを開始",
@@ -177,6 +184,8 @@
   "prejoin.returnDashboard": "ダッシュボードに戻る",
   "meeting.closedByHostTitle": "ミーティング終了",
   "meeting.closedByHostDesc": "ホストがこのミーティングを終了しました。ホームに戻ります…",
+  "meeting.duplicateSessionTitle": "セッションが移動しました",
+  "meeting.duplicateSessionDesc": "新しいアクティブセッションでこのミーティングに参加しました。現在のセッションは自動的に閉じられます。",
   "meeting.closedByHostToast": "ホストがこのミーティングを終了しました。",
   "meeting.returnHomeNow": "ホームに戻る",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",
@@ -551,5 +560,5 @@
   "livedoc.fetchingToken": "アクセストークンを取得中…",
   "livedoc.loadFailed": "LiveDoc を読み込めません",
   "livedoc.missingToken": "アクセストークンがありません",
-  "livedoc.loading": "ドキュメントを読み込んでいます…"
+  "livedoc.loading": "LiveDoc ビューを初期化しています。お待ちください…"
 }

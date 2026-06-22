@@ -28,6 +28,8 @@
   "nav.userMenu": "用户菜单",
   "nav.goBack": "返回",
   "nav.downloadDesktop": "下载桌面版",
+  "nav.switchDarkTheme": "切换到深色主题",
+  "nav.switchLightTheme": "切换到浅色主题",
   "anon.joinMeeting": "加入会议",
   "anon.hostPrivilege": "如需主持会议或以更高权限加入，",
   "anon.signInHere": "请在此登录",
@@ -173,6 +175,11 @@
   "prejoin.alreadyHosting": "您正在另一个会话中主持此会议。是否要加入？",
   "prejoin.inProgress": "会议已进行 {time}",
   "prejoin.startNow": "立即开始",
+  "prejoin.displayMyNameAs": "将我的姓名显示为",
+  "prejoin.microphone": "麦克风",
+  "prejoin.webcam": "摄像头",
+  "prejoin.mediaRequiresSecureContext": "当前浏览器需要 HTTPS 才能使用麦克风和摄像头控制。",
+  "prejoin.shareMeetingUrl": "与他人共享会议链接：",
   "prejoin.joinAsHost": "以主持人身份加入",
   "prejoin.joinNow": "立即加入",
   "prejoin.orStartNew": "或开始一个新会议",
@@ -183,6 +190,8 @@
   "prejoin.returnDashboard": "返回主页",
   "meeting.closedByHostTitle": "会议已结束",
   "meeting.closedByHostDesc": "主持人已关闭本次会议，正在返回主页…",
+  "meeting.duplicateSessionTitle": "会话已转移",
+  "meeting.duplicateSessionDesc": "您已通过新的活动会话加入此会议。当前会话将自动关闭。",
   "meeting.closedByHostToast": "主持人已关闭本次会议。",
   "meeting.returnHomeNow": "立即返回主页",
   "prejoin.loadingMeeting": "正在加载会议…",
@@ -556,5 +565,5 @@
   "livedoc.fetchingToken": "正在获取访问令牌…",
   "livedoc.loadFailed": "无法加载 LiveDoc",
   "livedoc.missingToken": "缺少访问令牌",
-  "livedoc.loading": "正在加载文档…"
+  "livedoc.loading": "正在初始化 LiveDoc 视图，请稍候…"
 }

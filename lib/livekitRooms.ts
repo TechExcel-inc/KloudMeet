@@ -61,6 +61,44 @@ export async function findKloudMemberHostInLiveRoom(
   return null;
 }
 
+/**
+ * Remove existing participants in the room that share the same kloudMemberId.
+ * Called when a user requests a new token so the old session is evicted
+ * BEFORE the new one connects — the old client receives DisconnectReason
+ * and shows the "Session Moved" popup instead of reconnecting.
+ */
+export async function evictParticipantsByMemberId(
+  roomName: string,
+  memberId: number,
+  excludeIdentity?: string,
+): Promise<number> {
+  const client = getRoomServiceClient();
+  if (!client) return 0;
+
+  try {
+    const participants = await client.listParticipants(roomName);
+    let evicted = 0;
+    for (const p of participants) {
+      if (excludeIdentity && p.identity === excludeIdentity) continue;
+      const pid = parseKloudMemberIdFromIdentity(p.identity);
+      if (pid != null && pid === memberId) {
+        try {
+          await client.removeParticipant(roomName, p.identity);
+          evicted++;
+        } catch (e) {
+          console.error('[livekitRooms] removeParticipant failed', p.identity, e);
+        }
+      }
+    }
+    return evicted;
+  } catch (e: any) {
+    // Room doesn't exist yet (new meeting) — nothing to evict, not an error
+    if (e?.code === 'not_found' || e?.status === 404) return 0;
+    console.error('[livekitRooms] listParticipants failed (evict)', roomName, e);
+    return 0;
+  }
+}
+
 export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
   const client = getRoomServiceClient();
   if (!client) return false;

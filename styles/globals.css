@@ -163,16 +163,21 @@ h2 a {
 }
 
 .kloud-prejoin-title {
-  font-size: 1.6rem;
-  font-weight: 700;
-  margin: 0.4rem 0 0.25rem;
-  color: #1e1e2e;
+  font-size: clamp(1.45rem, 2.2vw, 2.15rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0.3rem 0 0.35rem;
+  color: #1b1835;
+  line-height: 1.08;
 }
 
 .kloud-prejoin-subtitle {
-  font-size: 0.92rem;
-  color: #6b7280;
-  margin: 0;
+  font-size: 1rem;
+  color: #5a6478;
+  line-height: 1.45;
+  max-width: 760px;
+  margin: 0 auto;
+  font-weight: 500;
 }
 
 /* ── PreJoin card ───────────────────────────── */
@@ -188,34 +193,110 @@ h2 a {
   border: 1px solid rgba(124, 58, 237, 0.08);
 }
 
+/* ── PreJoin card (custom KloudPreJoin component) ─── */
+.kloud-prejoin-card {
+  background: linear-gradient(180deg, #ffffff 0%, #fcfbff 100%);
+  padding: 1.75rem 2rem 2rem;
+  border-radius: 24px;
+  box-shadow: 0 18px 48px rgba(76, 52, 173, 0.14), 0 2px 8px rgba(15, 23, 42, 0.06);
+  max-width: 460px;
+  width: 100%;
+  position: relative;
+  z-index: 1;
+  border: 1px solid #e8e3ff;
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
+
 /* ── Video preview ──────────────────────────── */
-.kloud-prejoin-wrapper .lk-video-container {
-  background: linear-gradient(145deg, #3b1d7a 0%, #2a1458 100%) !important;
-  border-radius: 14px;
+.kloud-prejoin-card .kloud-prejoin-video-preview {
+  background: linear-gradient(145deg, #3b1d7a 0%, #2a1458 100%);
+  border-radius: 16px;
   overflow: hidden;
   border: 2px solid rgba(124, 58, 237, 0.25);
   aspect-ratio: 16 / 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-/* Force purple on ALL nested elements when camera is off */
-.kloud-prejoin-wrapper .lk-video-container *:not(video) {
-  background-color: transparent !important;
-  background: transparent !important;
-}
-
-.kloud-prejoin-wrapper .lk-video-container video {
-  background: transparent !important;
-}
-
-/* Camera-off placeholder — purple avatar */
-.kloud-prejoin-wrapper .lk-camera-off-indicator {
-  background: transparent !important;
-}
-
-.kloud-prejoin-wrapper .lk-camera-off-indicator svg {
+.kloud-prejoin-card .kloud-prejoin-video-preview svg {
   color: rgba(167, 139, 250, 0.55) !important;
   width: 80px !important;
   height: 80px !important;
+}
+
+/* ── Device controls (mic + camera) ─────────── */
+.kloud-prejoin-card .kloud-prejoin-device-controls {
+  display: flex;
+  gap: 0.85rem;
+}
+
+.kloud-prejoin-card .kloud-prejoin-device-group {
+  flex: 1;
+  display: flex;
+}
+
+.kloud-prejoin-card .kloud-prejoin-device-group .lk-button {
+  flex: 1 1 auto;
+  justify-content: center;
+  min-width: 0;
+}
+
+.kloud-prejoin-card .kloud-prejoin-media-unavailable {
+  margin: -0.15rem 0 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: #6b7280;
+}
+
+/* ── Name row ───────────────────────────────── */
+.kloud-prejoin-card .kloud-prejoin-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kloud-prejoin-card .kloud-prejoin-name-row label {
+  flex: 0 0 auto;
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #2f3a4d;
+  white-space: nowrap;
+}
+
+.kloud-prejoin-card .kloud-prejoin-name-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Join button ────────────────────────────── */
+.kloud-prejoin-card .kloud-prejoin-join-btn {
+  width: 100%;
+  border: none;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #6b3ef0, #4f2bd5);
+  color: #fff;
+  font-size: 1.05rem;
+  font-weight: 700;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  box-shadow: 0 10px 24px rgba(79, 43, 213, 0.33);
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+
+.kloud-prejoin-card .kloud-prejoin-join-btn:hover:not(:disabled) {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(91, 33, 182, 0.3);
+}
+
+.kloud-prejoin-card .kloud-prejoin-join-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 /* ── Username input ─────────────────────────── */
@@ -248,12 +329,12 @@ h2 a {
 .kloud-prejoin-personal-room-checkbox {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   cursor: pointer;
   user-select: none;
-  font-size: 0.88rem;
-  font-weight: 500;
-  color: #334155;
+  font-size: 0.93rem;
+  font-weight: 600;
+  color: #344055;
   font-family: 'Inter', sans-serif;
 }
 
@@ -334,26 +415,32 @@ h2 a {
   gap: 0 !important;
 }
 
-.kloud-prejoin-wrapper .lk-button {
+.kloud-prejoin-wrapper .lk-button-group > .lk-button {
   background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   color: #fff !important;
   border: none !important;
   border-radius: 10px 0 0 10px !important;
   font-family: 'Inter', sans-serif !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
+  font-size: 0.92rem !important;
+  letter-spacing: 0.01em;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem;
+  padding: 0.72rem 0.95rem !important;
   transition: all 0.2s !important;
   box-shadow: none !important;
 }
 
-.kloud-prejoin-wrapper .lk-button svg {
+.kloud-prejoin-wrapper .lk-button-group > .lk-button svg {
   color: #fff !important;
 }
 
-.kloud-prejoin-wrapper .lk-button:hover {
+.kloud-prejoin-wrapper .lk-button-group > .lk-button:hover {
   background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
 }
 
-.kloud-prejoin-wrapper .lk-button[aria-pressed="true"] {
+.kloud-prejoin-wrapper .lk-button-group > .lk-button[aria-pressed="true"] {
   background: linear-gradient(135deg, #5E33DD, #5E33DD) !important;
   color: #fff !important;
 }
@@ -403,42 +490,31 @@ h2 a {
     font-size: 0.85rem;
   }
 
-  .kloud-prejoin-wrapper .lk-prejoin {
+  .kloud-prejoin-wrapper .kloud-prejoin-card {
     padding: 1.25rem 1rem 1.5rem !important;
     flex-shrink: 0;
     margin-bottom: 2rem;
-
-    /* Strict Bulletproof Grid Layout */
-    display: flex;
-    grid-template-columns: 1fr 1fr !important;
-    gap: 0.85rem !important;
-    align-items: center !important;
-  }
-
-  /* Force these major elements to span BOTH columns full width */
-  .kloud-prejoin-wrapper .lk-video-container,
-  .kloud-prejoin-wrapper .lk-button-group-container,
-  .kloud-prejoin-wrapper .lk-form-control,
-  .kloud-prejoin-wrapper .lk-join-button,
-  .kloud-prejoin-wrapper button[type="submit"].lk-button,
-  .kloud-prejoin-wrapper .lk-prejoin>button.lk-button:last-of-type {
-    grid-column: 1 / -1 !important;
-    width: 100% !important;
-    margin: 0 !important;
-  }
-
-  /* In case LiveKit uses a wrapper for the buttons, force it to lay its children out side-by-side */
-  .kloud-prejoin-wrapper .lk-button-group-container {
-    display: flex;
-    grid-template-columns: 1fr 1fr !important;
     gap: 0.85rem !important;
   }
 
-  /* Ensure video respects mobile bounds */
-  .kloud-prejoin-wrapper .lk-video-container {
+  .kloud-prejoin-wrapper .kloud-prejoin-video-preview {
     max-height: 30vh !important;
     min-height: 140px !important;
     aspect-ratio: auto !important;
+  }
+
+  .kloud-prejoin-wrapper .kloud-prejoin-device-controls {
+    gap: 0.5rem !important;
+  }
+
+  .kloud-prejoin-card .kloud-prejoin-name-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .kloud-prejoin-card .kloud-prejoin-name-row input {
+    width: 100%;
   }
 
   /* Protect input focus/height */
@@ -452,6 +528,68 @@ h2 a {
     min-height: 44px !important;
     height: 44px !important;
   }
+}
+
+/* ── Prejoin Dark Theme ───────────────────────── */
+html[data-theme='dark'] .kloud-prejoin-wrapper {
+  background: linear-gradient(180deg, #0f172a 0%, #111827 46%, #0b1120 100%);
+  color: #e5e7eb;
+}
+
+html[data-theme='dark'] .kloud-prejoin-wrapper::before {
+  background: radial-gradient(ellipse, rgba(79, 70, 229, 0.26) 0%, transparent 72%);
+}
+
+html[data-theme='dark'] .kloud-prejoin-title {
+  color: #f8fafc;
+}
+
+html[data-theme='dark'] .kloud-prejoin-subtitle {
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] .kloud-prejoin-card {
+  background: linear-gradient(180deg, #111827 0%, #0f172a 100%);
+  border-color: #334155;
+  box-shadow: 0 20px 50px rgba(2, 6, 23, 0.55), 0 1px 0 rgba(148, 163, 184, 0.08) inset;
+}
+
+html[data-theme='dark'] .kloud-prejoin-card .kloud-prejoin-name-row label,
+html[data-theme='dark'] .kloud-prejoin-personal-room-checkbox {
+  color: #cbd5e1;
+}
+
+html[data-theme='dark'] .kloud-prejoin-card .kloud-prejoin-media-unavailable {
+  color: #94a3b8;
+}
+
+html[data-theme='dark'] .kloud-prejoin-wrapper .lk-form-control {
+  background: #0f172a !important;
+  color: #f1f5f9 !important;
+  border-color: #334155 !important;
+}
+
+html[data-theme='dark'] .kloud-prejoin-wrapper .lk-form-control::placeholder {
+  color: #64748b;
+}
+
+html[data-theme='dark'] .kloud-prejoin-wrapper .lk-form-control:focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.24) !important;
+}
+
+html[data-theme='dark'] .kloud-prejoin-card .kloud-prejoin-join-btn {
+  box-shadow: 0 10px 24px rgba(79, 43, 213, 0.45);
+}
+
+html[data-theme='dark'] .kloud-prejoin-personal-room-checkbox input[type='checkbox'] {
+  background: #0f172a;
+  border-color: #475569;
+}
+
+html[data-theme='dark'] .kloud-prejoin-personal-room-checkbox input[type='checkbox']:checked {
+  background: #6366f1;
+  border-color: #6366f1;
 }
 
 

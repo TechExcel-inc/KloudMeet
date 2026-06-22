@@ -11,8 +11,26 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
   const { t, locale, setLocale } = useI18n();
   const [orgMenuOpen, setOrgMenuOpen] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>('light');
   const orgMenuRef = React.useRef<HTMLDivElement>(null);
   const langMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const storedTheme = window.localStorage.getItem('kloud-theme');
+    const nextTheme: 'light' | 'dark' = storedTheme === 'light' ? 'light' : 'dark';
+    setTheme(nextTheme);
+  }, []);
+
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.setAttribute('data-theme', theme);
+    try {
+      window.localStorage.setItem('kloud-theme', theme);
+    } catch {
+      /* ignore */
+    }
+  }, [theme]);
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -53,9 +71,9 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
               <button 
                 className={styles.orgDropdownBtn} 
                 onClick={() => setOrgMenuOpen(!orgMenuOpen)}
-                style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', color: '#4b5563', fontWeight: 500 }}
+                style={{ padding: '0.4rem 0.65rem', fontSize: '0.85rem', fontWeight: 500 }}
               >
-                {user.displayName}@Kloud Corp
+                {user.displayName}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" style={{ marginLeft: '6px', opacity: 0.6 }}>
                   <polyline points="6 9 12 15 18 9"></polyline>
                 </svg>
@@ -67,7 +85,7 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
                     <button className={styles.orgDropdownItemActive}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>K</div>
-                        Kloud Corp
+                        {user.displayName}
                       </div>
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                         <polyline points="20 6 9 17 4 12"></polyline>
@@ -93,6 +111,31 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
               )}
             </div>
           )}
+
+          <button
+            className={`${styles.topNavIconBtn} ${theme === 'dark' ? styles.topNavIconBtnActive : ''}`}
+            aria-label={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
+            title={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
+            onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+          >
+            {theme === 'dark' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                <path d="M21 12.79A9 9 0 1111.21 3c0 .28-.01.56-.01.84A7 7 0 0021 12.79z"></path>
+              </svg>
+            )}
+          </button>
 
           {/* Help button — desktop only */}
           <button className={styles.topNavIconBtn} aria-label={t('nav.help')} title={t('nav.help')} onClick={() => onOpenHelp?.()}>
@@ -149,4 +192,3 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
     </nav>
   );
 }
-

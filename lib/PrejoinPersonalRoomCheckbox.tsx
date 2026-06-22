@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { createPortal } from 'react-dom';
 import { useI18n } from './i18n';
 import { authHeaders, getKloudSessionBearer } from './kloudSession';
 import { writePrejoinPersonalRoomEnabled } from './prejoinPersonalRoom';
@@ -20,7 +19,6 @@ export function PrejoinPersonalRoomCheckbox({
   onPersonalRoomIdLoaded: (personalRoomId: string) => void;
 }) {
   const { t } = useI18n();
-  const [mountEl, setMountEl] = React.useState<HTMLElement | null>(null);
   const [enabled, setEnabled] = React.useState(false);
   /** null = loading; '' = no personal room; non-empty = show checkbox */
   const [personalRoomId, setPersonalRoomId] = React.useState<string | null>(null);
@@ -63,65 +61,6 @@ export function PrejoinPersonalRoomCheckbox({
     setEnabled(syncEnabled);
   }, [syncEnabled]);
 
-  React.useEffect(() => {
-    if (!active || !personalRoomId) {
-      setMountEl(null);
-      return;
-    }
-
-    let slot: HTMLDivElement | null = null;
-    let observer: MutationObserver | null = null;
-    let cancelled = false;
-
-    const attach = () => {
-      if (cancelled) return true;
-      const container = document.querySelector(
-        '.kloud-prejoin-wrapper .lk-username-container',
-      );
-      if (!container) return false;
-
-      if (slot?.parentElement === container) return true;
-
-      detach();
-      slot = document.createElement('div');
-      slot.className = 'kloud-prejoin-personal-room';
-      const joinBtn = container.querySelector(
-        'button[type="submit"], .lk-join-button',
-      );
-      if (joinBtn) {
-        container.insertBefore(slot, joinBtn);
-      } else {
-        container.appendChild(slot);
-      }
-      setMountEl(slot);
-      return true;
-    };
-
-    const detach = () => {
-      if (slot) {
-        slot.remove();
-        slot = null;
-      }
-      setMountEl(null);
-    };
-
-    if (!attach()) {
-      const root = document.querySelector('.kloud-prejoin-wrapper');
-      if (root) {
-        observer = new MutationObserver(() => {
-          if (attach()) observer?.disconnect();
-        });
-        observer.observe(root, { childList: true, subtree: true });
-      }
-    }
-
-    return () => {
-      cancelled = true;
-      observer?.disconnect();
-      detach();
-    };
-  }, [active, personalRoomId]);
-
   const handleChange = (checked: boolean) => {
     if (switching) return;
     setEnabled(checked);
@@ -129,9 +68,9 @@ export function PrejoinPersonalRoomCheckbox({
     writePrejoinPersonalRoomEnabled(checked);
   };
 
-  if (!personalRoomId || !mountEl) return null;
+  if (!active || !personalRoomId) return null;
 
-  return createPortal(
+  return (
     <label
       className={`kloud-prejoin-personal-room-checkbox${switching ? ' kloud-prejoin-personal-room-checkbox--disabled' : ''}`}
     >
@@ -142,7 +81,6 @@ export function PrejoinPersonalRoomCheckbox({
         onChange={(e) => handleChange(e.target.checked)}
       />
       <span>{t('profile.supportPersonalRoom')}</span>
-    </label>,
-    mountEl,
+    </label>
   );
 }

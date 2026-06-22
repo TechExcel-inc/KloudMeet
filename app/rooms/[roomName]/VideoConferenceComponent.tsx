@@ -6,6 +6,7 @@ import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
+import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { HelpModal } from '@/lib/HelpModal';
 import {
@@ -56,6 +57,7 @@ import {
   ScreenShareCaptureOptions,
   Track,
   DataPacket_Kind,
+  DisconnectReason,
 } from 'livekit-client';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -434,6 +436,8 @@ export function VideoConferenceComponent(props: {
   // Connection error state — drives the inline error UI instead of alert()
   const [connectError, setConnectError] = React.useState<string | null>(null);
   const [meetingEndedByHost, setMeetingEndedByHost] = React.useState(false);
+  const [evictedByDuplicateSession, setEvictedByDuplicateSession] = React.useState(false);
+  const duplicateSessionHandledRef = React.useRef(false);
   const hostEndedHandledRef = React.useRef(false);
   const hostEndedRedirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
@@ -558,7 +562,20 @@ export function VideoConferenceComponent(props: {
 
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
-    const handleUnexpectedDisconnected = () => {
+    const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
+      // Server evicted this session because the same user joined elsewhere
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
+          reason === DisconnectReason.DUPLICATE_IDENTITY) {
+        duplicateSessionHandledRef.current = true;
+        intentionalDisconnectRef.current = true;
+        try {
+          localStorage.removeItem('activeMeetingId');
+          localStorage.removeItem('activeMeetingStartedAt');
+        } catch { /* ignore */ }
+        setEvictedByDuplicateSession(true);
+        setTimeout(() => router.push('/'), 2500);
+        return;
+      }
       if (intentionalDisconnectRef.current) return;
       if (!hasConnectedOnceRef.current) return;
       if (hostEndedHandledRef.current) return;
@@ -776,6 +793,7 @@ export function VideoConferenceComponent(props: {
     const DEVICE_ERRORS = [
       'notfounderror', 'requested device', 'device not found',
       'overconstrained', 'notreadableerror', 'could not start',
+      'getusermedia', 'enumeratedevices', 'mediadevices', 'cannot read properties of undefined',
     ];
     const msg = error?.message?.toLowerCase() ?? '';
     const name = error?.name?.toLowerCase() ?? '';
@@ -838,6 +856,7 @@ export function VideoConferenceComponent(props: {
   // the network comes back later.
   React.useEffect(() => {
     const recover = (reason: string) => {
+      if (duplicateSessionHandledRef.current) return;
       if (intentionalDisconnectRef.current) return;
       if (!hasConnectedOnceRef.current) return;
       if (
@@ -1089,17 +1108,48 @@ export function VideoConferenceComponent(props: {
     return () => observer.disconnect();
   }, []);
 
+  const canUseRealtimeMediaControls =
+    typeof window !== 'undefined' &&
+    typeof navigator !== 'undefined' &&
+    !!window.isSecureContext &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    !!navigator.mediaDevices?.enumerateDevices;
+
+  const showMediaUnavailableToast = React.useCallback(() => {
+    const toastEl = document.createElement('div');
+    toastEl.textContent = t('prejoin.mediaRequiresSecureContext');
+    toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
+    document.body.appendChild(toastEl);
+    setTimeout(() => toastEl.remove(), 2800);
+  }, [t]);
+
   const handleToggleMic = React.useCallback(() => {
+    if (!canUseRealtimeMediaControls) {
+      showMediaUnavailableToast();
+      return;
+    }
     const next = !micEnabled;
     setMicEnabled(next);
-    room.localParticipant.setMicrophoneEnabled(next).catch(handleError);
-  }, [micEnabled, room]);
+    try {
+      Promise.resolve(room.localParticipant.setMicrophoneEnabled(next)).catch(handleError);
+    } catch (error) {
+      handleError(error as Error);
+    }
+  }, [canUseRealtimeMediaControls, micEnabled, room, handleError, showMediaUnavailableToast]);
 
   const handleToggleCam = React.useCallback(() => {
+    if (!canUseRealtimeMediaControls) {
+      showMediaUnavailableToast();
+      return;
+    }
     const next = !camEnabled;
     setCamEnabled(next);
-    room.localParticipant.setCameraEnabled(next).catch(handleError);
-  }, [camEnabled, room]);
+    try {
+      Promise.resolve(room.localParticipant.setCameraEnabled(next)).catch(handleError);
+    } catch (error) {
+      handleError(error as Error);
+    }
+  }, [canUseRealtimeMediaControls, camEnabled, room, handleError, showMediaUnavailableToast]);
 
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
@@ -2398,15 +2448,10 @@ export function VideoConferenceComponent(props: {
         setLiveDocFilePanelVisible(false);
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
-        setLiveDocFilePanelVisible(true);
       } else if (data.type === 'onkloudloaded') {
         setShowWebcamSidebar(false);
-        if (isToolbarMobileUserAgent()) {
-          setLiveDocFilePanelVisible(false);
-          setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
-        } else {
-          setLiveDocFilePanelVisible(true);
-        }
+        setLiveDocFilePanelVisible(false);
+        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
       } else if (
         data.type === 'onKloudFilePanelVisibleChange' ||
         data.type === 'Kloud-FilePanelVisibleChange' ||
@@ -2432,18 +2477,14 @@ export function VideoConferenceComponent(props: {
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // 活文档主区域显示时：桌面默认展开右侧文件栏；移动端与 iframe 内 showRightTab=false 一致，保持关闭。
+  // LiveDoc 主区域显示时：右侧面板已改为居中弹窗模态（LiveDoc Popup Modal），
+  // 不再常驻右侧，因此 KloudMeet 侧也不再预留面板宽度。
   React.useEffect(() => {
     if (shouldDisplayLiveDoc) {
       setShowWebcamSidebar(false);
-      if (isToolbarMobile) {
-        setLiveDocFilePanelVisible(false);
-        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
-        postKloudShowFilePanelToIframe(0);
-      } else {
-        setLiveDocFilePanelVisible(true);
-        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_EXPANDED_WIDTH);
-      }
+      setLiveDocFilePanelVisible(false);
+      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
+      postKloudShowFilePanelToIframe(0);
     } else {
       setShowWebcamSidebar(false);
       setLiveDocFilePanelVisible(false);
@@ -2870,6 +2911,74 @@ export function VideoConferenceComponent(props: {
                   border: 'none',
                   background: '#2563eb',
                   color: '#fff',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t('meeting.returnHomeNow')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Duplicate session eviction (same user joined elsewhere) ── */}
+        {evictedByDuplicateSession && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(8, 8, 18, 0.88)',
+              backdropFilter: 'blur(14px)',
+            }}
+          >
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: '16px',
+                padding: '2rem 2.25rem',
+                maxWidth: '420px',
+                width: '90%',
+                textAlign: 'center',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '12px',
+                  background: '#eff6ff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#3b82f6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9" />
+                  <path d="M3 4v5h5" />
+                </svg>
+              </div>
+              <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem', color: '#111827' }}>
+                {t('meeting.duplicateSessionTitle')}
+              </h3>
+              <p style={{ margin: '0 0 1.5rem', color: '#4b5563', lineHeight: 1.6, fontSize: '0.9375rem' }}>
+                {t('meeting.duplicateSessionDesc')}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  background: '#3b82f6',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
                   fontWeight: 600,
                   fontSize: '0.875rem',
                   cursor: 'pointer',
@@ -3586,10 +3695,12 @@ export function VideoConferenceComponent(props: {
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
               <MobileVideoLayout />
             ) : (
-              <VideoConference
-                chatMessageFormatter={formatChatMessageLinks}
-                SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
-              />
+              <VideoConferenceErrorBoundary>
+                <VideoConference
+                  chatMessageFormatter={formatChatMessageLinks}
+                  SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+                />
+              </VideoConferenceErrorBoundary>
             )}
 
             {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
