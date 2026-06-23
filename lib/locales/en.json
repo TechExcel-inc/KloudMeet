@@ -117,6 +117,8 @@
   "dash.scheduleMeeting": "Schedule",
   "dash.loadingMeetings": "Loading meetings...",
   "dash.noMeetings": "No meetings found.",
+  "dash.meetingListTagline": "Where AI works with your teams, supports your customers better",
+  "dash.emptyMeetingsHint": "Start a new meeting or join one to see it here.",
   "dash.upcoming": "Upcoming",
   "dash.past": "Past",
   "dash.today": "Today",
@@ -198,8 +200,6 @@
   "prejoin.returnDashboard": "Return to Dashboard",
   "meeting.closedByHostTitle": "Meeting Ended",
   "meeting.closedByHostDesc": "The host has ended this meeting. Returning to home…",
-  "meeting.duplicateSessionTitle": "Session Moved",
-  "meeting.duplicateSessionDesc": "You have joined this meeting with a new active session. The current session for this meeting will be auto closed.",
   "meeting.closedByHostToast": "The host has ended this meeting.",
   "meeting.returnHomeNow": "Return Home Now",
   "prejoin.loadingMeeting": "Loading meeting…",
@@ -581,5 +581,5 @@
   "livedoc.fetchingToken": "Fetching access token…",
   "livedoc.loadFailed": "Failed to load LiveDoc",
   "livedoc.missingToken": "Missing access token",
-  "livedoc.loading": "Initializing LiveDoc view, please wait…"
+  "livedoc.loading": "Loading document…"
 }

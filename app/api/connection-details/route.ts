@@ -107,7 +107,9 @@ export async function GET(request: NextRequest) {
     // token. The old client receives PARTICIPANT_REMOVED and shows the
     // "Session Moved" popup instead of silently reconnecting.
     if (member) {
-      await evictParticipantsByMemberId(livekitRoomName, member.id, identity);
+      console.log(`[connection-details] Evicting for room="${livekitRoomName}" memberId=${member.id} newIdentity="${identity}"`);
+      const evictedCount = await evictParticipantsByMemberId(livekitRoomName, member.id);
+      console.log(`[connection-details] Evicted ${evictedCount} old session(s)`);
     }
 
     const participantToken = await createParticipantToken(

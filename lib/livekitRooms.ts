@@ -1,4 +1,5 @@
 import { RoomServiceClient } from 'livekit-server-sdk';
+import { DataPacket_Kind } from '@livekit/protocol';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
@@ -73,28 +74,59 @@ export async function evictParticipantsByMemberId(
   excludeIdentity?: string,
 ): Promise<number> {
   const client = getRoomServiceClient();
-  if (!client) return 0;
+  if (!client) {
+    console.warn('[evict] No RoomServiceClient available');
+    return 0;
+  }
 
   try {
     const participants = await client.listParticipants(roomName);
+    console.log(`[evict] Room "${roomName}" has ${participants.length} participant(s):`,
+      participants.map(p => ({ identity: p.identity, sid: p.sid })));
     let evicted = 0;
     for (const p of participants) {
-      if (excludeIdentity && p.identity === excludeIdentity) continue;
+      if (excludeIdentity && p.identity === excludeIdentity) {
+        console.log(`[evict] Skipping excludeIdentity match: ${p.identity}`);
+        continue;
+      }
       const pid = parseKloudMemberIdFromIdentity(p.identity);
+      console.log(`[evict] Checking participant identity="${p.identity}" → memberId=${pid}, looking for ${memberId}`);
       if (pid != null && pid === memberId) {
         try {
+          // Send a pre-eviction notification via the data channel so the
+          // client can show the popup BEFORE the disconnect fires. This
+          // prevents the SDK's auto-retry from kicking in.
+          const notice = new TextEncoder().encode(
+            JSON.stringify({ type: 'SESSION_EVICTED' }),
+          );
+          try {
+            await client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
+              destinationIdentities: [p.identity],
+              topic: 'kloud-session',
+            });
+            console.log(`[evict] Sent SESSION_EVICTED to ${p.identity}, waiting 150ms…`);
+            await new Promise((r) => setTimeout(r, 150));
+          } catch (sendErr) {
+            console.warn(`[evict] sendData failed (non-fatal) for ${p.identity}`, sendErr);
+          }
+
+          console.log(`[evict] Removing participant: ${p.identity} (memberId=${pid})`);
           await client.removeParticipant(roomName, p.identity);
+          console.log(`[evict] Successfully removed: ${p.identity}`);
           evicted++;
         } catch (e) {
-          console.error('[livekitRooms] removeParticipant failed', p.identity, e);
+          console.error('[evict] removeParticipant failed', p.identity, e);
         }
       }
     }
+    console.log(`[evict] Done. Evicted ${evicted} participant(s).`);
     return evicted;
   } catch (e: any) {
-    // Room doesn't exist yet (new meeting) — nothing to evict, not an error
-    if (e?.code === 'not_found' || e?.status === 404) return 0;
-    console.error('[livekitRooms] listParticipants failed (evict)', roomName, e);
+    if (e?.code === 'not_found' || e?.status === 404) {
+      console.log(`[evict] Room "${roomName}" not found (new meeting) — nothing to evict.`);
+      return 0;
+    }
+    console.error('[evict] listParticipants failed', roomName, e);
     return 0;
   }
 }

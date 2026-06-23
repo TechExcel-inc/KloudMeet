@@ -629,6 +629,7 @@ export function DashboardView({
           {/* Title */}
           <div className={styles.meetingListTitleRow}>
             <h1 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h1>
+            <p className={styles.meetingListTagline}>{t('dash.meetingListTagline')}</p>
           </div>
 
           {/* Search + Schedule */}
@@ -669,18 +670,21 @@ export function DashboardView({
 
         {/* ── Meeting Cards ── */}
         {loadingMeetings ? (
-          <div className={styles.meetingEmptyState}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="40" height="40" style={{ color: '#cbd5e1', marginBottom: '0.75rem' }}>
-              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <p>{t('dash.loadingMeetings')}</p>
+          <div className={styles.meetingLoadingState}>
+            <div className={styles.meetingLoadingSpinner} />
+            <p className={styles.meetingLoadingTitle}>{t('dash.loadingMeetings')}</p>
           </div>
         ) : Object.keys(groupedMeetings).length === 0 ? (
           <div className={styles.meetingEmptyState}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="48" height="48" style={{ color: '#cbd5e1', marginBottom: '0.75rem' }}>
-              <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            <p>{t('dash.noMeetings')}</p>
+            <img
+              src="/images/kloud-header-logo.svg"
+              alt="Kloud Meet"
+              className={styles.meetingEmptyLogo}
+              height={36}
+              style={{ display: 'block', transform: 'translateY(4px)' }}
+            />
+            <p className={styles.meetingEmptyTitle}>{t('dash.noMeetings')}</p>
+            <p className={styles.meetingEmptyText}>{t('dash.emptyMeetingsHint')}</p>
           </div>
         ) : (
           <div className={styles.meetingCardsList}>
@@ -1340,4 +1344,3 @@ export function DashboardView({
     </div>
   );
 }
-

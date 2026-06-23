@@ -563,6 +563,9 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
     const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
+      console.log('[KloudMeet] Disconnected event received. reason=', reason, 'intentional=', intentionalDisconnectRef.current, 'duplicateHandled=', duplicateSessionHandledRef.current);
+      // During reconnection or voluntary disconnect, ignore all disconnect events
+      if (intentionalDisconnectRef.current) return;
       // Server evicted this session because the same user joined elsewhere
       if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
           reason === DisconnectReason.DUPLICATE_IDENTITY) {
