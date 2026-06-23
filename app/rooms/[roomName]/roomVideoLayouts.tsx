@@ -282,7 +282,12 @@ export function LiveDocFloatingGridTile({
             }}
           />
         ) : (
-          <div className="floating-grid-avatar">{getInitials(name)}</div>
+          <div className="floating-grid-avatar">
+            <span className="floating-grid-avatar-initials">{getInitials(name)}</span>
+            <span className="floating-grid-avatar-fullname" title={name}>
+              {name}
+            </span>
+          </div>
         )}
       </div>
       <div className="lk-participant-metadata webcam-floating-participant-metadata">

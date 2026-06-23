@@ -53,8 +53,8 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
               </svg>
             </button>
           )}
-          <div className={styles.navLogo} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }} onClick={() => window.location.assign('/')}>
-            <KloudLogo />
+          <div className={styles.navLogo} onClick={() => window.location.assign('/')}>
+            <KloudLogo variant="nav" />
           </div>
         </div>
 

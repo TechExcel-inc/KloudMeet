@@ -109,10 +109,40 @@
 }
 
 /* Logo alignment inside sticky nav */
+.topNav .toolbarLeft {
+  align-self: stretch;
+}
+
+.navLogo {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  cursor: pointer;
+  gap: 0.5rem;
+}
+
+.logoNav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: stretch;
+  margin: 0;
+  line-height: 0;
+}
+
+.logoNav img {
+  display: block;
+  height: 36px;
+  width: auto;
+}
+
+.logoNavLg img {
+  height: 52px;
+}
+
 .toolbarLeft {
   display: flex;
   align-items: center;
-  padding-top: 4px;
 }
 
 /* Keep old topToolbar for non-dashboard views */
@@ -2887,16 +2917,15 @@
     gap: 0.5rem;
   }
 
-  /* ── Logo: natural size on mobile ── */
-  .navLogo img,
-  .navLogo svg {
-    height: auto !important;
-    width: auto !important;
-  }
-
+  /* ── Logo: scale down on mobile ── */
   .navLogo {
     transform: scale(0.7);
     transform-origin: left center;
+  }
+
+  .logoNav img {
+    height: 36px;
+    width: auto;
   }
 
 

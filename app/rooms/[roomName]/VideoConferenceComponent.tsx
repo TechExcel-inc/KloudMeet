@@ -4790,8 +4790,38 @@ export function VideoConferenceComponent(props: {
                align-items: center;
                justify-content: center;
             }
+            .floating-grid-avatar-initials,
+            .floating-grid-avatar-fullname {
+               max-width: 100%;
+               padding: 0 6px;
+               overflow: hidden;
+               text-overflow: ellipsis;
+               white-space: nowrap;
+               text-align: center;
+            }
+            .floating-grid-avatar-fullname {
+               display: none;
+               font-size: 14px;
+               font-weight: 600;
+               line-height: 1.2;
+            }
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-avatar-initials {
+               display: none;
+            }
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-avatar-fullname {
+               display: block;
+            }
+            .floating-grid-tile--hero .floating-grid-avatar-fullname {
+               font-size: 14px;
+            }
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar-fullname {
+               font-size: calc(var(--floating-rest-tile) * 0.18);
+            }
             .floating-grid-tile.lk-participant-tile:hover .floating-grid-video {
                box-shadow: 0 0 0 2px #3b82f6;
+            }
+            .floating-webcam-panel .floating-grid-name {
+               display: none !important;
             }
             .floating-grid-name {
                color: rgba(255,255,255,0.92);
