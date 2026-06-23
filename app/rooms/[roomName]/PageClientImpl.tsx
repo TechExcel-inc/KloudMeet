@@ -1086,10 +1086,6 @@ export function PageClientImpl(props: {
 
             html[data-theme='dark'] .kloud-prejoin-logo-toolbar {
               color: #e5e7eb;
-              background: rgba(248, 250, 252, 0.95);
-              border-radius: 12px;
-              padding: 6px 10px;
-              box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35);
             }
             html[data-theme='dark'] .ead-btn {
               background: #0f172a;
@@ -1165,7 +1161,7 @@ export function PageClientImpl(props: {
               </Link>
               <Link href="/" className="kloud-prejoin-logo-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
                 <img
-                  src="/images/kloud-header-logo.svg"
+                  src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
                   alt="Kloud Meet"
                   height={36}
                   style={{ display: 'block', transform: 'translateY(4px)' }}

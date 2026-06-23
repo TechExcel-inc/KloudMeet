@@ -3078,13 +3078,6 @@
   box-shadow: 0 1px 12px rgba(2, 6, 23, 0.35);
 }
 
-:global(html[data-theme='dark']) .topNav .logoRow {
-  background: rgba(248, 250, 252, 0.95);
-  border-radius: 12px;
-  padding: 4px 10px;
-  box-shadow: 0 10px 22px rgba(2, 6, 23, 0.35);
-}
-
 :global(html[data-theme='dark']) .topNavIconBtn,
 :global(html[data-theme='dark']) .iconBtn,
 :global(html[data-theme='dark']) .avatarBtn {
