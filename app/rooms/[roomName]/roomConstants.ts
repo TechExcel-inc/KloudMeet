@@ -8,7 +8,8 @@ export const LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH = 56;
 export const FLOATING_WEBCAM_RIGHT_INSET = 350;
 /** 拖拽时 maxX 只用父容器右缘留白；文件栏在 iframe 内不占外层 clientWidth，不能再扣 livedoc 宽度或 350 */
 export const FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN = 12;
-export const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 104;
+/** 浮窗拖拽时距底栏留白（含 mobile safe-area） */
+export const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = 120;
 export const FLOATING_WEBCAM_TOP_INSET = 12;
 
 /** 请求屏幕共享时的系统/标签页音频，浏览器才会在选取器中显示对应勾选项（支持情况因浏览器而异）。 */

@@ -5077,6 +5077,7 @@ export function VideoConferenceComponent(props: {
                   left: 16px;
                   right: 16px;
                   height: 50vh;
+                  bottom: calc(var(--kloud-mobile-toolbar-height, 68px) + 8px);
                }
             }
 
@@ -5173,7 +5174,7 @@ export function VideoConferenceComponent(props: {
         </div>
 
         {/* Captions overlay — visible to all participants when host enables captions */}
-        <CaptionsOverlay captionsInfo={captionsInfo} bottomOffset={90} />
+        <CaptionsOverlay captionsInfo={captionsInfo} bottomOffset={isToolbarMobile ? 110 : 90} />
 
         {/* Custom toolbar overlay */}
         <KloudMeetToolbar

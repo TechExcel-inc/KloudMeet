@@ -659,14 +659,14 @@ export function KloudMeetToolbar({
         {isMobile ? (
           <>
             {/* 1. Audio (Mic) */}
-            <div className={styles.controlGroup} style={{ gap: '4px' }}>
+            <div className={styles.controlGroup}>
               <button
                 className={`${styles.controlBtn} ${!micEnabled ? styles.controlBtnOff : ''}`}
                 onClick={onToggleMic}
                 disabled={!canUseMediaDevices}
-                style={{ width: '36px', height: '36px' }}
+                aria-label={micEnabled ? t('toolbar.muteMic') : t('toolbar.unmuteMic')}
               >
-                <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
                   {micEnabled ? (
                     <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
                   ) : (
@@ -678,25 +678,25 @@ export function KloudMeetToolbar({
                 </svg>
               </button>
               {canEnumerateDevices ? (
-                <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.micSettings')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
                 </MediaDeviceMenu>
               ) : (
-                <button type="button" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.micSettings')} disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                <button type="button" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.micSettings')} disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
                 </button>
               )}
             </div>
 
             {/* 2. Webcam */}
-            <div className={styles.controlGroup} style={{ gap: '4px' }}>
+            <div className={styles.controlGroup}>
               <button
                 className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
                 onClick={onToggleCam}
                 disabled={!canUseMediaDevices}
-                style={{ width: '36px', height: '36px' }}
+                aria-label={camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam')}
               >
-                <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: '16px', height: '16px' }}>
+                <svg viewBox="0 0 24 24" fill="currentColor">
                   {camEnabled ? (
                     <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
                   ) : (
@@ -708,12 +708,12 @@ export function KloudMeetToolbar({
                 </svg>
               </button>
               {canEnumerateDevices ? (
-                <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.camSettings')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
                 </MediaDeviceMenu>
               ) : (
-                <button type="button" className={styles.chevron} style={{ padding: '0 2px', color: '#fff' }} title={t('toolbar.camSettings')} disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ width: '12px', height: '12px' }}><path d="M18 15l-6-6-6 6" /></svg>
+                <button type="button" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.camSettings')} disabled>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
                 </button>
               )}
             </div>
@@ -1288,93 +1288,56 @@ export function KloudMeetToolbar({
       {isMobile && (
         <div
           id="mobileTopRightBtn"
-          style={{
-            position: 'fixed', top: '12px', right: '12px', zIndex: 60,
-            display: 'flex', flexDirection: 'row', alignItems: 'center', gap: '8px',
-            opacity: visible ? 1 : 0, pointerEvents: visible ? 'auto' : 'none',
-            transition: 'opacity 0.3s ease',
-          }}
+          className={`${styles.mobileTopActions} ${!visible ? styles.mobileTopActionsHidden : ''}`}
         >
           {/* Speaker button */}
           <button
+            type="button"
+            className={styles.mobileTopBtn}
             onClick={(e) => { e.stopPropagation(); openSheet('speaker'); }}
             aria-label={t('toolbar.speakerSettings') || 'Speaker Settings'}
             title={t('toolbar.speakerSettings') || 'Speaker Settings'}
-            style={{
-              background: 'rgba(17, 24, 39, 0.70)',
-              backdropFilter: 'blur(10px)',
-              color: '#fff', border: 'none', borderRadius: '50%',
-              width: '40px', height: '40px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              cursor: 'pointer', flexShrink: 0,
-              transition: 'background 0.2s',
-            }}
           >
-            {mobileAudioState === 'speaker' && <svg viewBox="0 0 24 24" fill="currentColor" width="19" height="19"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>}
-            {mobileAudioState === 'earpiece' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>}
-            {mobileAudioState === 'bluetooth' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width="19" height="19"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>}
+            {mobileAudioState === 'speaker' && <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>}
+            {mobileAudioState === 'earpiece' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>}
+            {mobileAudioState === 'bluetooth' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>}
           </button>
 
           {/* Chat button */}
           <button
+            type="button"
+            className={`${styles.mobileTopBtn} ${chatOpen ? styles.mobileTopBtnChatActive : ''}`}
             onClick={(e) => { e.stopPropagation(); handleToggleChat(); }}
             aria-label="Chat"
             title={t('toolbar.chats') || 'Chat'}
-            style={{
-              background: chatOpen
-                ? 'rgba(99, 102, 241, 0.85)'
-                : 'rgba(17, 24, 39, 0.70)',
-              backdropFilter: 'blur(10px)',
-              color: '#fff', border: 'none', borderRadius: '50%',
-              width: '40px', height: '40px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              cursor: 'pointer', flexShrink: 0,
-              transition: 'background 0.2s',
-            }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
               <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
             </svg>
           </button>
 
           {/* Recording button */}
           <button
+            type="button"
+            className={`${styles.mobileTopBtn} ${isRecording ? styles.mobileTopBtnRecording : ''}`}
             onClick={(e) => {
               e.stopPropagation();
               if (isRecording) {
-                // Already recording → show stop/pause sheet
                 openSheet('recording');
               } else {
-                // Not recording → open the same record popup as web
                 onOpenRecordPopup?.();
               }
             }}
             aria-label={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
             title={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
-            style={{
-              background: isRecording
-                ? 'rgba(239, 68, 68, 0.85)'
-                : 'rgba(17, 24, 39, 0.70)',
-              backdropFilter: 'blur(10px)',
-              color: '#fff', border: 'none', borderRadius: '50%',
-              width: '40px', height: '40px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              cursor: 'pointer', flexShrink: 0,
-              transition: 'background 0.2s',
-              // pulse animation when recording
-              animation: isRecording ? 'mobileRecordPulse 1.8s ease-in-out infinite' : 'none',
-            }}
           >
             {isRecording ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="12" r="5" fill="#fff" stroke="none" />
                 <circle cx="12" cy="12" r="9" />
               </svg>
             ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="19" height="19">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
                 <circle cx="12" cy="12" r="5" />
                 <circle cx="12" cy="12" r="9" />
               </svg>
@@ -1383,21 +1346,13 @@ export function KloudMeetToolbar({
 
           {/* Exit button */}
           <button
+            type="button"
+            className={`${styles.mobileTopBtn} ${styles.mobileTopBtnExit}`}
             onClick={(e) => { e.stopPropagation(); openSheet('exit'); }}
             aria-label={t('toolbar.exit') || 'Exit'}
             title={t('toolbar.exit') || 'Exit'}
-            style={{
-              background: 'rgba(239, 68, 68, 0.80)',
-              backdropFilter: 'blur(10px)',
-              color: '#fff', border: 'none', borderRadius: '50%',
-              width: '40px', height: '40px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-              cursor: 'pointer', flexShrink: 0,
-              transition: 'background 0.2s',
-            }}
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
           </button>

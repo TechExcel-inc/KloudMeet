@@ -5,6 +5,7 @@
 html {
   color-scheme: dark;
   background-color: #111;
+  --kloud-mobile-toolbar-height: calc(58px + env(safe-area-inset-bottom, 0px));
 }
 
 html,
@@ -72,6 +73,12 @@ h2 a {
   border-radius: 8px;
   /* Optional for making the floating effect look a bit nicer */
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .lk-chat {
+    margin-bottom: var(--kloud-mobile-toolbar-height, 74px) !important;
+  }
 }
 
 /* Hide default LiveKit control bar to prevent redundant UI */

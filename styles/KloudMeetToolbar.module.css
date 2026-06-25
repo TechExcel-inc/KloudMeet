@@ -400,9 +400,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 2px;
+  gap: 0;
   width: 100%;
-  padding: 7px 4px;
+  padding: 8px max(6px, env(safe-area-inset-left, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(6px, env(safe-area-inset-right, 0px));
+  min-height: var(--kloud-mobile-toolbar-height, 58px);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .mobileBtn {
@@ -413,26 +416,30 @@
   gap: 0;
   background: transparent;
   border: none;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 10px;
   font-weight: 500;
-  padding: 7px 2px;
-  border-radius: 8px;
+  padding: 6px 2px;
+  border-radius: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: 36px;
+  transition: background 0.15s ease, transform 0.1s ease, color 0.15s ease;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 52px;
+  min-height: 44px;
   position: relative;
 }
 .mobileBtn svg {
-  width: 21px;
-  height: 21px;
+  width: 24px;
+  height: 24px;
 }
 .mobileBtn:active {
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.12);
+  transform: scale(0.94);
 }
 .mobileBtn.active {
-  color: #60a5fa;
-  background: rgba(59, 130, 246, 0.16);
+  color: #93bbfc;
+  background: rgba(59, 130, 246, 0.22);
 }
 .mobileBtn.danger {
   color: #ef4444;
@@ -446,27 +453,96 @@
 }
 
 .mobileToolbar .controlGroup {
-  min-width: 52px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 58px;
   justify-content: center;
+  gap: 0;
 }
 
 .mobileToolbar .controlGroup .controlBtn {
-  width: 34px !important;
-  height: 34px !important;
+  width: 40px !important;
+  height: 40px !important;
+  flex-shrink: 0;
 }
 
 .mobileToolbar .controlGroup .controlBtn svg {
-  width: 15px;
-  height: 15px;
+  width: 19px !important;
+  height: 19px !important;
+}
+
+.mobileToolbar .controlGroup .controlBtn:active {
+  transform: scale(0.94);
 }
 
 .mobileToolbar .controlGroup .chevron {
+  min-width: 24px;
+  min-height: 40px;
   padding: 0 1px !important;
 }
 
 .mobileToolbar .controlGroup .chevron svg {
-  width: 11px;
-  height: 11px;
+  width: 13px !important;
+  height: 13px !important;
+}
+
+/* Mobile top-right floating action buttons */
+.mobileTopActions {
+  position: fixed;
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+  z-index: 1002;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  transition: opacity 0.3s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobileTopActionsHidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mobileTopBtn {
+  background: rgba(17, 24, 39, 0.78);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.mobileTopBtn:active {
+  transform: scale(0.94);
+}
+
+.mobileTopBtn svg {
+  width: 21px;
+  height: 21px;
+}
+
+.mobileTopBtnChatActive {
+  background: rgba(99, 102, 241, 0.88);
+}
+
+.mobileTopBtnRecording {
+  background: rgba(239, 68, 68, 0.88);
+  animation: mobileRecordPulse 1.8s ease-in-out infinite;
+}
+
+.mobileTopBtnExit {
+  background: rgba(239, 68, 68, 0.84);
 }
 
 /* Bottom Sheet */
@@ -522,14 +598,15 @@
 .actionSheetClose {
   background: rgba(255,255,255,0.1);
   border: none;
-  width: 30px;
-  height: 30px;
-  border-radius: 15px;
+  width: 36px;
+  height: 36px;
+  border-radius: 18px;
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  touch-action: manipulation;
 }
 .actionSheetList {
   display: flex;
@@ -540,24 +617,27 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 16px;
+  padding: 16px 18px;
+  min-height: 52px;
   background: rgba(255,255,255,0.05);
   border-radius: 12px;
   border: none;
   color: #fff;
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
+  touch-action: manipulation;
 }
 .actionSheetItem svg {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   opacity: 0.8;
 }
 .actionSheetItem:active {
-  background: rgba(255,255,255,0.1);
+  background: rgba(255,255,255,0.12);
+  transform: scale(0.98);
 }
 .actionSheetItem.active {
   background: rgba(59, 130, 246, 0.15);
@@ -773,9 +853,19 @@
 }
 
 @media (max-width: 768px) {
-  .toolbar {
-    padding: 2px 4px;
-    padding-bottom: env(safe-area-inset-bottom);
+  .toolbar.mobileToolbar {
+    padding-top: 8px;
+    padding-left: max(6px, env(safe-area-inset-left, 0px));
+    padding-right: max(6px, env(safe-area-inset-right, 0px));
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .toast {
+    bottom: calc(var(--kloud-mobile-toolbar-height, 68px) + 12px);
+  }
+
+  .statusBar {
+    bottom: calc(var(--kloud-mobile-toolbar-height, 68px) + 4px);
   }
 }
 
