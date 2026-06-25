@@ -872,6 +872,20 @@
   padding: 1.25rem 1.5rem 0.75rem;
 }
 
+.dashboardTopTaglineWrap {
+  width: 100%;
+  padding: 0 2rem;
+  margin-top: 0.3rem;
+}
+
+.dashboardTopTagline {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: #475569;
+  font-weight: 500;
+}
+
 .dashContainer {
   width: 100%;
   max-width: 1000px;
@@ -2025,15 +2039,6 @@
   letter-spacing: -0.01em;
 }
 
-.meetingListTagline {
-  margin: 0;
-  font-size: 0.92rem;
-  line-height: 1.35;
-  color: #475569;
-  font-weight: 500;
-  max-width: 520px;
-}
-
 .meetingViewTabs {
   display: inline-flex;
   align-items: center;
@@ -2923,6 +2928,10 @@
     transform-origin: left center;
   }
 
+  .dashboardTopTaglineWrap {
+    display: none;
+  }
+
   .logoNav img {
     height: 36px;
     width: auto;
@@ -3153,7 +3162,7 @@
   color: #f1f5f9;
 }
 
-:global(html[data-theme='dark']) .meetingListTagline {
+:global(html[data-theme='dark']) .dashboardTopTagline {
   color: #94a3b8;
 }
 

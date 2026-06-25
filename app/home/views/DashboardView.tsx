@@ -561,6 +561,10 @@ export function DashboardView({
         hideAvatar={false} 
       />
 
+      <div className={styles.dashboardTopTaglineWrap}>
+        <p className={styles.dashboardTopTagline}>{t('dash.meetingListTagline')}</p>
+      </div>
+
       <div className={styles.dashStickyTop}>
 
         {/* ── QuickActions Glassmorphism Bar ── */}
@@ -629,7 +633,6 @@ export function DashboardView({
           {/* Title */}
           <div className={styles.meetingListTitleRow}>
             <h1 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h1>
-            <p className={styles.meetingListTagline}>{t('dash.meetingListTagline')}</p>
           </div>
 
           {/* Search + Schedule */}

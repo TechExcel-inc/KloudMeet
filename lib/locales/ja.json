@@ -111,7 +111,7 @@
   "dash.scheduleMeeting": "+ ミーティングを予約",
   "dash.loadingMeetings": "読み込み中...",
   "dash.noMeetings": "ミーティングが見つかりません。",
-  "dash.meetingListTagline": "AI がチームと連携し、お客様をより良く支援します",
+  "dash.meetingListTagline": "AI がチームやお客様と学びながら連携します。",
   "dash.emptyMeetingsHint": "新しいミーティングを開始するか、参加するとここに表示されます。",
   "dash.meetingTitle": "ミーティング名",
   "dash.created": "作成日時",

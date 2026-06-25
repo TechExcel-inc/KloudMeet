@@ -111,7 +111,7 @@
   "dash.scheduleMeeting": "+ 회의 예약",
   "dash.loadingMeetings": "회의 로딩 중...",
   "dash.noMeetings": "회의가 없습니다.",
-  "dash.meetingListTagline": "AI가 팀과 협업하여 고객을 더 잘 지원합니다",
+  "dash.meetingListTagline": "AI가 팀과 고객과 함께 배우고 협업할 수 있습니다.",
   "dash.emptyMeetingsHint": "새 회의를 시작하거나 참여하면 여기에 표시됩니다.",
   "dash.meetingTitle": "회의 제목",
   "dash.created": "생성일",
