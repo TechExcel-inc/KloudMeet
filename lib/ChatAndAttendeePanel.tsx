@@ -95,8 +95,14 @@ interface AttendeePanelProps {
   muteAllActive?: boolean;
   onMuteAll?: () => void;
   onUnmuteAll?: () => void;
-  /** Callback to individually mute/unmute a specific participant (host/co-host only) */
-  onMuteParticipant?: (identity: string, mute: boolean) => void;
+  /** Callback to disable mic or cancel host restriction (host/co-host only; cancel does not turn mic on) */
+  onMuteParticipant?: (identity: string, disable: boolean) => void;
+  /** Callback to disable camera or cancel host restriction (host/co-host only; cancel does not turn camera on) */
+  onDisableParticipantVideo?: (identity: string, disable: boolean) => void;
+  /** Identities whose mic was disabled by the host */
+  hostMutedIdentities?: string[];
+  /** Identities whose camera was disabled by the host */
+  hostDisabledVideoIdentities?: string[];
 }
 
 export function AttendeePanel({
@@ -116,6 +122,9 @@ export function AttendeePanel({
   onMuteAll,
   onUnmuteAll,
   onMuteParticipant,
+  onDisableParticipantVideo,
+  hostMutedIdentities = [],
+  hostDisabledVideoIdentities = [],
 }: AttendeePanelProps) {
   const { t } = useI18n();
   const participants = useParticipants();
@@ -265,20 +274,24 @@ export function AttendeePanel({
                 </div>
               </div>
 
-              {/* Per-participant mic toggle button (visible on row hover, clickable for operators) */}
+              {/* Per-participant mic / camera restriction controls (host only disables or cancels disable) */}
+              <div className="kloud-participant-media-actions">
               {(() => {
-                // Get real-time mic state from LiveKit participant
                 const lkParticipant = participants.find(lkp => lkp.identity === p.identity);
                 const micPub = lkParticipant?.getTrackPublication(Track.Source.Microphone);
-                // isMuted: true if publication exists and is muted, or if no publication at all
                 const isMicMuted = micPub ? micPub.isMuted : true;
-                const canToggleThisMic = !!(canMuteAll && !isLocalParticipant);
+                const isHostMicRestricted = hostMutedIdentities.includes(p.identity);
+                const canManageMic = !!(canMuteAll && !isLocalParticipant && onMuteParticipant);
                 return (
                   <button
-                    className={`kloud-participant-mic-btn${isMicMuted ? ' muted' : ' active'}${canToggleThisMic ? ' clickable' : ''}`}
-                    onClick={canToggleThisMic ? () => onMuteParticipant?.(p.identity, !isMicMuted) : undefined}
-                    title={canToggleThisMic ? (isMicMuted ? 'Unmute participant' : 'Mute participant') : (isMicMuted ? 'Muted' : 'Mic on')}
-                    disabled={!canToggleThisMic}
+                    className={`kloud-participant-mic-btn${isMicMuted ? ' muted' : ' active'}${isHostMicRestricted ? ' host-restricted' : ''}${canManageMic ? ' clickable' : ''}`}
+                    onClick={canManageMic ? () => onMuteParticipant(p.identity, !isHostMicRestricted) : undefined}
+                    title={
+                      canManageMic
+                        ? (isHostMicRestricted ? 'Cancel disable (does not turn on mic)' : 'Disable microphone')
+                        : (isHostMicRestricted ? 'Disabled by host' : (isMicMuted ? 'Muted' : 'Mic on'))
+                    }
+                    disabled={!canManageMic}
                   >
                     {isMicMuted ? (
                       <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
@@ -293,6 +306,38 @@ export function AttendeePanel({
                   </button>
                 );
               })()}
+
+              {(() => {
+                const lkParticipant = participants.find(lkp => lkp.identity === p.identity);
+                const camPub = lkParticipant?.getTrackPublication(Track.Source.Camera);
+                const isCamDisabled = camPub ? camPub.isMuted : true;
+                const isHostVideoRestricted = hostDisabledVideoIdentities.includes(p.identity);
+                const canManageCam = !!(canMuteAll && !isLocalParticipant && onDisableParticipantVideo);
+                return (
+                  <button
+                    className={`kloud-participant-cam-btn${isCamDisabled ? ' disabled' : ' active'}${isHostVideoRestricted ? ' host-restricted' : ''}${canManageCam ? ' clickable' : ''}`}
+                    onClick={canManageCam ? () => onDisableParticipantVideo(p.identity, !isHostVideoRestricted) : undefined}
+                    title={
+                      canManageCam
+                        ? (isHostVideoRestricted ? 'Cancel disable (does not turn on camera)' : 'Disable camera')
+                        : (isHostVideoRestricted ? 'Disabled by host' : (isCamDisabled ? 'Camera off' : 'Camera on'))
+                    }
+                    disabled={!canManageCam}
+                  >
+                    {isCamDisabled ? (
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                        <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
+                        <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+                      </svg>
+                    )}
+                  </button>
+                );
+              })()}
+              </div>
 
               {/* Force-muted badge: shown when muteAll is active for non-host/co-host participants */}
               {isForceMuted && (
@@ -799,34 +844,122 @@ export const chatAndAttendeeStyles = `
   .kloud-attendee-row:hover .kloud-participant-mic-btn {
     opacity: 1;
   }
-  /* Always visible when muted */
-  .kloud-participant-mic-btn.muted {
+  .kloud-participant-mic-btn.host-restricted {
     opacity: 1;
-    color: #f87171;
+  }
+  /* Voluntary mute — gray (not host-restricted) */
+  .kloud-participant-mic-btn.muted:not(.host-restricted) {
+    opacity: 1;
+    color: rgba(255, 255, 255, 0.75);
   }
   /* Active (unmuted) state */
-  .kloud-participant-mic-btn.active {
-    color: rgba(255,255,255,0.45);
+  .kloud-participant-mic-btn.active:not(.host-restricted) {
+    color: #22c55e;
   }
   /* Clickable (operator) states */
   .kloud-participant-mic-btn.clickable {
     cursor: pointer;
   }
-  .kloud-participant-mic-btn.clickable.muted {
-    background: rgba(239, 68, 68, 0.1);
-    border-color: rgba(239, 68, 68, 0.25);
-    color: #f87171;
+  .kloud-participant-mic-btn.clickable.muted:not(.host-restricted) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
   }
-  .kloud-participant-mic-btn.clickable.muted:hover {
-    background: rgba(239, 68, 68, 0.22);
-    border-color: rgba(239, 68, 68, 0.45);
-    color: #ef4444;
+  .kloud-participant-mic-btn.clickable.muted:not(.host-restricted):hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
     transform: scale(1.1);
   }
-  .kloud-participant-mic-btn.clickable.active:hover {
-    background: rgba(255,255,255,0.1);
-    border-color: rgba(255,255,255,0.2);
-    color: #fff;
+  .kloud-participant-mic-btn.clickable.active:not(.host-restricted):hover {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
+    transform: scale(1.1);
+  }
+  .kloud-participant-mic-btn.host-restricted,
+  .kloud-participant-mic-btn.host-restricted.muted,
+  .kloud-participant-mic-btn.clickable.host-restricted,
+  .kloud-participant-mic-btn.clickable.host-restricted.muted {
+    opacity: 1;
+    color: #ff2020 !important;
+    background: rgba(255, 32, 32, 0.12);
+    border-color: rgba(255, 32, 32, 0.35);
+  }
+  .kloud-participant-mic-btn.clickable.host-restricted:hover,
+  .kloud-participant-mic-btn.clickable.host-restricted.muted:hover {
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #86efac !important;
+  }
+
+  .kloud-participant-media-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .kloud-participant-cam-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid transparent;
+    background: transparent;
+    flex-shrink: 0;
+    transition: all 0.15s ease;
+    opacity: 0;
+    cursor: default;
+  }
+  .kloud-attendee-row:hover .kloud-participant-cam-btn {
+    opacity: 1;
+  }
+  .kloud-participant-cam-btn.host-restricted {
+    opacity: 1;
+  }
+  .kloud-participant-cam-btn.disabled:not(.host-restricted) {
+    opacity: 1;
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .kloud-participant-cam-btn.host-restricted,
+  .kloud-participant-cam-btn.host-restricted.disabled,
+  .kloud-participant-cam-btn.clickable.host-restricted,
+  .kloud-participant-cam-btn.clickable.host-restricted.disabled {
+    color: #ff2020 !important;
+    background: rgba(255, 32, 32, 0.12);
+    border-color: rgba(255, 32, 32, 0.35);
+    opacity: 1;
+  }
+  .kloud-participant-cam-btn.active:not(.host-restricted) {
+    color: #22c55e;
+  }
+  .kloud-participant-cam-btn.clickable {
+    cursor: pointer;
+  }
+  .kloud-participant-cam-btn.clickable.disabled:not(.host-restricted) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .kloud-participant-cam-btn.clickable.disabled:not(.host-restricted):hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.9);
+    transform: scale(1.1);
+  }
+  .kloud-participant-cam-btn.clickable.host-restricted:hover,
+  .kloud-participant-cam-btn.clickable.host-restricted.disabled:hover {
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.35);
+    color: #86efac !important;
+  }
+  .kloud-participant-cam-btn.clickable.active:not(.host-restricted):hover {
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.3);
+    color: #4ade80;
     transform: scale(1.1);
   }
 

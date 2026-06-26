@@ -87,6 +87,8 @@ interface KloudMeetToolbarProps {
   onUnmuteAll?: () => void;
   /** Whether this local user has been force-muted by the host (distinct from voluntary self-mute) */
   isMutedByHost?: boolean;
+  /** Whether this local user's camera was disabled by the host */
+  isCamDisabledByHost?: boolean;
   /** Only host/co-host can toggle captions */
   canToggleCaptions?: boolean;
   /** Whether captions are currently active */
@@ -132,6 +134,7 @@ export function KloudMeetToolbar({
   onMuteAll,
   onUnmuteAll,
   isMutedByHost,
+  isCamDisabledByHost,
   canToggleCaptions,
   captionsEnabled,
   onToggleCaptions,
@@ -691,7 +694,7 @@ export function KloudMeetToolbar({
             {/* 2. Webcam */}
             <div className={styles.controlGroup}>
               <button
-                className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
+                className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''} ${isCamDisabledByHost && !camEnabled ? styles.controlBtnMutedByHost : ''}`}
                 onClick={onToggleCam}
                 disabled={!canUseMediaDevices}
                 aria-label={camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam')}
@@ -819,17 +822,17 @@ export function KloudMeetToolbar({
 
               <div className={styles.controlGroup}>
                 <button
-                  className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''}`}
+                  className={`${styles.controlBtn} ${!camEnabled ? styles.controlBtnOff : ''} ${isCamDisabledByHost && !camEnabled ? styles.controlBtnMutedByHost : ''}`}
                   onClick={onToggleCam}
                   disabled={!canUseMediaDevices}
-                  title={camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam')}
+                  title={isCamDisabledByHost ? 'Camera disabled by host' : (camEnabled ? t('toolbar.turnOffCam') : t('toolbar.turnOnCam'))}
                 >
                   {camEnabled ? (
                     <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" /></svg>
                   ) : (
                     <svg viewBox="0 0 24 24" fill="currentColor">
                       <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" />
+                      <line x1="4" y1="4" x2="20" y2="20" stroke={isCamDisabledByHost ? '#ef4444' : '#f87171'} strokeWidth="2.5" strokeLinecap="round" />
                     </svg>
                   )}
                 </button>

@@ -70,6 +70,7 @@ import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import {
   LiveDocFloatingCollapsedAvatar,
   LiveDocFloatingExpandedParticipantLayout,
+  type KloudTileMediaRestrictionProps,
   LiveDocWebcamSidebarTile,
   MAX_VISIBLE,
   MobileVideoLayout,
@@ -1330,7 +1331,19 @@ export function VideoConferenceComponent(props: {
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
   const [hostMutedIdentities, setHostMutedIdentities] = React.useState<string[]>([]);
+  const [hostDisabledVideoIdentities, setHostDisabledVideoIdentities] = React.useState<string[]>([]);
   const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>([]);
+  const hostMutedIdentitiesRef = React.useRef(hostMutedIdentities);
+  const hostDisabledVideoIdentitiesRef = React.useRef(hostDisabledVideoIdentities);
+  const muteAllActiveRef = React.useRef(muteAllActive);
+  const exemptFromMuteAllIdentitiesRef = React.useRef(exemptFromMuteAllIdentities);
+  const updateCustomMicsRef = React.useRef<(() => void) | null>(null);
+  React.useEffect(() => {
+    hostMutedIdentitiesRef.current = hostMutedIdentities;
+    hostDisabledVideoIdentitiesRef.current = hostDisabledVideoIdentities;
+    muteAllActiveRef.current = muteAllActive;
+    exemptFromMuteAllIdentitiesRef.current = exemptFromMuteAllIdentities;
+  }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, exemptFromMuteAllIdentities]);
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
   // Auto-assign Presenter: whoever owns the active screen share track
   const autoPresenterIdentity = screenShareTracks.length > 0
@@ -1393,6 +1406,7 @@ export function VideoConferenceComponent(props: {
     livedocInstanceId: string | null;
     muteAllActive: boolean;
     hostMutedIdentities: string[];
+    hostDisabledVideoIdentities: string[];
     captionsOn: boolean;
   }>({
     view: activeView,
@@ -1400,6 +1414,7 @@ export function VideoConferenceComponent(props: {
     livedocInstanceId: null,
     muteAllActive: false,
     hostMutedIdentities: [],
+    hostDisabledVideoIdentities: [],
     captionsOn: false,
   });
 
@@ -1441,8 +1456,9 @@ export function VideoConferenceComponent(props: {
     if (isHost) {
       authState.current.muteAllActive = muteAllActive;
       authState.current.hostMutedIdentities = hostMutedIdentities;
+      authState.current.hostDisabledVideoIdentities = hostDisabledVideoIdentities;
     }
-  }, [isHost, muteAllActive, hostMutedIdentities]);
+  }, [isHost, muteAllActive, hostMutedIdentities, hostDisabledVideoIdentities]);
 
   // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
   // so we use a ref to allow handleData to call it without block-scope issues.
@@ -1485,20 +1501,31 @@ export function VideoConferenceComponent(props: {
     setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
 
-  // Send a targeted mute/unmute to a single participant (host/co-host only)
+  // Send a targeted mute to a single participant, or cancel the host restriction (host/co-host only).
+  // Canceling restriction does NOT turn the participant's mic back on.
   const handleMuteParticipant = React.useCallback(
-    (identity: string, mute: boolean) => {
-      // Broadcast to ALL participants so everyone can update their hostMutedIdentities
-      // and show the correct red/gray color on the mic indicator.
-      // The targetIdentity field tells each client which participant is being acted on.
-      sendMeetingMsg({ type: mute ? 'MUTE_PARTICIPANT' : 'UNMUTE_PARTICIPANT', targetIdentity: identity });
-      // Track this locally so the host sees them as forced-muted (RED)
+    (identity: string, disable: boolean) => {
+      sendMeetingMsg({ type: disable ? 'MUTE_PARTICIPANT' : 'UNMUTE_PARTICIPANT', targetIdentity: identity });
       setHostMutedIdentities(prev =>
-        mute ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+        disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
       );
-      // Track exemptions if they are individually unmuted during a global Mute All
       setExemptFromMuteAllIdentities(prev =>
-        !mute ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+        !disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+      );
+    },
+    [sendMeetingMsg],
+  );
+
+  // Disable a participant's camera, or cancel the host restriction (host/co-host only).
+  // Canceling restriction does NOT turn the participant's camera back on.
+  const handleDisableParticipantVideo = React.useCallback(
+    (identity: string, disable: boolean) => {
+      sendMeetingMsg({
+        type: disable ? 'DISABLE_VIDEO_PARTICIPANT' : 'ENABLE_VIDEO_PARTICIPANT',
+        targetIdentity: identity,
+      });
+      setHostDisabledVideoIdentities(prev =>
+        disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
       );
     },
     [sendMeetingMsg],
@@ -1623,6 +1650,7 @@ export function VideoConferenceComponent(props: {
           livedocInstanceId: auth.livedocInstanceId,
           muteAllActive: auth.muteAllActive,
           hostMutedIdentities: auth.hostMutedIdentities,
+          hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
           captionsOn: auth.captionsOn,
         },
         [participant.identity],
@@ -1684,6 +1712,9 @@ export function VideoConferenceComponent(props: {
           }
           if (Array.isArray(msg.hostMutedIdentities)) {
             setHostMutedIdentities(msg.hostMutedIdentities);
+          }
+          if (Array.isArray(msg.hostDisabledVideoIdentities)) {
+            setHostDisabledVideoIdentities(msg.hostDisabledVideoIdentities);
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
@@ -1761,14 +1792,24 @@ export function VideoConferenceComponent(props: {
             );
           }
         } else if (msg.type === 'UNMUTE_PARTICIPANT') {
-          // If this is the targeted participant, restore their mic
-          if (msg.targetIdentity === room.localParticipant.identity) {
-            room.localParticipant.setMicrophoneEnabled(true).catch(console.error);
-            setMicEnabled(true);
-          }
-          // ALL clients clear the force-muted state for this identity
+          // Cancel host mic restriction only — do NOT turn on the participant's microphone
           if (msg.targetIdentity) {
             setHostMutedIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
+          }
+        } else if (msg.type === 'DISABLE_VIDEO_PARTICIPANT') {
+          if (msg.targetIdentity === room.localParticipant.identity) {
+            room.localParticipant.setCameraEnabled(false).catch(console.error);
+            setCamEnabled(false);
+          }
+          if (msg.targetIdentity) {
+            setHostDisabledVideoIdentities(prev =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            );
+          }
+        } else if (msg.type === 'ENABLE_VIDEO_PARTICIPANT') {
+          // Cancel host camera restriction only — do NOT turn on the participant's camera
+          if (msg.targetIdentity) {
+            setHostDisabledVideoIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
           }
         } else if (msg.type === 'RC_REQUEST') {
           // Remote Control: someone is requesting control of our screen
@@ -1843,6 +1884,7 @@ export function VideoConferenceComponent(props: {
                 livedocInstanceId: auth.livedocInstanceId,
                 muteAllActive: auth.muteAllActive,
                 hostMutedIdentities: auth.hostMutedIdentities,
+                hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
                 captionsOn: auth.captionsOn,
               },
               [senderIdentity],
@@ -1898,6 +1940,7 @@ export function VideoConferenceComponent(props: {
             livedocInstanceId: auth.livedocInstanceId,
             muteAllActive: auth.muteAllActive,
             hostMutedIdentities: auth.hostMutedIdentities,
+            hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
             captionsOn: auth.captionsOn,
           },
           [participant.identity],
@@ -1969,16 +2012,45 @@ export function VideoConferenceComponent(props: {
       const identity = micArea.getAttribute('data-kloud-identity');
       if (!identity) return;
 
-      const isAudioMuted = micArea.getAttribute('data-kloud-muted') === 'true';
+      const isHostRestricted = micArea.getAttribute('data-kloud-host-restricted') === 'true';
 
       e.preventDefault();
       e.stopPropagation();
-      handleMuteParticipant(identity, !isAudioMuted);
+      handleMuteParticipant(identity, !isHostRestricted);
     };
 
     document.addEventListener('pointerdown', handleTileMicClick, true);
     return () => document.removeEventListener('pointerdown', handleTileMicClick, true);
   }, [room, isHost, isCohost, handleMuteParticipant]);
+
+  // Grid tile click-to-disable camera (host / co-host only)
+  React.useEffect(() => {
+    if (!room || (!isHost && !isCohost)) return;
+
+    const handleTileCamClick = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target) return;
+
+      const camArea = target.closest('.kloud-custom-cam-indicator');
+      if (!camArea) return;
+
+      const tile = target.closest('.lk-participant-tile');
+      if (!tile) return;
+      if (tile.getAttribute('data-lk-local-participant') === 'true') return;
+
+      const identity = camArea.getAttribute('data-kloud-identity');
+      if (!identity) return;
+
+      const isHostRestricted = camArea.getAttribute('data-kloud-host-restricted') === 'true';
+
+      e.preventDefault();
+      e.stopPropagation();
+      handleDisableParticipantVideo(identity, !isHostRestricted);
+    };
+
+    document.addEventListener('pointerdown', handleTileCamClick, true);
+    return () => document.removeEventListener('pointerdown', handleTileCamClick, true);
+  }, [room, isHost, isCohost, handleDisableParticipantVideo]);
 
   // ══════════════════════════════════════════════════════════════════════
   // Custom DOM-injected Microphone Indicator (Bypassing LiveKit default)
@@ -1991,13 +2063,31 @@ export function VideoConferenceComponent(props: {
     // SVG templates for the mic icon
     const micSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/></svg>`;
     const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
+    const camSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`;
+    const camOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
+
+    const applyKloudIndicatorColor = (el: HTMLElement, color: string) => {
+      el.style.setProperty('color', color, 'important');
+      el.querySelectorAll('svg').forEach((svg) => {
+        (svg as SVGElement).style.setProperty('fill', color, 'important');
+        svg.querySelectorAll('path').forEach((path) => {
+          (path as SVGElement).style.setProperty('fill', color, 'important');
+        });
+        svg.querySelectorAll('line').forEach((line) => {
+          (line as SVGElement).style.setProperty('stroke', color, 'important');
+        });
+      });
+    };
 
     const updateCustomMics = () => {
-      // 主网格 + 活文档右侧栏 + 浮窗展开网格（与主会议相同的自定义麦与主持点按静音）
+      // 主网格 + 活文档右侧栏 + 屏幕共享左侧 carousel（浮窗由 React 组件渲染麦/摄像头图标）
       const tiles = document.querySelectorAll(
-        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .floating-webcam-panel .floating-grid-tile.lk-participant-tile, .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile',
+        '.lk-grid-layout-wrapper .lk-participant-tile, .webcam-sidebar-panel .webcam-sidebar-tile.lk-participant-tile, .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile',
       );
-      const muteAllApplied = muteAllActive;
+      const muteAllApplied = muteAllActiveRef.current;
+      const restrictedMicIdentities = hostMutedIdentitiesRef.current;
+      const restrictedVideoIdentities = hostDisabledVideoIdentitiesRef.current;
+      const exemptIdentities = exemptFromMuteAllIdentitiesRef.current;
 
       tiles.forEach((tile) => {
         const inCarousel = !!tile.closest('.lk-carousel');
@@ -2064,10 +2154,11 @@ export function VideoConferenceComponent(props: {
         const targetIsCopresenter = copresenterIdentities.includes(identity);
         const targetIsOperator = targetIsHost || targetIsCohost || targetIsAutoPresenter || targetIsCopresenter;
 
-        // Force muted is true if either muted globally (and not exempt) or by the host explicitly.
-        // Note: !isLocal was intentionally removed — the muted participant should see red on their own tile.
-        // Operator exemption (!targetIsOperator) already handles preventing hosts/cohosts from being marked red.
-        const isForceMuted = ((muteAllApplied && !exemptFromMuteAllIdentities.includes(identity)) || hostMutedIdentities.includes(identity)) && !targetIsOperator && isMuted;
+        // Force muted: mute-all batch (red when actually muted); individual host ban uses data-kloud-host-restricted
+        const isHostMicRestricted = restrictedMicIdentities.includes(identity) && !targetIsOperator;
+        const isMuteAllForced =
+          muteAllApplied && !exemptIdentities.includes(identity) && !targetIsOperator && isMuted;
+        const isForceMuted = isMuteAllForced;
         tile.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
 
         // Look for our custom icon container, or create it if missing
@@ -2089,30 +2180,69 @@ export function VideoConferenceComponent(props: {
         const customMicEl = customMic as HTMLElement;
         customMicEl.setAttribute('data-kloud-identity', identity);
         customMicEl.setAttribute('data-kloud-muted', isMuted ? 'true' : 'false');
+        customMicEl.setAttribute('data-kloud-host-restricted', isHostMicRestricted ? 'true' : 'false');
         customMicEl.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
-        customMicEl.classList.toggle('kloud-custom-mic--force-muted', isForceMuted);
-
-        if (!isMuted) {
-          customMicEl.innerHTML = micSvg;
-          customMicEl.style.setProperty('color', '#22c55e', 'important');
-        } else if (isForceMuted) {
-          customMicEl.innerHTML = micOffSvg;
-          customMicEl.style.setProperty('color', '#ff2020', 'important');
+        customMicEl.classList.toggle('kloud-custom-mic--force-muted', isHostMicRestricted || isForceMuted);
+        customMicEl.innerHTML = isMuted ? micOffSvg : micSvg;
+        if (isHostMicRestricted || isForceMuted) {
+          applyKloudIndicatorColor(customMicEl, '#ff2020');
+        } else if (isMuted) {
+          applyKloudIndicatorColor(customMicEl, 'rgba(255, 255, 255, 0.75)');
         } else {
-          customMicEl.innerHTML = micOffSvg;
-          customMicEl.style.setProperty('color', 'rgba(255,255,255,0.75)', 'important');
+          applyKloudIndicatorColor(customMicEl, '#22c55e');
         }
 
         // If I am a host/co-host viewing a remote tile, show pointer and tooltip styles
         if (!isLocal && (isHost || isCohost)) {
           customMic.classList.add('operator-interactive');
-          customMic.setAttribute('title', isMuted ? 'Click to unmute' : 'Click to mute');
+          customMic.setAttribute(
+            'title',
+            isHostMicRestricted ? 'Cancel disable (does not turn on mic)' : 'Disable microphone',
+          );
         } else {
           customMic.classList.remove('operator-interactive');
           customMic.removeAttribute('title');
         }
+
+        const camPub = participant.getTrackPublication(Track.Source.Camera);
+        const isVideoDisabled = !camPub?.track || camPub.isMuted;
+        const isHostVideoRestricted = restrictedVideoIdentities.includes(identity) && !targetIsOperator;
+
+        let customCam = metadata.querySelector('.kloud-custom-cam-indicator');
+        if (!customCam) {
+          customCam = document.createElement('div');
+          customCam.className = 'kloud-custom-cam-indicator';
+          customMic.insertAdjacentElement('afterend', customCam);
+        }
+
+        const customCamEl = customCam as HTMLElement;
+        customCamEl.setAttribute('data-kloud-identity', identity);
+        customCamEl.setAttribute('data-kloud-video-disabled', isVideoDisabled ? 'true' : 'false');
+        customCamEl.setAttribute('data-kloud-host-restricted', isHostVideoRestricted ? 'true' : 'false');
+        customCamEl.classList.toggle('kloud-custom-cam--force-disabled', isHostVideoRestricted);
+        customCamEl.innerHTML = isVideoDisabled ? camOffSvg : camSvg;
+        if (isHostVideoRestricted) {
+          applyKloudIndicatorColor(customCamEl, '#ff2020');
+        } else if (isVideoDisabled) {
+          applyKloudIndicatorColor(customCamEl, 'rgba(255, 255, 255, 0.75)');
+        } else {
+          applyKloudIndicatorColor(customCamEl, '#22c55e');
+        }
+
+        if (!isLocal && (isHost || isCohost)) {
+          customCam.classList.add('operator-interactive');
+          customCam.setAttribute(
+            'title',
+            isHostVideoRestricted ? 'Cancel disable (does not turn on camera)' : 'Disable camera',
+          );
+        } else {
+          customCam.classList.remove('operator-interactive');
+          customCam.removeAttribute('title');
+        }
       });
     };
+
+    updateCustomMicsRef.current = updateCustomMics;
 
     // Run the update immediately
     updateCustomMics();
@@ -2124,19 +2254,17 @@ export function VideoConferenceComponent(props: {
     room.on(RoomEvent.ParticipantConnected, updateCustomMics);
     room.on(RoomEvent.ParticipantDisconnected, updateCustomMics);
 
-    // Track unmuting by the user to clear host-muted state
-    const handleTrackUnmuted = (pub: any, p: any) => {
+    // Track unmuting by the user — refresh indicators only; host restrictions are cleared by the host
+    const handleTrackUnmuted = () => {
       updateCustomMics();
-      if (pub && pub.source === Track.Source.Microphone && p) {
-        setHostMutedIdentities(prev => prev.filter(id => id !== p.identity));
-      }
     };
     room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
 
-    // Also run on an interval as a fail-safe against delayed DOM renders by LiveKit
+    // Fail-safe refresh (avoid tight loops — MutationObserver + DOM writes caused screen-share freeze)
     const intervalId = setInterval(updateCustomMics, 500);
 
     return () => {
+      updateCustomMicsRef.current = null;
       room.off(RoomEvent.TrackMuted, updateCustomMics);
       room.off(RoomEvent.TrackUnmuted, handleTrackUnmuted);
       room.off(RoomEvent.TrackPublished, updateCustomMics);
@@ -2153,10 +2281,18 @@ export function VideoConferenceComponent(props: {
     autoPresenterIdentity,
     copresenterIdentities,
     hostMutedIdentities,
+    hostDisabledVideoIdentities,
     exemptFromMuteAllIdentities,
     isHost,
     isCohost,
+    hasScreenShare,
+    isWebcamSidebarCollapsed,
   ]);
+
+  // 主持禁音/禁视频后立即刷新 carousel 图标（屏幕共享左侧栏）
+  React.useEffect(() => {
+    updateCustomMicsRef.current?.();
+  }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare]);
 
   // Clear all remote control permission state when screen share ends
   React.useEffect(() => {
@@ -2526,6 +2662,35 @@ export function VideoConferenceComponent(props: {
     (screenShareActive ||
       (activeView === 'liveDoc' && !hasScreenShare) ||
       (hasScreenShare && !screenShareActive && isWebcamSidebarCollapsed));
+
+  const floatingMediaRestrictions = React.useMemo<KloudTileMediaRestrictionProps>(
+    () => ({
+      hostMutedIdentities,
+      hostDisabledVideoIdentities,
+      muteAllActive,
+      exemptFromMuteAllIdentities,
+      hostIdentity,
+      cohostIdentities,
+      autoPresenterIdentity,
+      copresenterIdentities,
+      roomLocalIdentity: room.localParticipant.identity,
+      isHost,
+      isCohost,
+    }),
+    [
+      hostMutedIdentities,
+      hostDisabledVideoIdentities,
+      muteAllActive,
+      exemptFromMuteAllIdentities,
+      hostIdentity,
+      cohostIdentities,
+      autoPresenterIdentity,
+      copresenterIdentities,
+      room.localParticipant.identity,
+      isHost,
+      isCohost,
+    ],
+  );
 
   const getInsetFromParentRight = React.useCallback((x: number) => {
     const el = floatingRef.current;
@@ -4028,6 +4193,7 @@ export function VideoConferenceComponent(props: {
                               hostIdentity={hostIdentity}
                               cohostIdentities={cohostIdentities}
                               sortedEntries={allParticipants}
+                              mediaRestrictions={floatingMediaRestrictions}
                             />
                           </div>
                         </>
@@ -4073,6 +4239,9 @@ export function VideoConferenceComponent(props: {
                   onMuteAll={handleMuteAll}
                   onUnmuteAll={handleUnmuteAll}
                   onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
+                  onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
+                  hostMutedIdentities={hostMutedIdentities}
+                  hostDisabledVideoIdentities={hostDisabledVideoIdentities}
                   onAddCopresenter={(identity) => {
                     setCopresenterIdentities((prev) =>
                       prev.includes(identity) ? prev : [...prev, identity],
@@ -4258,6 +4427,10 @@ export function VideoConferenceComponent(props: {
                 background: rgba(0, 0, 0, 0.58) !important;
                 backdrop-filter: blur(4px) !important;
                 pointer-events: none !important;
+              }
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-metadata-item .kloud-custom-mic-indicator,
+              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-metadata-item .kloud-custom-cam-indicator {
+                pointer-events: auto !important;
               }
               .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-name {
                 color: rgba(255,255,255,0.92) !important;
@@ -4449,6 +4622,7 @@ export function VideoConferenceComponent(props: {
                max-width: min(420px, calc(100vw - 24px));
                min-width: 0;
                box-sizing: border-box;
+               overflow: visible;
             }
             .floating-collapsed-row {
                display: flex;
@@ -4562,6 +4736,9 @@ export function VideoConferenceComponent(props: {
                --floating-hero-col-w: 132px;
                --floating-rest-tile: calc(var(--floating-hero-col-w) / 3 + 10px);
             }
+            .floating-expanded-grid:has(.floating-compact-slot:hover) {
+               align-items: flex-start;
+            }
             .floating-expanded-grid--heroes-only {
                gap: 0;
             }
@@ -4581,7 +4758,7 @@ export function VideoConferenceComponent(props: {
             }
             .floating-expanded-rest-wrap {
                flex: 0 0 auto;
-               width: calc(var(--floating-rest-tile) * var(--floating-rest-visible-cols, 1) + 8px * (var(--floating-rest-visible-cols, 1) - 1));
+               width: fit-content;
                min-width: calc(var(--floating-rest-tile) * var(--floating-rest-visible-cols, 1) + 8px * (var(--floating-rest-visible-cols, 1) - 1));
                max-width: calc(var(--floating-rest-tile) * 3 + 16px);
                display: flex;
@@ -4591,7 +4768,11 @@ export function VideoConferenceComponent(props: {
                box-sizing: border-box;
                min-height: 0;
                align-self: stretch;
-               overflow: hidden;
+               overflow: visible;
+               transition: min-width 0.22s cubic-bezier(0.22, 1, 0.36, 1), max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+            }
+            .floating-expanded-rest-wrap:has(.floating-compact-slot:hover) {
+               max-width: calc(var(--floating-rest-tile) * 3 + 16px + var(--floating-rest-tile));
             }
             .floating-expanded-rest-scroll {
                flex: 1 1 auto;
@@ -4602,9 +4783,10 @@ export function VideoConferenceComponent(props: {
                align-items: stretch;
                gap: 8px;
                overflow-x: auto;
-               overflow-y: hidden;
+               overflow-y: visible;
                scrollbar-width: thin;
                -webkit-overflow-scrolling: touch;
+               width: fit-content;
             }
             .floating-expanded-rest-col {
                display: flex;
@@ -4616,6 +4798,35 @@ export function VideoConferenceComponent(props: {
                min-width: 0;
                min-height: 0;
                align-self: stretch;
+               overflow: visible;
+               transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1), flex-basis 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+            }
+            .floating-expanded-rest-col:has(.floating-compact-slot:hover) {
+               flex: 0 0 calc(var(--floating-rest-tile) * 2);
+               width: calc(var(--floating-rest-tile) * 2);
+            }
+            /* 右侧小格：悬停时槽位真实宽高 2 倍，撑开列 / 浮窗外层容器 */
+            .floating-expanded-rest-scroll .floating-compact-slot {
+              position: relative;
+              width: var(--floating-rest-tile);
+              height: var(--floating-rest-tile);
+              flex-shrink: 0;
+              z-index: 1;
+              transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), z-index 0s linear 0.22s;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover {
+              width: calc(var(--floating-rest-tile) * 2);
+              height: calc(var(--floating-rest-tile) * 2);
+              z-index: 30;
+              transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), z-index 0s;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot .floating-grid-tile--compact {
+              width: 100%;
+              height: 100%;
+              position: relative;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-tile--compact .floating-grid-avatar {
+              font-size: calc(var(--floating-rest-tile) * 0.68);
             }
             .floating-expanded-rest-hnav {
                display: flex;
@@ -4662,13 +4873,18 @@ export function VideoConferenceComponent(props: {
                background: #e8dcc8;
                color: #111827;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-video {
-               width: var(--floating-rest-tile);
-               height: var(--floating-rest-tile);
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-video,
+            .floating-expanded-rest-scroll .floating-compact-slot .floating-grid-video {
+               width: 100%;
+               height: 100%;
                aspect-ratio: 1;
                min-height: 0;
                min-width: 0;
                border-radius: 10px;
+               transition: border-radius 0.22s ease;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-video {
+               border-radius: 12px;
             }
             .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar {
                font-size: calc(var(--floating-rest-tile) * 0.34);
@@ -4685,7 +4901,7 @@ export function VideoConferenceComponent(props: {
                background: transparent;
                backdrop-filter: none;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .floating-grid-name-row {
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-tile--compact .floating-grid-name-row {
                background: rgba(0, 0, 0, 0.58);
                backdrop-filter: blur(4px);
             }
@@ -4702,21 +4918,66 @@ export function VideoConferenceComponent(props: {
               pointer-events: none;
               transition: opacity 0.18s ease, width 0.18s ease, min-width 0.18s ease, height 0.18s ease;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator {
+            /* 主持禁音 / 全员静音：小格也始终显示红色麦克风 */
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.kloud-custom-mic--force-muted {
+              opacity: 1 !important;
+              width: 1.15rem !important;
+              min-width: 1.15rem !important;
+              height: 1.15rem !important;
+              min-height: 1.15rem !important;
+              overflow: visible !important;
+              pointer-events: auto !important;
+            }
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator {
+              opacity: 0;
+              width: 0 !important;
+              min-width: 0 !important;
+              height: 0 !important;
+              min-height: 0 !important;
+              padding: 0 !important;
+              margin: 0 !important;
+              overflow: hidden;
+              pointer-events: none;
+            }
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
+              opacity: 1 !important;
+              width: 1.15rem !important;
+              min-width: 1.15rem !important;
+              height: 1.15rem !important;
+              min-height: 1.15rem !important;
+              overflow: visible !important;
+              pointer-events: auto !important;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator {
               opacity: 1;
               width: 1rem !important;
               height: 1rem !important;
               pointer-events: auto;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] {
               width: 1.15rem !important;
               height: 1.15rem !important;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .kloud-custom-mic-indicator.operator-interactive {
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator.operator-interactive {
               min-width: 1.35rem !important;
               min-height: 1.35rem !important;
               padding: 3px;
               margin: 0;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator {
+              opacity: 1;
+              width: 1rem !important;
+              height: 1rem !important;
+              pointer-events: auto;
+            }
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
+              width: 1.15rem !important;
+              height: 1.15rem !important;
             }
             .floating-grid-tile {
                display: block;
@@ -4843,8 +5104,8 @@ export function VideoConferenceComponent(props: {
             .floating-grid-tile.lk-participant-tile.floating-grid-tile--hero:hover .floating-grid-name {
                max-width: 120px;
             }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact:hover .floating-grid-name {
-               max-width: calc(var(--floating-rest-tile) * 1.05);
+            .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-name {
+               max-width: calc(var(--floating-rest-tile) * 2 - 8px);
             }
 
             /* ── Right webcam sidebar (LiveDoc + postMessage) ─── */
@@ -5088,12 +5349,39 @@ export function VideoConferenceComponent(props: {
                Replaces LiveKit's missing "mic on" DOM states
                ══════════════════════════════════════════════════════ */
 
-            /* Completely hide LiveKit's default microphone indicator（主网格 + 活文档侧栏 + 浮窗） */
+            /* Completely hide LiveKit's default mic/camera muted indicators */
             .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone,
             .webcam-sidebar-panel .lk-track-muted-indicator-microphone,
             .floating-webcam-panel .lk-track-muted-indicator-microphone,
-            .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-microphone {
+            .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-microphone,
+            .lk-grid-layout-wrapper .lk-track-muted-indicator-camera,
+            .webcam-sidebar-panel .lk-track-muted-indicator-camera,
+            .floating-webcam-panel .lk-track-muted-indicator-camera,
+            .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-camera {
               display: none !important;
+            }
+
+            /* Mic/cam indicator colors — green active, gray voluntary off, red host-restricted / mute-all */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-muted="false"],
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-muted="false"],
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-muted="false"],
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-muted="false"],
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
+            .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"] {
+              color: #22c55e !important;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
+            .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]) {
+              color: rgba(255, 255, 255, 0.75) !important;
             }
 
             /* Our custom injected microphone indicator styling */
@@ -5112,7 +5400,11 @@ export function VideoConferenceComponent(props: {
               pointer-events: auto;
             }
 
-            /* 主持强制静音：红色 + 脉冲（自行关麦仍为灰色，由 JS 内联 color 控制） */
+            /* 主持强制静音/禁视频：红色 + 脉冲 */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
             .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
             .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
@@ -5123,12 +5415,34 @@ export function VideoConferenceComponent(props: {
               filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
               animation: kloud-mic-alert-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
             }
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg,
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg *,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg *,
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg,
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg *,
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg *,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg *,
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg * {
+              fill: currentColor !important;
+              stroke: currentColor !important;
+            }
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] {
               color: #ff2020 !important;
             }
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted svg,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] svg *,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-force-muted="true"] svg * {
               fill: currentColor !important;
@@ -5167,6 +5481,89 @@ export function VideoConferenceComponent(props: {
             .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:hover,
             .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:hover,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive:hover {
+              background: rgba(255, 255, 255, 0.18);
+              transform: scale(1.2);
+            }
+
+            /* Custom injected camera indicator styling */
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator,
+            .floating-webcam-panel .kloud-custom-cam-indicator,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator {
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              position: relative;
+              width: 1.15rem;
+              height: 1.15rem;
+              flex-shrink: 0;
+              transition: all 0.2s ease;
+              pointer-events: auto;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
+            .floating-webcam-panel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
+              width: 1.4rem;
+              height: 1.4rem;
+              color: #ff2020 !important;
+              filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
+              animation: kloud-mic-alert-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg,
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg *,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg *,
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg,
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] svg * {
+              fill: currentColor !important;
+              stroke: currentColor !important;
+            }
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] {
+              color: #ff2020 !important;
+            }
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled svg * {
+              fill: currentColor !important;
+              stroke: currentColor !important;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.operator-interactive,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.operator-interactive {
+              cursor: pointer;
+              border-radius: 50%;
+              padding: 4px;
+              min-width: 1.6rem;
+              min-height: 1.6rem;
+              margin: -2px;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator svg,
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator svg *,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator svg,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator svg *,
+            .floating-webcam-panel .kloud-custom-cam-indicator svg,
+            .floating-webcam-panel .kloud-custom-cam-indicator svg *,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator svg,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator svg * {
+              pointer-events: none;
+            }
+
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.operator-interactive:hover,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator.operator-interactive:hover,
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive:hover,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.operator-interactive:hover {
               background: rgba(255, 255, 255, 0.18);
               transform: scale(1.2);
             }
@@ -5260,7 +5657,8 @@ export function VideoConferenceComponent(props: {
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
           onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
-          isMutedByHost={(muteAllActive || hostMutedIdentities.includes(room.localParticipant.identity)) && !micEnabled && !(isHost || isCohost)}
+          isMutedByHost={hostMutedIdentities.includes(room.localParticipant.identity) && !(isHost || isCohost)}
+          isCamDisabledByHost={hostDisabledVideoIdentities.includes(room.localParticipant.identity) && !(isHost || isCohost)}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
           onToggleCaptions={handleToggleCaptions}
@@ -5297,6 +5695,9 @@ export function VideoConferenceComponent(props: {
                 onMuteAll={handleMuteAll}
                 onUnmuteAll={handleUnmuteAll}
                 onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
+                onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
+                hostMutedIdentities={hostMutedIdentities}
+                hostDisabledVideoIdentities={hostDisabledVideoIdentities}
                 onAddCopresenter={(identity) => {
                   setCopresenterIdentities((prev) =>
                     prev.includes(identity) ? prev : [...prev, identity],

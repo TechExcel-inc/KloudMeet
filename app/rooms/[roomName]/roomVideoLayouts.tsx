@@ -24,6 +24,132 @@ import {
   LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
 } from './roomConstants';
 
+export type KloudTileMediaRestrictionProps = {
+  hostMutedIdentities: string[];
+  hostDisabledVideoIdentities: string[];
+  muteAllActive: boolean;
+  exemptFromMuteAllIdentities: string[];
+  hostIdentity: string;
+  cohostIdentities: string[];
+  autoPresenterIdentity: string | null;
+  copresenterIdentities: string[];
+  roomLocalIdentity: string;
+  isHost: boolean;
+  isCohost: boolean;
+};
+
+function isKloudTargetOperator(identity: string, props: KloudTileMediaRestrictionProps): boolean {
+  return (
+    identity === props.hostIdentity ||
+    props.cohostIdentities.includes(identity) ||
+    props.autoPresenterIdentity === identity ||
+    props.copresenterIdentities.includes(identity)
+  );
+}
+
+function KloudFloatingMicIndicator({
+  participant,
+  mediaRestrictions,
+}: {
+  participant: Participant;
+  mediaRestrictions: KloudTileMediaRestrictionProps;
+}) {
+  const micPub = participant.getTrackPublication(Track.Source.Microphone);
+  const isMuted = !micPub?.track || micPub.isMuted;
+  const identity = participant.identity;
+  const operator = isKloudTargetOperator(identity, mediaRestrictions);
+  const isHostMicRestricted =
+    mediaRestrictions.hostMutedIdentities.includes(identity) && !operator;
+  const isForceMuted =
+    mediaRestrictions.muteAllActive &&
+    !mediaRestrictions.exemptFromMuteAllIdentities.includes(identity) &&
+    !operator &&
+    isMuted;
+  const isRed = isHostMicRestricted || isForceMuted;
+  const color = isRed ? '#ff2020' : isMuted ? 'rgba(255, 255, 255, 0.75)' : '#22c55e';
+  const isLocal = identity === mediaRestrictions.roomLocalIdentity;
+  const operatorInteractive = !isLocal && (mediaRestrictions.isHost || mediaRestrictions.isCohost);
+
+  return (
+    <div
+      className={`kloud-custom-mic-indicator${isRed ? ' kloud-custom-mic--force-muted' : ''}${operatorInteractive ? ' operator-interactive' : ''}`}
+      data-kloud-identity={identity}
+      data-kloud-muted={isMuted ? 'true' : 'false'}
+      data-kloud-host-restricted={isHostMicRestricted ? 'true' : 'false'}
+      data-kloud-force-muted={isForceMuted ? 'true' : 'false'}
+      style={{ color }}
+      title={
+        operatorInteractive
+          ? isHostMicRestricted
+            ? 'Cancel disable (does not turn on mic)'
+            : 'Disable microphone'
+          : undefined
+      }
+    >
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
+        {isMuted ? (
+          <>
+            <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
+            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </>
+        ) : (
+          <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
+        )}
+      </svg>
+    </div>
+  );
+}
+
+function KloudFloatingCamIndicator({
+  participant,
+  mediaRestrictions,
+}: {
+  participant: Participant;
+  mediaRestrictions: KloudTileMediaRestrictionProps;
+}) {
+  const camPub = participant.getTrackPublication(Track.Source.Camera);
+  const isVideoDisabled = !camPub?.track || camPub.isMuted;
+  const identity = participant.identity;
+  const operator = isKloudTargetOperator(identity, mediaRestrictions);
+  const isHostVideoRestricted =
+    mediaRestrictions.hostDisabledVideoIdentities.includes(identity) && !operator;
+  const color = isHostVideoRestricted
+    ? '#ff2020'
+    : isVideoDisabled
+      ? 'rgba(255, 255, 255, 0.75)'
+      : '#22c55e';
+  const isLocal = identity === mediaRestrictions.roomLocalIdentity;
+  const operatorInteractive = !isLocal && (mediaRestrictions.isHost || mediaRestrictions.isCohost);
+
+  return (
+    <div
+      className={`kloud-custom-cam-indicator${isHostVideoRestricted ? ' kloud-custom-cam--force-disabled' : ''}${operatorInteractive ? ' operator-interactive' : ''}`}
+      data-kloud-identity={identity}
+      data-kloud-video-disabled={isVideoDisabled ? 'true' : 'false'}
+      data-kloud-host-restricted={isHostVideoRestricted ? 'true' : 'false'}
+      style={{ color }}
+      title={
+        operatorInteractive
+          ? isHostVideoRestricted
+            ? 'Cancel disable (does not turn on camera)'
+            : 'Disable camera'
+          : undefined
+      }
+    >
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
+        {isVideoDisabled ? (
+          <>
+            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+          </>
+        ) : (
+          <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
+        )}
+      </svg>
+    </div>
+  );
+}
+
 export function calcGridCols(count: number): number {
   if (count <= 1) return 1;
   if (count <= 2) return 2;
@@ -244,24 +370,26 @@ export function LiveDocFloatingGridTile({
   participant,
   name,
   size = 'compact',
+  mediaRestrictions,
 }: {
   participant: Participant;
   name: string;
   size?: 'hero' | 'compact';
+  mediaRestrictions: KloudTileMediaRestrictionProps;
 }) {
   const camPub = participant.getTrackPublication(Track.Source.Camera);
   const micPub = participant.getTrackPublication(Track.Source.Microphone);
   const hasVideo = !!(camPub?.track && !camPub.isMuted);
   const micMuted = !micPub?.track || micPub.isMuted;
   const isSpeaking = useIsSpeaking(participant);
-  const micTrackRef = React.useMemo(
-    () => ({
-      participant,
-      source: Track.Source.Microphone as const,
-      publication: micPub,
-    }),
-    [participant, micPub],
-  );
+  const identity = participant.identity;
+  const operator = isKloudTargetOperator(identity, mediaRestrictions);
+  const isForceMuted =
+    mediaRestrictions.muteAllActive &&
+    !mediaRestrictions.exemptFromMuteAllIdentities.includes(identity) &&
+    !operator &&
+    micMuted;
+
   return (
     <div
       className={`floating-grid-tile lk-participant-tile floating-grid-tile--${size}`}
@@ -271,6 +399,7 @@ export function LiveDocFloatingGridTile({
       data-lk-video-muted={!hasVideo}
       data-lk-local-participant={participant.isLocal}
       data-lk-source={Track.Source.Camera}
+      data-kloud-force-muted={isForceMuted ? 'true' : 'false'}
     >
       <div className="floating-grid-video">
         {hasVideo && camPub?.track ? (
@@ -292,7 +421,8 @@ export function LiveDocFloatingGridTile({
       </div>
       <div className="lk-participant-metadata webcam-floating-participant-metadata">
         <div className="floating-grid-name-row lk-participant-metadata-item">
-          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
+          <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <span className="floating-grid-name" title={name}>
             {name}
           </span>
@@ -326,11 +456,13 @@ export function LiveDocFloatingExpandedParticipantLayout({
   hostIdentity,
   cohostIdentities,
   sortedEntries,
+  mediaRestrictions,
 }: {
   room: Room;
   hostIdentity: string;
   cohostIdentities: string[];
   sortedEntries: FloatingParticipantEntry[];
+  mediaRestrictions: KloudTileMediaRestrictionProps;
 }) {
   const heroColumnRef = React.useRef<HTMLDivElement>(null);
   const restHScrollRef = React.useRef<HTMLDivElement>(null);
@@ -500,7 +632,13 @@ export function LiveDocFloatingExpandedParticipantLayout({
     >
       <div ref={heroColumnRef} className="floating-expanded-hero-column">
         {heroEntries.map((e) => (
-          <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="hero" />
+          <LiveDocFloatingGridTile
+            key={e.id}
+            participant={e.participant}
+            name={e.name}
+            size="hero"
+            mediaRestrictions={mediaRestrictions}
+          />
         ))}
       </div>
       {!heroesOnly && (
@@ -512,7 +650,14 @@ export function LiveDocFloatingExpandedParticipantLayout({
             {restColumns.map((col, ci) => (
               <div key={`rest-col-${ci}`} className="floating-expanded-rest-col">
                 {col.map((e) => (
-                  <LiveDocFloatingGridTile key={e.id} participant={e.participant} name={e.name} size="compact" />
+                  <div key={e.id} className="floating-compact-slot">
+                    <LiveDocFloatingGridTile
+                      participant={e.participant}
+                      name={e.name}
+                      size="compact"
+                      mediaRestrictions={mediaRestrictions}
+                    />
+                  </div>
                 ))}
               </div>
             ))}
