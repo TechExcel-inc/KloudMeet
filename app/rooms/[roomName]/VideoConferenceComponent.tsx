@@ -5567,6 +5567,48 @@ export function VideoConferenceComponent(props: {
               background: rgba(255, 255, 255, 0.18);
               transform: scale(1.2);
             }
+
+            /* ═══ Host/co-host: hover-to-reveal + visually separate mic/cam controls ═══ */
+            /* Add a visible gap between mic and cam so they don't look "connected" */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive {
+              margin-right: 10px !important;
+            }
+
+            /* Hide mic control when mic is ON (not muted / not restricted) — show on hover */
+            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
+            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted) {
+              opacity: 0;
+              pointer-events: none;
+              transition: opacity 0.2s ease;
+            }
+
+            /* Hide cam control when cam is ON (not disabled / not restricted) — show on hover */
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
+            .webcam-sidebar-panel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled) {
+              opacity: 0;
+              pointer-events: none;
+              transition: opacity 0.2s ease;
+            }
+
+            /* Reveal both controls when host/co-host hovers the tile */
+            .lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-custom-mic-indicator.operator-interactive,
+            .lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive,
+            .webcam-sidebar-panel .lk-participant-tile:hover .kloud-custom-mic-indicator.operator-interactive,
+            .webcam-sidebar-panel .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive,
+            .floating-webcam-panel .kl-participant-tile:hover .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .lk-participant-tile:hover .kloud-custom-mic-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive {
+              opacity: 1 !important;
+              pointer-events: auto !important;
+            }
           `}</style>
         </div>
 

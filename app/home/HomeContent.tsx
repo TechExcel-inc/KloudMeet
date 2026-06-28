@@ -148,6 +148,44 @@ export function HomeContent() {
     };
   }, []);
 
+  // ═══ SSO: Auto-login via shared cross-subdomain cookie (set by kloud.cn) ═══
+  // Only fires if there's no existing localStorage session.
+  useEffect(() => {
+    let cancelled = false;
+    // Skip if we already have a local session — the restore effect above handles it.
+    if (localStorage.getItem('kloudUser')) return;
+
+    (async () => {
+      try {
+        const res = await fetch('/api/auth/sso');
+        if (cancelled || !res.ok) return;
+
+        const data = await res.json();
+        if (!data || !data.token || !data.user) return;
+
+        const u: AuthUser = {
+          id: data.user.id,
+          username: data.user.username,
+          displayName: data.user.fullName || data.user.username,
+          email: data.user.email,
+          avatarUrl: data.user.avatarUrl,
+          token: data.token,
+        };
+        localStorage.setItem('kloudUser', JSON.stringify(u));
+        if (!cancelled) {
+          setUser(u);
+          setView('dashboard');
+        }
+      } catch {
+        /* No SSO cookie available — fall through to anonymous view */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleAuthSuccess = (u: AuthUser) => {
     setUser(u);
     setView('dashboard');

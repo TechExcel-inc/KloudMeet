@@ -255,6 +255,8 @@ export function KloudMeetToolbar({
   const explicitToggleUntilRef = useRef<number>(0);
   // 记录插件最后一次告知是否允许显示 SkyMeet 底栏，用于阻止 hoverZone 在 suppress 期间重新激活。
   const lastIframeShowRef = useRef<boolean>(true);
+  // LiveDoc view: auto-hide the toolbar 10s after it was shown by a click inside the iframe.
+  const liveDocAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee' | 'recording';
   const desktopAnchorBubbleKind: DesktopAnchorKind | null =
@@ -385,12 +387,28 @@ export function KloudMeetToolbar({
           const show = data?.show === 1 || data?.show === true;
           setVisible(show);
           explicitToggleUntilRef.current = show ? now + 10000 : 0;
+
+          // LiveDoc auto-hide: start a 10s timer whenever the toolbar is shown by a click.
+          if (liveDocAutoHideTimerRef.current) {
+            clearTimeout(liveDocAutoHideTimerRef.current);
+            liveDocAutoHideTimerRef.current = null;
+          }
+          if (show && !isMobile) {
+            liveDocAutoHideTimerRef.current = setTimeout(() => {
+              setVisible(false);
+              liveDocAutoHideTimerRef.current = null;
+            }, 10000);
+          }
         }
         return;
       }
 
       if (msgType === 'Kloud-DocToolAutoHide') {
         explicitToggleUntilRef.current = 0;
+        if (liveDocAutoHideTimerRef.current) {
+          clearTimeout(liveDocAutoHideTimerRef.current);
+          liveDocAutoHideTimerRef.current = null;
+        }
         setVisible(false);
         return;
       }
@@ -479,6 +497,25 @@ export function KloudMeetToolbar({
       window.removeEventListener('blur', hideByLeave);
     };
   }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen]);
+
+  // Cancel the LiveDoc auto-hide timer when menus/panels are open or on unmount,
+  // so the toolbar doesn't vanish while the user is actively interacting with it.
+  useEffect(() => {
+    if (activeSheet || chatOpen || attendeeOpen || inviteMenuOpen) {
+      if (liveDocAutoHideTimerRef.current) {
+        clearTimeout(liveDocAutoHideTimerRef.current);
+        liveDocAutoHideTimerRef.current = null;
+      }
+    }
+  }, [activeSheet, chatOpen, attendeeOpen, inviteMenuOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (liveDocAutoHideTimerRef.current) {
+        clearTimeout(liveDocAutoHideTimerRef.current);
+      }
+    };
+  }, []);
 
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
