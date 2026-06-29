@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import { useI18n } from '@/lib/i18n';
 import styles from '../styles/Home.module.css';
 
@@ -69,7 +70,14 @@ export function UserAvatarMenu({
         style={{ overflow: 'hidden' }}
       >
         {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <Image
+            src={user.avatarUrl}
+            alt=""
+            width={40}
+            height={40}
+            unoptimized
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
         ) : (
           <span style={{ fontWeight: 600, fontSize: '0.9rem' }}>{user.displayName.charAt(0).toUpperCase()}</span>
         )}

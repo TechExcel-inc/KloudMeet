@@ -234,7 +234,7 @@ export function useCaptions({
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room, decoder, showCaptionsToGUI]);
+  }, [room, decoder, showCaptionsToGUI, languageCode]);
 
   // ── 当 mic 关闭时停止本地识别（但保持字幕功能开启，仍能看到别人的字幕）──
   // ── 当 mic 重新开启时自动恢复本地识别 ──────────────────────────────────

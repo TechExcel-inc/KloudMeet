@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import Image from 'next/image';
 import styles from '../styles/MyProfileModal.module.css';
 import { useI18n } from './i18n';
 
@@ -454,7 +455,14 @@ export function MyProfileModal({
                 style={{ cursor: avatarUploading ? 'wait' : 'pointer' }}
               >
                 {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className={styles.avatarImg} />
+                  <Image
+                    src={avatarUrl}
+                    alt="Avatar"
+                    className={styles.avatarImg}
+                    width={130}
+                    height={130}
+                    unoptimized
+                  />
                 ) : (
                   <span className={styles.avatarInitial}>{(firstName?.[0] || lastName?.[0] || username?.[0] || 'U').toUpperCase()}</span>
                 )}

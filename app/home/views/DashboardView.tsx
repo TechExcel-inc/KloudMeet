@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
@@ -103,13 +104,17 @@ export function DashboardView({
       .catch(() => {});
   }, [user]);
 
-  const fetchMeetings = (searchTerm = searchQuery) => {
+  const searchQueryRef = useRef(searchQuery);
+  searchQueryRef.current = searchQuery;
+
+  const fetchMeetings = useCallback((searchTerm?: string) => {
+    const term = searchTerm ?? searchQueryRef.current;
     if (!user || (!user.token && !user.id)) return;
     setLoadingMeetings(true);
     const qs = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
-      ...(searchTerm.trim() ? { search: searchTerm.trim() } : {}),
+      ...(term.trim() ? { search: term.trim() } : {}),
     });
     fetch(`/api/account/meetings?${qs.toString()}`, {
       headers: { Authorization: `Bearer ${user.token}` }
@@ -128,11 +133,11 @@ export function DashboardView({
       })
       .catch(console.error)
       .finally(() => setLoadingMeetings(false));
-  };
+  }, [user, page, pageSize]);
 
   useEffect(() => {
     fetchMeetings();
-  }, [user, page, pageSize]);
+  }, [fetchMeetings]);
 
   // Debounced search: reset to page 1 and re-fetch when searchQuery changes
   const isFirstSearchRender = React.useRef(true);
@@ -146,7 +151,7 @@ export function DashboardView({
       fetchMeetings(searchQuery);
     }, 300);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, fetchMeetings]);
 
   // Polling fallback to check processing recordings
   useEffect(() => {
@@ -188,7 +193,7 @@ export function DashboardView({
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [user, dbMeetings]);
+  }, [user, dbMeetings, page, pageSize]);
 
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;
@@ -214,7 +219,7 @@ export function DashboardView({
     tick();
     const intv = setInterval(tick, 1000);
     return () => clearInterval(intv);
-  }, [scheduledModalData, router, user.id, toast]);
+  }, [scheduledModalData, router, user.id, toast, t]);
 
   const handleDeleteMeeting = async (roomName: string) => {
     setDeleteLoading(true);
@@ -679,10 +684,11 @@ export function DashboardView({
           </div>
         ) : Object.keys(groupedMeetings).length === 0 ? (
           <div className={styles.meetingEmptyState}>
-            <img
+            <Image
               src="/images/kloud-header-logo.svg"
               alt="Kloud Meet"
               className={styles.meetingEmptyLogo}
+              width={120}
               height={36}
               style={{ display: 'block', transform: 'translateY(4px)' }}
             />

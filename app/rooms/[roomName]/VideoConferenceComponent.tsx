@@ -119,7 +119,7 @@ export function VideoConferenceComponent(props: {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
   const router = useRouter();
-  const keyProvider = new ExternalE2EEKeyProvider();
+  const keyProvider = React.useMemo(() => new ExternalE2EEKeyProvider(), []);
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
 
@@ -255,9 +255,9 @@ export function VideoConferenceComponent(props: {
       e2ee: keyProvider && worker && e2eeEnabled ? { keyProvider, worker } : undefined,
       singlePeerConnection: true,
     };
-  }, [props.userChoices, props.options.hq, props.options.codec]);
+  }, [props.userChoices, props.options.hq, props.options.codec, e2eeEnabled, keyProvider, worker]);
 
-  const room = React.useMemo(() => new Room(roomOptions), []);
+  const room = React.useMemo(() => new Room(roomOptions), [roomOptions]);
 
   // Check for any active screen share tracks in the room
   const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
@@ -415,7 +415,7 @@ export function VideoConferenceComponent(props: {
     return () => {
       cancelled = true;
     };
-  }, [e2eeEnabled, room, e2eePassphrase]);
+  }, [e2eeEnabled, room, e2eePassphrase, keyProvider]);
 
   const connectOptions = React.useMemo((): RoomConnectOptions => {
     return {
@@ -1919,6 +1919,7 @@ export function VideoConferenceComponent(props: {
     props.meetingOwnerMemberId,
     handleClosedByHostExit,
     presenterListsEqual,
+    isLocalScreenShare,
   ]);
 
   // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.

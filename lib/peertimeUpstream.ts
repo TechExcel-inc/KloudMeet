@@ -1,25 +1,69 @@
 const DEFAULT_MEETING_SERVER = 'https://wss.peertime.cn/MeetingServer';
 const DEFAULT_PEER_TIME = 'https://api.peertime.cn';
 
-/** Extra fetch headers when base URL points at local nginx (127.0.0.1) instead of public DNS. */
-function loopbackHostHeaders(base: string, publicHost: string): Record<string, string> {
-  try {
-    const parsed = new URL(base.includes('://') ? base : `http://${base}`);
-    if (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') {
-      return { Host: publicHost };
-    }
-  } catch {
-    /* ignore */
-  }
-  return {};
+function parseLoopbackFlag(): boolean | null {
+  const raw = process.env.LIVEDOC_SERVER_USE_LOOPBACK?.trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === '0' || raw === 'false' || raw === 'no') return false;
+  if (raw === '1' || raw === 'true' || raw === 'yes') return true;
+  return null;
+}
+
+/**
+ * meet.kloud.cn and wss/api.peertime.cn share one host (74.208.27.19).
+ * Node fetch via public DNS hairpins to the same box and often times out.
+ * Default to loopback in production unless explicitly disabled.
+ */
+function shouldUseProductionLoopback(): boolean {
+  const explicit = parseLoopbackFlag();
+  if (explicit !== null) return explicit;
+  return process.env.NODE_ENV === 'production';
 }
 
 export function getMeetingServerBase(): string {
-  return process.env.LIVEDOC_SERVER_API_BASE_URL ?? DEFAULT_MEETING_SERVER;
+  if (process.env.LIVEDOC_SERVER_API_BASE_URL) {
+    return process.env.LIVEDOC_SERVER_API_BASE_URL;
+  }
+  if (shouldUseProductionLoopback()) {
+    // Java often runs behind nginx/Docker — :8080 is not exposed on the host (ECONNREFUSED).
+    // Default: local nginx on :80 with Host: wss.peertime.cn (see loopbackHostHeaders).
+    // Override with LIVEDOC_MEETING_SERVER_PORT=8080 only when Tomcat listens on the host.
+    const directPort = process.env.LIVEDOC_MEETING_SERVER_PORT?.trim();
+    if (directPort) {
+      return `http://127.0.0.1:${directPort}/MeetingServer`;
+    }
+    return 'http://127.0.0.1/MeetingServer';
+  }
+  return DEFAULT_MEETING_SERVER;
 }
 
 export function getPeerTimeApiBase(): string {
-  return process.env.PEER_TIME_API_BASE_URL ?? DEFAULT_PEER_TIME;
+  if (process.env.PEER_TIME_API_BASE_URL) {
+    return process.env.PEER_TIME_API_BASE_URL;
+  }
+  if (shouldUseProductionLoopback()) {
+    return 'http://127.0.0.1';
+  }
+  return DEFAULT_PEER_TIME;
+}
+
+/**
+ * nginx vhost routes need Host; direct Java on :8080 does not.
+ */
+function loopbackHostHeaders(base: string, publicHost: string): Record<string, string> {
+  try {
+    const parsed = new URL(base.includes('://') ? base : `http://${base}`);
+    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
+      return {};
+    }
+    const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
+    if (port !== '80' && port !== '443') {
+      return {};
+    }
+    return { Host: publicHost };
+  } catch {
+    return {};
+  }
 }
 
 export function buildMeetingServerUrl(path: string): { url: string; headers: Record<string, string> } {

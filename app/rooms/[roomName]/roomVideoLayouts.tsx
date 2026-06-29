@@ -577,7 +577,7 @@ export function LiveDocFloatingExpandedParticipantLayout({
 
     const rest = rows.filter((r) => !used.has(r.id)).sort(byJoin);
     return { heroEntries: hero, restEntries: rest, heroesOnly: rest.length === 0 };
-  }, [room, sortedEntries, hostIdentity, cohostIdentities, layoutKey]);
+  }, [room, sortedEntries, hostIdentity, cohostIdentities]);
 
   const restColumns = React.useMemo(() => chunkRestIntoColumns(restEntries), [restEntries]);
   const showRestHNav = restEntries.length > 13;

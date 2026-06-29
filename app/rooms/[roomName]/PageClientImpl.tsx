@@ -57,6 +57,7 @@ import {
 } from 'livekit-client';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
@@ -397,7 +398,7 @@ export function PageClientImpl(props: {
     return () => {
       cancelled = true;
     };
-  }, [routeRoomName, loadMeetingInfo, resolveEpoch]);
+  }, [routeRoomName, props.roomName, loadMeetingInfo, resolveEpoch]);
 
   React.useEffect(() => {
     if (!meetingInfo?.startedAt) return;
@@ -1166,9 +1167,10 @@ export function PageClientImpl(props: {
                 </svg>
               </Link>
               <Link href="/" className="kloud-prejoin-logo-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
-                <img
+                <Image
                   src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
                   alt="Kloud Meet"
+                  width={120}
                   height={36}
                   style={{ display: 'block', transform: 'translateY(4px)' }}
                 />

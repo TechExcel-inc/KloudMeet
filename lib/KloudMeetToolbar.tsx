@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
@@ -274,14 +274,14 @@ export function KloudMeetToolbar({
                 : null
       : null;
 
-  const applyMouseVisibility = (clientY: number, forceVisible?: boolean) => {
+  const applyMouseVisibility = useCallback((clientY: number, forceVisible?: boolean) => {
     if (activeSheetRef.current || chatOpen || attendeeOpen || inviteMenuOpen || forceVisible) {
       setVisible(true);
       return;
     }
     const threshold = window.innerHeight - 90;
     setVisible(clientY >= threshold);
-  };
+  }, [chatOpen, attendeeOpen, inviteMenuOpen]);
 
   useEffect(() => {
     if (isMobile) {
@@ -365,7 +365,7 @@ export function KloudMeetToolbar({
       window.addEventListener('mousemove', handleMouseMove);
       return () => window.removeEventListener('mousemove', handleMouseMove);
     }
-  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen]);
+  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, applyMouseVisibility]);
 
   // 接收 iframe postMessage：mousemove 和点击事件沿用同一套显示/隐藏逻辑
   useEffect(() => {
@@ -473,7 +473,7 @@ export function KloudMeetToolbar({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen]);
+  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen, applyMouseVisibility, iframeMouseActive]);
 
   // 鼠标离开窗口/页面失焦时，桌面端按“上方区域”处理，避免 toolbar 悬停不消失
   useEffect(() => {
