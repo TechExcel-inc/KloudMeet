@@ -1,6 +1,7 @@
 import {
   buildMeetingServerUrl,
   ensureHostBypassesProxy,
+  formatUpstreamFetchError,
 } from '@/lib/peertimeUpstream';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -41,14 +42,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }),
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown upstream error';
-    const cause =
-      error instanceof Error && error.cause instanceof Error ? error.cause.message : undefined;
     return NextResponse.json(
       {
         error: 'LiveDoc meeting-server upstream unavailable',
         url,
-        detail: cause ? `${message} (${cause})` : message,
+        detail: formatUpstreamFetchError(error),
       },
       { status: 502 },
     );

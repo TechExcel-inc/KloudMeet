@@ -59,3 +59,13 @@ export function ensureHostBypassesProxy(targetUrl: string): void {
   process.env.NO_PROXY = appendHost(process.env.NO_PROXY);
   process.env.no_proxy = appendHost(process.env.no_proxy);
 }
+
+/** ES2020-safe: avoid Error.cause (requires lib es2022). */
+export function formatUpstreamFetchError(error: unknown): string {
+  if (!(error instanceof Error)) return 'Unknown upstream error';
+  const nested = (error as Error & { cause?: unknown }).cause;
+  if (nested instanceof Error && nested.message) {
+    return `${error.message} (${nested.message})`;
+  }
+  return error.message;
+}
