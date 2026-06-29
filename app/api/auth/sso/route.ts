@@ -1,9 +1,7 @@
 import { prisma } from '@/lib/db';
+import { buildPeerTimeUrl, ensureHostBypassesProxy } from '@/lib/peertimeUpstream';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-
-const PEER_TIME_API_BASE =
-  process.env.PEER_TIME_API_BASE_URL ?? 'https://api.peertime.cn';
 
 /**
  * GET /api/auth/sso
@@ -23,10 +21,13 @@ export async function GET(request: NextRequest) {
 
     // ── 1. Validate the PeerTime token and fetch user profile ──
     const decodedToken = decodeURIComponent(ssoToken);
-    const profileRes = await fetch(
-      `${PEER_TIME_API_BASE}/peertime/V1/User/UserProfile`,
-      { headers: { UserToken: decodedToken } },
+    const { url: profileUrl, headers: loopbackHeaders } = buildPeerTimeUrl(
+      '/peertime/V1/User/UserProfile',
     );
+    ensureHostBypassesProxy(profileUrl);
+    const profileRes = await fetch(profileUrl, {
+      headers: { UserToken: decodedToken, ...loopbackHeaders },
+    });
 
     if (!profileRes.ok) {
       return NextResponse.json(
