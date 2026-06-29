@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
 
+const { buildDevApiRewrites } = require('./config/devApiProxy.js');
+
 // Read remote API URL from .env.local — set it locally for dev proxy, leave empty on server.
 const REMOTE_API = (process.env.NEXT_PUBLIC_REMOTE_API || '').trim();
-if (REMOTE_API) console.log(`[next.config] API proxy → ${REMOTE_API}`);
 
 const nextConfig = {
   reactStrictMode: false,
@@ -50,17 +51,10 @@ const nextConfig = {
       },
     ];
   },
-  // Proxy /api/* to remote server — beforeFiles ensures this runs BEFORE local API routes
+  // Proxy SkyMeet backend /api/* to remote — see config/devApiProxy.mjs for local-only exclusions.
   rewrites: async () => {
     if (!REMOTE_API) return [];
-    return {
-      beforeFiles: [
-        {
-          source: '/api/:path*',
-          destination: `${REMOTE_API}/api/:path*`,
-        },
-      ],
-    };
+    return buildDevApiRewrites(REMOTE_API);
   },
 };
 
