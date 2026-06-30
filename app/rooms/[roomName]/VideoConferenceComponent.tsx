@@ -4099,7 +4099,7 @@ export function VideoConferenceComponent(props: {
                     touchAction: 'none',
                     transition: isFloatingDragging
                       ? 'none'
-                      : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out',
+                      : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out, opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
                   }}
                 >
                   {!floatingExpanded && (
@@ -4615,6 +4615,9 @@ export function VideoConferenceComponent(props: {
                box-shadow: 0 8px 32px rgba(0,0,0,0.45);
                touch-action: none;
                -webkit-user-select: none;
+               opacity: 1;
+               pointer-events: auto;
+               transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
             }
             .floating-webcam-panel.expanded {
                border-radius: 16px;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
@@ -141,8 +141,6 @@ export function KloudMeetToolbar({
   onOpenDesktopApp,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
-  const [iframeMouseActive, setIframeMouseActive] = useState(false);
-  const iframeMouseInactiveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { t } = useI18n();
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -249,14 +247,6 @@ export function KloudMeetToolbar({
   const canEnumerateDevices =
     canUseMediaDevices && !!navigator.mediaDevices?.enumerateDevices;
   const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
-  const lastMouseYRef = useRef<number>(window.innerHeight);
-  const lastToggleTimeRef = useRef<number>(0);
-  const iframeMouseSuppressUntilRef = useRef<number>(0);
-  const explicitToggleUntilRef = useRef<number>(0);
-  // 记录插件最后一次告知是否允许显示 SkyMeet 底栏，用于阻止 hoverZone 在 suppress 期间重新激活。
-  const lastIframeShowRef = useRef<boolean>(true);
-  // LiveDoc view: auto-hide the toolbar 10s after it was shown by a click inside the iframe.
-  const liveDocAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee' | 'recording';
   const desktopAnchorBubbleKind: DesktopAnchorKind | null =
@@ -274,100 +264,70 @@ export function KloudMeetToolbar({
                 : null
       : null;
 
-  const applyMouseVisibility = useCallback((clientY: number, forceVisible?: boolean) => {
-    if (activeSheetRef.current || chatOpen || attendeeOpen || inviteMenuOpen || forceVisible) {
-      setVisible(true);
-      return;
-    }
-    const threshold = window.innerHeight - 90;
-    setVisible(clientY >= threshold);
-  }, [chatOpen, attendeeOpen, inviteMenuOpen]);
-
   useEffect(() => {
-    if (isMobile) {
-      // Logic for mobile: Auto-hide after 30 seconds of inactivity
-      let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!isMobile) return;
+    // LiveDoc iframe drives chrome via Kloud-onMouseClick (200ms debounce in plugin).
+    if (activeView === 'liveDoc') return;
 
-      const startTimer = () => {
-        if (hideTimer) clearTimeout(hideTimer);
-        hideTimer = setTimeout(() => {
-          setVisible(false);
-        }, 30000); // 30 seconds
-      };
+    // Mobile: tap to show/hide toolbar (non-LiveDoc views only).
+    let hideTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastTouchTime = 0;
 
-      if (visible) {
-        startTimer();
-      } else {
-        if (hideTimer) clearTimeout(hideTimer);
+    const startTimer = () => {
+      if (hideTimer) clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => {
+        setVisible(false);
+      }, 30000);
+    };
+
+    if (visible) {
+      startTimer();
+    } else if (hideTimer) {
+      clearTimeout(hideTimer);
+    }
+
+    const handleBodyClick = (e: MouseEvent | TouchEvent) => {
+      if (e.type === 'touchstart') {
+        lastTouchTime = Date.now();
+      } else if (e.type === 'click') {
+        if (Date.now() - lastTouchTime < 1000) {
+          return;
+        }
       }
 
-      const handleBodyClick = (e: MouseEvent | TouchEvent) => {
-        if (e.type === 'touchstart') {
-          lastToggleTimeRef.current = Date.now();
-        } else if (e.type === 'click') {
-          if (Date.now() - lastToggleTimeRef.current < 1000) {
-            return;
-          }
-        }
+      if (!visible) {
+        setVisible(true);
+        return;
+      }
 
-        // If toolbar is currently hidden, ANY tap on the screen should show it.
-        if (!visible) {
-          setVisible(true);
-          return;
-        }
+      const target = e.target as Element;
+      const isToolbarArea = !!(
+        toolbarRef.current?.contains(target) ||
+        target.closest?.('#mobileTopRightBtn') ||
+        target.closest?.('.lk-device-menu') ||
+        target.closest?.('.lk-menu') ||
+        target.closest?.(`.${styles.actionSheetOverlay}`) ||
+        target.closest?.(`.${styles.actionSheet}`)
+      );
 
-        const target = e.target as Element;
+      if (isToolbarArea) {
+        startTimer();
+        return;
+      }
 
-        // If visible, check if they tapped inside a toolbar component
-        const isToolbarArea = !!(
-          toolbarRef.current?.contains(target) ||
-          target.closest?.('#mobileTopRightBtn') ||
-          target.closest?.('.lk-device-menu') ||
-          target.closest?.('.lk-menu') ||
-          target.closest?.(`.${styles.actionSheetOverlay}`) ||
-          target.closest?.(`.${styles.actionSheet}`)
-        );
+      setVisible(false);
+    };
 
-        if (isToolbarArea) {
-          // They are using the toolbar, just refresh the 30s timer
-          startTimer();
-          return;
-        }
+    document.addEventListener('click', handleBodyClick, { capture: true });
+    document.addEventListener('touchstart', handleBodyClick, { capture: true, passive: true });
+    return () => {
+      if (hideTimer) clearTimeout(hideTimer);
+      document.removeEventListener('click', handleBodyClick, { capture: true });
+      document.removeEventListener('touchstart', handleBodyClick, { capture: true });
+    };
+  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen]);
 
-        // They clicked outside, so hide it
-        setVisible(false);
-      };
-
-      document.addEventListener('click', handleBodyClick, { capture: true });
-      document.addEventListener('touchstart', handleBodyClick, { capture: true, passive: true });
-      return () => {
-        if (hideTimer) clearTimeout(hideTimer);
-        document.removeEventListener('click', handleBodyClick, { capture: true });
-        document.removeEventListener('touchstart', handleBodyClick, { capture: true });
-      };
-    } else {
-      // Desktop mousemove logic
-      const handleMouseMove = (e: MouseEvent) => {
-        // 鼠标在 iframe 内移动时，由 iframe 主导显示/隐藏；父页面 mousemove 暂停一小段时间。
-        if (Date.now() < iframeMouseSuppressUntilRef.current) {
-          return;
-        }
-        lastMouseYRef.current = e.clientY;
-        const target = e.target as Element;
-        // forceVisible 只在鼠标直接悬浮在 toolbar 本身或其弹出菜单上时为 true
-        // 注意：不能用 [class*="lk-"]，那会匹配参与者视频卡片等所有 LiveKit 元素
-        const isHoveringMenu = !!(
-          toolbarRef.current?.contains(target) ||
-          target?.closest?.('.lk-device-menu, .lk-menu')
-        );
-        applyMouseVisibility(e.clientY, isHoveringMenu);
-      };
-      window.addEventListener('mousemove', handleMouseMove);
-      return () => window.removeEventListener('mousemove', handleMouseMove);
-    }
-  }, [isMobile, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, applyMouseVisibility]);
-
-  // 接收 iframe postMessage：mousemove 和点击事件沿用同一套显示/隐藏逻辑
+  // LiveDoc iframe click toggles toolbar (desktop + mobile when in iframe).
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       const payload = event.data;
@@ -377,39 +337,12 @@ export function KloudMeetToolbar({
           : '';
 
       if (msgType === 'Kloud-onMouseClick') {
-        const now = Date.now();
-        if (now - lastToggleTimeRef.current > 500) {
-          lastToggleTimeRef.current = now;
-          const data =
-            typeof payload === 'object' && payload !== null && 'data' in payload
-              ? (payload as { data?: { show?: unknown } }).data
-              : null;
-          const show = data?.show === 1 || data?.show === true;
-          setVisible(show);
-          explicitToggleUntilRef.current = show ? now + 10000 : 0;
-
-          // LiveDoc auto-hide: start a 10s timer whenever the toolbar is shown by a click.
-          if (liveDocAutoHideTimerRef.current) {
-            clearTimeout(liveDocAutoHideTimerRef.current);
-            liveDocAutoHideTimerRef.current = null;
-          }
-          if (show && !isMobile) {
-            liveDocAutoHideTimerRef.current = setTimeout(() => {
-              setVisible(false);
-              liveDocAutoHideTimerRef.current = null;
-            }, 10000);
-          }
-        }
-        return;
-      }
-
-      if (msgType === 'Kloud-DocToolAutoHide') {
-        explicitToggleUntilRef.current = 0;
-        if (liveDocAutoHideTimerRef.current) {
-          clearTimeout(liveDocAutoHideTimerRef.current);
-          liveDocAutoHideTimerRef.current = null;
-        }
-        setVisible(false);
+        const data =
+          typeof payload === 'object' && payload !== null && 'data' in payload
+            ? (payload as { data?: { show?: unknown } }).data
+            : null;
+        const show = data?.show === 1 || data?.show === true;
+        setVisible(show);
         return;
       }
 
@@ -426,95 +359,10 @@ export function KloudMeetToolbar({
         setLiveDocActionDialogVisible(data?.show === 1);
         return;
       }
-
-      // 由 iframe 决定是否显示 SkyMeet 底栏：plugin 侧已综合判断 liveToolbar 区与底部区域。
-      if (msgType === 'mousemove') {
-        if (isMobile) return;
-
-        const now = Date.now();
-        if (now < explicitToggleUntilRef.current) {
-          iframeMouseSuppressUntilRef.current = now + 200;
-          if (!iframeMouseActive) setIframeMouseActive(true);
-          if (iframeMouseInactiveTimerRef.current) clearTimeout(iframeMouseInactiveTimerRef.current);
-          iframeMouseInactiveTimerRef.current = setTimeout(() => {
-            setIframeMouseActive(false);
-          }, 250);
-          return;
-        }
-
-        const data =
-          typeof payload === 'object' && payload !== null && 'data' in payload
-            ? (payload as { data?: unknown }).data
-            : null;
-        const show =
-          typeof data === 'object' &&
-          data !== null &&
-          'showBottomToolbar' in data &&
-          !!(data as { showBottomToolbar?: unknown }).showBottomToolbar;
-
-        // 鼠标在 iframe 内的每次 mousemove 都暂停父页面 mousemove handler 一小段时间，
-        // 避免父页面 mousemove 反复把 toolbar 顶回显示。
-        iframeMouseSuppressUntilRef.current = Date.now() + 200;
-        // 同步给 hoverZone：iframe 内有鼠标移动时，让 hoverZone 不接收事件，
-        // 避免遮挡 iframe 内 liveToolbar 上的按钮和拖拽。
-        if (!iframeMouseActive) setIframeMouseActive(true);
-        if (iframeMouseInactiveTimerRef.current) clearTimeout(iframeMouseInactiveTimerRef.current);
-        iframeMouseInactiveTimerRef.current = setTimeout(() => {
-          setIframeMouseActive(false);
-        }, 250);
-
-        lastIframeShowRef.current = show;
-        const clientY = show ? window.innerHeight : 0;
-        lastMouseYRef.current = clientY;
-        applyMouseVisibility(clientY);
-        return;
-      }
     };
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen, applyMouseVisibility, iframeMouseActive]);
-
-  // 鼠标离开窗口/页面失焦时，桌面端按“上方区域”处理，避免 toolbar 悬停不消失
-  useEffect(() => {
-    const hideByLeave = () => {
-      if (!isMobile && !activeSheetRef.current && !chatOpen && !attendeeOpen && !inviteMenuOpen) {
-        setVisible(false);
-      }
-    };
-    const handleMouseOut = (e: MouseEvent) => {
-      // 当 relatedTarget 为 null 且鼠标超出了可视区域时，才认为是真正的离开窗口
-      if (!e.relatedTarget) {
-        if (e.clientY <= 0 || e.clientX <= 0 || e.clientX >= window.innerWidth || e.clientY >= window.innerHeight - 1) {
-          hideByLeave();
-        }
-      }
-    };
-    window.addEventListener('mouseout', handleMouseOut);
-    window.addEventListener('blur', hideByLeave);
-    return () => {
-      window.removeEventListener('mouseout', handleMouseOut);
-      window.removeEventListener('blur', hideByLeave);
-    };
-  }, [isMobile, chatOpen, attendeeOpen, inviteMenuOpen]);
-
-  // Cancel the LiveDoc auto-hide timer when menus/panels are open or on unmount,
-  // so the toolbar doesn't vanish while the user is actively interacting with it.
-  useEffect(() => {
-    if (activeSheet || chatOpen || attendeeOpen || inviteMenuOpen) {
-      if (liveDocAutoHideTimerRef.current) {
-        clearTimeout(liveDocAutoHideTimerRef.current);
-        liveDocAutoHideTimerRef.current = null;
-      }
-    }
-  }, [activeSheet, chatOpen, attendeeOpen, inviteMenuOpen]);
-
-  useEffect(() => {
-    return () => {
-      if (liveDocAutoHideTimerRef.current) {
-        clearTimeout(liveDocAutoHideTimerRef.current);
-      }
-    };
   }, []);
 
   useLayoutEffect(() => {
@@ -667,28 +515,13 @@ export function KloudMeetToolbar({
       {/* Toast */}
       {toastMsg && <div className={styles.toast}>{toastMsg}</div>}
 
-      {/* Hover zone + chevron handle when toolbar is hidden (desktop only) */}
+      {/* Chevron hint when toolbar is hidden (desktop only; show/hide via LiveDoc click) */}
       {!visible && !isMobile && (
-        <>
-          {/* Invisible trigger area covering the toolbar's natural position */}
-          <div
-            className={styles.hoverZone}
-            // iframe 内持续有鼠标移动时，让 hoverZone 不吃事件，鼠标直接命中 iframe（liveToolbar 等）。
-            style={iframeMouseActive ? { pointerEvents: 'none' } : undefined}
-            onMouseEnter={() => {
-              if (Date.now() < iframeMouseSuppressUntilRef.current) return;
-              // 插件最后一次告知不显示时（如鼠标在 liveToolbar 区停留后点击），不触发显示。
-              if (!lastIframeShowRef.current) return;
-              setVisible(true);
-            }}
-          />
-          {/* Small visual arrow hint at center bottom */}
-          <div className={styles.chevronHandle}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M18 15l-6-6-6 6" />
-            </svg>
-          </div>
-        </>
+        <div className={styles.chevronHandle}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M18 15l-6-6-6 6" />
+          </svg>
+        </div>
       )}
 
       {/* Main toolbar */}
