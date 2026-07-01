@@ -6,7 +6,6 @@ import {
   ConnectionStateToast,
   ParticipantTile,
   RoomAudioRenderer,
-  TrackMutedIndicator,
   useIsSpeaking,
   useTracks,
   VideoTrack,
@@ -69,21 +68,26 @@ function KloudFloatingMicIndicator({
   const color = isRed ? '#ff2020' : isMuted ? 'rgba(255, 255, 255, 0.75)' : '#22c55e';
   const isLocal = identity === mediaRestrictions.roomLocalIdentity;
   const operatorInteractive = !isLocal && (mediaRestrictions.isHost || mediaRestrictions.isCohost);
+  const selfInteractive = isLocal && !isHostMicRestricted && !isForceMuted;
 
   return (
     <div
-      className={`kloud-custom-mic-indicator${isRed ? ' kloud-custom-mic--force-muted' : ''}${operatorInteractive ? ' operator-interactive' : ''}`}
+      className={`kloud-custom-mic-indicator${isRed ? ' kloud-custom-mic--force-muted' : ''}${operatorInteractive ? ' operator-interactive' : ''}${selfInteractive ? ' self-interactive' : ''}`}
       data-kloud-identity={identity}
       data-kloud-muted={isMuted ? 'true' : 'false'}
       data-kloud-host-restricted={isHostMicRestricted ? 'true' : 'false'}
       data-kloud-force-muted={isForceMuted ? 'true' : 'false'}
       style={{ color }}
       title={
-        operatorInteractive
-          ? isHostMicRestricted
-            ? 'Cancel disable (does not turn on mic)'
-            : 'Disable microphone'
-          : undefined
+        selfInteractive
+          ? isMuted
+            ? 'Turn on microphone'
+            : 'Turn off microphone'
+          : operatorInteractive
+            ? isHostMicRestricted
+              ? 'Cancel disable (does not turn on mic)'
+              : 'Disable microphone'
+            : undefined
       }
     >
       <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
@@ -120,20 +124,25 @@ function KloudFloatingCamIndicator({
       : '#22c55e';
   const isLocal = identity === mediaRestrictions.roomLocalIdentity;
   const operatorInteractive = !isLocal && (mediaRestrictions.isHost || mediaRestrictions.isCohost);
+  const selfInteractive = isLocal && !isHostVideoRestricted;
 
   return (
     <div
-      className={`kloud-custom-cam-indicator${isHostVideoRestricted ? ' kloud-custom-cam--force-disabled' : ''}${operatorInteractive ? ' operator-interactive' : ''}`}
+      className={`kloud-custom-cam-indicator${isHostVideoRestricted ? ' kloud-custom-cam--force-disabled' : ''}${operatorInteractive ? ' operator-interactive' : ''}${selfInteractive ? ' self-interactive' : ''}`}
       data-kloud-identity={identity}
       data-kloud-video-disabled={isVideoDisabled ? 'true' : 'false'}
       data-kloud-host-restricted={isHostVideoRestricted ? 'true' : 'false'}
       style={{ color }}
       title={
-        operatorInteractive
-          ? isHostVideoRestricted
-            ? 'Cancel disable (does not turn on camera)'
-            : 'Disable camera'
-          : undefined
+        selfInteractive
+          ? isVideoDisabled
+            ? 'Turn on camera'
+            : 'Turn off camera'
+          : operatorInteractive
+            ? isHostVideoRestricted
+              ? 'Cancel disable (does not turn on camera)'
+              : 'Disable camera'
+            : undefined
       }
     >
       <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
@@ -319,20 +328,20 @@ export function MobileVideoLayout() {
 }
 
 /** LiveDoc 右侧栏 / 浮窗：与 ParticipantTile 一致的说话高亮 + 名字左侧麦克风指示 */
-export function LiveDocWebcamSidebarTile({ participant, name }: { participant: Participant; name: string }) {
+export function LiveDocWebcamSidebarTile({
+  participant,
+  name,
+  mediaRestrictions,
+}: {
+  participant: Participant;
+  name: string;
+  mediaRestrictions: KloudTileMediaRestrictionProps;
+}) {
   const camPub = participant.getTrackPublication(Track.Source.Camera);
   const micPub = participant.getTrackPublication(Track.Source.Microphone);
   const hasVideo = !!(camPub?.track && !camPub.isMuted);
   const micMuted = !micPub?.track || micPub.isMuted;
   const isSpeaking = useIsSpeaking(participant);
-  const micTrackRef = React.useMemo(
-    () => ({
-      participant,
-      source: Track.Source.Microphone as const,
-      publication: micPub,
-    }),
-    [participant, micPub],
-  );
   return (
     <div
       className="webcam-sidebar-tile lk-participant-tile"
@@ -340,7 +349,7 @@ export function LiveDocWebcamSidebarTile({ participant, name }: { participant: P
       data-lk-speaking={isSpeaking}
       data-lk-audio-muted={micMuted}
       data-lk-video-muted={!hasVideo}
-      data-lk-local-participant={participant.isLocal}
+      data-lk-local-participant={participant.isLocal ? 'true' : 'false'}
       data-lk-source={Track.Source.Camera}
     >
       <div className="webcam-sidebar-video">
@@ -358,7 +367,8 @@ export function LiveDocWebcamSidebarTile({ participant, name }: { participant: P
       </div>
       <div className="lk-participant-metadata webcam-sidebar-participant-metadata">
         <div className="webcam-sidebar-meta lk-participant-metadata-item">
-          <TrackMutedIndicator trackRef={micTrackRef} show="always" />
+          <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
+          <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <span className="webcam-sidebar-name">{name}</span>
         </div>
       </div>
