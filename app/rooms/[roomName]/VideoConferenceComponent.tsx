@@ -59,7 +59,7 @@ import {
   DataPacket_Kind,
   DisconnectReason,
 } from 'livekit-client';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
@@ -88,6 +88,7 @@ import {
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
+const HOST_MIC_LOCK_MS = 5000;
 import dynamic from 'next/dynamic';
 
 const LiveDocView = dynamic(
@@ -119,9 +120,11 @@ export function VideoConferenceComponent(props: {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const keyProvider = React.useMemo(() => new ExternalE2EEKeyProvider(), []);
   const { worker, e2eePassphrase } = useSetupE2EE();
   const e2eeEnabled = !!(e2eePassphrase && worker);
+  const isRecorderBot = searchParams?.get('isBot') === 'true';
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
   const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
@@ -132,6 +135,8 @@ export function VideoConferenceComponent(props: {
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
+  const localMicRestrictedRef = React.useRef(false);
+  const localCamRestrictedRef = React.useRef(false);
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   // Remote control permission flow
   const [remoteControlPending, setRemoteControlPending] = React.useState(false);
@@ -1133,6 +1138,11 @@ export function VideoConferenceComponent(props: {
       return;
     }
     const next = !micEnabled;
+    if (next && localMicRestrictedRef.current) {
+      setMicEnabled(false);
+      room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
+      return;
+    }
     setMicEnabled(next);
     try {
       Promise.resolve(room.localParticipant.setMicrophoneEnabled(next)).catch(handleError);
@@ -1147,6 +1157,11 @@ export function VideoConferenceComponent(props: {
       return;
     }
     const next = !camEnabled;
+    if (next && localCamRestrictedRef.current) {
+      setCamEnabled(false);
+      room.localParticipant.setCameraEnabled(false).catch(handleError);
+      return;
+    }
     setCamEnabled(next);
     try {
       Promise.resolve(room.localParticipant.setCameraEnabled(next)).catch(handleError);
@@ -1331,7 +1346,10 @@ export function VideoConferenceComponent(props: {
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
   const [hostMutedIdentities, setHostMutedIdentities] = React.useState<string[]>([]);
+  const [hostMutedUntilByIdentity, setHostMutedUntilByIdentity] = React.useState<Record<string, number>>({});
+  const [muteAllLockUntil, setMuteAllLockUntil] = React.useState<number | null>(null);
   const [hostDisabledVideoIdentities, setHostDisabledVideoIdentities] = React.useState<string[]>([]);
+  const [hostDisabledVideoUntilByIdentity, setHostDisabledVideoUntilByIdentity] = React.useState<Record<string, number>>({});
   const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>([]);
   const hostMutedIdentitiesRef = React.useRef(hostMutedIdentities);
   const hostDisabledVideoIdentitiesRef = React.useRef(hostDisabledVideoIdentities);
@@ -1344,17 +1362,129 @@ export function VideoConferenceComponent(props: {
     muteAllActiveRef.current = muteAllActive;
     exemptFromMuteAllIdentitiesRef.current = exemptFromMuteAllIdentities;
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, exemptFromMuteAllIdentities]);
+
+  React.useEffect(() => {
+    const refreshTimedMicLocks = () => {
+      const now = Date.now();
+      const activeEntries = Object.entries(hostMutedUntilByIdentity).filter(([, until]) => until > now);
+      const activeIdentities = activeEntries.map(([identity]) => identity);
+
+      setHostMutedIdentities((prev) =>
+        prev.length === activeIdentities.length && prev.every((id, index) => id === activeIdentities[index])
+          ? prev
+          : activeIdentities,
+      );
+
+      if (activeEntries.length !== Object.keys(hostMutedUntilByIdentity).length) {
+        setHostMutedUntilByIdentity(Object.fromEntries(activeEntries));
+      }
+
+      if (muteAllLockUntil !== null && muteAllLockUntil <= now) {
+        setMuteAllActive(false);
+        setMuteAllLockUntil(null);
+        preMuteAllMicRef.current = null;
+        setExemptFromMuteAllIdentities([]);
+      }
+
+      const activeVideoEntries = Object.entries(hostDisabledVideoUntilByIdentity).filter(([, until]) => until > now);
+      const activeVideoIdentities = activeVideoEntries.map(([identity]) => identity);
+
+      setHostDisabledVideoIdentities((prev) =>
+        prev.length === activeVideoIdentities.length && prev.every((id, index) => id === activeVideoIdentities[index])
+          ? prev
+          : activeVideoIdentities,
+      );
+
+      if (activeVideoEntries.length !== Object.keys(hostDisabledVideoUntilByIdentity).length) {
+        setHostDisabledVideoUntilByIdentity(Object.fromEntries(activeVideoEntries));
+      }
+    };
+
+    refreshTimedMicLocks();
+
+    const nextIdentityExpiry = Object.values(hostMutedUntilByIdentity)
+      .filter((until) => until > Date.now())
+      .sort((a, b) => a - b)[0];
+    const nextVideoExpiry = Object.values(hostDisabledVideoUntilByIdentity)
+      .filter((until) => until > Date.now())
+      .sort((a, b) => a - b)[0];
+    const candidates = [nextIdentityExpiry, nextVideoExpiry, muteAllLockUntil].filter(
+      (until): until is number => typeof until === 'number' && until > Date.now(),
+    );
+    if (candidates.length === 0) return;
+
+    const nextExpiry = Math.min(...candidates);
+    const timeout = window.setTimeout(refreshTimedMicLocks, Math.max(0, nextExpiry - Date.now()) + 50);
+    return () => window.clearTimeout(timeout);
+  }, [hostMutedUntilByIdentity, hostDisabledVideoUntilByIdentity, muteAllLockUntil]);
+
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
   // Auto-assign Presenter: whoever owns the active screen share track
   const autoPresenterIdentity = screenShareTracks.length > 0
     ? (screenShareTracks[0].participant?.identity ?? null)
     : null;
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
+  const isLocalControlOperator = isHost || isCohost || isCopresenter || isAutoPresenter;
+  const localIdentity = room.localParticipant.identity;
+  const isLocalMicRestricted =
+    !isLocalControlOperator &&
+    (hostMutedIdentities.includes(localIdentity) ||
+      (muteAllActive && !exemptFromMuteAllIdentities.includes(localIdentity)));
+  const isLocalCamRestricted =
+    !isLocalControlOperator && hostDisabledVideoIdentities.includes(localIdentity);
   // Interactive meetings: everyone can switch views locally; only privileged roles sync to the room
   const canSwitchViews = true;
   const canBroadcastViewChange =
     isHost || isCohost || isCopresenter || isAutoPresenter;
   canBroadcastViewChangeRef.current = canBroadcastViewChange;
+
+  React.useEffect(() => {
+    localMicRestrictedRef.current = isLocalMicRestricted;
+
+    const enforceHostMute = () => {
+      if (!localMicRestrictedRef.current) return;
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const micIsLive = !!micPub?.track && !micPub.isMuted;
+      if (micEnabled || micIsLive) {
+        setMicEnabled(false);
+        room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
+      }
+    };
+
+    enforceHostMute();
+    room.on(RoomEvent.LocalTrackPublished, enforceHostMute);
+    room.on(RoomEvent.TrackUnmuted, enforceHostMute);
+    room.on(RoomEvent.TrackMuted, enforceHostMute);
+    return () => {
+      room.off(RoomEvent.LocalTrackPublished, enforceHostMute);
+      room.off(RoomEvent.TrackUnmuted, enforceHostMute);
+      room.off(RoomEvent.TrackMuted, enforceHostMute);
+    };
+  }, [isLocalMicRestricted, micEnabled, room, handleError]);
+
+  React.useEffect(() => {
+    localCamRestrictedRef.current = isLocalCamRestricted;
+
+    const enforceHostCameraDisable = () => {
+      if (!localCamRestrictedRef.current) return;
+      const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const camIsLive = !!camPub?.track && !camPub.isMuted;
+      if (camEnabled || camIsLive) {
+        setCamEnabled(false);
+        room.localParticipant.setCameraEnabled(false).catch(handleError);
+      }
+    };
+
+    enforceHostCameraDisable();
+    room.on(RoomEvent.LocalTrackPublished, enforceHostCameraDisable);
+    room.on(RoomEvent.TrackUnmuted, enforceHostCameraDisable);
+    room.on(RoomEvent.TrackMuted, enforceHostCameraDisable);
+    return () => {
+      room.off(RoomEvent.LocalTrackPublished, enforceHostCameraDisable);
+      room.off(RoomEvent.TrackUnmuted, enforceHostCameraDisable);
+      room.off(RoomEvent.TrackMuted, enforceHostCameraDisable);
+    };
+  }, [isLocalCamRestricted, camEnabled, room, handleError]);
 
   const meetingRoomName = props.connectionDetails.roomName;
   const jitsiInstanceId = resolveJitsiInstanceId({
@@ -1405,16 +1535,24 @@ export function VideoConferenceComponent(props: {
     presenter: string[];
     livedocInstanceId: string | null;
     muteAllActive: boolean;
+    muteAllLockUntil: number | null;
     hostMutedIdentities: string[];
+    hostMutedUntilByIdentity: Record<string, number>;
+    exemptFromMuteAllIdentities: string[];
     hostDisabledVideoIdentities: string[];
+    hostDisabledVideoUntilByIdentity: Record<string, number>;
     captionsOn: boolean;
   }>({
     view: activeView,
     presenter: [],
     livedocInstanceId: null,
     muteAllActive: false,
+    muteAllLockUntil: null,
     hostMutedIdentities: [],
+    hostMutedUntilByIdentity: {},
+    exemptFromMuteAllIdentities: [],
     hostDisabledVideoIdentities: [],
+    hostDisabledVideoUntilByIdentity: {},
     captionsOn: false,
   });
 
@@ -1455,10 +1593,23 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (isHost) {
       authState.current.muteAllActive = muteAllActive;
+      authState.current.muteAllLockUntil = muteAllLockUntil;
       authState.current.hostMutedIdentities = hostMutedIdentities;
+      authState.current.hostMutedUntilByIdentity = hostMutedUntilByIdentity;
+      authState.current.exemptFromMuteAllIdentities = exemptFromMuteAllIdentities;
       authState.current.hostDisabledVideoIdentities = hostDisabledVideoIdentities;
+      authState.current.hostDisabledVideoUntilByIdentity = hostDisabledVideoUntilByIdentity;
     }
-  }, [isHost, muteAllActive, hostMutedIdentities, hostDisabledVideoIdentities]);
+  }, [
+    isHost,
+    muteAllActive,
+    muteAllLockUntil,
+    hostMutedIdentities,
+    hostMutedUntilByIdentity,
+    exemptFromMuteAllIdentities,
+    hostDisabledVideoIdentities,
+    hostDisabledVideoUntilByIdentity,
+  ]);
 
   // Ref bridge: setCaptionsOpen is declared after the message handler useEffect,
   // so we use a ref to allow handleData to call it without block-scope issues.
@@ -1488,16 +1639,21 @@ export function VideoConferenceComponent(props: {
   // Mute All / Unmute All handlers (defined after sendMeetingMsg)
   // Only remote participants are affected — the local user (host/co-host) keeps their mic as-is.
   const handleMuteAll = React.useCallback(() => {
-    sendMeetingMsg({ type: 'MUTE_ALL' });
+    const lockUntil = Date.now() + HOST_MIC_LOCK_MS;
+    sendMeetingMsg({ type: 'MUTE_ALL', lockUntil });
     setMuteAllActive(true);
+    setMuteAllLockUntil(lockUntil);
     setHostMutedIdentities([]);
+    setHostMutedUntilByIdentity({});
     setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
 
   const handleUnmuteAll = React.useCallback(() => {
     sendMeetingMsg({ type: 'UNMUTE_ALL' });
     setMuteAllActive(false);
+    setMuteAllLockUntil(null);
     setHostMutedIdentities([]);
+    setHostMutedUntilByIdentity({});
     setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
 
@@ -1505,12 +1661,28 @@ export function VideoConferenceComponent(props: {
   // Canceling restriction does NOT turn the participant's mic back on.
   const handleMuteParticipant = React.useCallback(
     (identity: string, disable: boolean) => {
-      sendMeetingMsg({ type: disable ? 'MUTE_PARTICIPANT' : 'UNMUTE_PARTICIPANT', targetIdentity: identity });
-      setHostMutedIdentities(prev =>
-        disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
-      );
+      const lockUntil = Date.now() + HOST_MIC_LOCK_MS;
+      sendMeetingMsg({
+        type: disable ? 'MUTE_PARTICIPANT' : 'UNMUTE_PARTICIPANT',
+        targetIdentity: identity,
+        ...(disable ? { lockUntil } : {}),
+      });
+      if (disable) {
+        setHostMutedUntilByIdentity((prev) => {
+          return { ...prev, [identity]: lockUntil };
+        });
+      } else {
+        setHostMutedUntilByIdentity((prev) => {
+          const next = { ...prev };
+          delete next[identity];
+          return next;
+        });
+        setHostMutedIdentities((prev) => prev.filter((id) => id !== identity));
+      }
       setExemptFromMuteAllIdentities(prev =>
-        !disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
+        !disable
+          ? (prev.includes(identity) ? prev : [...prev, identity])
+          : prev.filter(id => id !== identity)
       );
     },
     [sendMeetingMsg],
@@ -1520,13 +1692,24 @@ export function VideoConferenceComponent(props: {
   // Canceling restriction does NOT turn the participant's camera back on.
   const handleDisableParticipantVideo = React.useCallback(
     (identity: string, disable: boolean) => {
+      const lockUntil = Date.now() + HOST_MIC_LOCK_MS;
       sendMeetingMsg({
         type: disable ? 'DISABLE_VIDEO_PARTICIPANT' : 'ENABLE_VIDEO_PARTICIPANT',
         targetIdentity: identity,
+        ...(disable ? { lockUntil } : {}),
       });
-      setHostDisabledVideoIdentities(prev =>
-        disable ? (prev.includes(identity) ? prev : [...prev, identity]) : prev.filter(id => id !== identity)
-      );
+      if (disable) {
+        setHostDisabledVideoUntilByIdentity((prev) => {
+          return { ...prev, [identity]: lockUntil };
+        });
+      } else {
+        setHostDisabledVideoUntilByIdentity((prev) => {
+          const next = { ...prev };
+          delete next[identity];
+          return next;
+        });
+        setHostDisabledVideoIdentities((prev) => prev.filter((id) => id !== identity));
+      }
     },
     [sendMeetingMsg],
   );
@@ -1649,8 +1832,12 @@ export function VideoConferenceComponent(props: {
           presenter: auth.presenter,
           livedocInstanceId: auth.livedocInstanceId,
           muteAllActive: auth.muteAllActive,
+          muteAllLockUntil: auth.muteAllLockUntil,
           hostMutedIdentities: auth.hostMutedIdentities,
+          hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
+          exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
           hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
+          hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
           captionsOn: auth.captionsOn,
         },
         [participant.identity],
@@ -1667,6 +1854,21 @@ export function VideoConferenceComponent(props: {
     (view: ViewMode) => {
       if (isHost) {
         authState.current.view = view;
+        const auth = authState.current;
+        sendMeetingMsg({
+          type: 'CORRECTION',
+          view: auth.view,
+          presenter: auth.presenter,
+          livedocInstanceId: auth.livedocInstanceId,
+          muteAllActive: auth.muteAllActive,
+          muteAllLockUntil: auth.muteAllLockUntil,
+          hostMutedIdentities: auth.hostMutedIdentities,
+          hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
+          exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
+          hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
+          hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
+          captionsOn: auth.captionsOn,
+        });
       }
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
     },
@@ -1710,11 +1912,37 @@ export function VideoConferenceComponent(props: {
           if (typeof msg.muteAllActive === 'boolean') {
             setMuteAllActive(msg.muteAllActive);
           }
+          if (typeof msg.muteAllLockUntil === 'number') {
+            setMuteAllLockUntil(msg.muteAllLockUntil > Date.now() ? msg.muteAllLockUntil : null);
+          } else if (msg.muteAllActive === false) {
+            setMuteAllLockUntil(null);
+          }
           if (Array.isArray(msg.hostMutedIdentities)) {
             setHostMutedIdentities(msg.hostMutedIdentities);
           }
+          if (msg.hostMutedUntilByIdentity && typeof msg.hostMutedUntilByIdentity === 'object') {
+            const now = Date.now();
+            const activeLocks = Object.fromEntries(
+              Object.entries(msg.hostMutedUntilByIdentity as Record<string, number>).filter(
+                ([, until]) => typeof until === 'number' && until > now,
+              ),
+            );
+            setHostMutedUntilByIdentity(activeLocks);
+          }
+          if (Array.isArray(msg.exemptFromMuteAllIdentities)) {
+            setExemptFromMuteAllIdentities(msg.exemptFromMuteAllIdentities);
+          }
           if (Array.isArray(msg.hostDisabledVideoIdentities)) {
             setHostDisabledVideoIdentities(msg.hostDisabledVideoIdentities);
+          }
+          if (msg.hostDisabledVideoUntilByIdentity && typeof msg.hostDisabledVideoUntilByIdentity === 'object') {
+            const now = Date.now();
+            const activeVideoLocks = Object.fromEntries(
+              Object.entries(msg.hostDisabledVideoUntilByIdentity as Record<string, number>).filter(
+                ([, until]) => typeof until === 'number' && until > now,
+              ),
+            );
+            setHostDisabledVideoUntilByIdentity(activeVideoLocks);
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
@@ -1761,24 +1989,42 @@ export function VideoConferenceComponent(props: {
           }
           handleClosedByHostExit();
         } else if (msg.type === 'MUTE_ALL') {
-          // Snapshot current mic state before muting (so UNMUTE_ALL can restore it).
-          // micEnabled is the React source of truth for the local mic toggle state.
-          preMuteAllMicRef.current = micEnabled;
-          room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
-          setMicEnabled(false);
+          const lockUntil =
+            typeof msg.lockUntil === 'number' && msg.lockUntil > Date.now()
+              ? msg.lockUntil
+              : Date.now() + HOST_MIC_LOCK_MS;
           setMuteAllActive(true);
+          setMuteAllLockUntil(lockUntil);
           setHostMutedIdentities([]);
+          setHostMutedUntilByIdentity({});
           setExemptFromMuteAllIdentities([]);
+          if (!isLocalControlOperator) {
+            // Snapshot only when we actually force-mute this client; UNMUTE_ALL
+            // must not turn on a mic that was already off or never snapshotted.
+            if (preMuteAllMicRef.current === null) {
+              preMuteAllMicRef.current = micEnabled;
+            }
+            room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
+            setMicEnabled(false);
+          }
         } else if (msg.type === 'UNMUTE_ALL') {
-          // Restore to the state the user had BEFORE the mute-all command
-          const restoreTo = preMuteAllMicRef.current ?? true;
+          // Restore only if MUTE_ALL previously captured this client's mic state.
+          const restoreTo = preMuteAllMicRef.current;
           preMuteAllMicRef.current = null;
-          room.localParticipant.setMicrophoneEnabled(restoreTo).catch(console.error);
-          setMicEnabled(restoreTo);
           setMuteAllActive(false);
+          setMuteAllLockUntil(null);
           setHostMutedIdentities([]);
+          setHostMutedUntilByIdentity({});
           setExemptFromMuteAllIdentities([]);
+          if (restoreTo !== null) {
+            room.localParticipant.setMicrophoneEnabled(restoreTo).catch(console.error);
+            setMicEnabled(restoreTo);
+          }
         } else if (msg.type === 'MUTE_PARTICIPANT') {
+          const lockUntil =
+            typeof msg.lockUntil === 'number' && msg.lockUntil > Date.now()
+              ? msg.lockUntil
+              : Date.now() + HOST_MIC_LOCK_MS;
           // If this is the targeted participant, mute their mic
           if (msg.targetIdentity === room.localParticipant.identity) {
             room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
@@ -1787,28 +2033,51 @@ export function VideoConferenceComponent(props: {
           // ALL clients track that this participant was force-muted by the host
           // This ensures every viewer sees the red indicator.
           if (msg.targetIdentity) {
+            setHostMutedUntilByIdentity((prev) => {
+              return { ...prev, [msg.targetIdentity]: lockUntil };
+            });
             setHostMutedIdentities(prev =>
               prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
             );
+            setExemptFromMuteAllIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
           }
         } else if (msg.type === 'UNMUTE_PARTICIPANT') {
           // Cancel host mic restriction only — do NOT turn on the participant's microphone
           if (msg.targetIdentity) {
+            setHostMutedUntilByIdentity((prev) => {
+              const next = { ...prev };
+              delete next[msg.targetIdentity];
+              return next;
+            });
             setHostMutedIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
+            setExemptFromMuteAllIdentities(prev =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            );
           }
         } else if (msg.type === 'DISABLE_VIDEO_PARTICIPANT') {
+          const lockUntil =
+            typeof msg.lockUntil === 'number' && msg.lockUntil > Date.now()
+              ? msg.lockUntil
+              : Date.now() + HOST_MIC_LOCK_MS;
           if (msg.targetIdentity === room.localParticipant.identity) {
             room.localParticipant.setCameraEnabled(false).catch(console.error);
             setCamEnabled(false);
           }
           if (msg.targetIdentity) {
+            setHostDisabledVideoUntilByIdentity((prev) => {
+              return { ...prev, [msg.targetIdentity]: lockUntil };
+            });
             setHostDisabledVideoIdentities(prev =>
               prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
             );
           }
         } else if (msg.type === 'ENABLE_VIDEO_PARTICIPANT') {
-          // Cancel host camera restriction only — do NOT turn on the participant's camera
           if (msg.targetIdentity) {
+            setHostDisabledVideoUntilByIdentity((prev) => {
+              const next = { ...prev };
+              delete next[msg.targetIdentity];
+              return next;
+            });
             setHostDisabledVideoIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
           }
         } else if (msg.type === 'RC_REQUEST') {
@@ -1870,9 +2139,37 @@ export function VideoConferenceComponent(props: {
             : msg.presenter
               ? [msg.presenter]
               : [];
+          const guestMuteAllActive =
+            typeof msg.muteAllActive === 'boolean' ? msg.muteAllActive : false;
+          const guestMuteAllLockUntil =
+            typeof msg.muteAllLockUntil === 'number' ? msg.muteAllLockUntil : null;
+          const guestHostMuted = Array.isArray(msg.hostMutedIdentities)
+            ? msg.hostMutedIdentities
+            : [];
+          const guestHostMutedUntil =
+            msg.hostMutedUntilByIdentity && typeof msg.hostMutedUntilByIdentity === 'object'
+              ? (msg.hostMutedUntilByIdentity as Record<string, number>)
+              : {};
+          const guestMuteAllExemptions = Array.isArray(msg.exemptFromMuteAllIdentities)
+            ? msg.exemptFromMuteAllIdentities
+            : [];
+          const guestHostDisabledVideo = Array.isArray(msg.hostDisabledVideoIdentities)
+            ? msg.hostDisabledVideoIdentities
+            : [];
+          const guestHostDisabledVideoUntil =
+            msg.hostDisabledVideoUntilByIdentity && typeof msg.hostDisabledVideoUntilByIdentity === 'object'
+              ? (msg.hostDisabledVideoUntilByIdentity as Record<string, number>)
+              : {};
           if (
             msg.view !== auth.view ||
             !presenterListsEqual(guestPresenters, auth.presenter) ||
+            guestMuteAllActive !== auth.muteAllActive ||
+            guestMuteAllLockUntil !== auth.muteAllLockUntil ||
+            !presenterListsEqual(guestHostMuted, auth.hostMutedIdentities) ||
+            JSON.stringify(guestHostMutedUntil) !== JSON.stringify(auth.hostMutedUntilByIdentity) ||
+            !presenterListsEqual(guestMuteAllExemptions, auth.exemptFromMuteAllIdentities) ||
+            !presenterListsEqual(guestHostDisabledVideo, auth.hostDisabledVideoIdentities) ||
+            JSON.stringify(guestHostDisabledVideoUntil) !== JSON.stringify(auth.hostDisabledVideoUntilByIdentity) ||
             livedocMismatch ||
             captionsMismatch
           ) {
@@ -1883,8 +2180,12 @@ export function VideoConferenceComponent(props: {
                 presenter: auth.presenter,
                 livedocInstanceId: auth.livedocInstanceId,
                 muteAllActive: auth.muteAllActive,
+                muteAllLockUntil: auth.muteAllLockUntil,
                 hostMutedIdentities: auth.hostMutedIdentities,
+                hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
+                exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
                 hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
+                hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
                 captionsOn: auth.captionsOn,
               },
               [senderIdentity],
@@ -1916,10 +2217,12 @@ export function VideoConferenceComponent(props: {
     approvedControllerIdentity,
     remoteControlRequest,
     micEnabled,
+    camEnabled,
     props.meetingOwnerMemberId,
     handleClosedByHostExit,
     presenterListsEqual,
     isLocalScreenShare,
+    isLocalControlOperator,
   ]);
 
   // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.
@@ -1940,8 +2243,12 @@ export function VideoConferenceComponent(props: {
             presenter: auth.presenter,
             livedocInstanceId: auth.livedocInstanceId,
             muteAllActive: auth.muteAllActive,
+            muteAllLockUntil: auth.muteAllLockUntil,
             hostMutedIdentities: auth.hostMutedIdentities,
+            hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
+            exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
             hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
+            hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
             captionsOn: auth.captionsOn,
           },
           [participant.identity],
@@ -1973,6 +2280,13 @@ export function VideoConferenceComponent(props: {
           presenter: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
+          muteAllActive,
+          muteAllLockUntil,
+          hostMutedIdentities,
+          hostMutedUntilByIdentity,
+          exemptFromMuteAllIdentities,
+          hostDisabledVideoIdentities,
+          hostDisabledVideoUntilByIdentity,
           captionsOn: captionsRunningRef.current,
         },
         [hostIdentity],
@@ -1987,8 +2301,16 @@ export function VideoConferenceComponent(props: {
     isLocalScreenShare,
     copresenterIdentities,
     livedocInstanceId,
+    muteAllActive,
+    muteAllLockUntil,
+    hostMutedIdentities,
+    hostMutedUntilByIdentity,
+    exemptFromMuteAllIdentities,
+    hostDisabledVideoIdentities,
+    hostDisabledVideoUntilByIdentity,
     sendMeetingMsg,
   ]);
+
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
   // Event delegation on document (capture phase) so it fires before LiveKit's own handlers.
   // Detects clicks on the mic-indicator region of a remote participant tile,
@@ -2705,6 +3027,7 @@ export function VideoConferenceComponent(props: {
   const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
   /** 共享方 LiveDoc / 纯 LiveDoc / 非共享方且左侧栏已折叠时显示浮窗 */
   const shouldShowFloatingWebcamPanel =
+    !isRecorderBot &&
     activeView !== 'webcam' &&
     !showWebcamSidebar &&
     (screenShareActive ||
@@ -3906,7 +4229,7 @@ export function VideoConferenceComponent(props: {
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
-            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''}`}
+            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''}`}
             style={{
               flex: 1,
               position: 'relative',
@@ -4036,7 +4359,7 @@ export function VideoConferenceComponent(props: {
             )}
 
             {/* Attendee sidebar collapse button (hidden during remote control for unobstructed view) */}
-            {hasScreenShare && !screenShareActive && !isRemoteControlMode && (
+            {hasScreenShare && !screenShareActive && !isRemoteControlMode && !isRecorderBot && (
               <button
                 className="webcam-collapse-toggle"
                 onClick={(e) => {
@@ -4400,6 +4723,9 @@ export function VideoConferenceComponent(props: {
               
               /* This pure CSS toggle prevents the catastrophic Layout Thrashing bug */
               .sky-meet-video-wrapper.sidebar-collapsed .lk-carousel {
+                display: none !important;
+              }
+              .sky-meet-video-wrapper.recorder-bot-view .lk-carousel {
                 display: none !important;
               }
 
@@ -5084,11 +5410,15 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-cam-indicator {
                pointer-events: auto;
             }
+            .floating-webcam-panel .kloud-custom-mic-indicator,
+            .floating-webcam-panel .kloud-custom-cam-indicator {
+               margin: 0 !important;
+            }
             .floating-grid-name-row {
                display: inline-flex;
                align-items: center;
                justify-content: flex-start;
-               gap: 3px;
+               gap: 2px;
                max-width: 100%;
                min-width: 0;
                padding: 2px 4px;
@@ -5566,6 +5896,16 @@ export function VideoConferenceComponent(props: {
               transform: scale(1.2);
             }
 
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator.self-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive {
+              min-width: 1.15rem;
+              min-height: 1.15rem;
+              padding: 2px;
+              margin: 0 !important;
+            }
+
             /* Custom injected camera indicator styling */
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator,
             .webcam-sidebar-panel .kloud-custom-cam-indicator,
@@ -5657,33 +5997,17 @@ export function VideoConferenceComponent(props: {
               transform: scale(1.2);
             }
 
-            /* ═══ Host/co-host: hover-to-reveal + visually separate mic/cam controls ═══ */
-            /* Add a visible gap between mic and cam so they don't look "connected" */
+            /* Host/co-host controls stay visible so mute/camera state is never ambiguous. */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
             .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
             .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
-            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive {
-              margin-right: 10px !important;
-            }
-
-            /* Hide mic control when mic is ON (not muted / not restricted) — show on hover */
-            .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
-            .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
-            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
-            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive:not([data-kloud-muted="true"]):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted) {
-              opacity: 0;
-              pointer-events: none;
-              transition: opacity 0.2s ease;
-            }
-
-            /* Hide cam control when cam is ON (not disabled / not restricted) — show on hover */
-            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
-            .webcam-sidebar-panel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
-            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled),
-            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.operator-interactive:not([data-kloud-video-disabled="true"]):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled) {
-              opacity: 0;
-              pointer-events: none;
-              transition: opacity 0.2s ease;
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.operator-interactive,
+            .lk-grid-layout-wrapper .kloud-custom-cam-indicator.operator-interactive,
+            .webcam-sidebar-panel .kloud-custom-cam-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive,
+            .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.operator-interactive {
+              opacity: 1 !important;
+              pointer-events: auto !important;
             }
 
             /* Self tile: always show own mic/cam controls (click to toggle) */
@@ -5811,8 +6135,8 @@ export function VideoConferenceComponent(props: {
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
           onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
-          isMutedByHost={hostMutedIdentities.includes(room.localParticipant.identity) && !(isHost || isCohost)}
-          isCamDisabledByHost={hostDisabledVideoIdentities.includes(room.localParticipant.identity) && !(isHost || isCohost)}
+          isMutedByHost={isLocalMicRestricted}
+          isCamDisabledByHost={isLocalCamRestricted}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
           onToggleCaptions={handleToggleCaptions}

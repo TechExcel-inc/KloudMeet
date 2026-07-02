@@ -144,11 +144,12 @@ export function PageClientImpl(props: {
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (isBot) return;
     const u = new URL(window.location.href);
     if (u.search) {
       replaceBrowserRoomUrl(effectiveRoomName);
     }
-  }, [effectiveRoomName]);
+  }, [effectiveRoomName, isBot]);
 
   const preJoinDefaults = React.useMemo(() => {
     let defaultUsername = '';
