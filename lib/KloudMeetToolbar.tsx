@@ -175,6 +175,12 @@ export function KloudMeetToolbar({
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
 
   useEffect(() => {
+    setVisible(true);
+  }, [activeView]);
+
+  const revealToolbar = () => setVisible(true);
+
+  useEffect(() => {
     try {
       const raw = localStorage.getItem('kloud-stt-settings');
       if (raw) {
@@ -515,13 +521,26 @@ export function KloudMeetToolbar({
       {/* Toast */}
       {toastMsg && <div className={styles.toast}>{toastMsg}</div>}
 
-      {/* Chevron hint when toolbar is hidden (desktop only; show/hide via LiveDoc click) */}
-      {!visible && !isMobile && (
-        <div className={styles.chevronHandle}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path d="M18 15l-6-6-6 6" />
-          </svg>
-        </div>
+      {!visible && (
+        <>
+          <div
+            className={styles.hoverZone}
+            onMouseEnter={revealToolbar}
+            onPointerDown={revealToolbar}
+            onTouchStart={revealToolbar}
+          />
+          <button
+            type="button"
+            className={styles.chevronHandle}
+            onClick={revealToolbar}
+            aria-label={t('toolbar.showToolbar') || 'Show toolbar'}
+            title={t('toolbar.showToolbar') || 'Show toolbar'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+          </button>
+        </>
       )}
 
       {/* Main toolbar */}
