@@ -163,3 +163,38 @@ export async function createLivedocInstance({
   }
   return String(result.data);
 }
+
+export async function keepLivedocInstanceActive({
+  userToken,
+  jitsiInstanceId,
+  livedocInstanceId,
+}: {
+  userToken: string;
+  jitsiInstanceId: string;
+  livedocInstanceId?: string | null;
+}): Promise<string> {
+  const response = await fetch('/api/livedoc/keepalive', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      UserToken: userToken,
+    },
+    body: JSON.stringify({
+      jitsiInstanceId,
+      livedocMeetingId: livedocInstanceId ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`livedoc_keepalive: ${response.status} ${text}`);
+  }
+
+  const result = (await response.json()) as CreateMeetingInstanceResponse;
+  if (result.code !== 0 || typeof result.data !== 'number' || !Number.isFinite(result.data)) {
+    throw new Error(
+      `livedoc_keepalive: ${result.msg ?? 'error'} (code=${String(result.code)})`,
+    );
+  }
+  return String(result.data);
+}

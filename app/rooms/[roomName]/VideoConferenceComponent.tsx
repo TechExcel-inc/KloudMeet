@@ -12,6 +12,7 @@ import { HelpModal } from '@/lib/HelpModal';
 import {
   createLivedocInstance,
   createOrUpdateInstantAccount,
+  keepLivedocInstanceActive,
   resolveJitsiInstanceId,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
@@ -1816,6 +1817,61 @@ export function VideoConferenceComponent(props: {
     isHost,
     jitsiInstanceId,
     props.userChoices.username,
+    sendMeetingMsg,
+  ]);
+
+  React.useEffect(() => {
+    if (!livekitConnected || meetingEndedByHost || !livedocInstanceId) return;
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const keepAlive = async () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      try {
+        const userToken = await createOrUpdateInstantAccount(props.userChoices.username);
+        const id = await keepLivedocInstanceActive({
+          userToken,
+          jitsiInstanceId,
+          livedocInstanceId,
+        });
+        if (!cancelled && id && id !== livedocInstanceId) {
+          setLivedocInstanceId(id);
+          if (isHost) {
+            authState.current.livedocInstanceId = id;
+            sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
+          }
+        }
+      } catch (error) {
+        console.warn('[LiveDoc keepalive] failed:', error);
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const LIVEDOC_KEEPALIVE_INTERVAL_MS = 15000;
+    keepAlive();
+    const interval = setInterval(keepAlive, LIVEDOC_KEEPALIVE_INTERVAL_MS);
+    const keepAliveOnResume = () => {
+      if (document.hidden) return;
+      keepAlive();
+    };
+    window.addEventListener('online', keepAlive);
+    document.addEventListener('visibilitychange', keepAliveOnResume);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+      window.removeEventListener('online', keepAlive);
+      document.removeEventListener('visibilitychange', keepAliveOnResume);
+    };
+  }, [
+    livekitConnected,
+    meetingEndedByHost,
+    livedocInstanceId,
+    jitsiInstanceId,
+    props.userChoices.username,
+    isHost,
     sendMeetingMsg,
   ]);
 
