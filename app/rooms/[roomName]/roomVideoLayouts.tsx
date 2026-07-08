@@ -890,19 +890,28 @@ export function LiveDocFloatingCollapsedAvatar({
   participant,
   name,
   style,
+  onClick,
+  selected,
 }: {
   participant: Participant;
   name: string;
   style: React.CSSProperties;
+  onClick?: (e: React.MouseEvent) => void;
+  selected?: boolean;
 }) {
   const isSpeaking = useIsSpeaking(participant);
   return (
     <div
-      className="floating-avatar-shell lk-participant-tile"
+      className={`floating-avatar-shell lk-participant-tile${selected ? ' selected' : ''}`}
       data-lk-speaking={isSpeaking}
       data-lk-source={Track.Source.Camera}
       data-lk-local-participant={participant.isLocal}
       style={style}
+      onClick={onClick}
+      onMouseDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
     >
       <div className="floating-avatar" title={name}>
         {getInitials(name || participant.identity || '?')}

@@ -72,6 +72,7 @@ import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import {
   LiveDocFloatingCollapsedAvatar,
   LiveDocFloatingExpandedParticipantLayout,
+  LiveDocFloatingGridTile,
   type KloudTileMediaRestrictionProps,
   KloudMobileRoomAudioRenderer,
   LiveDocWebcamSidebarTile,
@@ -3138,6 +3139,7 @@ export function VideoConferenceComponent(props: {
     'right-inset',
   );
   const [floatingExpanded, setFloatingExpanded] = React.useState(true);
+  const [floatingCollapsedPreviewId, setFloatingCollapsedPreviewId] = React.useState<string | null>(null);
   const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
   const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
@@ -3262,8 +3264,73 @@ export function VideoConferenceComponent(props: {
     Boolean(
       target.closest('.kloud-custom-mic-indicator') ||
         target.closest('.floating-chevron-btn') ||
+        target.closest('.floating-avatar-shell') ||
+        target.closest('.floating-avatar:not(.overflow-badge)') ||
+        target.closest('.floating-collapsed-preview') ||
         target.closest('button'),
     );
+
+  const handleCollapsedAvatarClick = React.useCallback((participantId: string) => {
+    setFloatingCollapsedPreviewId((prev) => (prev === participantId ? null : participantId));
+  }, []);
+
+  const shouldKeepFloatingCollapsedPreview = React.useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Element)) return false;
+    return Boolean(
+      target.closest('.floating-stacked-avatars') ||
+        target.closest('.floating-collapsed-preview') ||
+        target.closest('.floating-chevron-btn'),
+    );
+  }, []);
+
+  // 收起态预览：点击空白处关闭（pointerdown capture + LiveDoc iframe 点击消息）
+  React.useEffect(() => {
+    if (!floatingCollapsedPreviewId || floatingExpanded) return;
+
+    const close = () => setFloatingCollapsedPreviewId(null);
+
+    const onOutsidePointerDown = (e: PointerEvent) => {
+      if (shouldKeepFloatingCollapsedPreview(e.target)) return;
+      close();
+    };
+
+    const onLiveDocClick = (e: MessageEvent) => {
+      const payload = e.data;
+      const msgType =
+        typeof payload === 'object' && payload !== null && 'type' in payload
+          ? String((payload as { type?: unknown }).type ?? '')
+          : '';
+      if (msgType === 'Kloud-onMouseClick') {
+        close();
+      }
+    };
+
+    const onWindowBlur = () => {
+      window.setTimeout(() => {
+        const active = document.activeElement;
+        if (active instanceof HTMLIFrameElement) {
+          close();
+        }
+      }, 0);
+    };
+
+    document.addEventListener('pointerdown', onOutsidePointerDown, true);
+    window.addEventListener('message', onLiveDocClick);
+    window.addEventListener('blur', onWindowBlur);
+    return () => {
+      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
+      window.removeEventListener('message', onLiveDocClick);
+      window.removeEventListener('blur', onWindowBlur);
+    };
+  }, [floatingCollapsedPreviewId, floatingExpanded, shouldKeepFloatingCollapsedPreview]);
+
+  React.useEffect(() => {
+    if (!floatingCollapsedPreviewId) return;
+    if (floatingCollapsedPreviewId === 'local') return;
+    if (!room.remoteParticipants.has(floatingCollapsedPreviewId)) {
+      setFloatingCollapsedPreviewId(null);
+    }
+  }, [room.remoteParticipants, floatingCollapsedPreviewId]);
 
   const beginFloatingDrag = React.useCallback(
     (clientX: number, clientY: number) => {
@@ -3301,10 +3368,13 @@ export function VideoConferenceComponent(props: {
   const handleFloatingMouseDown = React.useCallback(
     (e: React.MouseEvent) => {
       if (shouldIgnoreFloatingDragTarget(e.target as Element)) return;
+      if (floatingCollapsedPreviewId && !floatingExpanded) {
+        setFloatingCollapsedPreviewId(null);
+      }
       beginFloatingDrag(e.clientX, e.clientY);
       e.preventDefault();
     },
-    [beginFloatingDrag],
+    [beginFloatingDrag, floatingCollapsedPreviewId, floatingExpanded],
   );
 
   const handleFloatingTouchStart = React.useCallback(
@@ -4614,6 +4684,7 @@ export function VideoConferenceComponent(props: {
                   }}
                 >
                   {!floatingExpanded && (
+                    <>
                     <div className="floating-collapsed-row">
                       <div className="floating-stacked-avatars">
                         {allParticipants.slice(0, maxVisible).map((p, i) => {
@@ -4621,13 +4692,22 @@ export function VideoConferenceComponent(props: {
                             p.id === 'local'
                               ? room.localParticipant
                               : room.remoteParticipants.get(p.id);
+                          const isPreviewSelected = floatingCollapsedPreviewId === p.id;
                           if (!participant) {
                             return (
                               <div
                                 key={p.id}
-                                className="floating-avatar"
+                                className={`floating-avatar${isPreviewSelected ? ' selected' : ''}`}
                                 title={p.name}
                                 style={{ zIndex: maxVisible - i }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleCollapsedAvatarClick(p.id);
+                                }}
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onTouchStart={(e) => e.stopPropagation()}
+                                role="button"
+                                tabIndex={0}
                               >
                                 {getInitials(p.name || p.id || '?')}
                               </div>
@@ -4639,6 +4719,11 @@ export function VideoConferenceComponent(props: {
                               participant={participant}
                               name={p.name}
                               style={{ zIndex: maxVisible - i }}
+                              selected={isPreviewSelected}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCollapsedAvatarClick(p.id);
+                              }}
                             />
                           );
                         })}
@@ -4652,6 +4737,7 @@ export function VideoConferenceComponent(props: {
                         className="floating-chevron-btn"
                         onClick={(e) => {
                           e.stopPropagation();
+                          setFloatingCollapsedPreviewId(null);
                           setFloatingExpanded(true);
                         }}
                         onMouseDown={(e) => e.stopPropagation()}
@@ -4669,6 +4755,30 @@ export function VideoConferenceComponent(props: {
                         </svg>
                       </button>
                     </div>
+                    {floatingCollapsedPreviewId && (() => {
+                      const previewEntry = allParticipants.find((p) => p.id === floatingCollapsedPreviewId);
+                      if (!previewEntry) return null;
+                      const previewParticipant =
+                        previewEntry.id === 'local'
+                          ? room.localParticipant
+                          : room.remoteParticipants.get(previewEntry.id);
+                      if (!previewParticipant) return null;
+                      return (
+                        <div
+                          className="floating-collapsed-preview"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onTouchStart={(e) => e.stopPropagation()}
+                        >
+                          <LiveDocFloatingGridTile
+                            participant={previewParticipant}
+                            name={previewEntry.name}
+                            size="hero"
+                            mediaRestrictions={floatingMediaRestrictions}
+                          />
+                        </div>
+                      );
+                    })()}
+                    </>
                   )}
                   {floatingExpanded &&
                     (() => {
@@ -4682,6 +4792,7 @@ export function VideoConferenceComponent(props: {
                               className="floating-chevron-btn up"
                               onClick={(e) => {
                                 e.stopPropagation();
+                                setFloatingCollapsedPreviewId(null);
                                 setFloatingExpanded(false);
                               }}
                               onMouseDown={(e) => e.stopPropagation()}
@@ -5163,6 +5274,25 @@ export function VideoConferenceComponent(props: {
             .floating-stacked-avatars .floating-avatar:hover,
             .floating-stacked-avatars .floating-avatar-shell:hover {
                transform: scale(1.15);
+            }
+            .floating-stacked-avatars .floating-avatar:not(.overflow-badge),
+            .floating-stacked-avatars .floating-avatar-shell {
+               cursor: pointer;
+            }
+            .floating-stacked-avatars .floating-avatar.selected,
+            .floating-stacked-avatars .floating-avatar-shell.selected .floating-avatar {
+               border-color: #60a5fa;
+               box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.45);
+            }
+            .floating-collapsed-preview {
+               margin-top: 6px;
+               padding-top: 6px;
+               border-top: 1px solid rgba(255,255,255,0.08);
+               width: var(--floating-hero-col-w, 132px);
+               cursor: default;
+            }
+            .floating-webcam-panel:not(.expanded):has(.floating-collapsed-preview) {
+               padding-bottom: 8px;
             }
             .floating-avatar-shell.lk-participant-tile {
                width: 30px;
