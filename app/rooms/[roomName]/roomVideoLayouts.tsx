@@ -1,12 +1,20 @@
 'use client';
 
 import React from 'react';
-import { Participant, Room, RoomEvent, Track } from 'livekit-client';
 import {
+  Participant,
+  RemoteParticipant,
+  RemoteTrackPublication,
+  Room,
+  RoomEvent,
+  Track,
+} from 'livekit-client';
+import {
+  AudioTrack,
   ConnectionStateToast,
   ParticipantTile,
-  RoomAudioRenderer,
   useIsSpeaking,
+  useRoomContext,
   useTracks,
   VideoTrack,
 } from '@livekit/components-react';
@@ -171,8 +179,116 @@ export function calcGridCols(count: number): number {
 
 export const MAX_VISIBLE = 16;
 
+const MOBILE_AUDIO_SOURCES = new Set<Track.Source>([
+  Track.Source.Microphone,
+  Track.Source.ScreenShareAudio,
+]);
+
+function collectMobileRemoteAudioTracks(room: Room) {
+  const refs: Array<{
+    participant: RemoteParticipant;
+    publication: RemoteTrackPublication;
+    source: Track.Source;
+  }> = [];
+
+  room.remoteParticipants.forEach((participant) => {
+    participant.audioTrackPublications.forEach((publication) => {
+      if (!MOBILE_AUDIO_SOURCES.has(publication.source)) return;
+      if (!publication.isSubscribed || !publication.track) return;
+      refs.push({
+        participant,
+        publication,
+        source: publication.source,
+      });
+    });
+  });
+
+  return refs;
+}
+
+/** Mobile-only: force-subscribe every remote mic and render one AudioTrack per participant. */
+export function KloudMobileRoomAudioRenderer() {
+  const room = useRoomContext();
+  const [syncToken, setSyncToken] = React.useState(0);
+
+  React.useEffect(() => {
+    const ensureRemoteAudio = () => {
+      let requestedSubscription = false;
+      room.remoteParticipants.forEach((participant) => {
+        participant.audioTrackPublications.forEach((publication) => {
+          if (!MOBILE_AUDIO_SOURCES.has(publication.source)) return;
+          if (!publication.isSubscribed) {
+            publication.setSubscribed(true);
+            requestedSubscription = true;
+          }
+        });
+      });
+
+      void room.startAudio().catch(() => null);
+      if (requestedSubscription) {
+        setSyncToken((v) => v + 1);
+      }
+    };
+
+    const syncRemoteAudio = () => {
+      ensureRemoteAudio();
+      setSyncToken((v) => v + 1);
+    };
+
+    syncRemoteAudio();
+
+    const events = [
+      RoomEvent.ParticipantConnected,
+      RoomEvent.ParticipantDisconnected,
+      RoomEvent.TrackPublished,
+      RoomEvent.TrackUnpublished,
+      RoomEvent.TrackSubscribed,
+      RoomEvent.TrackUnsubscribed,
+      RoomEvent.TrackSubscriptionStatusChanged,
+      RoomEvent.TrackMuted,
+      RoomEvent.TrackUnmuted,
+      RoomEvent.Reconnected,
+      RoomEvent.ConnectionStateChanged,
+    ] as const;
+
+    events.forEach((event) => room.on(event, syncRemoteAudio));
+
+    const intervalId = window.setInterval(ensureRemoteAudio, 4000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        syncRemoteAudio();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      events.forEach((event) => room.off(event, syncRemoteAudio));
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [room]);
+
+  const audioTracks = React.useMemo(
+    () => collectMobileRemoteAudioTracks(room),
+    [room, syncToken],
+  );
+
+  return (
+    <div style={{ display: 'none' }} aria-hidden="true">
+      {audioTracks.map(({ participant, publication, source }) => (
+        <AudioTrack
+          key={`${participant.identity}-${publication.trackSid}`}
+          trackRef={{ participant, publication, source }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function MobileVideoLayout() {
   const { t } = useI18n();
+  const room = useRoomContext();
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
@@ -217,6 +333,52 @@ export function MobileVideoLayout() {
     return () => observer.disconnect();
   }, [visibleTracks.length]);
 
+  // Mobile browsers often pause <video> after backgrounding or reconnecting.
+  // Proactively resume playback (same recovery pattern as web VideoConference + startAudio).
+  React.useEffect(() => {
+    const container = gridRef.current;
+    if (!container) return;
+
+    let playTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const playVideos = () => {
+      container.querySelectorAll('video').forEach((video) => {
+        if (video.paused) {
+          video.play().catch(() => null);
+        }
+      });
+    };
+
+    const schedulePlay = () => {
+      if (playTimer) clearTimeout(playTimer);
+      requestAnimationFrame(playVideos);
+      playTimer = setTimeout(playVideos, 350);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      schedulePlay();
+    };
+
+    const handleMediaRecovery = () => schedulePlay();
+
+    schedulePlay();
+    document.addEventListener('visibilitychange', handleVisibility);
+    room.on(RoomEvent.Reconnected, handleMediaRecovery);
+    room.on(RoomEvent.TrackSubscribed, handleMediaRecovery);
+    room.on(RoomEvent.TrackUnmuted, handleMediaRecovery);
+    room.on(RoomEvent.LocalTrackPublished, handleMediaRecovery);
+
+    return () => {
+      if (playTimer) clearTimeout(playTimer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      room.off(RoomEvent.Reconnected, handleMediaRecovery);
+      room.off(RoomEvent.TrackSubscribed, handleMediaRecovery);
+      room.off(RoomEvent.TrackUnmuted, handleMediaRecovery);
+      room.off(RoomEvent.LocalTrackPublished, handleMediaRecovery);
+    };
+  }, [room, visibleTracks.length]);
+
   // 不滚动模式：用 CSS Grid 填满父容器高度
   const gridStyle: React.CSSProperties = isOver && expanded
     ? {
@@ -243,8 +405,27 @@ export function MobileVideoLayout() {
       boxSizing: 'border-box',
     };
 
+  const handleMobileGridBlankTap = React.useCallback((e: React.PointerEvent) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (
+      target.closest(
+        'button, a, input, select, textarea, .kloud-custom-mic-indicator, .kloud-custom-cam-indicator, .lk-device-menu',
+      )
+    ) {
+      return;
+    }
+    window.dispatchEvent(
+      new CustomEvent('kloud-mobile-blank-tap', { detail: { target } }),
+    );
+  }, []);
+
   return (
-    <div className="lk-mobile-scroll-grid" style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}>
+    <div
+      className="lk-mobile-scroll-grid"
+      onPointerDown={handleMobileGridBlankTap}
+      style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}
+    >
       <div ref={gridRef} style={gridStyle}>
         {visibleTracks.map((track, i) => (
           <div
@@ -321,7 +502,6 @@ export function MobileVideoLayout() {
         </button>
       )}
 
-      <RoomAudioRenderer />
       <ConnectionStateToast />
     </div>
   );

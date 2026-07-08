@@ -276,6 +276,8 @@
   "toolbar.chat": "채팅",
   "toolbar.clickToPlay": "클릭하여 화면 공유 재생",
   "toolbar.clickToWatch": "클릭하여 참가자의 화면을 시청하세요",
+  "toolbar.clickToEnableAudio": "탭하여 오디오 켜기",
+  "toolbar.clickToHearOthers": "브라우저 정책상 탭한 후 다른 참가자의 음성이 재생됩니다",
   "toolbar.viewingAttendeeScreen": "{name}님의 화면을 시청 중.",
   "toolbar.previewAnotherTab": "미리보기: 다른 탭.",
   "toolbar.recordingHeader": "녹화",

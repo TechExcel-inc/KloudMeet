@@ -4,12 +4,19 @@ import { authFetch, getKloudSessionBearer } from '@/lib/kloudSession';
 export const PREJOIN_PERSONAL_ROOM_STORAGE_KEY = 'kloud-prejoin-personal-room-enabled';
 export const PREJOIN_ORIGINAL_ROOM_SESSION_KEY = 'kloud-prejoin-original-room';
 
-export function readPrejoinPersonalRoomEnabled(): boolean {
+/** null = no saved preference yet */
+export function readPrejoinPersonalRoomPreference(): boolean | null {
   try {
-    return localStorage.getItem(PREJOIN_PERSONAL_ROOM_STORAGE_KEY) === 'true';
+    const value = localStorage.getItem(PREJOIN_PERSONAL_ROOM_STORAGE_KEY);
+    if (value === null) return null;
+    return value === 'true';
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function readPrejoinPersonalRoomEnabled(): boolean {
+  return readPrejoinPersonalRoomPreference() === true;
 }
 
 export function writePrejoinPersonalRoomEnabled(enabled: boolean): void {

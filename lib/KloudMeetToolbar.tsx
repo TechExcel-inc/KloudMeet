@@ -168,6 +168,12 @@ export function KloudMeetToolbar({
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
   const activeSheetRef = useRef<ActionSheetType>(null);
   activeSheetRef.current = activeSheet;
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  const chatOpenRef = useRef(chatOpen);
+  chatOpenRef.current = chatOpen;
+  const attendeeOpenRef = useRef(attendeeOpen);
+  attendeeOpenRef.current = attendeeOpen;
   const [showSTTSettings, setShowSTTSettings] = useState(false);
   const [showCCSettings, setShowCCSettings] = useState(false);
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
@@ -275,7 +281,7 @@ export function KloudMeetToolbar({
     // LiveDoc iframe drives chrome via Kloud-onMouseClick (200ms debounce in plugin).
     if (activeView === 'liveDoc') return;
 
-    // Mobile: tap to show/hide toolbar (non-LiveDoc views only).
+    // Mobile webcam / screen share: tap blank area to hide toolbar + overlays (like LiveDoc).
     let hideTimer: ReturnType<typeof setTimeout> | null = null;
     let lastTouchTime = 0;
 
@@ -292,7 +298,46 @@ export function KloudMeetToolbar({
       clearTimeout(hideTimer);
     }
 
-    const handleBodyClick = (e: MouseEvent | TouchEvent) => {
+    const isChromeTarget = (target: Element) => !!(
+      toolbarRef.current?.contains(target) ||
+      target.closest?.('#mobileTopRightBtn') ||
+      target.closest?.('.lk-device-menu') ||
+      target.closest?.('.lk-menu') ||
+      target.closest?.('.chat-overlay-panel') ||
+      target.closest?.(`.${styles.actionSheetOverlay}`) ||
+      target.closest?.(`.${styles.actionSheet}`) ||
+      target.closest?.('.kloud-modal')
+    );
+
+    const isInteractiveVideoTarget = (target: Element) => !!(
+      target.closest?.(
+        'button, a, input, select, textarea, .kloud-custom-mic-indicator, .kloud-custom-cam-indicator',
+      )
+    );
+
+    const hideMobileChrome = () => {
+      if (chatOpenRef.current) handleToggleChat();
+      if (attendeeOpenRef.current) handleToggleAttendee();
+      if (activeSheetRef.current) setActiveSheet(null);
+      closeInviteMenu();
+      setVisible(false);
+    };
+
+    const handleMobileBlankTap = (target: Element) => {
+      if (isChromeTarget(target) || isInteractiveVideoTarget(target)) {
+        if (visibleRef.current) startTimer();
+        return;
+      }
+
+      if (!visibleRef.current) {
+        setVisible(true);
+        return;
+      }
+
+      hideMobileChrome();
+    };
+
+    const handleBodyClick = (e: MouseEvent | TouchEvent | PointerEvent) => {
       if (e.type === 'touchstart') {
         lastTouchTime = Date.now();
       } else if (e.type === 'click') {
@@ -301,35 +346,41 @@ export function KloudMeetToolbar({
         }
       }
 
-      if (!visible) {
-        setVisible(true);
-        return;
-      }
-
-      const target = e.target as Element;
-      const isToolbarArea = !!(
-        toolbarRef.current?.contains(target) ||
-        target.closest?.('#mobileTopRightBtn') ||
-        target.closest?.('.lk-device-menu') ||
-        target.closest?.('.lk-menu') ||
-        target.closest?.(`.${styles.actionSheetOverlay}`) ||
-        target.closest?.(`.${styles.actionSheet}`)
-      );
-
-      if (isToolbarArea) {
-        startTimer();
-        return;
-      }
-
-      setVisible(false);
+      handleMobileBlankTap(e.target as Element);
     };
 
+    const handleBlankTapEvent = (e: Event) => {
+      const detail = (e as CustomEvent<{ target?: Element }>).detail;
+      handleMobileBlankTap(detail?.target ?? (document.body as Element));
+    };
+
+    const attachVideoWrapper = () => {
+      const wrapper = document.querySelector('.sky-meet-video-wrapper');
+      if (!wrapper) return undefined;
+      const handler = (e: Event) => handleBodyClick(e as PointerEvent);
+      wrapper.addEventListener('pointerdown', handler, { capture: true });
+      return () => wrapper.removeEventListener('pointerdown', handler, { capture: true });
+    };
+
+    window.addEventListener('kloud-mobile-blank-tap', handleBlankTapEvent);
     document.addEventListener('click', handleBodyClick, { capture: true });
     document.addEventListener('touchstart', handleBodyClick, { capture: true, passive: true });
+    document.addEventListener('pointerdown', handleBodyClick, { capture: true });
+
+    let detachVideoWrapper = attachVideoWrapper();
+    const attachTimer = window.setTimeout(() => {
+      detachVideoWrapper?.();
+      detachVideoWrapper = attachVideoWrapper();
+    }, 400);
+
     return () => {
       if (hideTimer) clearTimeout(hideTimer);
+      window.clearTimeout(attachTimer);
+      detachVideoWrapper?.();
+      window.removeEventListener('kloud-mobile-blank-tap', handleBlankTapEvent);
       document.removeEventListener('click', handleBodyClick, { capture: true });
       document.removeEventListener('touchstart', handleBodyClick, { capture: true });
+      document.removeEventListener('pointerdown', handleBodyClick, { capture: true });
     };
   }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen]);
 

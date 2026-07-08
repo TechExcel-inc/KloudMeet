@@ -282,6 +282,8 @@
   "toolbar.chat": "聊天",
   "toolbar.clickToPlay": "点击播放屏幕共享",
   "toolbar.clickToWatch": "点击即可观看对方的屏幕",
+  "toolbar.clickToEnableAudio": "点击开启声音",
+  "toolbar.clickToHearOthers": "浏览器需要您点击后才能播放他人语音",
   "toolbar.viewingAttendeeScreen": "正在观看 {name} 的屏幕。",
   "toolbar.previewAnotherTab": "预览：另一个标签页。",
   "toolbar.recordingHeader": "录制",

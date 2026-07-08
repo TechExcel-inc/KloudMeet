@@ -36,7 +36,6 @@ import {
   VideoTrack,
   useTracks,
   ParticipantTile,
-  RoomAudioRenderer,
   ConnectionStateToast,
   TrackMutedIndicator,
   useIsSpeaking,
@@ -53,6 +52,8 @@ import {
   ConnectionState,
   RemoteParticipant,
   Participant,
+  RemoteTrack,
+  RemoteTrackPublication,
   TrackPublishDefaults,
   VideoCaptureOptions,
   ScreenShareCaptureOptions,
@@ -72,6 +73,7 @@ import {
   LiveDocFloatingCollapsedAvatar,
   LiveDocFloatingExpandedParticipantLayout,
   type KloudTileMediaRestrictionProps,
+  KloudMobileRoomAudioRenderer,
   LiveDocWebcamSidebarTile,
   MAX_VISIBLE,
   MobileVideoLayout,
@@ -152,6 +154,9 @@ export function VideoConferenceComponent(props: {
   const isToolbarMobile = useToolbarIsMobile();
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
   const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
+  const [canPlaybackAudio, setCanPlaybackAudio] = React.useState(() =>
+    typeof window !== 'undefined' ? !isToolbarMobileUserAgent() : true,
+  );
 
   const [showMeetingReadyModal, setShowMeetingReadyModal] = React.useState(false);
   const [isRecording, setIsRecording] = React.useState(false);
@@ -728,6 +733,10 @@ export function VideoConferenceComponent(props: {
                 if (props.userChoices.audioEnabled) {
                   room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
                 }
+
+                if (isToolbarMobile) {
+                  room.startAudio().catch(() => null);
+                }
               };
               enableDevices();
             })
@@ -944,6 +953,71 @@ export function VideoConferenceComponent(props: {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [room]);
+
+  // ── 移动端远程音频：与 Web 端 RoomAudioRenderer 对齐，但单独挂载并主动 startAudio ──
+  // iOS/微信等在他人入会或轨道订阅后常需再次 startAudio，否则听不到对方声音。
+  React.useEffect(() => {
+    if (!isToolbarMobile) return;
+
+    setCanPlaybackAudio(room.canPlaybackAudio);
+
+    const recoverRemoteAudio = () => {
+      room.startAudio()
+        .then(() => setCanPlaybackAudio(true))
+        .catch(() => setCanPlaybackAudio(room.canPlaybackAudio));
+    };
+
+    const handleTrackSubscribed = (
+      _track: RemoteTrack,
+      publication: RemoteTrackPublication,
+      participant: RemoteParticipant,
+    ) => {
+      if (publication.kind === Track.Kind.Audio && participant.identity !== room.localParticipant.identity) {
+        recoverRemoteAudio();
+      }
+    };
+
+    const handleParticipantConnected = () => {
+      room.remoteParticipants.forEach((participant) => {
+        participant.audioTrackPublications.forEach((publication) => {
+          if (
+            publication.source === Track.Source.Microphone ||
+            publication.source === Track.Source.ScreenShareAudio
+          ) {
+            if (!publication.isSubscribed) {
+              publication.setSubscribed(true);
+            }
+          }
+        });
+      });
+      recoverRemoteAudio();
+    };
+
+    const handleAudioPlaybackStatusChanged = (allowed: boolean) => {
+      setCanPlaybackAudio(allowed);
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        recoverRemoteAudio();
+      }
+    };
+
+    recoverRemoteAudio();
+    room.on(RoomEvent.ParticipantConnected, handleParticipantConnected);
+    room.on(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+    room.on(RoomEvent.Reconnected, recoverRemoteAudio);
+    room.on(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
+      room.off(RoomEvent.TrackSubscribed, handleTrackSubscribed);
+      room.off(RoomEvent.Reconnected, recoverRemoteAudio);
+      room.off(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [isToolbarMobile, room]);
 
   // ── Wake Lock: 防止手机息屏中断音频 ──
   // 在支持 Wake Lock API 的浏览器上，保持屏幕唤醒以避免
@@ -3434,8 +3508,9 @@ export function VideoConferenceComponent(props: {
   );
 
   return (
-    <div className="lk-room-container" style={{ position: 'relative', height: '100%' }}>
+    <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
+        {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
         <KeyboardShortcuts />
 
         {/* ── Host ended meeting (remote end or END_MEETING) ── */}
@@ -3748,6 +3823,9 @@ export function VideoConferenceComponent(props: {
                             }
                             if (props.userChoices.audioEnabled) {
                               room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                            }
+                            if (isToolbarMobileUserAgent()) {
+                              room.startAudio().catch(() => null);
                             }
                           };
                           enableRetryDevices();
@@ -4294,6 +4372,8 @@ export function VideoConferenceComponent(props: {
           >
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
               <MobileVideoLayout />
+            ) : isToolbarMobile && !hasScreenShare ? (
+              <ConnectionStateToast />
             ) : (
               <VideoConferenceErrorBoundary>
                 <VideoConference
@@ -5809,10 +5889,12 @@ export function VideoConferenceComponent(props: {
 
             /* Completely hide LiveKit's default mic/camera muted indicators */
             .lk-grid-layout-wrapper .lk-track-muted-indicator-microphone,
+            .lk-mobile-scroll-grid .lk-track-muted-indicator-microphone,
             .webcam-sidebar-panel .lk-track-muted-indicator-microphone,
             .floating-webcam-panel .lk-track-muted-indicator-microphone,
             .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-microphone,
             .lk-grid-layout-wrapper .lk-track-muted-indicator-camera,
+            .lk-mobile-scroll-grid .lk-track-muted-indicator-camera,
             .webcam-sidebar-panel .lk-track-muted-indicator-camera,
             .floating-webcam-panel .lk-track-muted-indicator-camera,
             .sky-meet-video-wrapper .lk-carousel .lk-track-muted-indicator-camera {
@@ -5825,6 +5907,7 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-muted="false"],
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-muted="false"],
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
             .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
             .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"],
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-video-disabled="false"] {
@@ -5836,6 +5919,7 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]),
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
             .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
             .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]),
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not([data-kloud-host-restricted="true"]) {
@@ -5955,15 +6039,22 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
             .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive,
             .floating-webcam-panel .kloud-custom-mic-indicator.self-interactive,
-            .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive {
+            .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator.operator-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator.operator-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator.self-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator.self-interactive {
               min-width: 1.15rem;
               min-height: 1.15rem;
+              width: 1.15rem;
+              height: 1.15rem;
               padding: 2px;
               margin: 0 !important;
             }
 
             /* Custom injected camera indicator styling */
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator,
             .webcam-sidebar-panel .kloud-custom-cam-indicator,
             .floating-webcam-panel .kloud-custom-cam-indicator,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator {
@@ -5979,10 +6070,12 @@ export function VideoConferenceComponent(props: {
             }
 
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
             .webcam-sidebar-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
             .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
             .webcam-sidebar-panel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
             .floating-webcam-panel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
@@ -6101,10 +6194,87 @@ export function VideoConferenceComponent(props: {
               opacity: 1 !important;
               pointer-events: auto !important;
             }
+
+            /* Mobile grid: keep metadata row compact so cam/mic icons match */
+            .lk-mobile-scroll-grid .lk-participant-metadata-item {
+              display: inline-flex !important;
+              align-items: center !important;
+              gap: 3px !important;
+              max-width: 100% !important;
+              min-width: 0 !important;
+              line-height: 1 !important;
+            }
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator svg,
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator svg {
+              width: 100% !important;
+              height: 100% !important;
+              max-width: 1.15rem;
+              max-height: 1.15rem;
+            }
+
+            /* Mobile: top-level RoomAudioRenderer plays remote audio; hide duplicates inside hidden video wrapper */
+            .kloud-mobile-meeting .sky-meet-video-wrapper audio {
+              display: none !important;
+            }
           `}</style>
         </div>
 
         {/* Captions overlay — visible to all participants when host enables captions */}
+        {/* 移动端：浏览器拦截远程音频时提示点击开启（Web 端无此层） */}
+        {isToolbarMobile && !canPlaybackAudio && room.state === ConnectionState.Connected && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 11900,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(4px)',
+              WebkitBackdropFilter: 'blur(4px)',
+              pointerEvents: 'auto',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                room.startAudio()
+                  .then(() => setCanPlaybackAudio(true))
+                  .catch(() => setCanPlaybackAudio(room.canPlaybackAudio));
+              }}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 14,
+                background: 'rgba(255,255,255,0.12)',
+                border: '2px solid rgba(255,255,255,0.55)',
+                borderRadius: 20,
+                padding: '28px 40px',
+                cursor: 'pointer',
+                WebkitTapHighlightColor: 'transparent',
+                backdropFilter: 'blur(8px)',
+                touchAction: 'manipulation',
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
+                <path
+                  d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"
+                  fill="white"
+                />
+              </svg>
+              <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
+                {t('toolbar.clickToEnableAudio')}
+              </span>
+              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, textAlign: 'center', maxWidth: 260 }}>
+                {t('toolbar.clickToHearOthers')}
+              </span>
+            </button>
+          </div>
+        )}
+
         <CaptionsOverlay captionsInfo={captionsInfo} bottomOffset={isToolbarMobile ? 110 : 90} />
 
         {/* Custom toolbar overlay */}

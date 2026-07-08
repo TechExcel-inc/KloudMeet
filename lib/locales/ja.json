@@ -276,6 +276,8 @@
   "toolbar.chat": "チャット",
   "toolbar.clickToPlay": "クリックして画面共有を再生",
   "toolbar.clickToWatch": "クリックして参加者の画面を視聴します",
+  "toolbar.clickToEnableAudio": "タップして音声を有効にする",
+  "toolbar.clickToHearOthers": "ブラウザの制限により、タップ後に他の参加者の音声が再生されます",
   "toolbar.viewingAttendeeScreen": "{name} の画面を視聴中。",
   "toolbar.previewAnotherTab": "プレビュー：別のタブ。",
   "toolbar.recordingHeader": "録画",

@@ -293,6 +293,8 @@
   "toolbar.chat": "Chat",
   "toolbar.clickToPlay": "Click to play screen share",
   "toolbar.clickToWatch": "Click to watch the participant's screen",
+  "toolbar.clickToEnableAudio": "Tap to enable audio",
+  "toolbar.clickToHearOthers": "Your browser needs a tap before others' voices can play",
   "toolbar.viewingAttendeeScreen": "Viewing {name}'s screen.",
   "toolbar.previewAnotherTab": "Preview: Another Tab.",
   "toolbar.recordingHeader": "Recording",

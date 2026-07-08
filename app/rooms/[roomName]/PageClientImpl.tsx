@@ -79,6 +79,7 @@ import {
   cancelAbandonedInstantMeeting,
   createInstantMeetingRoom,
   readPrejoinPersonalRoomEnabled,
+  readPrejoinPersonalRoomPreference,
 } from '@/lib/prejoinPersonalRoom';
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
@@ -192,12 +193,9 @@ export function PageClientImpl(props: {
   const [showHelp, setShowHelp] = React.useState(false);
   const [showSettingsModal, setShowSettingsModal] = React.useState(false);
   const [showProfileModal, setShowProfileModal] = React.useState(false);
-  const [personalRoomUrlEnabled, setPersonalRoomUrlEnabled] = React.useState(false);
-  // Restore the user's last choice for "Enable my meeting room ID" so it persists
-  // across sessions (writes happen in PrejoinPersonalRoomCheckbox on every change).
-  React.useEffect(() => {
-    setPersonalRoomUrlEnabled(readPrejoinPersonalRoomEnabled());
-  }, []);
+  const [personalRoomUrlEnabled, setPersonalRoomUrlEnabled] = React.useState(() =>
+    typeof window !== 'undefined' ? readPrejoinPersonalRoomEnabled() : false,
+  );
   const [hostPersonalRoomId, setHostPersonalRoomId] = React.useState('');
   const creatingNewMeetingRef = React.useRef(false);
   const personalRoomAutoEnabledRef = React.useRef(false);
@@ -445,11 +443,9 @@ export function PageClientImpl(props: {
     } catch {
       /* ignore */
     }
-    if (
-      !hostPersonalRoomId ||
-      routeRoomName.toLowerCase() !== hostPersonalRoomId.toLowerCase()
-    ) {
-      setPersonalRoomUrlEnabled(false);
+    if (!hostPersonalRoomId) return;
+    if (routeRoomName.toLowerCase() !== hostPersonalRoomId.toLowerCase()) {
+      setPersonalRoomUrlEnabled(readPrejoinPersonalRoomEnabled());
     }
   }, [routeRoomName, hostPersonalRoomId]);
 
@@ -461,7 +457,9 @@ export function PageClientImpl(props: {
     if (routeRoomName.toLowerCase() !== hostPersonalRoomId.toLowerCase()) return;
     if (effectiveRoomName.toLowerCase() !== routeRoomName.toLowerCase()) return;
     personalRoomAutoEnabledRef.current = true;
-    setPersonalRoomUrlEnabled(true);
+    if (readPrejoinPersonalRoomPreference() !== false) {
+      setPersonalRoomUrlEnabled(true);
+    }
   }, [hostPersonalRoomId, routeRoomName, effectiveRoomName, connectionDetails]);
 
   React.useEffect(() => {
