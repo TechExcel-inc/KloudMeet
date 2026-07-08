@@ -60,3 +60,6 @@ KloudMeet.env/
 
 # Server access info (local only)
 .server-access
+
+# Cursor local rules (personal, never commit)
+.cursor/rules/

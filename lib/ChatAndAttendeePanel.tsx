@@ -130,17 +130,21 @@ export function AttendeePanel({
   const participants = useParticipants();
   const [searchQuery, setSearchQuery] = useState('');
   const [showHostPicker, setShowHostPicker] = useState(false);
-  const [showHostMenu, setShowHostMenu] = useState(false);
+  const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
   const [confirmHostId, setConfirmHostId] = useState<string | null>(null);
 
-  // Close host menu on outside click
+  // 点击外部关闭三点菜单（capture 阶段，避免父级 stopPropagation 拦截）
   useEffect(() => {
-    if (!showHostMenu) return;
-    const close = () => setShowHostMenu(false);
-    document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
-  }, [showHostMenu]);
+    if (!openMenuIdentity) return;
+    const close = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('.kloud-more-menu-anchor')) return;
+      setOpenMenuIdentity(null);
+    };
+    document.addEventListener('mousedown', close, true);
+    return () => document.removeEventListener('mousedown', close, true);
+  }, [openMenuIdentity]);
 
   const getRoles = (identity: string): { label: string; cls: string }[] => {
     const roles: { label: string; cls: string }[] = [];
@@ -349,36 +353,13 @@ export function AttendeePanel({
                 </div>
               )}
 
-              {/* Host row: presenter toggle + ⋯ for transfer host */}
-              {isThisHost && canManageRoles && (
+              {/* Host / 非本地参会者：角色操作统一放入 ⋯ 菜单 */}
+              {canManageRoles && (isThisHost || (!isLocalParticipant && !isThisHost)) && (
                 <div className="kloud-attendee-actions">
-                  {isLocalParticipant && (
-                    <button
-                      className={`kloud-role-icon-btn ${isThisCopresenter ? 'checked' : ''}`}
-                      onClick={() => isThisCopresenter ? onRemoveCopresenter?.(p.identity) : onAddCopresenter?.(p.identity)}
-                      title={isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                        <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                        <path d="M19 10v1a7 7 0 01-14 0v-1" />
-                        <line x1="12" y1="18" x2="12" y2="23" />
-                        <line x1="8" y1="23" x2="16" y2="23" />
-                      </svg>
-                      {isThisCopresenter && (
-                        <span className="kloud-check-badge">
-                          <svg viewBox="0 0 16 16" fill="none" width="10" height="10">
-                            <circle cx="8" cy="8" r="8" fill="#22c55e" />
-                            <path d="M4.5 8.5l2 2 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </span>
-                      )}
-                    </button>
-                  )}
-                  {/* ⋯ menu on host row */}
                   <div className="kloud-more-menu-anchor" onMouseDown={(e) => e.stopPropagation()}>
                     <button
                       className="kloud-role-icon-btn"
-                      onClick={() => setShowHostMenu(!showHostMenu)}
+                      onClick={() => setOpenMenuIdentity(openMenuIdentity === p.identity ? null : p.identity)}
                       title="More options"
                     >
                       <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
@@ -387,69 +368,91 @@ export function AttendeePanel({
                         <circle cx="19" cy="12" r="2" />
                       </svg>
                     </button>
-                    {showHostMenu && (
+                    {openMenuIdentity === p.identity && (
                       <div className="kloud-more-dropdown" onMouseDown={(e) => e.stopPropagation()}>
-                        <button
-                          className="kloud-more-dropdown-item"
-                          onClick={() => {
-                            setShowHostMenu(false);
-                            setPickerSearch('');
-                            setShowHostPicker(true);
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                            <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                            <circle cx="8.5" cy="7" r="4" />
-                            <polyline points="17 11 19 13 23 9" />
-                          </svg>
-                          Transfer Host
-                        </button>
+                        {/* Host 本人：Co-Present 切换 */}
+                        {isThisHost && isLocalParticipant && (
+                          <button
+                            className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
+                            onClick={() => {
+                              if (isThisCopresenter) {
+                                onRemoveCopresenter?.(p.identity);
+                              } else {
+                                onAddCopresenter?.(p.identity);
+                              }
+                              setOpenMenuIdentity(null);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+                              <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                              <path d="M19 10v1a7 7 0 01-14 0v-1" />
+                              <line x1="12" y1="18" x2="12" y2="23" />
+                              <line x1="8" y1="23" x2="16" y2="23" />
+                            </svg>
+                            {isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
+                          </button>
+                        )}
+                        {/* 非 Host 参会者：Co-Presenter / Co-host 切换 */}
+                        {!isThisHost && (
+                          <>
+                            <button
+                              className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
+                              onClick={() => {
+                                if (isThisCopresenter) {
+                                  onRemoveCopresenter?.(p.identity);
+                                } else {
+                                  onAddCopresenter?.(p.identity);
+                                }
+                                setOpenMenuIdentity(null);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+                                <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
+                                <path d="M19 10v1a7 7 0 01-14 0v-1" />
+                                <line x1="12" y1="18" x2="12" y2="23" />
+                                <line x1="8" y1="23" x2="16" y2="23" />
+                              </svg>
+                              {isThisCopresenter ? 'Remove Co-Presenter' : 'Make Co-Presenter'}
+                            </button>
+                            <button
+                              className={`kloud-more-dropdown-item${isThisCohost ? ' active' : ''}`}
+                              onClick={() => {
+                                if (isThisCohost) {
+                                  onRemoveCohost?.(p.identity);
+                                } else {
+                                  onSetCohost?.(p.identity);
+                                }
+                                setOpenMenuIdentity(null);
+                              }}
+                            >
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                              </svg>
+                              {isThisCohost ? 'Remove Co-host' : 'Make Co-host'}
+                            </button>
+                          </>
+                        )}
+                        {/* Host 行：转移主持人 */}
+                        {isThisHost && (
+                          <button
+                            className="kloud-more-dropdown-item"
+                            onClick={() => {
+                              setOpenMenuIdentity(null);
+                              setPickerSearch('');
+                              setShowHostPicker(true);
+                            }}
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+                              <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
+                              <circle cx="8.5" cy="7" r="4" />
+                              <polyline points="17 11 19 13 23 9" />
+                            </svg>
+                            Transfer Host
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                </div>
-              )}
-
-              {/* Non-host participants: presenter & co-host toggles only (no ⋯) */}
-              {canManageRoles && !isLocalParticipant && !isThisHost && (
-                <div className="kloud-attendee-actions">
-                  <button
-                    className={`kloud-role-icon-btn ${isThisCopresenter ? 'checked' : ''}`}
-                    onClick={() => isThisCopresenter ? onRemoveCopresenter?.(p.identity) : onAddCopresenter?.(p.identity)}
-                    title={isThisCopresenter ? 'Remove Co-Presenter' : 'Make Co-Presenter'}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                      <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                      <path d="M19 10v1a7 7 0 01-14 0v-1" />
-                      <line x1="12" y1="18" x2="12" y2="23" />
-                      <line x1="8" y1="23" x2="16" y2="23" />
-                    </svg>
-                    {isThisCopresenter && (
-                      <span className="kloud-check-badge">
-                        <svg viewBox="0 0 16 16" fill="none" width="10" height="10">
-                          <circle cx="8" cy="8" r="8" fill="#22c55e" />
-                          <path d="M4.5 8.5l2 2 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                    )}
-                  </button>
-                  <button
-                    className={`kloud-role-icon-btn ${isThisCohost ? 'checked' : ''}`}
-                    onClick={() => isThisCohost ? onRemoveCohost?.(p.identity) : onSetCohost?.(p.identity)}
-                    title={isThisCohost ? 'Remove Co-host' : 'Make Co-host'}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                    </svg>
-                    {isThisCohost && (
-                      <span className="kloud-check-badge">
-                        <svg viewBox="0 0 16 16" fill="none" width="10" height="10">
-                          <circle cx="8" cy="8" r="8" fill="#22c55e" />
-                          <path d="M4.5 8.5l2 2 5-5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </span>
-                    )}
-                  </button>
                 </div>
               )}
             </div>
@@ -1013,7 +1016,7 @@ export const chatAndAttendeeStyles = `
     position: absolute;
     right: 0;
     top: 32px;
-    min-width: 140px;
+    min-width: 180px;
     background: rgba(15, 23, 42, 0.98);
     backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.12);
@@ -1045,6 +1048,12 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-more-dropdown-item:hover {
     background: rgba(255,255,255,0.08);
+  }
+  .kloud-more-dropdown-item.active {
+    color: #4ade80;
+  }
+  .kloud-more-dropdown-item.active svg {
+    color: #4ade80;
   }
   .kloud-more-dropdown-item svg {
     flex-shrink: 0;
