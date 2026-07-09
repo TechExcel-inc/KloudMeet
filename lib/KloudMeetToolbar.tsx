@@ -11,6 +11,24 @@ import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
 
+type ChatBubbleRect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
+
+type ChatBubbleInteraction = {
+  mode: 'move' | 'resize';
+  startX: number;
+  startY: number;
+  startRect: ChatBubbleRect;
+};
+
+const CHAT_BUBBLE_MIN_WIDTH = 300;
+const CHAT_BUBBLE_MIN_HEIGHT = 260;
+const CHAT_BUBBLE_VIEWPORT_MARGIN = 12;
+
 /** Web：完整页面 URL；Electron 桌面：可唤起本机应用的 kloudmeet 深度链接（含当前查询参数）。 */
 export function buildInviteLinkForClipboard(isDesktop: boolean): string {
   if (!isDesktop) {
@@ -163,6 +181,11 @@ export function KloudMeetToolbar({
     height?: number;
   };
   const [desktopBubblePos, setDesktopBubblePos] = useState<BubblePos | null>(null);
+  const [chatBubbleRect, setChatBubbleRect] = useState<ChatBubbleRect | null>(null);
+  const [isChatBubbleInteracting, setIsChatBubbleInteracting] = useState(false);
+  const chatBubbleInteractionRef = useRef<ChatBubbleInteraction | null>(null);
+  const chatBubbleRectRef = useRef<ChatBubbleRect | null>(null);
+  chatBubbleRectRef.current = chatBubbleRect;
 
   type ActionSheetType = 'views' | 'more' | 'exit' | 'recording' | 'speaker' | null;
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
@@ -180,9 +203,36 @@ export function KloudMeetToolbar({
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
 
+  const clampChatBubbleRect = React.useCallback((rect: ChatBubbleRect): ChatBubbleRect => {
+    if (typeof window === 'undefined') return rect;
+
+    const maxWidth = Math.max(CHAT_BUBBLE_MIN_WIDTH, window.innerWidth - CHAT_BUBBLE_VIEWPORT_MARGIN * 2);
+    const maxHeight = Math.max(CHAT_BUBBLE_MIN_HEIGHT, window.innerHeight - CHAT_BUBBLE_VIEWPORT_MARGIN * 2);
+    const width = Math.min(maxWidth, Math.max(CHAT_BUBBLE_MIN_WIDTH, rect.width));
+    const height = Math.min(maxHeight, Math.max(CHAT_BUBBLE_MIN_HEIGHT, rect.height));
+    const left = Math.min(
+      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, rect.left),
+      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, window.innerWidth - width - CHAT_BUBBLE_VIEWPORT_MARGIN),
+    );
+    const top = Math.min(
+      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, rect.top),
+      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, window.innerHeight - height - CHAT_BUBBLE_VIEWPORT_MARGIN),
+    );
+
+    return { top, left, width, height };
+  }, []);
+
   useEffect(() => {
     setVisible(true);
   }, [activeView]);
+
+  useEffect(() => {
+    if (!chatOpen) {
+      setChatBubbleRect(null);
+      chatBubbleInteractionRef.current = null;
+      setIsChatBubbleInteracting(false);
+    }
+  }, [chatOpen]);
 
   const revealToolbar = () => setVisible(true);
 
@@ -519,6 +569,83 @@ export function KloudMeetToolbar({
     return () => window.removeEventListener('resize', onResize);
   }, [desktopAnchorBubbleKind, isMobile]);
 
+  useEffect(() => {
+    if (!chatBubbleRect || isMobile) return;
+    const onResize = () => setChatBubbleRect((rect) => (rect ? clampChatBubbleRect(rect) : rect));
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [chatBubbleRect, clampChatBubbleRect, isMobile]);
+
+  useEffect(() => {
+    if (!isChatBubbleInteracting) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      const interaction = chatBubbleInteractionRef.current;
+      if (!interaction) return;
+
+      const dx = event.clientX - interaction.startX;
+      const dy = event.clientY - interaction.startY;
+      const next =
+        interaction.mode === 'move'
+          ? {
+            ...interaction.startRect,
+            left: interaction.startRect.left + dx,
+            top: interaction.startRect.top + dy,
+          }
+          : {
+            ...interaction.startRect,
+            width: interaction.startRect.width + dx,
+            height: interaction.startRect.height + dy,
+          };
+
+      setChatBubbleRect(clampChatBubbleRect(next));
+    };
+
+    const onPointerUp = () => {
+      chatBubbleInteractionRef.current = null;
+      setIsChatBubbleInteracting(false);
+    };
+
+    document.addEventListener('pointermove', onPointerMove);
+    document.addEventListener('pointerup', onPointerUp, { once: true });
+    return () => {
+      document.removeEventListener('pointermove', onPointerMove);
+      document.removeEventListener('pointerup', onPointerUp);
+    };
+  }, [clampChatBubbleRect, isChatBubbleInteracting]);
+
+  const getCurrentChatBubbleRect = React.useCallback((): ChatBubbleRect | null => {
+    if (chatBubbleRectRef.current) return chatBubbleRectRef.current;
+    if (!desktopBubblePos) return null;
+    return {
+      top: desktopBubblePos.top,
+      left: desktopBubblePos.left,
+      width: desktopBubblePos.width,
+      height: desktopBubblePos.height ?? Math.min(500, desktopBubblePos.maxHeight),
+    };
+  }, [desktopBubblePos]);
+
+  const beginChatBubbleInteraction = React.useCallback(
+    (event: React.PointerEvent, mode: ChatBubbleInteraction['mode']) => {
+      if (desktopAnchorBubbleKind !== 'chat') return;
+      const startRect = getCurrentChatBubbleRect();
+      if (!startRect) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      const clampedStartRect = clampChatBubbleRect(startRect);
+      chatBubbleInteractionRef.current = {
+        mode,
+        startX: event.clientX,
+        startY: event.clientY,
+        startRect: clampedStartRect,
+      };
+      setChatBubbleRect(clampedStartRect);
+      setIsChatBubbleInteracting(true);
+    },
+    [clampChatBubbleRect, desktopAnchorBubbleKind, getCurrentChatBubbleRect],
+  );
+
   const showComingSoon = (feature: string) => {
     setToastMsg(t('toolbar.comingSoon', { feature }));
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -566,6 +693,33 @@ export function KloudMeetToolbar({
     if (!iframe?.contentWindow) return;
     iframe.contentWindow.postMessage({ type: 'Kloud-ToggleDocPopup' }, '*');
   };
+
+  const desktopBubbleStyle = desktopBubblePos
+    ? ({
+      top:
+        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+          ? chatBubbleRect.top
+          : desktopBubblePos.top,
+      left:
+        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+          ? chatBubbleRect.left
+          : desktopBubblePos.left,
+      width:
+        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+          ? chatBubbleRect.width
+          : desktopBubblePos.width,
+      maxHeight:
+        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+          ? `calc(100vh - ${CHAT_BUBBLE_VIEWPORT_MARGIN * 2}px)`
+          : desktopBubblePos.maxHeight,
+      height:
+        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+          ? chatBubbleRect.height
+          : desktopBubblePos.height,
+      ['--toolbar-bubble-arrow' as string]: `${desktopBubblePos.arrowLeft}px`,
+      visibility: 'visible',
+    } as React.CSSProperties)
+    : ({ visibility: 'hidden', pointerEvents: 'none' } as React.CSSProperties);
 
   return (
     <>
@@ -1132,24 +1286,21 @@ export function KloudMeetToolbar({
               <div
                 ref={desktopBubbleRef}
                 className={`${styles.toolbarBubble} ${desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee' ? styles.toolbarBubblePanel : ''
-                  }`}
-                style={
-                  desktopBubblePos
-                    ? ({
-                      top: desktopBubblePos.top,
-                      left: desktopBubblePos.left,
-                      width: desktopBubblePos.width,
-                      maxHeight: desktopBubblePos.maxHeight,
-                      height: desktopBubblePos.height,
-                      ['--toolbar-bubble-arrow' as string]: `${desktopBubblePos.arrowLeft}px`,
-                      visibility: 'visible',
-                    } as React.CSSProperties)
-                    : ({ visibility: 'hidden', pointerEvents: 'none' } as React.CSSProperties)
-                }
+                  } ${desktopAnchorBubbleKind === 'chat' ? styles.toolbarBubbleDraggable : ''
+                  } ${desktopAnchorBubbleKind === 'chat' && chatBubbleRect ? styles.toolbarBubbleFree : ''
+                  } ${isChatBubbleInteracting ? styles.toolbarBubbleInteracting : ''}`}
+                style={desktopBubbleStyle}
                 onMouseDown={(e) => e.stopPropagation()}
               >
                 <div className={styles.toolbarBubbleArrow} aria-hidden />
-                <div className={styles.toolbarBubbleHeader}>
+                <div
+                  className={`${styles.toolbarBubbleHeader} ${desktopAnchorBubbleKind === 'chat' ? styles.toolbarBubbleDragHandle : ''}`}
+                  onPointerDown={(e) => {
+                    const target = e.target as HTMLElement;
+                    if (target.closest('button')) return;
+                    beginChatBubbleInteraction(e, 'move');
+                  }}
+                >
                   <span className={styles.toolbarBubbleTitle}>
                     {desktopAnchorBubbleKind === 'exit'
                       ? t('toolbar.leaveMeeting')
@@ -1221,6 +1372,15 @@ export function KloudMeetToolbar({
                       onLiveDocPanelTab={postLiveDocPanelTab}
                     />
                   </div>
+                )}
+                {desktopAnchorBubbleKind === 'chat' && (
+                  <button
+                    type="button"
+                    className={styles.toolbarBubbleResizeHandle}
+                    onPointerDown={(e) => beginChatBubbleInteraction(e, 'resize')}
+                    aria-label="Resize chat"
+                    title="Resize chat"
+                  />
                 )}
               </div>
             </>,

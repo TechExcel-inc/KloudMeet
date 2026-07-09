@@ -783,6 +783,19 @@
   max-height: min(78vh, 520px);
 }
 
+.toolbarBubbleDraggable {
+  min-width: 300px;
+  min-height: 260px;
+}
+
+.toolbarBubbleFree .toolbarBubbleArrow {
+  display: none;
+}
+
+.toolbarBubbleInteracting {
+  user-select: none;
+}
+
 .toolbarBubblePanelBody {
   flex: 1;
   min-height: 0;
@@ -816,6 +829,10 @@
   flex-shrink: 0;
 }
 
+.toolbarBubbleDragHandle {
+  cursor: move;
+}
+
 .toolbarBubbleTitle {
   font-size: 14px;
   font-weight: 600;
@@ -838,6 +855,34 @@
 
 .toolbarBubbleClose:hover {
   background: rgba(255, 255, 255, 0.14);
+}
+
+.toolbarBubbleResizeHandle {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: transparent;
+  cursor: nwse-resize;
+  padding: 0;
+}
+
+.toolbarBubbleResizeHandle::before {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: 10px;
+  height: 10px;
+  border-right: 2px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.35);
+  border-radius: 1px;
+}
+
+.toolbarBubbleResizeHandle:hover::before {
+  border-color: rgba(255, 255, 255, 0.75);
 }
 
 .toolbarBubbleList {
