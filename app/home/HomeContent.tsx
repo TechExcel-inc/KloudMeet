@@ -20,6 +20,7 @@ export function HomeContent() {
   const [view, setView] = useState<PageView>('anonymous');
   const [signupSource, setSignupSource] = useState<PageView>('login');
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const toast = useToast();
   const searchParams = useSearchParams();
@@ -79,6 +80,7 @@ export function HomeContent() {
         toast.show('Network error logging in with Google');
       })
       .finally(() => {
+        setAuthInitialized(true);
         window.history.replaceState({}, document.title, window.location.pathname);
       });
     }
@@ -92,11 +94,12 @@ export function HomeContent() {
         const stored = localStorage.getItem('kloudUser');
         if (!stored) return;
         const parsed = JSON.parse(stored) as AuthUser;
+        if (!cancelled) {
+          setUser(parsed);
+          setView('dashboard');
+          setAuthInitialized(true);
+        }
         if (!parsed?.token) {
-          if (!cancelled) {
-            setUser(parsed);
-            setView('dashboard');
-          }
           return;
         }
         const res = await fetch('/api/auth/profile', {
@@ -139,6 +142,8 @@ export function HomeContent() {
             }
           } catch {
             /* ignore */
+          } finally {
+            setAuthInitialized(true);
           }
         }
       }
@@ -154,6 +159,7 @@ export function HomeContent() {
     let cancelled = false;
     // Skip if we already have a local session — the restore effect above handles it.
     if (localStorage.getItem('kloudUser')) return;
+    if (searchParams.get('sso_token')) return;
 
     (async () => {
       try {
@@ -178,13 +184,15 @@ export function HomeContent() {
         }
       } catch {
         /* No SSO cookie available — fall through to anonymous view */
+      } finally {
+        if (!cancelled) setAuthInitialized(true);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [searchParams]);
 
   const handleAuthSuccess = (u: AuthUser) => {
     setUser(u);
@@ -201,10 +209,15 @@ export function HomeContent() {
     <>
       {toast.el}
       <div className={styles.bgGlow} />
-      {view === 'anonymous' && (
+      {!authInitialized && (
+        <div className={styles.authInitializing} aria-label="Loading">
+          <div className={styles.meetingLoadingSpinner} />
+        </div>
+      )}
+      {authInitialized && view === 'anonymous' && (
         <AnonymousView onSignIn={() => setView('login')} onSignUp={() => { setSignupSource('anonymous'); setView('signup'); }} onOpenHelp={() => setShowHelp(true)} toast={toast} />
       )}
-      {view === 'login' && (
+      {authInitialized && view === 'login' && (
         <LoginView
           onBack={() => setView('anonymous')}
           onLoginSuccess={handleAuthSuccess}
@@ -214,14 +227,14 @@ export function HomeContent() {
           toast={toast}
         />
       )}
-      {view === 'forgot-password' && (
+      {authInitialized && view === 'forgot-password' && (
         <ForgotPasswordView
           onBack={() => setView('login')}
           onOpenHelp={() => setShowHelp(true)}
           toast={toast}
         />
       )}
-      {view === 'signup' && (
+      {authInitialized && view === 'signup' && (
         <SignupView
           onBack={() => setView(signupSource)}
           onSignupSuccess={handleAuthSuccess}
@@ -229,7 +242,7 @@ export function HomeContent() {
           toast={toast}
         />
       )}
-      {view === 'dashboard' && user && (
+      {authInitialized && view === 'dashboard' && user && (
         <DashboardView
           user={user}
           onSignOut={handleSignOut}

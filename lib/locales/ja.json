@@ -553,6 +553,13 @@
   "dash.replay": "🎬 再生",
   "dash.replayTitle": "ミーティング録画を再生",
   "dash.replaySummaryTitle": "再生と概要を表示",
+  "chatHistory.open": "会議チャットを表示",
+  "chatHistory.shortTitle": "チャット",
+  "chatHistory.title": "会議チャット履歴",
+  "chatHistory.messages": "件のメッセージ",
+  "chatHistory.loading": "チャット履歴を読み込み中…",
+  "chatHistory.loadFailed": "チャット履歴を読み込めませんでした。",
+  "chatHistory.empty": "この会議には保存されたチャットメッセージがありません。",
 
   "livedoc.errorTitle": "ドキュメントセッションを作成できません",
   "livedoc.creating": "ドキュメントセッションを作成中…",

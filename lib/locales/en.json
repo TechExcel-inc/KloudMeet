@@ -574,6 +574,13 @@
   "dash.replay": "🎬 Replay",
   "dash.replayTitle": "Play meeting recording",
   "dash.replaySummaryTitle": "View replay & summary",
+  "chatHistory.open": "View meeting chat",
+  "chatHistory.shortTitle": "Chat",
+  "chatHistory.title": "Meeting chat history",
+  "chatHistory.messages": "messages",
+  "chatHistory.loading": "Loading chat history…",
+  "chatHistory.loadFailed": "Unable to load chat history.",
+  "chatHistory.empty": "No chat messages were saved for this meeting.",
 
   "livedoc.errorTitle": "Failed to create document session",
   "livedoc.creating": "Creating document session…",

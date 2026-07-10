@@ -1,0 +1,230 @@
+.page {
+  min-height: 100vh;
+  padding: 32px;
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.14), transparent 34%),
+    #f4f6fb;
+  color: #0f172a;
+}
+
+.panel {
+  width: min(920px, 100%);
+  min-height: calc(100vh - 64px);
+  margin: 0 auto;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 20px;
+  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.1);
+}
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 24px 28px;
+  background: rgba(255, 255, 255, 0.94);
+  border-bottom: 1px solid #e2e8f0;
+  backdrop-filter: blur(16px);
+}
+
+.backLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.backLink:hover {
+  color: #4f46e5;
+}
+
+.heading {
+  min-width: 0;
+}
+
+.heading h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 22px;
+  line-height: 1.35;
+}
+
+.heading p {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.content {
+  padding: 12px 28px 32px;
+}
+
+.state {
+  padding: 80px 24px;
+  color: #64748b;
+  font-size: 14px;
+  text-align: center;
+}
+
+.error {
+  color: #dc2626;
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+}
+
+.messageRow {
+  display: flex;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.messageRowOwn {
+  flex-direction: row-reverse;
+}
+
+.messageRow:last-child {
+  border-bottom: none;
+}
+
+.avatar {
+  display: flex;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border-radius: 50%;
+}
+
+.avatarOwn {
+  background: linear-gradient(135deg, #2563eb, #06b6d4);
+}
+
+.messageBody {
+  min-width: 0;
+  max-width: min(620px, calc(100% - 48px));
+}
+
+.messageBodyOwn {
+  display: flex;
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.messageMeta {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.messageMeta strong {
+  overflow: hidden;
+  color: #1e293b;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.messageMeta time {
+  flex-shrink: 0;
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+.messageBody p {
+  margin: 5px 0 0;
+  padding: 10px 12px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.55;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.messageBodyOwn p {
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  border-color: transparent;
+}
+
+:global(html[data-theme='dark']) .page {
+  background:
+    radial-gradient(circle at top left, rgba(99, 102, 241, 0.2), transparent 34%),
+    #020617;
+}
+
+:global(html[data-theme='dark']) .panel,
+:global(html[data-theme='dark']) .header {
+  background: rgba(15, 23, 42, 0.94);
+  border-color: #334155;
+}
+
+:global(html[data-theme='dark']) .heading h1,
+:global(html[data-theme='dark']) .messageMeta strong {
+  color: #f8fafc;
+}
+
+:global(html[data-theme='dark']) .messageBody p {
+  color: #cbd5e1;
+  background: #0f172a;
+  border-color: #334155;
+}
+
+:global(html[data-theme='dark']) .messageBodyOwn p {
+  color: #fff;
+  background: linear-gradient(135deg, #2563eb, #4f46e5);
+  border-color: transparent;
+}
+
+:global(html[data-theme='dark']) .messageRow {
+  border-color: #1e293b;
+}
+
+@media (max-width: 640px) {
+  .page {
+    padding: 0;
+  }
+
+  .panel {
+    min-height: 100vh;
+    border: none;
+    border-radius: 0;
+  }
+
+  .header {
+    gap: 14px;
+    padding: 18px 16px;
+  }
+
+  .content {
+    padding: 8px 16px 24px;
+  }
+
+  .messageMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+}

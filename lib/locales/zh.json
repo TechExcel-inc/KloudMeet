@@ -558,6 +558,13 @@
   "dash.replay": "🎬 回放",
   "dash.replayTitle": "播放会议录制",
   "dash.replaySummaryTitle": "查看回放与摘要",
+  "chatHistory.open": "查看会议聊天记录",
+  "chatHistory.shortTitle": "聊天记录",
+  "chatHistory.title": "会议聊天记录",
+  "chatHistory.messages": "条消息",
+  "chatHistory.loading": "正在加载聊天记录…",
+  "chatHistory.loadFailed": "无法加载聊天记录。",
+  "chatHistory.empty": "该会议没有保存的聊天消息。",
 
   "livedoc.errorTitle": "无法创建文档会话",
   "livedoc.creating": "正在创建文档会话…",

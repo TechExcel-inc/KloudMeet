@@ -73,6 +73,8 @@ export function DashboardView({
     pendingIntent: MeetingStartIntent;
   } | null>(null);
   const [endingActiveMeeting, setEndingActiveMeeting] = useState(false);
+  const userToken = user.token;
+  const userId = user.id;
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -93,23 +95,23 @@ export function DashboardView({
 
   // Fetch personal room ID from profile
   useEffect(() => {
-    if (!user?.token) return;
+    if (!userToken) return;
     fetch('/api/account/profile', {
-      headers: { Authorization: `Bearer ${user.token}` }
+      headers: { Authorization: `Bearer ${userToken}` }
     })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
         if (data?.personalRoomId) setPersonalRoomId(data.personalRoomId);
       })
       .catch(() => {});
-  }, [user]);
+  }, [userToken]);
 
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
 
   const fetchMeetings = useCallback((searchTerm?: string) => {
     const term = searchTerm ?? searchQueryRef.current;
-    if (!user || (!user.token && !user.id)) return;
+    if (!userToken && !userId) return;
     setLoadingMeetings(true);
     const qs = new URLSearchParams({
       page: String(page),
@@ -117,7 +119,7 @@ export function DashboardView({
       ...(term.trim() ? { search: term.trim() } : {}),
     });
     fetch(`/api/account/meetings?${qs.toString()}`, {
-      headers: { Authorization: `Bearer ${user.token}` }
+      headers: { Authorization: `Bearer ${userToken}` }
     })
       .then(res => res.json())
       .then(data => {
@@ -133,7 +135,7 @@ export function DashboardView({
       })
       .catch(console.error)
       .finally(() => setLoadingMeetings(false));
-  }, [user, page, pageSize]);
+  }, [userId, userToken, page, pageSize]);
 
   useEffect(() => {
     fetchMeetings();
@@ -155,7 +157,7 @@ export function DashboardView({
 
   // Polling fallback to check processing recordings
   useEffect(() => {
-    if (!user?.token) return;
+    if (!userToken) return;
     
     // Check if any meetings in the current list have a PROCESSING/UPLOADING recording
     const hasProcessing = dbMeetings.some(m => 
@@ -166,14 +168,14 @@ export function DashboardView({
 
     const intervalId = setInterval(() => {
       fetch('/api/account/recordings/sync', {
-        headers: { Authorization: `Bearer ${user.token}` }
+        headers: { Authorization: `Bearer ${userToken}` }
       })
       .then(res => res.json())
       .then(data => {
         if (data.updatedCount > 0) {
           // Re-fetch meetings silently without setting loading state
             fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
-              headers: { Authorization: `Bearer ${user.token}` }
+              headers: { Authorization: `Bearer ${userToken}` }
             })
               .then(res => res.json())
               .then(d => {
@@ -193,7 +195,7 @@ export function DashboardView({
     }, 5000);
 
     return () => clearInterval(intervalId);
-  }, [user, dbMeetings, page, pageSize]);
+  }, [userToken, dbMeetings, page, pageSize]);
 
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;
@@ -219,7 +221,7 @@ export function DashboardView({
     tick();
     const intv = setInterval(tick, 1000);
     return () => clearInterval(intv);
-  }, [scheduledModalData, router, user.id, toast, t]);
+  }, [scheduledModalData, router, userId, toast, t]);
 
   const handleDeleteMeeting = async (roomName: string) => {
     setDeleteLoading(true);
@@ -309,12 +311,12 @@ export function DashboardView({
 
       const roomId = generateRoomId();
       try {
-        if (user?.token) {
+        if (userToken) {
           const res = await authFetch('/api/meetings', {
             method: 'POST',
             headers: authHeaders({
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${user.token}`,
+              Authorization: `Bearer ${userToken}`,
             }),
             body: JSON.stringify({ roomName: roomId }),
           });
@@ -333,12 +335,12 @@ export function DashboardView({
         setIsCreatingMeeting(false);
       }
     },
-    [isCreatingMeeting, router, t, toast, user?.token],
+    [isCreatingMeeting, router, t, toast, userToken],
   );
 
   const runMeetingStartGuard = useCallback(
     async (intent: MeetingStartIntent): Promise<boolean> => {
-      const token = user?.token ?? getKloudSessionBearer();
+      const token = userToken ?? getKloudSessionBearer();
       if (!token) {
         await executeMeetingIntent(intent);
         return true;
@@ -371,7 +373,7 @@ export function DashboardView({
         return false;
       }
     },
-    [executeMeetingIntent, router, t, toast, user?.token],
+    [executeMeetingIntent, router, t, toast, userToken],
   );
 
   const handleNewMeeting = () => {
@@ -964,6 +966,18 @@ export function DashboardView({
                                 </button>
                               )}
 
+                              {m.status === 'ENDED' && (
+                                <button
+                                  title={t('chatHistory.open')}
+                                  className={styles.iconBtn}
+                                  onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                                >
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                    <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+                                  </svg>
+                                </button>
+                              )}
+
                               {/* Edit */}
                               {isHost && (
                                 <button
@@ -1074,6 +1088,17 @@ export function DashboardView({
                                   </div>
                                 )}
                               </div>
+                            )}
+                            {m.status === 'ENDED' && (
+                              <button
+                                className={styles.mobileCopyBtn}
+                                onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                                  <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                                {t('chatHistory.shortTitle')}
+                              </button>
                             )}
                             {/* Delete */}
                             {isHost && !m.isActive && (

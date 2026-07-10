@@ -8,6 +8,7 @@ import { getInitials } from './getInitials';
 // Custom Chat Panel (uses publishData directly)
 // ════════════════════════════════════
 export interface ChatMsg {
+  clientMessageId: string;
   senderIdentity: string;
   senderName: string;
   message: string;
@@ -23,20 +24,37 @@ export interface ChatPanelProps {
 export function ChatPanel({ messages, onSend }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { t } = useI18n();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 132)}px`;
+  }, [draft]);
 
-  const handleSend = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
+  const sendDraft = useCallback(() => {
     if (!draft.trim()) return;
-    
+
     onSend(draft.trim());
     setDraft('');
   }, [draft, onSend]);
+
+  const handleSend = useCallback((e: React.FormEvent) => {
+    e.preventDefault();
+    sendDraft();
+  }, [sendDraft]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    sendDraft();
+  }, [sendDraft]);
 
   return (
     <div className="kloud-chat-panel">
@@ -44,8 +62,8 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
         {messages.length === 0 && (
           <div className="kloud-chat-empty">{t('chat.noMessages') || 'No messages yet. Say hello! 👋'}</div>
         )}
-        {messages.map((msg, i) => (
-          <div key={i} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
+        {messages.map((msg) => (
+          <div key={msg.clientMessageId} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
             <div className="kloud-chat-meta">
               <span className="kloud-chat-sender">{msg.isLocal ? (t('chat.you') || 'You') : msg.senderName}</span>
               <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -56,19 +74,23 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
         <div ref={messagesEndRef} />
       </div>
       <form className="kloud-chat-form" onSubmit={handleSend}>
-        <input
-          type="text"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder={t('chat.typeMessage') || 'Type a message...'}
-          className="kloud-chat-input"
-          disabled={false}
-        />
-        <button type="submit" className="kloud-chat-send" disabled={!draft.trim()}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
-            <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
-          </svg>
-        </button>
+        <div className="kloud-chat-input-shell">
+          <textarea
+            ref={textareaRef}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={handleKeyDown}
+            maxLength={4000}
+            rows={1}
+            placeholder={t('chat.typeMessage') || 'Type a message...'}
+            className="kloud-chat-input"
+          />
+          <button type="submit" className="kloud-chat-send" disabled={!draft.trim()}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+              <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
+            </svg>
+          </button>
+        </div>
       </form>
     </div>
   );
@@ -631,48 +653,77 @@ export const chatAndAttendeeStyles = `
     word-break: break-word;
   }
   .kloud-chat-form {
-    padding: 8px 12px;
+    padding: 10px 12px 12px;
     border-top: 1px solid rgba(255,255,255,0.08);
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.68), rgba(15, 23, 42, 0.92));
+  }
+  .kloud-chat-input-shell {
+    position: relative;
     display: flex;
-    gap: 6px;
+    min-height: 54px;
+    padding: 10px 44px 10px 12px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.13);
+    border-radius: 18px;
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 10px 26px rgba(0,0,0,0.18);
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .kloud-chat-input-shell:focus-within {
+    background: rgba(255,255,255,0.13);
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.07),
+      0 0 0 3px rgba(59, 130, 246, 0.14),
+      0 12px 30px rgba(0,0,0,0.22);
   }
   .kloud-chat-input {
     flex: 1;
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #fff;
-    border-radius: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .kloud-chat-input:focus {
-    border-color: rgba(59, 130, 246, 0.5);
-  }
-  .kloud-chat-input::placeholder {
-    color: rgba(255,255,255,0.3);
-  }
-  .kloud-chat-send {
-    background: #3b82f6;
+    min-height: 24px;
+    max-height: 132px;
+    background: transparent;
     border: none;
     color: #fff;
-    width: 34px;
-    height: 34px;
-    border-radius: 8px;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    outline: none;
+    overflow-y: auto;
+    resize: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.22) transparent;
+  }
+  .kloud-chat-input::placeholder {
+    color: rgba(255,255,255,0.36);
+  }
+  .kloud-chat-send {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    background: linear-gradient(135deg, #22c55e, #16a34a);
+    border: none;
+    color: #fff;
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
+    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.32);
+    transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s, background 0.15s;
     flex-shrink: 0;
   }
   .kloud-chat-send:hover:not(:disabled) {
-    background: #2563eb;
+    background: linear-gradient(135deg, #16a34a, #15803d);
+    box-shadow: 0 10px 22px rgba(22, 163, 74, 0.4);
+    transform: translateY(-1px);
   }
   .kloud-chat-send:disabled {
-    opacity: 0.4;
+    opacity: 0.42;
     cursor: not-allowed;
+    box-shadow: none;
   }
 
   /* Attendee Panel */

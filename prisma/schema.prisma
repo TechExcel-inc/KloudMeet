@@ -7,27 +7,28 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model accountmembership {
-  id               Int              @id @default(autoincrement())
-  accountId        Int
-  teamMemberId     Int
-  status           String           @default("ACTIVE")
-  joinedVia        String?
-  joinedAt         DateTime         @default(now())
-  createdAt        DateTime         @default(now())
-  createdBy        String?
-  modifiedAt       DateTime?
-  modifiedBy       String?
-  deletedAt        DateTime?
-  deletedBy        String?
-  kloudmeetaccount kloudmeetaccount @relation(fields: [accountId], references: [id], map: "AccountMembership_accountId_fkey")
-  teammember       teammember       @relation(fields: [teamMemberId], references: [id], map: "AccountMembership_teamMemberId_fkey")
+model AccountMembership {
+  id           Int              @id @default(autoincrement())
+  accountId    Int
+  teamMemberId Int
+  status       String           @default("ACTIVE")
+  joinedVia    String?
+  joinedAt     DateTime         @default(now())
+  createdAt    DateTime         @default(now())
+  createdBy    String?
+  modifiedAt   DateTime?
+  modifiedBy   String?
+  deletedAt    DateTime?
+  deletedBy    String?
+  account      KloudMeetAccount @relation(fields: [accountId], references: [id], map: "AccountMembership_accountId_fkey")
+  teamMember   TeamMember       @relation(fields: [teamMemberId], references: [id], map: "AccountMembership_teamMemberId_fkey")
 
   @@unique([accountId, teamMemberId], map: "AccountMembership_accountId_teamMemberId_key")
   @@index([teamMemberId], map: "AccountMembership_teamMemberId_fkey")
+  @@map("AccountMembership")
 }
 
-model accountownerandadmin {
+model AccountOwnerAndAdmin {
   id                 Int              @id @default(autoincrement())
   accountId          Int
   teamMemberId       Int
@@ -39,14 +40,15 @@ model accountownerandadmin {
   createdBy          String?
   modifiedAt         DateTime?
   modifiedBy         String?
-  kloudmeetaccount   kloudmeetaccount @relation(fields: [accountId], references: [id], map: "AccountOwnerAndAdmin_accountId_fkey")
-  teammember         teammember       @relation(fields: [teamMemberId], references: [id], map: "AccountOwnerAndAdmin_teamMemberId_fkey")
+  account            KloudMeetAccount @relation(fields: [accountId], references: [id], map: "AccountOwnerAndAdmin_accountId_fkey")
+  teamMember         TeamMember       @relation(fields: [teamMemberId], references: [id], map: "AccountOwnerAndAdmin_teamMemberId_fkey")
 
   @@unique([accountId, teamMemberId], map: "AccountOwnerAndAdmin_accountId_teamMemberId_key")
   @@index([teamMemberId], map: "AccountOwnerAndAdmin_teamMemberId_fkey")
+  @@map("AccountOwnerAndAdmin")
 }
 
-model kloudmeetaccount {
+model KloudMeetAccount {
   id                     Int                    @id @default(autoincrement())
   accountCode            String                 @unique(map: "KloudMeetAccount_accountCode_key")
   accountName            String
@@ -65,87 +67,109 @@ model kloudmeetaccount {
   modifiedBy             String?
   deletedAt              DateTime?
   deletedBy              String?
-  accountmembership      accountmembership[]
-  accountownerandadmin   accountownerandadmin[]
-  meeting                meeting[]
+  memberships            AccountMembership[]
+  ownersAndAdmins        AccountOwnerAndAdmin[]
+  meetings               Meeting[]
+
+  @@map("KloudMeetAccount")
 }
 
-model meeting {
-  id                     Int                      @id @default(autoincrement())
-  roomName               String                   @unique(map: "Meeting_roomName_key")
-  roomSid                String?
-  title                  String?
-  accountId              Int?
-  createdByMemberId      Int
-  startedAt              DateTime                 @default(now())
-  endedAt                DateTime?
-  scheduledFor           DateTime?
-  timezone               String?
-  durationMinutes        Int?
-  actualStartedAt        DateTime?
-  actualDurationMinutes  Int?
-  description            String?
-  maxParticipants        Int                      @default(0)
-  status                 String                   @default("ACTIVE")
-  createdAt              DateTime                 @default(now())
-  createdBy              String?
-  modifiedAt             DateTime?
-  modifiedBy             String?
-  deletedAt              DateTime?
-  kloudMeetingId         Int?
-  endedReason            String?
-  rejoinableUntil        DateTime?
-  roomEmptyAt            DateTime?
-  kloudmeetaccount       kloudmeetaccount?        @relation(fields: [accountId], references: [id], map: "Meeting_accountId_fkey")
-  teammember             teammember               @relation(fields: [createdByMemberId], references: [id], map: "Meeting_createdByMemberId_fkey")
-  meetingparticipant     meetingparticipant[]
-  meetingsummaryitem     meetingsummaryitem[]
-  meetingtranscript      meetingtranscript[]
-  recording              recording[]
-  recordingaccessrequest recordingaccessrequest[]
+model Meeting {
+  id                      Int                      @id @default(autoincrement())
+  roomName                String                   @unique(map: "Meeting_roomName_key")
+  roomSid                 String?
+  title                   String?
+  accountId               Int?
+  createdByMemberId       Int
+  startedAt               DateTime                 @default(now())
+  endedAt                 DateTime?
+  scheduledFor            DateTime?
+  timezone                String?
+  durationMinutes         Int?
+  actualStartedAt         DateTime?
+  actualDurationMinutes   Int?
+  description             String?
+  maxParticipants         Int                      @default(0)
+  status                  String                   @default("ACTIVE")
+  createdAt               DateTime                 @default(now())
+  createdBy               String?
+  modifiedAt              DateTime?
+  modifiedBy              String?
+  deletedAt               DateTime?
+  kloudMeetingId          Int?
+  endedReason             String?
+  rejoinableUntil         DateTime?
+  roomEmptyAt             DateTime?
+  account                 KloudMeetAccount?        @relation(fields: [accountId], references: [id], map: "Meeting_accountId_fkey")
+  createdByMember         TeamMember               @relation(fields: [createdByMemberId], references: [id], map: "Meeting_createdByMemberId_fkey")
+  participants            MeetingParticipant[]
+  chatMessages            MeetingChatMessage[]
+  summaryItems            MeetingSummaryItem[]
+  transcripts             MeetingTranscript[]
+  recordings              Recording[]
+  recordingAccessRequests RecordingAccessRequest[]
 
   @@index([accountId], map: "Meeting_accountId_fkey")
   @@index([createdByMemberId], map: "Meeting_createdByMemberId_fkey")
+  @@map("Meeting")
 }
 
-model meetingactivity {
-  id                  Int                   @id @default(autoincrement())
-  meetingId           Int
-  participantId       Int
-  activityType        String
-  startedAt           DateTime
-  endedAt             DateTime?
-  durationSeconds     Int?
-  metadata            String?
-  createdAt           DateTime              @default(now())
-  meetingparticipant  meetingparticipant    @relation(fields: [participantId], references: [id], map: "MeetingActivity_participantId_fkey")
-  meetlivedocactivity meetlivedocactivity[]
+model MeetingChatMessage {
+  id              Int      @id @default(autoincrement())
+  meetingId       Int
+  clientMessageId String
+  senderIdentity  String
+  senderName      String
+  content         String   @db.Text
+  sentAt          DateTime
+  createdAt       DateTime @default(now())
+  meeting         Meeting  @relation(fields: [meetingId], references: [id], map: "MeetingChatMessage_meetingId_fkey")
+
+  @@unique([meetingId, clientMessageId], map: "MeetingChatMessage_meetingId_clientMessageId_key")
+  @@index([meetingId, sentAt, id], map: "MeetingChatMessage_meetingId_sentAt_id_idx")
+  @@map("MeetingChatMessage")
+}
+
+model MeetingActivity {
+  id                Int                   @id @default(autoincrement())
+  meetingId         Int
+  participantId     Int
+  activityType      String
+  startedAt         DateTime
+  endedAt           DateTime?
+  durationSeconds   Int?
+  metadata          String?
+  createdAt         DateTime              @default(now())
+  participant       MeetingParticipant    @relation(fields: [participantId], references: [id], map: "MeetingActivity_participantId_fkey")
+  liveDocActivities MeetLiveDocActivity[]
 
   @@index([participantId], map: "MeetingActivity_participantId_fkey")
+  @@map("MeetingActivity")
 }
 
-model meetingparticipant {
-  id                  Int                   @id @default(autoincrement())
-  meetingId           Int
-  teamMemberId        Int?
-  meetUserId          Int?
-  displayName         String
-  roles               String                @default("PARTICIPANT")
-  joinedAt            DateTime              @default(now())
-  leftAt              DateTime?
-  durationSeconds     Int?
-  meetingactivity     meetingactivity[]
-  meetuser            meetuser?             @relation(fields: [meetUserId], references: [id], map: "MeetingParticipant_meetUserId_fkey")
-  meeting             meeting               @relation(fields: [meetingId], references: [id], map: "MeetingParticipant_meetingId_fkey")
-  teammember          teammember?           @relation(fields: [teamMemberId], references: [id], map: "MeetingParticipant_teamMemberId_fkey")
-  meetlivedocactivity meetlivedocactivity[]
+model MeetingParticipant {
+  id                Int                   @id @default(autoincrement())
+  meetingId         Int
+  teamMemberId      Int?
+  meetUserId        Int?
+  displayName       String
+  roles             String                @default("PARTICIPANT")
+  joinedAt          DateTime              @default(now())
+  leftAt            DateTime?
+  durationSeconds   Int?
+  activities        MeetingActivity[]
+  meetUser          MeetUser?             @relation(fields: [meetUserId], references: [id], map: "MeetingParticipant_meetUserId_fkey")
+  meeting           Meeting               @relation(fields: [meetingId], references: [id], map: "MeetingParticipant_meetingId_fkey")
+  teamMember        TeamMember?           @relation(fields: [teamMemberId], references: [id], map: "MeetingParticipant_teamMemberId_fkey")
+  liveDocActivities MeetLiveDocActivity[]
 
   @@index([meetUserId], map: "MeetingParticipant_meetUserId_fkey")
   @@index([meetingId], map: "MeetingParticipant_meetingId_fkey")
   @@index([teamMemberId], map: "MeetingParticipant_teamMemberId_fkey")
+  @@map("MeetingParticipant")
 }
 
-model meetingsummaryitem {
+model MeetingSummaryItem {
   id         Int      @id @default(autoincrement())
   meetingId  Int
   title      String
@@ -153,12 +177,13 @@ model meetingsummaryitem {
   timeOffset String
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
-  meeting    meeting  @relation(fields: [meetingId], references: [id], map: "MeetingSummaryItem_meetingId_fkey")
+  meeting    Meeting  @relation(fields: [meetingId], references: [id], map: "MeetingSummaryItem_meetingId_fkey")
 
   @@index([meetingId, sortOrder], map: "MeetingSummaryItem_meetingId_sortOrder_idx")
+  @@map("MeetingSummaryItem")
 }
 
-model meetingtranscript {
+model MeetingTranscript {
   id              Int      @id @default(autoincrement())
   meetingId       Int
   speakerName     String
@@ -168,71 +193,76 @@ model meetingtranscript {
   offsetSeconds   Int?
   sourceId        String?
   createdAt       DateTime @default(now())
-  meeting         meeting  @relation(fields: [meetingId], references: [id], map: "MeetingTranscript_meetingId_fkey")
+  meeting         Meeting  @relation(fields: [meetingId], references: [id], map: "MeetingTranscript_meetingId_fkey")
 
   @@index([meetingId, captionTime], map: "MeetingTranscript_meetingId_captionTime_idx")
+  @@map("MeetingTranscript")
 }
 
-model meetlivedocactivity {
-  id                 Int                @id @default(autoincrement())
-  meetingId          Int
-  participantId      Int
-  meetingActivityId  Int?
-  actionType         String
-  documentName       String?
-  documentUrl        String?
-  pageNumber         Int?
-  totalPages         Int?
-  timestamp          DateTime
-  durationSeconds    Int?
-  metadata           String?
-  createdAt          DateTime           @default(now())
-  meetingactivity    meetingactivity?   @relation(fields: [meetingActivityId], references: [id], map: "MeetLiveDocActivity_meetingActivityId_fkey")
-  meetingparticipant meetingparticipant @relation(fields: [participantId], references: [id], map: "MeetLiveDocActivity_participantId_fkey")
+model MeetLiveDocActivity {
+  id                Int                @id @default(autoincrement())
+  meetingId         Int
+  participantId     Int
+  meetingActivityId Int?
+  actionType        String
+  documentName      String?
+  documentUrl       String?
+  pageNumber        Int?
+  totalPages        Int?
+  timestamp         DateTime
+  durationSeconds   Int?
+  metadata          String?
+  createdAt         DateTime           @default(now())
+  meetingActivity   MeetingActivity?   @relation(fields: [meetingActivityId], references: [id], map: "MeetLiveDocActivity_meetingActivityId_fkey")
+  participant       MeetingParticipant @relation(fields: [participantId], references: [id], map: "MeetLiveDocActivity_participantId_fkey")
 
   @@index([meetingActivityId], map: "MeetLiveDocActivity_meetingActivityId_fkey")
   @@index([participantId], map: "MeetLiveDocActivity_participantId_fkey")
+  @@map("MeetLiveDocActivity")
 }
 
-model meetuser {
-  id                     Int                      @id @default(autoincrement())
-  email                  String                   @unique(map: "MeetUser_email_key")
-  phone                  String?
-  displayName            String?
-  note                   String?
-  createdAt              DateTime                 @default(now())
-  createdBy              String?
-  modifiedAt             DateTime?
-  modifiedBy             String?
-  meetingparticipant     meetingparticipant[]
-  recordingaccessrequest recordingaccessrequest[]
+model MeetUser {
+  id                      Int                      @id @default(autoincrement())
+  email                   String                   @unique(map: "MeetUser_email_key")
+  phone                   String?
+  displayName             String?
+  note                    String?
+  createdAt               DateTime                 @default(now())
+  createdBy               String?
+  modifiedAt              DateTime?
+  modifiedBy              String?
+  participants            MeetingParticipant[]
+  recordingAccessRequests RecordingAccessRequest[]
+
+  @@map("MeetUser")
 }
 
-model recording {
-  id                     Int                      @id @default(autoincrement())
-  meetingId              Int
-  teamMemberId           Int
-  fileName               String
-  storageProvider        String                   @default("LOCAL")
-  storageKey             String
-  storageUrl             String?
-  fileSizeBytes          Int?
-  durationSeconds        Int?
-  mimeType               String?
-  status                 String                   @default("UPLOADING")
-  createdAt              DateTime                 @default(now())
-  createdBy              String?
-  deletedAt              DateTime?
-  deletedBy              String?
-  meeting                meeting                  @relation(fields: [meetingId], references: [id], map: "Recording_meetingId_fkey")
-  teammember             teammember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
-  recordingaccessrequest recordingaccessrequest[]
+model Recording {
+  id              Int                      @id @default(autoincrement())
+  meetingId       Int
+  teamMemberId    Int
+  fileName        String
+  storageProvider String                   @default("LOCAL")
+  storageKey      String
+  storageUrl      String?
+  fileSizeBytes   Int?
+  durationSeconds Int?
+  mimeType        String?
+  status          String                   @default("UPLOADING")
+  createdAt       DateTime                 @default(now())
+  createdBy       String?
+  deletedAt       DateTime?
+  deletedBy       String?
+  meeting         Meeting                  @relation(fields: [meetingId], references: [id], map: "Recording_meetingId_fkey")
+  teamMember      TeamMember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
+  accessRequests  RecordingAccessRequest[]
 
   @@index([meetingId], map: "Recording_meetingId_fkey")
   @@index([teamMemberId], map: "Recording_teamMemberId_fkey")
+  @@map("Recording")
 }
 
-model recordingaccessrequest {
+model RecordingAccessRequest {
   id                  Int       @id @default(autoincrement())
   recordingId         Int
   meetUserId          Int
@@ -243,16 +273,17 @@ model recordingaccessrequest {
   requestedAt         DateTime  @default(now())
   respondedAt         DateTime?
   respondedByMemberId Int?
-  meetuser            meetuser  @relation(fields: [meetUserId], references: [id], map: "RecordingAccessRequest_meetUserId_fkey")
-  meeting             meeting   @relation(fields: [meetingId], references: [id], map: "RecordingAccessRequest_meetingId_fkey")
-  recording           recording @relation(fields: [recordingId], references: [id], map: "RecordingAccessRequest_recordingId_fkey")
+  meetUser            MeetUser  @relation(fields: [meetUserId], references: [id], map: "RecordingAccessRequest_meetUserId_fkey")
+  meeting             Meeting   @relation(fields: [meetingId], references: [id], map: "RecordingAccessRequest_meetingId_fkey")
+  recording           Recording @relation(fields: [recordingId], references: [id], map: "RecordingAccessRequest_recordingId_fkey")
 
   @@index([meetUserId], map: "RecordingAccessRequest_meetUserId_fkey")
   @@index([meetingId], map: "RecordingAccessRequest_meetingId_fkey")
   @@index([recordingId], map: "RecordingAccessRequest_recordingId_fkey")
+  @@map("RecordingAccessRequest")
 }
 
-model session {
+model Session {
   id           Int        @id @default(autoincrement())
   teamMemberId Int
   token        String     @unique(map: "Session_token_key")
@@ -260,53 +291,58 @@ model session {
   ipAddress    String?
   userAgent    String?    @db.Text
   createdAt    DateTime   @default(now())
-  teammember   teammember @relation(fields: [teamMemberId], references: [id], map: "Session_teamMemberId_fkey")
+  teamMember   TeamMember @relation(fields: [teamMemberId], references: [id], map: "Session_teamMemberId_fkey")
 
   @@index([teamMemberId], map: "Session_teamMemberId_fkey")
+  @@map("Session")
 }
 
-model systemsetting {
+model SystemSetting {
   id         Int       @id @default(autoincrement())
   key        String    @unique(map: "SystemSetting_key_key")
   value      String    @db.Text
   createdAt  DateTime  @default(now())
   modifiedAt DateTime?
+
+  @@map("SystemSetting")
 }
 
-model teammember {
-  id                   Int                    @id @default(autoincrement())
-  email                String?                @unique(map: "TeamMember_email_key")
-  googleId             String?                @unique(map: "TeamMember_googleId_key")
-  username             String                 @unique(map: "TeamMember_username_key")
-  phone                String?
-  passwordHash         String
-  fullName             String?
-  firstName            String?
-  middleName           String?
-  lastName             String?
-  biography            String?
-  personalRoomId       String?                @unique(map: "TeamMember_personalRoomId_key")
-  avatarUrl            String?
-  emailVerified        Boolean                @default(false)
-  emailVerifiedAt      DateTime?
-  phoneVerified        Boolean                @default(false)
-  phoneVerifiedAt      DateTime?
-  status               String                 @default("ACTIVE")
-  createdAt            DateTime               @default(now())
-  createdBy            String?
-  modifiedAt           DateTime?
-  modifiedBy           String?
-  deletedAt            DateTime?
-  deletedBy            String?
-  accountmembership    accountmembership[]
-  accountownerandadmin accountownerandadmin[]
-  meeting              meeting[]
-  meetingparticipant   meetingparticipant[]
-  recording            recording[]
-  session              session[]
+model TeamMember {
+  id                  Int                    @id @default(autoincrement())
+  email               String?                @unique(map: "TeamMember_email_key")
+  googleId            String?                @unique(map: "TeamMember_googleId_key")
+  username            String                 @unique(map: "TeamMember_username_key")
+  phone               String?
+  passwordHash        String
+  fullName            String?
+  firstName           String?
+  middleName          String?
+  lastName            String?
+  biography           String?
+  personalRoomId      String?                @unique(map: "TeamMember_personalRoomId_key")
+  avatarUrl           String?
+  emailVerified       Boolean                @default(false)
+  emailVerifiedAt     DateTime?
+  phoneVerified       Boolean                @default(false)
+  phoneVerifiedAt     DateTime?
+  status              String                 @default("ACTIVE")
+  createdAt           DateTime               @default(now())
+  createdBy           String?
+  modifiedAt          DateTime?
+  modifiedBy          String?
+  deletedAt           DateTime?
+  deletedBy           String?
+  memberships         AccountMembership[]
+  ownerRoles          AccountOwnerAndAdmin[]
+  meetings            Meeting[]
+  meetingParticipants MeetingParticipant[]
+  recordings          Recording[]
+  sessions            Session[]
+
+  @@map("TeamMember")
 }
 
-model verificationcode {
+model VerificationCode {
   id        Int      @id @default(autoincrement())
   target    String
   code      String
@@ -316,4 +352,5 @@ model verificationcode {
   createdAt DateTime @default(now())
 
   @@index([target, code], map: "VerificationCode_target_code_idx")
+  @@map("VerificationCode")
 }

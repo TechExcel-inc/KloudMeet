@@ -65,8 +65,14 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
-import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
+import {
+  ChatPanel,
+  AttendeePanel,
+  chatAndAttendeeStyles,
+  type ChatMsg,
+} from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import {
@@ -109,6 +115,74 @@ import {
   LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
   SCREEN_SHARE_CAPTURE,
 } from './roomConstants';
+
+interface ChatWireMessage {
+  type: 'chat';
+  clientMessageId?: string;
+  senderIdentity: string;
+  senderName: string;
+  message: string;
+  timestamp: number;
+}
+
+interface PersistedChatMessage {
+  clientMessageId: string;
+  senderIdentity: string;
+  senderName: string;
+  message: string;
+  timestamp: number;
+}
+
+interface ChatHistoryResponse {
+  messages?: unknown;
+}
+
+function isChatWireMessage(value: unknown): value is ChatWireMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.type === 'chat' &&
+    (candidate.clientMessageId === undefined || typeof candidate.clientMessageId === 'string') &&
+    typeof candidate.senderIdentity === 'string' &&
+    typeof candidate.senderName === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.timestamp === 'number' &&
+    Number.isFinite(candidate.timestamp)
+  );
+}
+
+function isPersistedChatMessage(value: unknown): value is PersistedChatMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.clientMessageId === 'string' &&
+    typeof candidate.senderIdentity === 'string' &&
+    typeof candidate.senderName === 'string' &&
+    typeof candidate.message === 'string' &&
+    typeof candidate.timestamp === 'number' &&
+    Number.isFinite(candidate.timestamp)
+  );
+}
+
+function getChatMessageId(message: ChatWireMessage): string {
+  return message.clientMessageId ??
+    `legacy:${message.senderIdentity}:${message.timestamp}:${message.message}`;
+}
+
+function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
+  const byId = new Map(current.map((message) => [message.clientMessageId, message]));
+  for (const message of incoming) {
+    byId.set(message.clientMessageId, message);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function createChatMessageId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -3509,33 +3583,63 @@ export function VideoConferenceComponent(props: {
   const CHAT_TOPIC = 'kloud-chat';
   const chatEncoder = React.useMemo(() => new TextEncoder(), []);
   const chatDecoder = React.useMemo(() => new TextDecoder(), []);
-  const [chatMessages, setChatMessages] = React.useState<
-    Array<{
-      senderIdentity: string;
-      senderName: string;
-      message: string;
-      timestamp: number;
-      isLocal: boolean;
-    }>
-  >([]);
+  const [chatMessages, setChatMessages] = React.useState<ChatMsg[]>([]);
 
   React.useEffect(() => {
-    const handleChatData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
+    const controller = new AbortController();
+    const loadChatHistory = async (): Promise<void> => {
+      try {
+        const response = await fetchWithTimeout(
+          `/api/meetings/${encodeURIComponent(meetingRoomName)}/chat-messages`,
+          {
+            cache: 'no-store',
+            signal: controller.signal,
+            headers: {
+              Authorization: `Bearer ${connectionDetailsRef.current.participantToken}`,
+            },
+          },
+        );
+        if (!response.ok) return;
+
+        const body = await response.json() as ChatHistoryResponse;
+        if (!Array.isArray(body.messages)) return;
+        const history = body.messages
+          .filter(isPersistedChatMessage)
+          .map<ChatMsg>((message) => ({
+            ...message,
+            isLocal: message.senderIdentity === room.localParticipant.identity,
+          }));
+        setChatMessages((current) => mergeChatMessages(current, history));
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        if (error instanceof Error && error.name === 'AbortError') return;
+      }
+    };
+
+    void loadChatHistory();
+    return () => controller.abort();
+  }, [meetingRoomName, room.localParticipant.identity]);
+
+  React.useEffect(() => {
+    const handleChatData = (
+      payload: Uint8Array,
+      _participant?: RemoteParticipant,
+      _kind?: DataPacket_Kind,
+      topic?: string,
+    ) => {
       if (topic !== CHAT_TOPIC) return;
       try {
-        const data = JSON.parse(chatDecoder.decode(payload));
-        if (data.type === 'chat') {
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              senderIdentity: data.senderIdentity,
-              senderName: data.senderName,
-              message: data.message,
-              timestamp: data.timestamp,
-              isLocal: false,
-            },
-          ]);
-        }
+        const data: unknown = JSON.parse(chatDecoder.decode(payload));
+        if (!isChatWireMessage(data)) return;
+        const incoming: ChatMsg = {
+          clientMessageId: getChatMessageId(data),
+          senderIdentity: data.senderIdentity,
+          senderName: data.senderName,
+          message: data.message,
+          timestamp: data.timestamp,
+          isLocal: data.senderIdentity === room.localParticipant.identity,
+        };
+        setChatMessages((current) => mergeChatMessages(current, [incoming]));
       } catch (e) {
         console.error('Chat message parse error:', e);
       }
@@ -3549,21 +3653,24 @@ export function VideoConferenceComponent(props: {
   const sendChatMessage = React.useCallback(
     (text: string) => {
       const now = Date.now();
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          senderIdentity: room.localParticipant.identity,
-          senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
-          message: text,
-          timestamp: now,
-          isLocal: true,
-        },
-      ]);
+      const clientMessageId = createChatMessageId();
+      const senderName =
+        room.localParticipant.name || room.localParticipant.identity || 'You';
+      const localMessage: ChatMsg = {
+        clientMessageId,
+        senderIdentity: room.localParticipant.identity,
+        senderName,
+        message: text,
+        timestamp: now,
+        isLocal: true,
+      };
+      setChatMessages((current) => mergeChatMessages(current, [localMessage]));
       const payload = chatEncoder.encode(
         JSON.stringify({
           type: 'chat',
+          clientMessageId,
           senderIdentity: room.localParticipant.identity,
-          senderName: room.localParticipant.name || room.localParticipant.identity || 'You',
+          senderName,
           message: text,
           timestamp: now,
         }),
@@ -3573,8 +3680,31 @@ export function VideoConferenceComponent(props: {
         .catch(() => {
           room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
         });
+
+      const persistMessage = async (): Promise<void> => {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const response = await fetchWithTimeout(
+              `/api/meetings/${encodeURIComponent(meetingRoomName)}/chat-messages`,
+              {
+                method: 'POST',
+                headers: {
+                  Authorization: `Bearer ${connectionDetailsRef.current.participantToken}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ clientMessageId, message: text }),
+              },
+            );
+            if (response.ok || response.status < 500) return;
+          } catch (error) {
+            if (attempt === 1 || (error instanceof Error && error.name === 'AbortError')) return;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+        }
+      };
+      void persistMessage();
     },
-    [room, chatEncoder],
+    [room, chatEncoder, meetingRoomName],
   );
 
   return (
