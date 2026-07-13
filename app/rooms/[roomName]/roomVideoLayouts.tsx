@@ -18,6 +18,7 @@ import {
   useTracks,
   VideoTrack,
 } from '@livekit/components-react';
+import { ParticipantTileRoleMoreMenu } from '@/lib/ParticipantRoleMenu';
 import { getInitials } from '@/lib/getInitials';
 import { useI18n } from '@/lib/i18n';
 import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
@@ -410,7 +411,7 @@ export function MobileVideoLayout() {
     const target = e.target as HTMLElement;
     if (
       target.closest(
-        'button, a, input, select, textarea, .kloud-custom-mic-indicator, .kloud-custom-cam-indicator, .lk-device-menu',
+        'button, a, input, select, textarea, .kloud-custom-mic-indicator, .kloud-custom-cam-indicator, .kloud-tile-more-menu-btn, .lk-device-menu',
       )
     ) {
       return;
@@ -550,6 +551,7 @@ export function LiveDocWebcamSidebarTile({
           <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <span className="webcam-sidebar-name">{name}</span>
+          <ParticipantTileRoleMoreMenu identity={participant.identity} placement="inline" />
         </div>
       </div>
     </div>
@@ -591,6 +593,7 @@ export function LiveDocFloatingGridTile({
       data-lk-source={Track.Source.Camera}
       data-kloud-force-muted={isForceMuted ? 'true' : 'false'}
     >
+      <ParticipantTileRoleMoreMenu identity={identity} />
       <div className="floating-grid-video">
         {hasVideo && camPub?.track ? (
           <VideoTrack

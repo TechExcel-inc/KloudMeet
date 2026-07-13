@@ -72,6 +72,12 @@ import {
   type ChatMsg,
 } from '@/lib/ChatAndAttendeePanel';
 import { getInitials } from '@/lib/getInitials';
+import {
+  ParticipantRoleMenuProvider,
+  participantRoleMenuBridge,
+  KLoud_TILE_MORE_BTN_SVG,
+  type ParticipantRoleActionsConfig,
+} from '@/lib/ParticipantRoleMenu';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
@@ -2652,6 +2658,10 @@ export function VideoConferenceComponent(props: {
 
       tiles.forEach((tile) => {
         const inCarousel = !!tile.closest('.lk-carousel');
+        const inWebcamSidebar = !!tile.closest('.webcam-sidebar-panel');
+        const inFloating = !!tile.closest('.floating-webcam-panel');
+        const inGrid =
+          !!tile.closest('.lk-grid-layout-wrapper') || !!tile.closest('.lk-mobile-scroll-grid');
 
         // Determine participant identity from the tile's data-lk-participant or fallback to name matching
         let identity = tile.getAttribute('data-lk-participant');
@@ -2814,6 +2824,58 @@ export function VideoConferenceComponent(props: {
         } else {
           customCam.removeAttribute('title');
         }
+
+        const tileSource = tile.getAttribute('data-lk-source') || '';
+        const isCameraTile =
+          !tileSource || tileSource === 'camera' || tileSource === String(Track.Source.Camera);
+        const shouldInjectDomMoreMenu =
+          isCameraTile && (inCarousel || (inGrid && !inWebcamSidebar && !inFloating));
+
+        if (shouldInjectDomMoreMenu) {
+          const roleConfig = participantRoleMenuBridge.current?.getConfig();
+          const canManageRoles = roleConfig?.canManageRoles ?? (isHost || isCohost);
+          const isThisHost = identity === hostIdentity;
+          const showMoreMenu = canManageRoles && (isThisHost || (!isLocal && !isThisHost));
+
+          let moreWrap = tile.querySelector('.kloud-tile-more-menu-wrap') as HTMLElement | null;
+          if (!showMoreMenu) {
+            moreWrap?.remove();
+          } else {
+            if (!moreWrap) {
+              moreWrap = document.createElement('div');
+              moreWrap.className = 'kloud-tile-more-menu-wrap kloud-more-menu-anchor kloud-tile-more-menu-wrap--inline';
+              const moreBtn = document.createElement('button');
+              moreBtn.type = 'button';
+              moreBtn.className = 'kloud-role-icon-btn kloud-tile-more-menu-btn';
+              moreBtn.title = 'More options';
+              moreBtn.innerHTML = KLoud_TILE_MORE_BTN_SVG;
+              moreBtn.addEventListener('mousedown', (e) => e.stopPropagation());
+              moreBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const wrap = (e.currentTarget as HTMLElement).closest('.kloud-tile-more-menu-wrap') as HTMLElement | null;
+                const id = wrap?.getAttribute('data-kloud-identity');
+                if (wrap && id) {
+                  participantRoleMenuBridge.current?.toggleMenu(id, wrap);
+                }
+              });
+              moreWrap.appendChild(moreBtn);
+            }
+            if (inCarousel) {
+              moreWrap.classList.remove('kloud-tile-more-menu-wrap--inline');
+              if (moreWrap.parentElement !== tile) {
+                tile.appendChild(moreWrap);
+              }
+            } else {
+              moreWrap.classList.add('kloud-tile-more-menu-wrap--inline');
+              if (moreWrap.parentElement !== itemContainer) {
+                itemContainer.appendChild(moreWrap);
+              }
+            }
+          }
+          if (moreWrap) {
+            moreWrap.setAttribute('data-kloud-identity', identity);
+          }
+        }
       });
     };
 
@@ -2864,10 +2926,10 @@ export function VideoConferenceComponent(props: {
     isWebcamSidebarCollapsed,
   ]);
 
-  // 主持禁音/禁视频后立即刷新 carousel 图标（屏幕共享左侧栏）
+  // 主持禁音/禁视频 / 切换 Webcam 视图后立即刷新 tile 图标与 ⋯ 菜单
   React.useEffect(() => {
     updateCustomMicsRef.current?.();
-  }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare]);
+  }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare, activeView]);
 
   // Clear all remote control permission state when screen share ends
   React.useEffect(() => {
@@ -3266,6 +3328,55 @@ export function VideoConferenceComponent(props: {
       room.localParticipant.identity,
       isHost,
       isCohost,
+    ],
+  );
+
+  const participantRoleActions = React.useMemo<ParticipantRoleActionsConfig>(
+    () => ({
+      hostIdentity,
+      copresenterIdentities,
+      cohostIdentities,
+      canManageRoles: isHost || isCohost,
+      localIdentity: room.localParticipant.identity,
+      autoPresenterIdentity,
+      onAddCopresenter: (identity) => {
+        setCopresenterIdentities((prev) => (prev.includes(identity) ? prev : [...prev, identity]));
+        sendMeetingMsg({ type: 'SET_PRESENTER', identity });
+      },
+      onRemoveCopresenter: (identity) => {
+        setCopresenterIdentities((prev) => prev.filter((id) => id !== identity));
+        sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
+      },
+      onSetCohost: (identity) => {
+        setCohostIdentities((prev) => [...prev, identity]);
+        sendMeetingMsg({ type: 'SET_COHOST', identity });
+      },
+      onRemoveCohost: (identity) => {
+        setCohostIdentities((prev) => prev.filter((id) => id !== identity));
+        sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
+      },
+      onSetHost: (identity) => {
+        const oldHost = hostIdentity;
+        setHostIdentityOverride(identity);
+        setCohostIdentities((prev) => {
+          const without = prev.filter((id) => id !== identity);
+          if (!without.includes(oldHost)) {
+            return [...without, oldHost];
+          }
+          return without;
+        });
+        sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
+      },
+    }),
+    [
+      hostIdentity,
+      copresenterIdentities,
+      cohostIdentities,
+      isHost,
+      isCohost,
+      room.localParticipant.identity,
+      autoPresenterIdentity,
+      sendMeetingMsg,
     ],
   );
 
@@ -3710,6 +3821,7 @@ export function VideoConferenceComponent(props: {
   return (
     <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
+        <ParticipantRoleMenuProvider {...participantRoleActions}>
         {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
         <KeyboardShortcuts />
 
@@ -4984,7 +5096,6 @@ export function VideoConferenceComponent(props: {
                   hostIdentity={hostIdentity}
                   copresenterIdentities={copresenterIdentities}
                   cohostIdentities={cohostIdentities}
-                  canManageRoles={isHost || isCohost}
                   localIdentity={room.localParticipant.identity}
                   autoPresenterIdentity={autoPresenterIdentity}
                   canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
@@ -4995,36 +5106,6 @@ export function VideoConferenceComponent(props: {
                   onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
                   hostMutedIdentities={hostMutedIdentities}
                   hostDisabledVideoIdentities={hostDisabledVideoIdentities}
-                  onAddCopresenter={(identity) => {
-                    setCopresenterIdentities((prev) =>
-                      prev.includes(identity) ? prev : [...prev, identity],
-                    );
-                    sendMeetingMsg({ type: 'SET_PRESENTER', identity });
-                  }}
-                  onRemoveCopresenter={(identity) => {
-                    setCopresenterIdentities((prev) => prev.filter((id) => id !== identity));
-                    sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
-                  }}
-                  onSetCohost={(identity) => {
-                    setCohostIdentities((prev) => [...prev, identity]);
-                    sendMeetingMsg({ type: 'SET_COHOST', identity });
-                  }}
-                  onRemoveCohost={(identity) => {
-                    setCohostIdentities((prev) => prev.filter((id) => id !== identity));
-                    sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
-                  }}
-                  onSetHost={(identity) => {
-                    const oldHost = hostIdentity;
-                    setHostIdentityOverride(identity);
-                    setCohostIdentities((prev) => {
-                      const without = prev.filter((id) => id !== identity);
-                      if (!without.includes(oldHost)) {
-                        return [...without, oldHost];
-                      }
-                      return without;
-                    });
-                    sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
-                  }}
                 />
               </div>
             </div>
@@ -6142,6 +6223,95 @@ export function VideoConferenceComponent(props: {
 
             ${chatAndAttendeeStyles}
 
+            /* Participant tile ⋯ 角色菜单（hover 显示） */
+            .kloud-tile-more-menu-wrap {
+              position: absolute;
+              top: 4px;
+              right: 4px;
+              z-index: 6;
+              opacity: 0;
+              pointer-events: none;
+              transition: opacity 0.15s ease;
+            }
+            .floating-grid-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+            .webcam-sidebar-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+            .webcam-sidebar-tile:hover .kloud-tile-more-menu-wrap--inline,
+            .lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-tile-more-menu-wrap--inline,
+            .lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-tile-more-menu-wrap--inline,
+            .lk-grid-layout-wrapper .lk-participant-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+            .lk-mobile-scroll-grid .lk-participant-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+            .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile:hover > .kloud-tile-more-menu-wrap {
+              opacity: 1;
+              pointer-events: auto;
+            }
+            .kloud-tile-more-menu-wrap:has(.kloud-tile-more-menu-btn.open),
+            .kloud-tile-more-menu-wrap.open {
+              opacity: 1;
+              pointer-events: auto;
+            }
+            .webcam-sidebar-tile {
+              position: relative;
+            }
+            .lk-grid-layout-wrapper .lk-participant-tile,
+            .lk-mobile-scroll-grid .lk-participant-tile {
+              position: relative !important;
+            }
+            .kloud-tile-more-menu-wrap--inline {
+              position: static;
+              top: auto;
+              right: auto;
+              margin-left: auto;
+              flex-shrink: 0;
+            }
+            .lk-grid-layout-wrapper .lk-participant-metadata-item,
+            .lk-mobile-scroll-grid .lk-participant-metadata-item {
+              display: inline-flex !important;
+              align-items: center !important;
+              flex-wrap: nowrap !important;
+              gap: 3px !important;
+              max-width: 100% !important;
+              min-width: 0 !important;
+            }
+            .lk-grid-layout-wrapper .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn,
+            .lk-mobile-scroll-grid .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn {
+              width: 20px;
+              height: 20px;
+            }
+            /* 触摸设备无 hover：Host 在 Webcam 网格仍能看到 ⋯ */
+            @media (hover: none) {
+              .lk-mobile-scroll-grid .kloud-tile-more-menu-wrap--inline,
+              .lk-grid-layout-wrapper .kloud-tile-more-menu-wrap--inline {
+                opacity: 1;
+                pointer-events: auto;
+              }
+            }
+            .webcam-sidebar-meta .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn {
+              width: 20px;
+              height: 20px;
+            }
+            .kloud-tile-more-menu-wrap .kloud-role-icon-btn {
+              width: 24px;
+              height: 24px;
+              padding: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              background: rgba(0, 0, 0, 0.55);
+              border: 1px solid rgba(255, 255, 255, 0.15);
+              border-radius: 6px;
+              color: rgba(255, 255, 255, 0.85);
+              cursor: pointer;
+            }
+            .kloud-tile-more-menu-wrap .kloud-role-icon-btn:hover {
+              background: rgba(0, 0, 0, 0.75);
+              color: #fff;
+            }
+            .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn,
+            .lk-grid-layout-wrapper .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn,
+            .lk-mobile-scroll-grid .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn {
+              pointer-events: auto;
+            }
+
             /* ══════════════════════════════════════════════════════
                Custom Microphone Indicator DOM Injection
                Replaces LiveKit's missing "mic on" DOM states
@@ -6445,6 +6615,10 @@ export function VideoConferenceComponent(props: {
             .sky-meet-video-wrapper .lk-carousel .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive,
             .lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-custom-mic-indicator.self-interactive,
             .lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-custom-cam-indicator.self-interactive,
+            .lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-custom-mic-indicator.operator-interactive,
+            .lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-custom-cam-indicator.operator-interactive,
+            .lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-custom-mic-indicator.self-interactive,
+            .lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-custom-cam-indicator.self-interactive,
             .webcam-sidebar-panel .lk-participant-tile:hover .kloud-custom-mic-indicator.self-interactive,
             .webcam-sidebar-panel .lk-participant-tile:hover .kloud-custom-cam-indicator.self-interactive,
             .floating-webcam-panel .kl-participant-tile:hover .kloud-custom-mic-indicator.self-interactive,
@@ -6651,7 +6825,6 @@ export function VideoConferenceComponent(props: {
                 hostIdentity={hostIdentity}
                 copresenterIdentities={copresenterIdentities}
                 cohostIdentities={cohostIdentities}
-                canManageRoles={isHost || isCohost}
                 localIdentity={room.localParticipant.identity}
                 autoPresenterIdentity={autoPresenterIdentity}
                 canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
@@ -6662,36 +6835,6 @@ export function VideoConferenceComponent(props: {
                 onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
                 hostMutedIdentities={hostMutedIdentities}
                 hostDisabledVideoIdentities={hostDisabledVideoIdentities}
-                onAddCopresenter={(identity) => {
-                  setCopresenterIdentities((prev) =>
-                    prev.includes(identity) ? prev : [...prev, identity],
-                  );
-                  sendMeetingMsg({ type: 'SET_PRESENTER', identity });
-                }}
-                onRemoveCopresenter={(identity) => {
-                  setCopresenterIdentities((prev) => prev.filter((id) => id !== identity));
-                  sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity });
-                }}
-                onSetCohost={(identity) => {
-                  setCohostIdentities((prev) => [...prev, identity]);
-                  sendMeetingMsg({ type: 'SET_COHOST', identity });
-                }}
-                onRemoveCohost={(identity) => {
-                  setCohostIdentities((prev) => prev.filter((id) => id !== identity));
-                  sendMeetingMsg({ type: 'REMOVE_COHOST', identity });
-                }}
-                onSetHost={(identity) => {
-                  const oldHost = hostIdentity;
-                  setHostIdentityOverride(identity);
-                  setCohostIdentities((prev) => {
-                    const without = prev.filter((id) => id !== identity);
-                    if (!without.includes(oldHost)) {
-                      return [...without, oldHost];
-                    }
-                    return without;
-                  });
-                  sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
-                }}
               />
             )
           }
@@ -6801,6 +6944,7 @@ export function VideoConferenceComponent(props: {
         <RecordingIndicator />
         {desktopLaunchModal}
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+        </ParticipantRoleMenuProvider>
       </RoomContext.Provider>
     </div>
   );

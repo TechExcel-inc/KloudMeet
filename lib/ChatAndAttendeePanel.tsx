@@ -3,6 +3,7 @@ import { useRoomContext, useParticipants } from '@livekit/components-react';
 import { RoomEvent, Track } from 'livekit-client';
 import { useI18n } from './i18n';
 import { getInitials } from './getInitials';
+import { ParticipantAttendeeRowMoreMenu } from './ParticipantRoleMenu';
 
 // ════════════════════════════════════
 // Custom Chat Panel (uses publishData directly)
@@ -103,14 +104,8 @@ interface AttendeePanelProps {
   hostIdentity: string | null;
   copresenterIdentities: string[];
   cohostIdentities: string[];
-  canManageRoles: boolean; // host OR co-host
   localIdentity: string;
   autoPresenterIdentity: string | null;
-  onAddCopresenter?: (identity: string) => void;
-  onRemoveCopresenter?: (identity: string) => void;
-  onSetCohost?: (identity: string) => void;
-  onRemoveCohost?: (identity: string) => void;
-  onSetHost?: (identity: string) => void;
   /** Whether the local user has permission to mute/unmute all */
   canMuteAll?: boolean;
   /** Whether "Mute All" has been activated (controls button state) */
@@ -131,14 +126,8 @@ export function AttendeePanel({
   hostIdentity,
   copresenterIdentities,
   cohostIdentities,
-  canManageRoles,
   localIdentity,
   autoPresenterIdentity,
-  onAddCopresenter,
-  onRemoveCopresenter,
-  onSetCohost,
-  onRemoveCohost,
-  onSetHost,
   canMuteAll,
   muteAllActive,
   onMuteAll,
@@ -151,12 +140,8 @@ export function AttendeePanel({
   const { t } = useI18n();
   const participants = useParticipants();
   const [searchQuery, setSearchQuery] = useState('');
-  const [showHostPicker, setShowHostPicker] = useState(false);
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
-  const [pickerSearch, setPickerSearch] = useState('');
-  const [confirmHostId, setConfirmHostId] = useState<string | null>(null);
 
-  // 点击外部关闭三点菜单（capture 阶段，避免父级 stopPropagation 拦截）
   useEffect(() => {
     if (!openMenuIdentity) return;
     const close = (e: MouseEvent) => {
@@ -200,19 +185,6 @@ export function AttendeePanel({
         return name.includes(searchQuery.toLowerCase());
       })
     : sorted;
-
-  // Candidates for host transfer (non-host participants)
-  const hostCandidates = participants
-    .filter((p) => p.identity !== hostIdentity)
-    .filter((p) => {
-      if (!pickerSearch.trim()) return true;
-      const name = (p.name || p.identity || '').toLowerCase();
-      return name.includes(pickerSearch.toLowerCase());
-    });
-
-  const confirmParticipant = confirmHostId
-    ? participants.find((p) => p.identity === confirmHostId)
-    : null;
 
   return (
     <div className="kloud-attendee-panel">
@@ -276,7 +248,6 @@ export function AttendeePanel({
           const isLocalParticipant = p.identity === localIdentity;
           const isThisHost = p.identity === hostIdentity;
           const isThisCohost = cohostIdentities.includes(p.identity);
-          const isThisCopresenter = copresenterIdentities.includes(p.identity);
           const isThisAutoPresenter = p.identity === autoPresenterIdentity;
           // Force-muted: muteAll is active AND this participant is NOT someone who can initiate mute-all
           // (host, co-host, and auto-presenter are all exempt — they are the operators, not the subjects)
@@ -375,108 +346,14 @@ export function AttendeePanel({
                 </div>
               )}
 
-              {/* Host / 非本地参会者：角色操作统一放入 ⋯ 菜单 */}
-              {canManageRoles && (isThisHost || (!isLocalParticipant && !isThisHost)) && (
-                <div className="kloud-attendee-actions">
-                  <div className="kloud-more-menu-anchor" onMouseDown={(e) => e.stopPropagation()}>
-                    <button
-                      className="kloud-role-icon-btn"
-                      onClick={() => setOpenMenuIdentity(openMenuIdentity === p.identity ? null : p.identity)}
-                      title="More options"
-                    >
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
-                        <circle cx="5" cy="12" r="2" />
-                        <circle cx="12" cy="12" r="2" />
-                        <circle cx="19" cy="12" r="2" />
-                      </svg>
-                    </button>
-                    {openMenuIdentity === p.identity && (
-                      <div className="kloud-more-dropdown" onMouseDown={(e) => e.stopPropagation()}>
-                        {/* Host 本人：Co-Present 切换 */}
-                        {isThisHost && isLocalParticipant && (
-                          <button
-                            className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
-                            onClick={() => {
-                              if (isThisCopresenter) {
-                                onRemoveCopresenter?.(p.identity);
-                              } else {
-                                onAddCopresenter?.(p.identity);
-                              }
-                              setOpenMenuIdentity(null);
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                              <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                              <path d="M19 10v1a7 7 0 01-14 0v-1" />
-                              <line x1="12" y1="18" x2="12" y2="23" />
-                              <line x1="8" y1="23" x2="16" y2="23" />
-                            </svg>
-                            {isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
-                          </button>
-                        )}
-                        {/* 非 Host 参会者：Co-Presenter / Co-host 切换 */}
-                        {!isThisHost && (
-                          <>
-                            <button
-                              className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
-                              onClick={() => {
-                                if (isThisCopresenter) {
-                                  onRemoveCopresenter?.(p.identity);
-                                } else {
-                                  onAddCopresenter?.(p.identity);
-                                }
-                                setOpenMenuIdentity(null);
-                              }}
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                                <path d="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3z" />
-                                <path d="M19 10v1a7 7 0 01-14 0v-1" />
-                                <line x1="12" y1="18" x2="12" y2="23" />
-                                <line x1="8" y1="23" x2="16" y2="23" />
-                              </svg>
-                              {isThisCopresenter ? 'Remove Co-Presenter' : 'Make Co-Presenter'}
-                            </button>
-                            <button
-                              className={`kloud-more-dropdown-item${isThisCohost ? ' active' : ''}`}
-                              onClick={() => {
-                                if (isThisCohost) {
-                                  onRemoveCohost?.(p.identity);
-                                } else {
-                                  onSetCohost?.(p.identity);
-                                }
-                                setOpenMenuIdentity(null);
-                              }}
-                            >
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                              </svg>
-                              {isThisCohost ? 'Remove Co-host' : 'Make Co-host'}
-                            </button>
-                          </>
-                        )}
-                        {/* Host 行：转移主持人 */}
-                        {isThisHost && (
-                          <button
-                            className="kloud-more-dropdown-item"
-                            onClick={() => {
-                              setOpenMenuIdentity(null);
-                              setPickerSearch('');
-                              setShowHostPicker(true);
-                            }}
-                          >
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
-                              <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
-                              <circle cx="8.5" cy="7" r="4" />
-                              <polyline points="17 11 19 13 23 9" />
-                            </svg>
-                            Transfer Host
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+              <ParticipantAttendeeRowMoreMenu
+                identity={p.identity}
+                isOpen={openMenuIdentity === p.identity}
+                onToggle={() =>
+                  setOpenMenuIdentity(openMenuIdentity === p.identity ? null : p.identity)
+                }
+                onClose={() => setOpenMenuIdentity(null)}
+              />
             </div>
           );
         })}
@@ -485,103 +362,6 @@ export function AttendeePanel({
         )}
       </div>
 
-      {/* Host Transfer Picker Popup */}
-      {showHostPicker && (
-        <div className="kloud-confirm-overlay" onClick={() => { setShowHostPicker(false); setConfirmHostId(null); }}>
-          <div className="kloud-host-picker" onClick={(e) => e.stopPropagation()}>
-            {!confirmHostId ? (
-              <>
-                <div className="kloud-host-picker-header">
-                  <h3 className="kloud-host-picker-title">Transfer Host</h3>
-                  <button className="kloud-host-picker-close" onClick={() => setShowHostPicker(false)}>✕</button>
-                </div>
-                <p className="kloud-host-picker-desc">Select a participant to become the new Host. You will become Co-host.</p>
-                {participants.length >= 5 && (
-                  <div className="kloud-host-picker-search">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                    </svg>
-                    <input
-                      type="text"
-                      value={pickerSearch}
-                      onChange={(e) => setPickerSearch(e.target.value)}
-                      placeholder="Search..."
-                      className="kloud-host-picker-search-input"
-                      autoFocus
-                    />
-                  </div>
-                )}
-                <div className="kloud-host-picker-list">
-                  {hostCandidates.map((p) => {
-                    const name = p.name || p.identity || '??';
-                    const initials = getInitials(name);
-                    const roles = getRoles(p.identity);
-                    return (
-                      <button
-                        key={p.identity}
-                        className="kloud-host-picker-item"
-                        onClick={() => setConfirmHostId(p.identity)}
-                      >
-                        <div className="kloud-attendee-avatar">{initials}</div>
-                        <div className="kloud-host-picker-item-info">
-                          <span className="kloud-attendee-name">{name}</span>
-                          <div className="kloud-attendee-badges">
-                            {roles.map((r) => (
-                              <span key={r.cls} className={`kloud-attendee-role ${r.cls}`}>{r.label}</span>
-                            ))}
-                          </div>
-                        </div>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" style={{ flexShrink: 0, opacity: 0.4 }}>
-                          <polyline points="9 18 15 12 9 6" />
-                        </svg>
-                      </button>
-                    );
-                  })}
-                  {hostCandidates.length === 0 && (
-                    <div className="kloud-attendee-empty">No participants found</div>
-                  )}
-                </div>
-              </>
-            ) : confirmParticipant && (
-              <>
-                <div className="kloud-host-picker-header">
-                  <button className="kloud-host-picker-back" onClick={() => setConfirmHostId(null)}>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                      <polyline points="15 18 9 12 15 6" />
-                    </svg>
-                  </button>
-                  <h3 className="kloud-host-picker-title">Confirm Transfer</h3>
-                  <button className="kloud-host-picker-close" onClick={() => { setShowHostPicker(false); setConfirmHostId(null); }}>✕</button>
-                </div>
-                <div className="kloud-confirm-body">
-                  <div className="kloud-confirm-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2" width="32" height="32">
-                      <path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                    </svg>
-                  </div>
-                  <p className="kloud-confirm-text">
-                    <strong>{confirmParticipant.name || confirmParticipant.identity}</strong> will become the new Host.
-                    You will be automatically demoted to Co-host.
-                  </p>
-                  <div className="kloud-confirm-actions">
-                    <button className="kloud-confirm-cancel" onClick={() => setConfirmHostId(null)}>Cancel</button>
-                    <button
-                      className="kloud-confirm-proceed"
-                      onClick={() => {
-                        onSetHost?.(confirmHostId);
-                        setConfirmHostId(null);
-                        setShowHostPicker(false);
-                      }}
-                    >
-                      Transfer Host
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1353,5 +1133,16 @@ export const chatAndAttendeeStyles = `
   .kloud-confirm-body {
     text-align: center;
     padding: 8px 0;
+  }
+  .kloud-host-transfer-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    z-index: 100001 !important;
+    border-radius: 0 !important;
+  }
+  .kloud-more-menu-portal .kloud-more-dropdown {
+    position: static;
+    top: auto;
+    right: auto;
   }
 `;
