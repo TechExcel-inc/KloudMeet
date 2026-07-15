@@ -17,6 +17,7 @@
 
 # electron-builder
 /dist
+/.electron-app
 
 # misc
 .DS_Store

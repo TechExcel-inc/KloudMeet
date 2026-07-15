@@ -2867,7 +2867,16 @@ export function VideoConferenceComponent(props: {
               }
             } else {
               moreWrap.classList.add('kloud-tile-more-menu-wrap--inline');
-              if (moreWrap.parentElement !== itemContainer) {
+              const camIndicator = itemContainer.querySelector('.kloud-custom-cam-indicator');
+              const nameAnchor =
+                itemContainer.querySelector('.floating-grid-name') ||
+                itemContainer.querySelector('.webcam-sidebar-name') ||
+                itemContainer.querySelector('.lk-participant-name');
+              if (camIndicator) {
+                camIndicator.insertAdjacentElement('afterend', moreWrap);
+              } else if (nameAnchor) {
+                itemContainer.insertBefore(moreWrap, nameAnchor);
+              } else if (moreWrap.parentElement !== itemContainer) {
                 itemContainer.appendChild(moreWrap);
               }
             }
@@ -6260,8 +6269,15 @@ export function VideoConferenceComponent(props: {
               position: static;
               top: auto;
               right: auto;
-              margin-left: auto;
               flex-shrink: 0;
+            }
+            .lk-grid-layout-wrapper .lk-participant-metadata-item .lk-participant-name,
+            .lk-mobile-scroll-grid .lk-participant-metadata-item .lk-participant-name {
+              min-width: 0;
+              flex: 1;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
             }
             .lk-grid-layout-wrapper .lk-participant-metadata-item,
             .lk-mobile-scroll-grid .lk-participant-metadata-item {

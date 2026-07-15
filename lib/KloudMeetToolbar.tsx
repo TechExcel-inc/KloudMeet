@@ -193,8 +193,6 @@ export function KloudMeetToolbar({
   activeSheetRef.current = activeSheet;
   const visibleRef = useRef(visible);
   visibleRef.current = visible;
-  const chatOpenRef = useRef(chatOpen);
-  chatOpenRef.current = chatOpen;
   const attendeeOpenRef = useRef(attendeeOpen);
   attendeeOpenRef.current = attendeeOpen;
   const [showSTTSettings, setShowSTTSettings] = useState(false);
@@ -366,7 +364,6 @@ export function KloudMeetToolbar({
     );
 
     const hideMobileChrome = () => {
-      if (chatOpenRef.current) handleToggleChat();
       if (attendeeOpenRef.current) handleToggleAttendee();
       if (activeSheetRef.current) setActiveSheet(null);
       closeInviteMenu();
@@ -1270,19 +1267,19 @@ export function KloudMeetToolbar({
         (typeof document !== 'undefined'
           ? createPortal(
             <>
-              <div
-                role="presentation"
-                className={styles.toolbarBubbleDismiss}
-                onMouseDown={() => {
-                  if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
-                    setActiveSheet(null);
-                  } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
-                    onToggleChat();
-                  } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
-                    onToggleAttendee();
-                  }
-                }}
-              />
+              {desktopAnchorBubbleKind !== 'chat' && (
+                <div
+                  role="presentation"
+                  className={styles.toolbarBubbleDismiss}
+                  onMouseDown={() => {
+                    if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
+                      setActiveSheet(null);
+                    } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
+                      onToggleAttendee();
+                    }
+                  }}
+                />
+              )}
               <div
                 ref={desktopBubbleRef}
                 className={`${styles.toolbarBubble} ${desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee' ? styles.toolbarBubblePanel : ''
@@ -1294,13 +1291,32 @@ export function KloudMeetToolbar({
               >
                 <div className={styles.toolbarBubbleArrow} aria-hidden />
                 <div
-                  className={`${styles.toolbarBubbleHeader} ${desktopAnchorBubbleKind === 'chat' ? styles.toolbarBubbleDragHandle : ''}`}
-                  onPointerDown={(e) => {
-                    const target = e.target as HTMLElement;
-                    if (target.closest('button')) return;
-                    beginChatBubbleInteraction(e, 'move');
-                  }}
+                  className={`${styles.toolbarBubbleHeader}${desktopAnchorBubbleKind === 'chat' ? ` ${styles.toolbarBubbleDragHandle}` : ''}`}
+                  onPointerDown={
+                    desktopAnchorBubbleKind === 'chat'
+                      ? (e) => {
+                          const target = e.target as HTMLElement;
+                          if (target.closest('button')) return;
+                          beginChatBubbleInteraction(e, 'move');
+                        }
+                      : undefined
+                  }
                 >
+                  {desktopAnchorBubbleKind === 'chat' && (
+                    <div
+                      className={styles.toolbarBubbleDragIcon}
+                      aria-hidden
+                    >
+                      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden>
+                        <circle cx="8" cy="6" r="2" />
+                        <circle cx="8" cy="12" r="2" />
+                        <circle cx="8" cy="18" r="2" />
+                        <circle cx="14" cy="6" r="2" />
+                        <circle cx="14" cy="12" r="2" />
+                        <circle cx="14" cy="18" r="2" />
+                      </svg>
+                    </div>
+                  )}
                   <span className={styles.toolbarBubbleTitle}>
                     {desktopAnchorBubbleKind === 'exit'
                       ? t('toolbar.leaveMeeting')

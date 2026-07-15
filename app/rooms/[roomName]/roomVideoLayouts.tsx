@@ -550,8 +550,8 @@ export function LiveDocWebcamSidebarTile({
         <div className="webcam-sidebar-meta lk-participant-metadata-item">
           <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
-          <span className="webcam-sidebar-name">{name}</span>
           <ParticipantTileRoleMoreMenu identity={participant.identity} placement="inline" />
+          <span className="webcam-sidebar-name">{name}</span>
         </div>
       </div>
     </div>
