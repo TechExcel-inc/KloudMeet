@@ -81,6 +81,14 @@ h2 a {
   }
 }
 
+/* Participant tile metadata: 去掉 LiveKit 默认连片黑底，控件各自独立 */
+.lk-room-container .lk-participant-metadata-item {
+  background: transparent !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  gap: 5px;
+}
+
 /* Hide default LiveKit control bar to prevent redundant UI */
 .lk-control-bar {
   display: none !important;

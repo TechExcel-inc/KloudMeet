@@ -685,10 +685,14 @@ export const chatAndAttendeeStyles = `
   .kloud-participant-mic-btn.muted:not(.host-restricted) {
     opacity: 1;
     color: rgba(255, 255, 255, 0.75);
+    background: rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.1);
   }
   /* Active (unmuted) state */
   .kloud-participant-mic-btn.active:not(.host-restricted) {
     color: #22c55e;
+    background: rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.1);
   }
   /* Clickable (operator) states */
   .kloud-participant-mic-btn.clickable {
@@ -730,7 +734,7 @@ export const chatAndAttendeeStyles = `
   .kloud-participant-media-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
   }
 
@@ -757,6 +761,8 @@ export const chatAndAttendeeStyles = `
   .kloud-participant-cam-btn.disabled:not(.host-restricted) {
     opacity: 1;
     color: rgba(255, 255, 255, 0.75);
+    background: rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.1);
   }
   .kloud-participant-cam-btn.host-restricted,
   .kloud-participant-cam-btn.host-restricted.disabled,
@@ -769,6 +775,8 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-participant-cam-btn.active:not(.host-restricted) {
     color: #22c55e;
+    background: rgba(0, 0, 0, 0.45);
+    border-color: rgba(255, 255, 255, 0.1);
   }
   .kloud-participant-cam-btn.clickable {
     cursor: pointer;
@@ -800,7 +808,7 @@ export const chatAndAttendeeStyles = `
   /* Action buttons */
   .kloud-attendee-actions {
     display: flex;
-    gap: 4px;
+    gap: 6px;
     flex-shrink: 0;
     align-items: center;
   }
@@ -809,17 +817,18 @@ export const chatAndAttendeeStyles = `
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.1);
-    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.45);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.15s;
     color: rgba(255,255,255,0.5);
+    box-sizing: border-box;
   }
   .kloud-role-icon-btn:hover {
-    background: rgba(255,255,255,0.12);
+    background: rgba(0, 0, 0, 0.62);
     border-color: rgba(255,255,255,0.2);
     color: rgba(255,255,255,0.85);
   }

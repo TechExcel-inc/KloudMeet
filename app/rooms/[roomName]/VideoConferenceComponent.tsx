@@ -4559,13 +4559,15 @@ export function VideoConferenceComponent(props: {
 
         {/* View content area */}
         <div
-          className="main-meeting-area"
+          className={`main-meeting-area${isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? ' kloud-mobile-webcam-view' : ''}`}
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: isToolbarMobile && activeView === 'webcam' && !hasScreenShare
+              ? 'var(--kloud-mobile-toolbar-height)'
+              : 0,
             overflow: 'hidden',
             display: 'flex',
           }}
@@ -5264,14 +5266,14 @@ export function VideoConferenceComponent(props: {
                 display: inline-flex !important;
                 align-items: center !important;
                 justify-content: flex-start !important;
-                gap: 3px !important;
+                gap: 5px !important;
                 max-width: 100% !important;
                 min-width: 0 !important;
-                padding: 2px 4px !important;
+                padding: 0 !important;
                 line-height: 1 !important;
-                border-radius: 4px !important;
-                background: rgba(0, 0, 0, 0.58) !important;
-                backdrop-filter: blur(4px) !important;
+                border-radius: 0 !important;
+                background: transparent !important;
+                backdrop-filter: none !important;
                 pointer-events: none !important;
               }
               .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-participant-metadata-item .kloud-custom-mic-indicator,
@@ -5770,8 +5772,8 @@ export function VideoConferenceComponent(props: {
                backdrop-filter: none;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-tile--compact .floating-grid-name-row {
-               background: rgba(0, 0, 0, 0.58);
-               backdrop-filter: blur(4px);
+               background: transparent;
+               backdrop-filter: none;
             }
             /* 右侧小格：麦克风默认隐藏，悬停头像再显示（左侧 hero 不受影响） */
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator {
@@ -5792,10 +5794,11 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.kloud-custom-mic--force-muted,
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.self-interactive {
               opacity: 1 !important;
-              width: 1.15rem !important;
-              min-width: 1.15rem !important;
-              height: 1.15rem !important;
-              min-height: 1.15rem !important;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               overflow: visible !important;
               pointer-events: auto !important;
             }
@@ -5814,46 +5817,57 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
             .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator.self-interactive {
               opacity: 1 !important;
-              width: 1.15rem !important;
-              min-width: 1.15rem !important;
-              height: 1.15rem !important;
-              min-height: 1.15rem !important;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               overflow: visible !important;
               pointer-events: auto !important;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator {
               opacity: 1;
-              width: 1rem !important;
-              height: 1rem !important;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               pointer-events: auto;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] {
-              width: 1.15rem !important;
-              height: 1.15rem !important;
+              width: 20px !important;
+              height: 20px !important;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator.operator-interactive {
-              min-width: 1.35rem !important;
-              min-height: 1.35rem !important;
-              padding: 3px;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               margin: 0;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator.self-interactive {
-              min-width: 1.35rem !important;
-              min-height: 1.35rem !important;
-              padding: 3px;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               margin: 0;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator {
               opacity: 1;
-              width: 1rem !important;
-              height: 1rem !important;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
               pointer-events: auto;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
             .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
-              width: 1.15rem !important;
-              height: 1.15rem !important;
+              width: 20px !important;
+              height: 20px !important;
             }
             .floating-grid-tile {
                display: block;
@@ -5900,18 +5914,58 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-cam-indicator {
                margin: 0 !important;
             }
+            /* 活文档浮窗：mic / cam / ⋯ 统一 chip 尺寸，避免一大一小 */
+            .floating-webcam-panel .kloud-custom-mic-indicator,
+            .floating-webcam-panel .kloud-custom-cam-indicator,
+            .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.operator-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator.self-interactive,
+            .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive,
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+            .floating-webcam-panel .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
+            .floating-webcam-panel .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
+            .floating-webcam-panel .kloud-custom-mic-indicator.kloud-custom-mic--force-muted,
+            .floating-webcam-panel .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
+              margin: 0 !important;
+              box-sizing: border-box !important;
+              border-radius: 5px !important;
+            }
+            .floating-webcam-panel .kloud-custom-mic-indicator svg,
+            .floating-webcam-panel .kloud-custom-cam-indicator svg {
+              width: 14px !important;
+              height: 14px !important;
+              max-width: 14px !important;
+              max-height: 14px !important;
+            }
+            .floating-webcam-panel .kloud-tile-more-menu-wrap .kloud-role-icon-btn {
+              width: 20px !important;
+              height: 20px !important;
+              min-width: 20px !important;
+              min-height: 20px !important;
+              padding: 0 !important;
+              box-sizing: border-box !important;
+            }
+            .floating-webcam-panel .kloud-tile-more-menu-wrap .kloud-role-icon-btn svg {
+              width: 14px !important;
+              height: 14px !important;
+            }
             .floating-grid-name-row {
                display: inline-flex;
                align-items: center;
                justify-content: flex-start;
-               gap: 2px;
+               gap: 5px;
                max-width: 100%;
                min-width: 0;
-               padding: 2px 4px;
+               padding: 0;
                line-height: 1;
-               border-radius: 4px;
-               background: rgba(0, 0, 0, 0.58);
-               backdrop-filter: blur(4px);
+               border-radius: 0;
+               background: transparent;
+               backdrop-filter: none;
             }
             .floating-grid-name-row .lk-track-muted-indicator-microphone {
                flex-shrink: 0;
@@ -6063,9 +6117,9 @@ export function VideoConferenceComponent(props: {
             .webcam-sidebar-meta {
                display: flex;
                align-items: center;
-               gap: 4px;
-               padding: 4px 8px 6px;
-               background: rgba(0,0,0,0.45);
+               gap: 5px;
+               padding: 0;
+               background: transparent;
                color: rgba(255,255,255,0.8);
                font-size: 11px;
                font-weight: 500;
@@ -6284,9 +6338,12 @@ export function VideoConferenceComponent(props: {
               display: inline-flex !important;
               align-items: center !important;
               flex-wrap: nowrap !important;
-              gap: 3px !important;
+              gap: 5px !important;
               max-width: 100% !important;
               min-width: 0 !important;
+              padding: 0 !important;
+              background: transparent !important;
+              border-radius: 0 !important;
             }
             .lk-grid-layout-wrapper .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn,
             .lk-mobile-scroll-grid .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn {
@@ -6306,26 +6363,52 @@ export function VideoConferenceComponent(props: {
               height: 20px;
             }
             .kloud-tile-more-menu-wrap .kloud-role-icon-btn {
-              width: 24px;
-              height: 24px;
+              width: 20px;
+              height: 20px;
               padding: 0;
               display: flex;
               align-items: center;
               justify-content: center;
-              background: rgba(0, 0, 0, 0.55);
-              border: 1px solid rgba(255, 255, 255, 0.15);
-              border-radius: 6px;
+              background: rgba(0, 0, 0, 0.58);
+              backdrop-filter: blur(4px);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              border-radius: 5px;
+              box-sizing: border-box;
               color: rgba(255, 255, 255, 0.85);
               cursor: pointer;
             }
             .kloud-tile-more-menu-wrap .kloud-role-icon-btn:hover {
-              background: rgba(0, 0, 0, 0.75);
+              background: rgba(0, 0, 0, 0.72);
+              border-color: rgba(255, 255, 255, 0.22);
               color: #fff;
             }
             .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn,
             .lk-grid-layout-wrapper .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn,
             .lk-mobile-scroll-grid .lk-participant-tile > .kloud-tile-more-menu-wrap .kloud-tile-more-menu-btn {
               pointer-events: auto;
+            }
+
+            /* ══════════════════════════════════════════════════════
+               Tile control chips — mic / cam / more 各自独立
+               ══════════════════════════════════════════════════════ */
+            .lk-room-container .kloud-custom-mic-indicator,
+            .lk-room-container .kloud-custom-cam-indicator {
+              background: rgba(0, 0, 0, 0.58);
+              backdrop-filter: blur(4px);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              border-radius: 5px;
+              box-sizing: border-box;
+              margin: 0 !important;
+            }
+            .lk-room-container .lk-participant-metadata-item .lk-participant-name,
+            .lk-room-container .lk-participant-metadata-item .webcam-sidebar-name,
+            .lk-room-container .floating-grid-name-row .floating-grid-name {
+              padding: 2px 6px;
+              background: rgba(0, 0, 0, 0.58);
+              backdrop-filter: blur(4px);
+              border: 1px solid rgba(255, 255, 255, 0.1);
+              border-radius: 5px;
+              box-sizing: border-box;
             }
 
             /* ══════════════════════════════════════════════════════
@@ -6453,11 +6536,11 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-mic-indicator.self-interactive,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.self-interactive {
               cursor: pointer;
-              border-radius: 50%;
-              padding: 4px;          /* larger hit area */
+              border-radius: 5px;
+              padding: 3px;
               min-width: 1.6rem;
               min-height: 1.6rem;
-              margin: -2px;          /* compensate for extra padding */
+              margin: 0;
             }
             /* SVG inside mic indicator must not steal pointer events */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator svg,
@@ -6478,8 +6561,9 @@ export function VideoConferenceComponent(props: {
             .webcam-sidebar-panel .kloud-custom-mic-indicator.self-interactive:hover,
             .floating-webcam-panel .kloud-custom-mic-indicator.self-interactive:hover,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-mic-indicator.self-interactive:hover {
-              background: rgba(255, 255, 255, 0.18);
-              transform: scale(1.2);
+              background: rgba(0, 0, 0, 0.72);
+              border-color: rgba(255, 255, 255, 0.22);
+              transform: scale(1.05);
             }
 
             .floating-webcam-panel .kloud-custom-mic-indicator.operator-interactive,
@@ -6490,12 +6574,13 @@ export function VideoConferenceComponent(props: {
             .lk-mobile-scroll-grid .kloud-custom-cam-indicator.operator-interactive,
             .lk-mobile-scroll-grid .kloud-custom-mic-indicator.self-interactive,
             .lk-mobile-scroll-grid .kloud-custom-cam-indicator.self-interactive {
-              min-width: 1.15rem;
-              min-height: 1.15rem;
-              width: 1.15rem;
-              height: 1.15rem;
-              padding: 2px;
+              min-width: 20px;
+              min-height: 20px;
+              width: 20px;
+              height: 20px;
+              padding: 3px;
               margin: 0 !important;
+              box-sizing: border-box;
             }
 
             /* Custom injected camera indicator styling */
@@ -6562,11 +6647,11 @@ export function VideoConferenceComponent(props: {
             .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.self-interactive {
               cursor: pointer;
-              border-radius: 50%;
-              padding: 4px;
+              border-radius: 5px;
+              padding: 3px;
               min-width: 1.6rem;
               min-height: 1.6rem;
-              margin: -2px;
+              margin: 0;
             }
 
             .lk-grid-layout-wrapper .kloud-custom-cam-indicator svg,
@@ -6588,8 +6673,9 @@ export function VideoConferenceComponent(props: {
             .webcam-sidebar-panel .kloud-custom-cam-indicator.self-interactive:hover,
             .floating-webcam-panel .kloud-custom-cam-indicator.self-interactive:hover,
             .sky-meet-video-wrapper .lk-carousel .kloud-custom-cam-indicator.self-interactive:hover {
-              background: rgba(255, 255, 255, 0.18);
-              transform: scale(1.2);
+              background: rgba(0, 0, 0, 0.72);
+              border-color: rgba(255, 255, 255, 0.22);
+              transform: scale(1.05);
             }
 
             /* Host/co-host controls stay visible so mute/camera state is never ambiguous. */
@@ -6649,9 +6735,11 @@ export function VideoConferenceComponent(props: {
             .lk-mobile-scroll-grid .lk-participant-metadata-item {
               display: inline-flex !important;
               align-items: center !important;
-              gap: 3px !important;
+              gap: 5px !important;
               max-width: 100% !important;
               min-width: 0 !important;
+              padding: 0 !important;
+              background: transparent !important;
               line-height: 1 !important;
             }
             .lk-mobile-scroll-grid .kloud-custom-cam-indicator svg,
@@ -6660,6 +6748,15 @@ export function VideoConferenceComponent(props: {
               height: 100% !important;
               max-width: 1.15rem;
               max-height: 1.15rem;
+            }
+
+            /* Mobile webcam：视频网格停在底部导航栏上方 */
+            .kloud-mobile-meeting .main-meeting-area.kloud-mobile-webcam-view {
+              bottom: var(--kloud-mobile-toolbar-height);
+            }
+            .kloud-mobile-meeting .main-meeting-area.kloud-mobile-webcam-view .lk-mobile-scroll-grid {
+              height: 100%;
+              max-height: 100%;
             }
 
             /* Mobile: top-level RoomAudioRenderer plays remote audio; hide duplicates inside hidden video wrapper */
