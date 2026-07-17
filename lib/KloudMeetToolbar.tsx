@@ -352,6 +352,7 @@ export function KloudMeetToolbar({
       target.closest?.('.lk-device-menu') ||
       target.closest?.('.lk-menu') ||
       target.closest?.('.chat-overlay-panel') ||
+      target.closest?.('.floating-webcam-panel') ||
       target.closest?.(`.${styles.actionSheetOverlay}`) ||
       target.closest?.(`.${styles.actionSheet}`) ||
       target.closest?.('.kloud-modal')
@@ -748,6 +749,7 @@ export function KloudMeetToolbar({
       {/* Main toolbar */}
       <div
         ref={toolbarRef}
+        data-skymeet-toolbar="true"
         className={`${styles.toolbar} ${isMobile ? styles.mobileToolbar : ''} ${!visible ? styles.toolbarHidden : ''}`}
       >
         {isMobile ? (
@@ -766,7 +768,8 @@ export function KloudMeetToolbar({
                   ) : (
                     <>
                       <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" />
+                      {/* 自己关麦：斜线跟 icon 同色，不用红色 */}
+                      <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
                     </>
                   )}
                 </svg>
@@ -796,7 +799,16 @@ export function KloudMeetToolbar({
                   ) : (
                     <>
                       <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="#f87171" strokeWidth="2.5" strokeLinecap="round" />
+                      {/* 自己关摄像头：斜线跟 icon 同色；主持人禁用仍走红色底样式 */}
+                      <line
+                        x1="4"
+                        y1="4"
+                        x2="20"
+                        y2="20"
+                        stroke={isCamDisabledByHost ? '#ef4444' : 'currentColor'}
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
                     </>
                   )}
                 </svg>
@@ -812,16 +824,12 @@ export function KloudMeetToolbar({
               )}
             </div>
 
-            {/* 3. LiveDoc */}
+            {/* 3. LiveDoc — 手机不展示 Live Doc Menu，仅切换视图 */}
             <button
               className={`${styles.mobileBtn} ${activeView === 'liveDoc' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
               onClick={() => {
                 if (!canSwitchViews) return;
-                if (activeView === 'liveDoc' && liveDocPluginLoaded) {
-                  postToggleDocPopup();
-                } else {
-                  onViewChange('liveDoc');
-                }
+                onViewChange('liveDoc');
               }}
               aria-label={t('toolbar.liveDoc')}
               title={t('toolbar.liveDoc')}
@@ -829,13 +837,6 @@ export function KloudMeetToolbar({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              {activeView === 'liveDoc' && liveDocPluginLoaded && (
-                <span style={{ position: 'absolute', top: '1px', right: '1px', width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" style={{ width: '8px', height: '8px' }}>
-                    <path d="M18 15l-6-6-6 6" />
-                  </svg>
-                </span>
-              )}
             </button>
 
             {/* 4. Webcam */}
@@ -1223,6 +1224,7 @@ export function KloudMeetToolbar({
                 onOpenDesktopApp={onOpenDesktopApp}
                 liveDocPluginLoaded={liveDocPluginLoaded}
                 onLiveDocPanelTab={postLiveDocPanelTab}
+                showLiveDocMenu={false}
               />
             </div>
           </div>
@@ -1386,6 +1388,7 @@ export function KloudMeetToolbar({
                       onOpenDesktopApp={onOpenDesktopApp}
                       liveDocPluginLoaded={liveDocPluginLoaded}
                       onLiveDocPanelTab={postLiveDocPanelTab}
+                      showLiveDocMenu
                     />
                   </div>
                 )}
@@ -1532,6 +1535,7 @@ function ActiveSheetContent({
   onOpenDesktopApp,
   liveDocPluginLoaded,
   onLiveDocPanelTab,
+  showLiveDocMenu = true,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1634,7 +1638,7 @@ function ActiveSheetContent({
           </button>
           */}
 
-          {activeView === 'liveDoc' && liveDocPluginLoaded && (
+          {showLiveDocMenu && activeView === 'liveDoc' && liveDocPluginLoaded && (
             <div className={styles.actionSheetGroup}>
               <div className={styles.actionSheetGroupLabel}>{t('toolbar.liveDocMenu')}</div>
               <div className={styles.actionSheetGroupItems}>

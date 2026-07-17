@@ -911,8 +911,6 @@ export function LiveDocFloatingCollapsedAvatar({
       data-lk-local-participant={participant.isLocal}
       style={style}
       onClick={onClick}
-      onMouseDown={(e) => e.stopPropagation()}
-      onTouchStart={(e) => e.stopPropagation()}
       role={onClick ? 'button' : undefined}
       tabIndex={onClick ? 0 : undefined}
     >

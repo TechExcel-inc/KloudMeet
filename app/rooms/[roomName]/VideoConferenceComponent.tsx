@@ -112,7 +112,8 @@ const LiveDocView = dynamic(
   { ssr: false },
 );
 import {
-  FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET,
+  FLOATING_WEBCAM_BOTTOM_GAP,
+  FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK,
   FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL,
   FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN,
   FLOATING_WEBCAM_RIGHT_INSET,
@@ -320,19 +321,38 @@ export function VideoConferenceComponent(props: {
   }, []);
 
   const roomOptions = React.useMemo((): RoomOptions => {
-    let videoCodec: VideoCodec | undefined = props.options.codec ? props.options.codec : 'vp9';
+    // 同步 UA：Room 在首屏创建，不能等 useToolbarIsMobile 的 effect
+    const isMobileClient = isToolbarMobileUserAgent();
+    // 手机默认 h264（Safari/微信更稳）；桌面仍默认 vp9。URL ?codec= 优先。
+    let videoCodec: VideoCodec | undefined = props.options.codec
+      ? props.options.codec
+      : isMobileClient
+        ? 'h264'
+        : 'vp9';
     if (e2eeEnabled && (videoCodec === 'av1' || videoCodec === 'vp9')) {
       videoCodec = undefined;
     }
+    // 手机忽略 hq，避免 4K 采集把低端机打挂
+    const useHq = Boolean(props.options.hq) && !isMobileClient;
     const videoCaptureDefaults: VideoCaptureOptions = {
       deviceId: props.userChoices.videoDeviceId ?? undefined,
-      resolution: props.options.hq ? VideoPresets.h2160 : VideoPresets.h720,
+      resolution: useHq
+        ? VideoPresets.h2160
+        : isMobileClient
+          ? VideoPresets.h360
+          : VideoPresets.h720,
+      ...(isMobileClient && !props.userChoices.videoDeviceId
+        ? { facingMode: 'user' as const }
+        : {}),
     };
     const publishDefaults: TrackPublishDefaults = {
-      dtx: false,
-      videoSimulcastLayers: props.options.hq
+      // 手机开 dtx，静音时段少发包，弱网更稳
+      dtx: isMobileClient,
+      videoSimulcastLayers: useHq
         ? [VideoPresets.h1080, VideoPresets.h720]
-        : [VideoPresets.h540, VideoPresets.h216],
+        : isMobileClient
+          ? [VideoPresets.h180]
+          : [VideoPresets.h540, VideoPresets.h216],
       red: !e2eeEnabled,
       videoCodec,
     };
@@ -344,6 +364,8 @@ export function VideoConferenceComponent(props: {
       },
       adaptiveStream: true,
       dynacast: true,
+      // 手机切后台常见 pagehide/freeze；不断连，靠现有 visibility 恢复音频
+      disconnectOnPageLeave: !isMobileClient,
       e2ee: keyProvider && worker && e2eeEnabled ? { keyProvider, worker } : undefined,
       singlePeerConnection: true,
     };
@@ -3001,6 +3023,9 @@ export function VideoConferenceComponent(props: {
   const [liveDocFilePanelWidth, setLiveDocFilePanelWidth] = React.useState(
     LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
   );
+  /** 浮窗拖拽中：供 LiveDoc postMessage 守卫使用（须早于 message effect） */
+  const isDragging = React.useRef(false);
+  const clearFloatingDragListenersRef = React.useRef<() => void>(() => {});
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   React.useEffect(() => {
@@ -3234,6 +3259,8 @@ export function VideoConferenceComponent(props: {
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
       } else if (data.type === 'onkloudloaded') {
+        // ② 文档加载完成：再释放一次，并恢复 iframe 可点
+        clearFloatingDragListenersRef.current();
         setShowWebcamSidebar(false);
         setLiveDocFilePanelVisible(false);
         setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
@@ -3243,6 +3270,7 @@ export function VideoConferenceComponent(props: {
         data.type === 'Kloud-ShowFilePanel' ||
         !!data.type?.toLowerCase().includes('filepanel')
       ) {
+        if (isDragging.current) return;
         const visible = getPanelVisibility(data);
         if (visible !== null) {
           setLiveDocFilePanelVisible(visible);
@@ -3286,14 +3314,9 @@ export function VideoConferenceComponent(props: {
   const [floatingExpanded, setFloatingExpanded] = React.useState(true);
   const [floatingCollapsedPreviewId, setFloatingCollapsedPreviewId] = React.useState<string | null>(null);
   const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
-  const isDragging = React.useRef(false);
   const dragOffset = React.useRef({ x: 0, y: 0 });
-  /** 浮窗右边缘距 offsetParent 右缘的像素（与 CSS `right` 同向），用于 LiveDoc 下宽度变化后同步 */
-  const rememberedRightInsetRef = React.useRef<number | null>(null);
   const floatingPosRef = React.useRef(floatingPos);
   const floatingPosLayoutRef = React.useRef(floatingPosLayout);
-  const floatingXAnimationRef = React.useRef<number | null>(null);
-  const FLOATING_SYNC_ANIMATION_MS = 340;
   /** 文件栏完全隐藏时不占位，避免仍按「折叠宽度」把浮窗拦在距右缘 56px+ 处 */
   const effectiveLiveDocPanelWidth = liveDocFilePanelVisible ? liveDocFilePanelWidth : 0;
   const floatingRightInset =
@@ -3389,12 +3412,24 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
-  const getInsetFromParentRight = React.useCallback((x: number) => {
-    const el = floatingRef.current;
-    const parent = el?.offsetParent as HTMLElement | null;
-    if (!el || !parent) return null;
-    return parent.clientWidth - x - el.offsetWidth;
+  const getFloatingBottomInset = React.useCallback((parent: HTMLElement) => {
+    const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
+    if (!toolbar) {
+      return FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK + FLOATING_WEBCAM_BOTTOM_GAP;
+    }
+    const parentRect = parent.getBoundingClientRect();
+    const toolbarRect = toolbar.getBoundingClientRect();
+    // 底栏已滑出视口（hidden）时允许贴近父容器底边
+    if (toolbarRect.top >= window.innerHeight - 2) {
+      return FLOATING_WEBCAM_BOTTOM_GAP;
+    }
+    const overlap = parentRect.bottom - toolbarRect.top;
+    if (overlap <= 0) {
+      return FLOATING_WEBCAM_BOTTOM_GAP;
+    }
+    return Math.max(FLOATING_WEBCAM_BOTTOM_GAP, overlap + FLOATING_WEBCAM_BOTTOM_GAP);
   }, []);
+
   const clampFloatingPosition = React.useCallback(
     (x: number, y: number) => {
       const el = floatingRef.current;
@@ -3403,63 +3438,47 @@ export function VideoConferenceComponent(props: {
 
       const minY = activeView === 'liveDoc' && !hasScreenShare ? FLOATING_WEBCAM_TOP_INSET : 0;
       const maxX = Math.max(0, parent.clientWidth - el.offsetWidth - floatingRightBoundaryInset);
-      const maxY = Math.max(
-        minY,
-        parent.clientHeight - el.offsetHeight - FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET,
-      );
+      const bottomInset = getFloatingBottomInset(parent);
+      const maxY = Math.max(minY, parent.clientHeight - el.offsetHeight - bottomInset);
       return {
         x: Math.min(Math.max(0, x), maxX),
         y: Math.min(Math.max(minY, y), maxY),
       };
     },
-    [activeView, floatingRightBoundaryInset, hasScreenShare],
+    [activeView, floatingRightBoundaryInset, getFloatingBottomInset, hasScreenShare],
   );
+
+  const clampFloatingPositionRef = React.useRef(clampFloatingPosition);
+  clampFloatingPositionRef.current = clampFloatingPosition;
 
   React.useEffect(() => {
     floatingPosRef.current = floatingPos;
   }, [floatingPos]);
   floatingPosLayoutRef.current = floatingPosLayout;
 
-  const cancelFloatingXAnimation = React.useCallback(() => {
-    if (floatingXAnimationRef.current !== null) {
-      window.cancelAnimationFrame(floatingXAnimationRef.current);
-      floatingXAnimationRef.current = null;
-    }
+  // 修复历史残留：曾用 iframe.style.pointerEvents='none' 导致整页点不了
+  const restoreLiveDocIframePointerEvents = React.useCallback(() => {
+    document.querySelectorAll<HTMLIFrameElement>('iframe[title="LiveDoc"]').forEach((iframe) => {
+      iframe.style.pointerEvents = '';
+    });
   }, []);
 
-  const animateFloatingXTo = React.useCallback(
-    (targetX: number) => {
-      cancelFloatingXAnimation();
-      const start = floatingPosRef.current;
-      const deltaX = targetX - start.x;
-      if (Math.abs(deltaX) < 0.5) return;
-      const startAt = performance.now();
-      const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
+  const setLiveDocIframePointerEventsEnabled = React.useCallback((enabled: boolean) => {
+    document.querySelectorAll<HTMLIFrameElement>('iframe[title="LiveDoc"]').forEach((iframe) => {
+      iframe.style.pointerEvents = enabled ? '' : 'none';
+    });
+  }, []);
 
-      const tick = (now: number) => {
-        const elapsed = now - startAt;
-        const progress = Math.min(1, elapsed / FLOATING_SYNC_ANIMATION_MS);
-        const eased = easeOut(progress);
-        const x = start.x + deltaX * eased;
-        const clamped = clampFloatingPosition(x, start.y);
-        setFloatingPos({ x: clamped.x, y: clamped.y });
-        if (progress < 1 && !isDragging.current) {
-          floatingXAnimationRef.current = window.requestAnimationFrame(tick);
-        } else {
-          floatingXAnimationRef.current = null;
-        }
-      };
-      floatingXAnimationRef.current = window.requestAnimationFrame(tick);
-    },
-    [cancelFloatingXAnimation, clampFloatingPosition],
-  );
+  React.useEffect(() => {
+    restoreLiveDocIframePointerEvents();
+  }, [restoreLiveDocIframePointerEvents]);
 
+  /** 仅真正控件忽略拖拽；头像允许「按住拖动 / 轻点预览」 */
   const shouldIgnoreFloatingDragTarget = (target: Element) =>
     Boolean(
       target.closest('.kloud-custom-mic-indicator') ||
+        target.closest('.kloud-custom-cam-indicator') ||
         target.closest('.floating-chevron-btn') ||
-        target.closest('.floating-avatar-shell') ||
-        target.closest('.floating-avatar:not(.overflow-badge)') ||
         target.closest('.floating-collapsed-preview') ||
         target.closest('button'),
     );
@@ -3499,22 +3518,11 @@ export function VideoConferenceComponent(props: {
       }
     };
 
-    const onWindowBlur = () => {
-      window.setTimeout(() => {
-        const active = document.activeElement;
-        if (active instanceof HTMLIFrameElement) {
-          close();
-        }
-      }, 0);
-    };
-
     document.addEventListener('pointerdown', onOutsidePointerDown, true);
     window.addEventListener('message', onLiveDocClick);
-    window.addEventListener('blur', onWindowBlur);
     return () => {
       document.removeEventListener('pointerdown', onOutsidePointerDown, true);
       window.removeEventListener('message', onLiveDocClick);
-      window.removeEventListener('blur', onWindowBlur);
     };
   }, [floatingCollapsedPreviewId, floatingExpanded, shouldKeepFloatingCollapsedPreview]);
 
@@ -3526,149 +3534,224 @@ export function VideoConferenceComponent(props: {
     }
   }, [room.remoteParticipants, floatingCollapsedPreviewId]);
 
-  const beginFloatingDrag = React.useCallback(
-    (clientX: number, clientY: number) => {
-      isDragging.current = true;
-      setIsFloatingDragging(true);
-      cancelFloatingXAnimation();
-      if (floatingPosLayout === 'right-inset' && floatingRef.current) {
-        const el = floatingRef.current;
-        const parent = el.offsetParent as HTMLElement | null;
-        if (parent) {
-          const rect = el.getBoundingClientRect();
+  const FLOATING_DRAG_THRESHOLD_PX = 8;
+  const suppressFloatingAvatarClickRef = React.useRef(false);
+  const floatingDragCleanupRef = React.useRef<(() => void) | null>(null);
+
+  const clearFloatingDragListeners = React.useCallback(() => {
+    floatingDragCleanupRef.current?.();
+    floatingDragCleanupRef.current = null;
+    isDragging.current = false;
+    setIsFloatingDragging(false);
+    // 拖拽结束必须恢复 iframe，否则 LiveDoc 全屏区域全部点不了
+    restoreLiveDocIframePointerEvents();
+  }, [restoreLiveDocIframePointerEvents]);
+  clearFloatingDragListenersRef.current = clearFloatingDragListeners;
+
+  // 组件卸载时务必收尾
+  React.useEffect(() => () => clearFloatingDragListeners(), [clearFloatingDragListeners]);
+
+  // ① 切入 LiveDoc 模式时释放一次浮窗手势
+  const prevActiveViewForFloatingDragRef = React.useRef(activeView);
+  React.useEffect(() => {
+    const prev = prevActiveViewForFloatingDragRef.current;
+    prevActiveViewForFloatingDragRef.current = activeView;
+    if (activeView === 'liveDoc' && prev !== 'liveDoc') {
+      clearFloatingDragListeners();
+    }
+  }, [activeView, clearFloatingDragListeners]);
+
+  // 切后台时兜底恢复，防止 iframe pointer-events 残留
+  React.useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') clearFloatingDragListeners();
+    };
+    const onPageHide = () => clearFloatingDragListeners();
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [clearFloatingDragListeners]);
+
+  const handleFloatingPointerDown = React.useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      if (!(e.target instanceof Element)) return;
+      if (shouldIgnoreFloatingDragTarget(e.target)) return;
+
+      clearFloatingDragListeners();
+
+      const panelEl = e.currentTarget;
+      const pointerId = e.pointerId;
+      const originX = e.clientX;
+      const originY = e.clientY;
+      let moved = false;
+      let dragActive = false;
+      let watchdogTimer: number | null = null;
+      const latestPos = { x: floatingPosRef.current.x, y: floatingPosRef.current.y };
+
+      const applyDomPosition = (x: number, y: number) => {
+        latestPos.x = x;
+        latestPos.y = y;
+        panelEl.style.left = `${x}px`;
+        panelEl.style.top = `${y}px`;
+        panelEl.style.right = 'auto';
+        panelEl.style.transition = 'none';
+      };
+
+      const clientToParentPos = (clientX: number, clientY: number) => {
+        const parent = panelEl.offsetParent as HTMLElement | null;
+        if (!parent) {
+          return {
+            x: clientX - dragOffset.current.x,
+            y: clientY - dragOffset.current.y,
+          };
+        }
+        const pRect = parent.getBoundingClientRect();
+        return {
+          x: clientX - pRect.left - dragOffset.current.x,
+          y: clientY - pRect.top - dragOffset.current.y,
+        };
+      };
+
+      const beginDrag = (clientX: number, clientY: number) => {
+        if (dragActive) return;
+        dragActive = true;
+        moved = true;
+        isDragging.current = true;
+        setFloatingCollapsedPreviewId(null);
+        // 关键：拖拽期间禁用 LiveDoc iframe 命中，否则手指一进文档区父页就收不到 move/up
+        setLiveDocIframePointerEventsEnabled(false);
+
+        const parent = panelEl.offsetParent as HTMLElement | null;
+        if (floatingPosLayoutRef.current === 'right-inset' && parent) {
+          const rect = panelEl.getBoundingClientRect();
           const pRect = parent.getBoundingClientRect();
           const x = rect.left - pRect.left;
           const y = rect.top - pRect.top;
-          const clamped = clampFloatingPosition(x, y);
+          const clamped = clampFloatingPositionRef.current(x, y);
+          floatingPosRef.current = clamped;
           setFloatingPosLayout('coordinates');
           setFloatingPos(clamped);
-          if (activeView === 'liveDoc' && !hasScreenShare) {
-            rememberedRightInsetRef.current = getInsetFromParentRight(clamped.x);
-          }
-          dragOffset.current = { x: clientX - clamped.x, y: clientY - clamped.y };
+          setIsFloatingDragging(true);
+          applyDomPosition(clamped.x, clamped.y);
+          dragOffset.current = {
+            x: clientX - pRect.left - clamped.x,
+            y: clientY - pRect.top - clamped.y,
+          };
+        } else if (parent) {
+          const p = floatingPosRef.current;
+          const pRect = parent.getBoundingClientRect();
+          dragOffset.current = {
+            x: clientX - pRect.left - p.x,
+            y: clientY - pRect.top - p.y,
+          };
+          setIsFloatingDragging(true);
+          applyDomPosition(p.x, p.y);
         } else {
           const p = floatingPosRef.current;
           dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
+          setIsFloatingDragging(true);
+        }
+      };
+
+      const onMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== pointerId) return;
+        const dx = ev.clientX - originX;
+        const dy = ev.clientY - originY;
+        if (!dragActive) {
+          if (dx * dx + dy * dy < FLOATING_DRAG_THRESHOLD_PX * FLOATING_DRAG_THRESHOLD_PX) {
+            return;
+          }
+          beginDrag(originX, originY);
+        }
+        if (!dragActive) return;
+        const raw = clientToParentPos(ev.clientX, ev.clientY);
+        const next = clampFloatingPositionRef.current(raw.x, raw.y);
+        applyDomPosition(next.x, next.y);
+      };
+
+      // touch 在跨 iframe 时比 pointer 更稳：目标仍绑定 touchstart 元素
+      const onTouchMove = (ev: TouchEvent) => {
+        if (!ev.touches.length) return;
+        const t = ev.touches[0];
+        const dx = t.clientX - originX;
+        const dy = t.clientY - originY;
+        if (!dragActive) {
+          if (dx * dx + dy * dy < FLOATING_DRAG_THRESHOLD_PX * FLOATING_DRAG_THRESHOLD_PX) {
+            return;
+          }
+          beginDrag(originX, originY);
+        }
+        if (!dragActive) return;
+        if (ev.cancelable) ev.preventDefault();
+        const raw = clientToParentPos(t.clientX, t.clientY);
+        const next = clampFloatingPositionRef.current(raw.x, raw.y);
+        applyDomPosition(next.x, next.y);
+      };
+
+      const endGesture = (ev: PointerEvent | TouchEvent) => {
+        if ('pointerId' in ev && ev.pointerId !== pointerId) return;
+        cleanup();
+      };
+
+      let ended = false;
+      const cleanup = () => {
+        if (ended) return;
+        ended = true;
+        if (watchdogTimer !== null) {
+          window.clearTimeout(watchdogTimer);
+          watchdogTimer = null;
+        }
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', endGesture);
+        window.removeEventListener('pointercancel', endGesture);
+        window.removeEventListener('touchmove', onTouchMove);
+        window.removeEventListener('touchend', endGesture);
+        window.removeEventListener('touchcancel', endGesture);
+        restoreLiveDocIframePointerEvents();
+        if (moved) {
+          suppressFloatingAvatarClickRef.current = true;
+          const committed = clampFloatingPositionRef.current(latestPos.x, latestPos.y);
+          floatingPosRef.current = committed;
+          setFloatingPos(committed);
           setFloatingPosLayout('coordinates');
         }
-      } else {
-        const p = floatingPosRef.current;
-        dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
-      }
+        isDragging.current = false;
+        setIsFloatingDragging(false);
+        if (floatingDragCleanupRef.current === cleanup) {
+          floatingDragCleanupRef.current = null;
+        }
+      };
+
+      floatingDragCleanupRef.current = cleanup;
+      // 不用 setPointerCapture（跨 iframe / 文档加载时易残留，表现为点击错位）
+      // 起手即暂时让 iframe 不抢事件，松手/清理时必恢复
+      setLiveDocIframePointerEventsEnabled(false);
+      window.addEventListener('pointermove', onMove, { passive: true });
+      window.addEventListener('pointerup', endGesture);
+      window.addEventListener('pointercancel', endGesture);
+      window.addEventListener('touchmove', onTouchMove, { passive: false });
+      window.addEventListener('touchend', endGesture);
+      window.addEventListener('touchcancel', endGesture);
+      // 极端兜底：最长按住拖 30s 后强制收尾（避免 up 丢失导致永久点不了）
+      watchdogTimer = window.setTimeout(() => cleanup(), 30000);
     },
-    [activeView, cancelFloatingXAnimation, clampFloatingPosition, floatingPosLayout, getInsetFromParentRight, hasScreenShare],
+    [
+      clearFloatingDragListeners,
+      restoreLiveDocIframePointerEvents,
+      setLiveDocIframePointerEventsEnabled,
+    ],
   );
 
-  const handleFloatingMouseDown = React.useCallback(
-    (e: React.MouseEvent) => {
-      if (shouldIgnoreFloatingDragTarget(e.target as Element)) return;
-      if (floatingCollapsedPreviewId && !floatingExpanded) {
-        setFloatingCollapsedPreviewId(null);
-      }
-      beginFloatingDrag(e.clientX, e.clientY);
-      e.preventDefault();
-    },
-    [beginFloatingDrag, floatingCollapsedPreviewId, floatingExpanded],
-  );
-
-  const handleFloatingTouchStart = React.useCallback(
-    (e: React.TouchEvent) => {
-      if (shouldIgnoreFloatingDragTarget(e.target as Element)) return;
-      if (e.touches.length !== 1) return;
-      beginFloatingDrag(e.touches[0].clientX, e.touches[0].clientY);
-    },
-    [beginFloatingDrag],
-  );
-
-  React.useEffect(() => {
-    const applyFloatingDragMove = (clientX: number, clientY: number) => {
-      if (!isDragging.current) return;
-      const next = clampFloatingPosition(clientX - dragOffset.current.x, clientY - dragOffset.current.y);
-      setFloatingPos(next);
-      if (isDragging.current && activeView === 'liveDoc' && !hasScreenShare) {
-        rememberedRightInsetRef.current = getInsetFromParentRight(next.x);
-      }
-    };
-    const handleMouseMove = (e: MouseEvent) => {
-      applyFloatingDragMove(e.clientX, e.clientY);
-    };
-    const handleTouchMove = (e: TouchEvent) => {
-      if (!isDragging.current || e.touches.length !== 1) return;
-      e.preventDefault();
-      applyFloatingDragMove(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const finishFloatingDrag = () => {
-      isDragging.current = false;
-      setIsFloatingDragging(false);
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', finishFloatingDrag);
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', finishFloatingDrag);
-    window.addEventListener('touchcancel', finishFloatingDrag);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', finishFloatingDrag);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', finishFloatingDrag);
-      window.removeEventListener('touchcancel', finishFloatingDrag);
-    };
-  }, [activeView, clampFloatingPosition, getInsetFromParentRight, hasScreenShare]);
-
-  React.useEffect(() => {
-    const finishDrag = () => {
-      isDragging.current = false;
-      setIsFloatingDragging(false);
-    };
-    window.addEventListener('blur', finishDrag);
-    return () => window.removeEventListener('blur', finishDrag);
-  }, []);
-
-  // 勿在「切换到 coordinates」时触发：mousedown 已写入 clamped 坐标，再 setState 会多一次布局导致起手卡顿。
+  // 勿在「切换到 coordinates」时触发：起手已写入 clamped 坐标，再 setState 会多一次布局导致卡顿。
   React.useLayoutEffect(() => {
     if (floatingPosLayoutRef.current !== 'coordinates') return;
+    if (isDragging.current) return;
     setFloatingPos((pos) => clampFloatingPosition(pos.x, pos.y));
   }, [clampFloatingPosition, floatingExpanded]);
-
-  const syncFloatingXToRememberedGap = React.useCallback(() => {
-    if (floatingPosLayout !== 'coordinates' || activeView !== 'liveDoc' || hasScreenShare) return;
-    if (isDragging.current) return;
-    const el = floatingRef.current;
-    const parent = el?.offsetParent as HTMLElement | null;
-    if (!el || !parent) return;
-    const current = floatingPosRef.current;
-
-    const rememberedInset =
-      rememberedRightInsetRef.current ??
-      getInsetFromParentRight(current.x) ??
-      effectiveLiveDocPanelWidth + FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL;
-
-    rememberedRightInsetRef.current = rememberedInset;
-    const targetX = parent.clientWidth - el.offsetWidth - rememberedInset;
-    const clampedTarget = clampFloatingPosition(targetX, current.y);
-    animateFloatingXTo(clampedTarget.x);
-  }, [
-    activeView,
-    animateFloatingXTo,
-    clampFloatingPosition,
-    effectiveLiveDocPanelWidth,
-    floatingPosLayout,
-    getInsetFromParentRight,
-    hasScreenShare,
-  ]);
-
-  React.useEffect(() => {
-    syncFloatingXToRememberedGap();
-  }, [syncFloatingXToRememberedGap]);
-
-  React.useEffect(() => {
-    return () => cancelFloatingXAnimation();
-  }, [cancelFloatingXAnimation]);
-
-  React.useEffect(() => {
-    if (floatingPosLayout !== 'coordinates' || activeView !== 'liveDoc' || hasScreenShare) return;
-    syncFloatingXToRememberedGap();
-  }, [activeView, floatingExpanded, floatingPosLayout, hasScreenShare, syncFloatingXToRememberedGap]);
 
   // Chat + Attendee overlay state
   const [chatOpen, setChatOpen] = React.useState(false);
@@ -3831,7 +3914,8 @@ export function VideoConferenceComponent(props: {
     <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
         <ParticipantRoleMenuProvider {...participantRoleActions}>
-        {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
+        {/* 有屏幕共享时走 VideoConference 自带 RoomAudioRenderer，避免双挂载回声 */}
+        {isToolbarMobile && !hasScreenShare && <KloudMobileRoomAudioRenderer />}
         <KeyboardShortcuts />
 
         {/* ── Host ended meeting (remote end or END_MEETING) ── */}
@@ -4919,21 +5003,21 @@ export function VideoConferenceComponent(props: {
                 <div
                   ref={floatingRef}
                   className={`floating-webcam-panel ${floatingExpanded ? 'expanded' : ''}`}
-                  onMouseDown={handleFloatingMouseDown}
-                  onTouchStart={handleFloatingTouchStart}
+                  onPointerDown={handleFloatingPointerDown}
                   style={{
                     position: 'absolute',
                     top: floatingPos.y,
                     ...(floatingPosLayout === 'right-inset'
                       ? { right: floatingRightInset, left: 'auto' as const }
                       : { left: floatingPos.x, right: 'auto' as const }),
-                    zIndex: floatingExpanded ? 350 : 200,
+                    // 必须低于底栏(1001)，否则会盖住导航导致点击错位
+                    zIndex: isFloatingDragging ? 900 : 350,
                     cursor: isFloatingDragging ? 'grabbing' : 'grab',
                     userSelect: 'none',
                     touchAction: 'none',
                     transition: isFloatingDragging
                       ? 'none'
-                      : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out, opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1)',
+                      : 'left 260ms cubic-bezier(0.22, 1, 0.36, 1), right 260ms cubic-bezier(0.22, 1, 0.36, 1), top 180ms ease-out, opacity 0.35s ease',
                   }}
                 >
                   {!floatingExpanded && (
@@ -4955,10 +5039,12 @@ export function VideoConferenceComponent(props: {
                                 style={{ zIndex: maxVisible - i }}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (suppressFloatingAvatarClickRef.current) {
+                                    suppressFloatingAvatarClickRef.current = false;
+                                    return;
+                                  }
                                   handleCollapsedAvatarClick(p.id);
                                 }}
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onTouchStart={(e) => e.stopPropagation()}
                                 role="button"
                                 tabIndex={0}
                               >
@@ -4975,6 +5061,10 @@ export function VideoConferenceComponent(props: {
                               selected={isPreviewSelected}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                if (suppressFloatingAvatarClickRef.current) {
+                                  suppressFloatingAvatarClickRef.current = false;
+                                  return;
+                                }
                                 handleCollapsedAvatarClick(p.id);
                               }}
                             />
@@ -5464,7 +5554,7 @@ export function VideoConferenceComponent(props: {
                -webkit-user-select: none;
                opacity: 1;
                pointer-events: auto;
-               transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+               transition: opacity 0.35s ease;
             }
             .floating-webcam-panel.expanded {
                border-radius: 16px;
@@ -5474,6 +5564,13 @@ export function VideoConferenceComponent(props: {
                min-width: 0;
                box-sizing: border-box;
                overflow: visible;
+            }
+            @media (max-width: 768px) {
+               .floating-webcam-panel.expanded {
+                  max-width: min(280px, calc(100vw - 24px));
+                  max-height: min(52vh, 420px);
+                  overflow: auto;
+               }
             }
             .floating-collapsed-row {
                display: flex;
@@ -6735,19 +6832,49 @@ export function VideoConferenceComponent(props: {
             .lk-mobile-scroll-grid .lk-participant-metadata-item {
               display: inline-flex !important;
               align-items: center !important;
-              gap: 5px !important;
+              gap: 6px !important;
               max-width: 100% !important;
               min-width: 0 !important;
               padding: 0 !important;
               background: transparent !important;
               line-height: 1 !important;
             }
+            /* 手机 webcam 左下角麦/摄像头：略放大，方便手指点击 */
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator {
+              width: 1.65rem !important;
+              height: 1.65rem !important;
+              min-width: 1.65rem !important;
+              min-height: 1.65rem !important;
+              padding: 4px !important;
+              border-radius: 6px !important;
+            }
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator.self-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator.self-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-mic-indicator.operator-interactive,
+            .lk-mobile-scroll-grid .kloud-custom-cam-indicator.operator-interactive {
+              min-width: 2rem !important;
+              min-height: 2rem !important;
+              width: 2rem !important;
+              height: 2rem !important;
+              padding: 5px !important;
+            }
             .lk-mobile-scroll-grid .kloud-custom-cam-indicator svg,
             .lk-mobile-scroll-grid .kloud-custom-mic-indicator svg {
               width: 100% !important;
               height: 100% !important;
-              max-width: 1.15rem;
-              max-height: 1.15rem;
+              max-width: 1.35rem;
+              max-height: 1.35rem;
+            }
+            .lk-mobile-scroll-grid .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn {
+              width: 2rem !important;
+              height: 2rem !important;
+              min-width: 2rem !important;
+              min-height: 2rem !important;
+            }
+            .lk-mobile-scroll-grid .lk-participant-metadata-item .kloud-tile-more-menu-wrap--inline .kloud-role-icon-btn svg {
+              width: 1.15rem !important;
+              height: 1.15rem !important;
             }
 
             /* Mobile webcam：视频网格停在底部导航栏上方 */

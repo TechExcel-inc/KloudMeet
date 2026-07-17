@@ -14,6 +14,13 @@
   cursor: default;
 }
 
+/* 触控设备：热区不抢点击（浮窗/页面可点）；桌面仍可靠悬停唤出底栏 */
+@media (hover: none), (pointer: coarse) {
+  .hoverZone {
+    pointer-events: none;
+  }
+}
+
 /* Chevron handle when toolbar is hidden */
 .chevronHandle {
   position: fixed;
