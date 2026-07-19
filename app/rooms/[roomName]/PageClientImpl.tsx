@@ -1257,21 +1257,18 @@ export function PageClientImpl(props: {
                 )}
               </div>
 
-              <UserAvatarMenu
-                user={
-                  currentUser
-                    ? {
-                        displayName: currentUser.displayName || currentUser.username,
-                        avatarUrl: currentUser.avatarUrl,
-                      }
-                    : undefined
-                }
-                onSignIn={() => { window.location.href = '/'; }}
-                onOpenProfile={() => setShowProfileModal(true)}
-                onOpenSettings={() => setShowSettingsModal(true)}
-                onOpenDesktopApp={() => openDesktopEntry('prejoin')}
-                onSignOut={handlePrejoinSignOut}
-              />
+              {currentUser && (
+                <UserAvatarMenu
+                  user={{
+                    displayName: currentUser.displayName || currentUser.username,
+                    avatarUrl: currentUser.avatarUrl,
+                  }}
+                  onOpenProfile={() => setShowProfileModal(true)}
+                  onOpenSettings={() => setShowSettingsModal(true)}
+                  onOpenDesktopApp={() => openDesktopEntry('prejoin')}
+                  onSignOut={handlePrejoinSignOut}
+                />
+              )}
             </div>
           </header>
 

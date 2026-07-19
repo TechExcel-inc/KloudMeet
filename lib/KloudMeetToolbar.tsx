@@ -1222,9 +1222,6 @@ export function KloudMeetToolbar({
                 onOpenCCSettings={() => setShowCCSettings(true)}
                 localSubtitleVisible={localSubtitleVisible}
                 onOpenDesktopApp={onOpenDesktopApp}
-                liveDocPluginLoaded={liveDocPluginLoaded}
-                onLiveDocPanelTab={postLiveDocPanelTab}
-                showLiveDocMenu={false}
               />
             </div>
           </div>
@@ -1386,9 +1383,6 @@ export function KloudMeetToolbar({
                       onOpenCCSettings={() => setShowCCSettings(true)}
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
-                      liveDocPluginLoaded={liveDocPluginLoaded}
-                      onLiveDocPanelTab={postLiveDocPanelTab}
-                      showLiveDocMenu
                     />
                   </div>
                 )}
@@ -1533,9 +1527,6 @@ function ActiveSheetContent({
   onOpenCCSettings,
   localSubtitleVisible,
   onOpenDesktopApp,
-  liveDocPluginLoaded,
-  onLiveDocPanelTab,
-  showLiveDocMenu = true,
 }: any) {
   const { t } = useI18n();
   const showComingSoon = (feature: string) => {
@@ -1597,88 +1588,6 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
-          <button
-            className={styles.actionSheetItem}
-            onClick={() => {
-              void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
-              setToastMsg(t('toolbar.inviteCopied'));
-              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-              setActiveSheet(null);
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-            </svg>
-            {t('schedule.copyLink')}
-          </button>
-
-          <button
-            className={styles.actionSheetItem}
-            onClick={() => {
-              void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
-              setToastMsg(t('schedule.inviteCopied'));
-              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-              setActiveSheet(null);
-            }}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
-            </svg>
-            {t('schedule.copyInvite')}
-          </button>
-
-          {/*
-          <button className={styles.actionSheetItem} onClick={() => handleToggleChat()}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-            </svg>
-            {t('toolbar.chats')}
-          </button>
-          */}
-
-          {showLiveDocMenu && activeView === 'liveDoc' && liveDocPluginLoaded && (
-            <div className={styles.actionSheetGroup}>
-              <div className={styles.actionSheetGroupLabel}>{t('toolbar.liveDocMenu')}</div>
-              <div className={styles.actionSheetGroupItems}>
-                <button
-                  type="button"
-                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
-                  onClick={() => {
-                    onLiveDocPanelTab?.('file');
-                    setActiveSheet(null);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                  {t('toolbar.liveDocPanelFile')}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
-                  onClick={() => {
-                    onLiveDocPanelTab?.('summary');
-                    setActiveSheet(null);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  {t('toolbar.liveDocPanelSummary')}
-                </button>
-                <button
-                  type="button"
-                  className={`${styles.actionSheetItem} ${styles.actionSheetItemNested}`}
-                  onClick={() => {
-                    onLiveDocPanelTab?.('transcript');
-                    setActiveSheet(null);
-                  }}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h16M4 12h16M4 18h7" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  {t('toolbar.liveDocPanelTranscript')}
-                </button>
-              </div>
-            </div>
-          )}
-
           {!isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
@@ -1738,24 +1647,6 @@ function ActiveSheetContent({
               {localSubtitleVisible ? t('toolbar.ccShow') || 'Closed Caption - Show' : t('toolbar.ccHide') || 'Closed Caption - Hide'}
             </button>
           )}
-          {/*
-          <button className={`${styles.actionSheetItem} ${attendeeOpen ? styles.active : ''}`} onClick={() => { handleToggleAttendee(); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-            {t('toolbar.peopleAttendees')}
-          </button>
-          */}
-          {false && (
-            <button className={styles.actionSheetItem} onClick={() => {
-              navigator.clipboard.writeText(buildInviteLinkForClipboard(isDesktop));
-              setToastMsg(t('toolbar.inviteCopied'));
-              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-              setActiveSheet(null);
-            }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" /></svg>
-              {t('toolbar.copyInviteLink')}
-            </button>
-          )}
           <button className={styles.actionSheetItem} onClick={() => {
             if (onOpenDesktopApp) {
               onOpenDesktopApp();
@@ -1769,12 +1660,6 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
             {t('toolbar.openDesktop.menuItem')}
           </button>
-          {false && (
-            <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.appDeviceSettings')); setActiveSheet(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.573-1.066z" /><circle cx="12" cy="12" r="3" /></svg>
-              {t('toolbar.appDeviceSettings')}
-            </button>
-          )}
           <button className={styles.actionSheetItem} onClick={() => { onOpenHelp?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
             {t('toolbar.help')}

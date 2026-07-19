@@ -309,28 +309,36 @@ export function MobileVideoLayout() {
 
   const cols = calcGridCols(Math.min(totalCount, MAX_VISIBLE));
 
-  // 注入 data-lk-initials 到每个 placeholder 元素
+  // 注入 data-lk-name 到每个 placeholder（摄像头关闭时中央显示登录名）
   React.useEffect(() => {
     const container = gridRef.current;
     if (!container) return;
 
-    const applyInitials = () => {
+    const applyNames = () => {
       container.querySelectorAll<HTMLElement>('.lk-participant-tile').forEach((tile) => {
         const placeholder = tile.querySelector<HTMLElement>('.lk-participant-placeholder');
         if (!placeholder) return;
-        // 获取名字：先尝试 data-lk-name，再找 .lk-participant-name 文字
-        const name =
+        const name = (
           placeholder.getAttribute('data-lk-name') ||
           tile.querySelector('.lk-participant-name')?.textContent ||
-          '';
+          ''
+        ).trim();
+        if (!name) return;
+        if (placeholder.getAttribute('data-lk-name') !== name) {
+          placeholder.setAttribute('data-lk-name', name);
+        }
         placeholder.setAttribute('data-lk-initials', getInitials(name));
       });
     };
 
-    applyInitials();
-    // MutationObserver 监听 DOM 变化（新人加入/摄像头切换）
-    const observer = new MutationObserver(applyInitials);
-    observer.observe(container, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-lk-name', 'data-lk-video-muted'] });
+    applyNames();
+    const observer = new MutationObserver(applyNames);
+    observer.observe(container, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-lk-name', 'data-lk-video-muted'],
+    });
     return () => observer.disconnect();
   }, [visibleTracks.length]);
 
@@ -543,7 +551,12 @@ export function LiveDocWebcamSidebarTile({
             }}
           />
         ) : (
-          <div className="webcam-sidebar-avatar">{getInitials(name || participant.identity || '?')}</div>
+          <div className="webcam-sidebar-avatar" title={name || participant.identity || ''}>
+            <span className="webcam-sidebar-avatar-initials">
+              {getInitials(name || participant.identity || '?')}
+            </span>
+            <span className="webcam-sidebar-avatar-fullname">{name || participant.identity || '?'}</span>
+          </div>
         )}
       </div>
       <div className="lk-participant-metadata webcam-sidebar-participant-metadata">
@@ -551,7 +564,6 @@ export function LiveDocWebcamSidebarTile({
           <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <ParticipantTileRoleMoreMenu identity={participant.identity} placement="inline" />
-          <span className="webcam-sidebar-name">{name}</span>
         </div>
       </div>
     </div>
@@ -616,9 +628,6 @@ export function LiveDocFloatingGridTile({
         <div className="floating-grid-name-row lk-participant-metadata-item">
           <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
-          <span className="floating-grid-name" title={name}>
-            {name}
-          </span>
         </div>
       </div>
     </div>
