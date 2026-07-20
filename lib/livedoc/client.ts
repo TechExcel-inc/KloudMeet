@@ -8,6 +8,24 @@ export type LiveDocRuntimeSettings = {
   debugUrl?: string | null;
 };
 
+/** SkyMeet → LiveDoc iframe 身份（与 Dev MainStage `onRoleChanged` / URL `role` 对齐） */
+export type LiveDocEmbedRole = 'host' | 'colhost' | 'presenter' | 'participant';
+
+export function resolveLiveDocEmbedRole({
+  isHost,
+  isCohost,
+  isPresenter,
+}: {
+  isHost: boolean;
+  isCohost: boolean;
+  isPresenter: boolean;
+}): LiveDocEmbedRole {
+  if (isHost) return 'host';
+  if (isCohost) return 'colhost';
+  if (isPresenter) return 'presenter';
+  return 'participant';
+}
+
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
@@ -67,6 +85,7 @@ export function buildLiveDocIframeSrc(
   const base = resolveLiveDocBaseUrl(settings);
   const id = encodeURIComponent(livedocInstanceId);
   const token = encodeURIComponent(userToken);
+  // 注意：不要把 role 写进 URL。身份变更应走 postMessage(onRoleChanged)，避免 iframe 重载闪动。
   return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}`;
 }
 

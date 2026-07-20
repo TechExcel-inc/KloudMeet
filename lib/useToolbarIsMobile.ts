@@ -20,6 +20,21 @@ export function postKloudShowFilePanelToIframe(show: 0 | 1): void {
   iframe?.contentWindow?.postMessage({ type: 'Kloud-ShowFilePanel', Show: show }, '*');
 }
 
+/** 向所有 LiveDoc iframe 同步 SkyMeet 身份（批注工具条权限）；不改 URL，避免重载。 */
+export function postLivedocRoleToIframe(role: string): void {
+  if (typeof document === 'undefined' || !role) return;
+  const iframes = document.querySelectorAll<HTMLIFrameElement>(
+    'iframe#sharedIframePlayer, iframe[title="LiveDoc"]',
+  );
+  const seen = new Set<Window>();
+  iframes.forEach((iframe) => {
+    const cw = iframe.contentWindow;
+    if (!cw || seen.has(cw)) return;
+    seen.add(cw);
+    cw.postMessage({ type: 'onRoleChanged', role }, '*');
+  });
+}
+
 /** 与 KloudMeetToolbar 一致的移动设备 UA 判定（用于 Chat/Attendees 桌面气泡 vs 侧栏浮层）。 */
 export function useToolbarIsMobile() {
   const [isMobile, setIsMobile] = useState(false);

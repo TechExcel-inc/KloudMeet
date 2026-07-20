@@ -5,11 +5,15 @@ import {
   buildLiveDocIframeSrc,
   createOrUpdateInstantAccount,
   resolveLiveDocBaseUrl,
+  type LiveDocEmbedRole,
   type LiveDocRuntimeSettings,
 } from '@/lib/livedoc/client';
 import { useI18n } from '@/lib/i18n';
 import { authFetch } from '@/lib/kloudSession';
-import { isToolbarMobileUserAgent } from '@/lib/useToolbarIsMobile';
+import {
+  isToolbarMobileUserAgent,
+  postLivedocRoleToIframe,
+} from '@/lib/useToolbarIsMobile';
 import styles from '../styles/LiveDocView.module.css';
 
 interface LiveDocViewProps {
@@ -19,6 +23,8 @@ interface LiveDocViewProps {
   hostInitError: string | null;
   hostInitInProgress: boolean;
   isHost: boolean;
+  /** SkyMeet 实时身份：host / colhost / presenter / participant */
+  livedocRole: LiveDocEmbedRole;
 }
 
 export function LiveDocView({
@@ -28,6 +34,7 @@ export function LiveDocView({
   hostInitError,
   hostInitInProgress,
   isHost,
+  livedocRole,
 }: LiveDocViewProps) {
   const { t, locale } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
@@ -37,6 +44,8 @@ export function LiveDocView({
   const [runtimeSettings, setRuntimeSettings] = React.useState<LiveDocRuntimeSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = React.useState(true);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const livedocRoleRef = React.useRef(livedocRole);
+  livedocRoleRef.current = livedocRole;
 
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -111,10 +120,23 @@ export function LiveDocView({
       // 移动端与 Dev MainStage created() 一致：默认关闭右侧栏，勿用 Show:1 顶开
       const showPanel = isToolbarMobileUserAgent() ? 0 : 1;
       cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: showPanel }, '*');
+      // 插件就绪后同步当前 SkyMeet 身份（批注工具条权限）
+      cw.postMessage({ type: 'onRoleChanged', role: livedocRoleRef.current }, '*');
+      postLivedocRoleToIframe(livedocRoleRef.current);
     };
     window.addEventListener('message', handler);
     return () => window.removeEventListener('message', handler);
   }, []);
+
+  // 会议中身份变更时实时推送到插件
+  React.useEffect(() => {
+    if (!pluginLoaded) return;
+    const cw = iframeRef.current?.contentWindow;
+    if (cw) {
+      cw.postMessage({ type: 'onRoleChanged', role: livedocRole }, '*');
+    }
+    postLivedocRoleToIframe(livedocRole);
+  }, [livedocRole, pluginLoaded]);
 
   if (isHost && hostInitError) {
     return (
@@ -166,6 +188,7 @@ export function LiveDocView({
   }
 
   const languageId = locale === 'zh' ? 0 : 1;
+  // src 不含 role：身份只走 postMessage(onRoleChanged)，避免身份变更触发 iframe 重载
   const src = buildLiveDocIframeSrc(livedocInstanceId, userToken, languageId, runtimeSettings);
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 

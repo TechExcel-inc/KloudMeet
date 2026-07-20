@@ -14,6 +14,7 @@ import {
   createOrUpdateInstantAccount,
   keepLivedocInstanceActive,
   resolveJitsiInstanceId,
+  resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
@@ -23,6 +24,7 @@ import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
   postKloudShowFilePanelToIframe,
+  postLivedocRoleToIframe,
   useToolbarIsMobile,
 } from '@/lib/useToolbarIsMobile';
 import { ConnectionDetails } from '@/lib/types';
@@ -1603,6 +1605,25 @@ export function VideoConferenceComponent(props: {
     : null;
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
   const isLocalControlOperator = isHost || isCohost || isCopresenter || isAutoPresenter;
+  /** LiveDoc 批注：仅 host / co-host / presenter(含 co-presenter、屏幕共享 presenter) */
+  const livedocEmbedRole = resolveLiveDocEmbedRole({
+    isHost,
+    isCohost,
+    isPresenter: isCopresenter || isAutoPresenter,
+  });
+
+  // 身份实时变化时，由会议层直接推送到插件（不依赖 LiveDocView 内部 effect）
+  React.useEffect(() => {
+    postLivedocRoleToIframe(livedocEmbedRole);
+    // 插件可能稍晚才挂上 listener，短延迟再推一次
+    const t1 = window.setTimeout(() => postLivedocRoleToIframe(livedocEmbedRole), 300);
+    const t2 = window.setTimeout(() => postLivedocRoleToIframe(livedocEmbedRole), 1200);
+    return () => {
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [livedocEmbedRole]);
+
   const localIdentity = room.localParticipant.identity;
   const isLocalMicRestricted =
     !isLocalControlOperator &&
@@ -4696,6 +4717,7 @@ export function VideoConferenceComponent(props: {
                   hostInitError={livedocInitError}
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
+                  livedocRole={livedocEmbedRole}
                 />
               )}
             </div>
@@ -4834,6 +4856,7 @@ export function VideoConferenceComponent(props: {
                   hostInitError={livedocInitError}
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
+                  livedocRole={livedocEmbedRole}
                 />
               </div>
             )}
@@ -5596,7 +5619,8 @@ export function VideoConferenceComponent(props: {
             @media (max-width: 768px) {
                .floating-webcam-panel.expanded {
                   max-width: min(280px, calc(100vw - 24px));
-                  max-height: min(52vh, 420px);
+                  /* 头栏≈36 + 面板/网格 padding≈36 + 3×hero(132) + 2×gap(8) ≈ 508，保证左侧三大格完整可视 */
+                  max-height: calc(36px + 36px + 3 * 132px + 2 * 8px);
                   overflow: auto;
                }
             }
