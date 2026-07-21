@@ -425,7 +425,9 @@ export function MobileVideoLayout() {
       return;
     }
     window.dispatchEvent(
-      new CustomEvent('kloud-mobile-blank-tap', { detail: { target } }),
+      new CustomEvent('kloud-mobile-blank-tap', {
+        detail: { target, clientY: e.clientY },
+      }),
     );
   }, []);
 

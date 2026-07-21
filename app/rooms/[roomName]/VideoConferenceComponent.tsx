@@ -554,7 +554,9 @@ export function VideoConferenceComponent(props: {
   const [connectError, setConnectError] = React.useState<string | null>(null);
   const [meetingEndedByHost, setMeetingEndedByHost] = React.useState(false);
   const [evictedByDuplicateSession, setEvictedByDuplicateSession] = React.useState(false);
+  const [removedFromMeeting, setRemovedFromMeeting] = React.useState(false);
   const duplicateSessionHandledRef = React.useRef(false);
+  const removedFromMeetingHandledRef = React.useRef(false);
   const hostEndedHandledRef = React.useRef(false);
   const hostEndedRedirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
@@ -651,6 +653,34 @@ export function VideoConferenceComponent(props: {
     }, 2200);
   }, [room, router, t, props.meetingOwnerMemberId]);
 
+  /** Host/co-host 将本端移出会议 */
+  const handleRemovedFromMeeting = React.useCallback(() => {
+    if (removedFromMeetingHandledRef.current) return;
+    removedFromMeetingHandledRef.current = true;
+    intentionalDisconnectRef.current = true;
+
+    if (connectRetryTimerRef.current) {
+      clearTimeout(connectRetryTimerRef.current);
+      connectRetryTimerRef.current = null;
+    }
+    setConnectError(null);
+    setRemovedFromMeeting(true);
+    try {
+      localStorage.removeItem('activeMeetingId');
+      localStorage.removeItem('activeMeetingStartedAt');
+    } catch {
+      /* ignore */
+    }
+
+    if (room.state !== ConnectionState.Disconnected) {
+      room.disconnect().catch(console.error);
+    }
+
+    setTimeout(() => {
+      router.push('/');
+    }, 2500);
+  }, [room, router]);
+
   // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
   const computeBackoffMs = React.useCallback((attempt: number): number => {
     return Math.min(8000, Math.pow(2, attempt - 1) * 1000);
@@ -683,15 +713,21 @@ export function VideoConferenceComponent(props: {
       console.log('[KloudMeet] Disconnected event received. reason=', reason, 'intentional=', intentionalDisconnectRef.current, 'duplicateHandled=', duplicateSessionHandledRef.current);
       // During reconnection or voluntary disconnect, ignore all disconnect events
       if (intentionalDisconnectRef.current) return;
-      // Server evicted this session because the same user joined elsewhere
+      // Server forced remove (host kick or duplicate-session eviction)
       if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
           reason === DisconnectReason.DUPLICATE_IDENTITY) {
-        duplicateSessionHandledRef.current = true;
         intentionalDisconnectRef.current = true;
         try {
           localStorage.removeItem('activeMeetingId');
           localStorage.removeItem('activeMeetingStartedAt');
         } catch { /* ignore */ }
+        if (removedFromMeetingHandledRef.current) {
+          setRemovedFromMeeting(true);
+          setTimeout(() => router.push('/'), 2500);
+          return;
+        }
+        // Duplicate-session eviction or unknown PARTICIPANT_REMOVED → session moved UI
+        duplicateSessionHandledRef.current = true;
         setEvictedByDuplicateSession(true);
         setTimeout(() => router.push('/'), 2500);
         return;
@@ -2137,6 +2173,26 @@ export function VideoConferenceComponent(props: {
   // Listen for incoming DataChannel messages
   React.useEffect(() => {
     const handleData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
+      try {
+        const msg = JSON.parse(decoder.decode(payload));
+        // 服务端踢人通知（可能来自 meeting-control 或 kloud-session）
+        if (msg.type === 'SESSION_EVICTED') {
+          duplicateSessionHandledRef.current = true;
+          intentionalDisconnectRef.current = true;
+          setEvictedByDuplicateSession(true);
+          return;
+        }
+        if (msg.type === 'REMOVED_FROM_MEETING') {
+          const target =
+            typeof msg.identity === 'string' ? msg.identity : room.localParticipant.identity;
+          if (target === room.localParticipant.identity) {
+            handleRemovedFromMeeting();
+          }
+          return;
+        }
+      } catch {
+        /* fall through to topic-gated handler */
+      }
       if (topic !== TOPIC) return;
       try {
         const msg = JSON.parse(decoder.decode(payload));
@@ -2474,6 +2530,7 @@ export function VideoConferenceComponent(props: {
     camEnabled,
     props.meetingOwnerMemberId,
     handleClosedByHostExit,
+    handleRemovedFromMeeting,
     presenterListsEqual,
     isLocalScreenShare,
     isLocalControlOperator,
@@ -3435,6 +3492,30 @@ export function VideoConferenceComponent(props: {
         });
         sendMeetingMsg({ type: 'SET_HOST', newHostIdentity: identity, oldHostIdentity: oldHost });
       },
+      onRemoveFromMeeting: (identity) => {
+        if (!isHost && !isCohost) return;
+        if (!identity || identity === room.localParticipant.identity) return;
+        if (identity === hostIdentity) return;
+
+        // 先通知对方立即离开，再由服务端强制移除
+        sendMeetingMsg({ type: 'REMOVED_FROM_MEETING', identity }, [identity]);
+
+        const roomSeg =
+          window.location.pathname.split('/').filter(Boolean).pop() || '';
+        if (roomSeg) {
+          void fetch(`/api/meetings/${encodeURIComponent(roomSeg)}/remove-participant`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              identity,
+              hostIdentity,
+              cohostIdentities,
+            }),
+          }).catch((e) => {
+            console.warn('[remove-participant] API failed', e);
+          });
+        }
+      },
     }),
     [
       hostIdentity,
@@ -4080,6 +4161,76 @@ export function VideoConferenceComponent(props: {
               </h3>
               <p style={{ margin: '0 0 1.5rem', color: '#4b5563', lineHeight: 1.6, fontSize: '0.9375rem' }}>
                 {t('meeting.duplicateSessionDesc')}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push('/')}
+                style={{
+                  padding: '0.625rem 1.5rem',
+                  background: '#3b82f6',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  cursor: 'pointer',
+                }}
+              >
+                {t('meeting.returnHomeNow')}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Removed from meeting by host / co-host ── */}
+        {removedFromMeeting && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 99999,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'rgba(8, 8, 18, 0.88)',
+              backdropFilter: 'blur(14px)',
+            }}
+          >
+            <div
+              style={{
+                background: '#fff',
+                borderRadius: '16px',
+                padding: '2rem 2.25rem',
+                maxWidth: '420px',
+                width: '90%',
+                textAlign: 'center',
+                boxShadow: '0 20px 40px rgba(0,0,0,0.25)',
+              }}
+            >
+              <div
+                style={{
+                  width: '56px',
+                  height: '56px',
+                  borderRadius: '12px',
+                  background: '#fef2f2',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto 1rem',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="17" y1="8" x2="22" y2="13" />
+                  <line x1="22" y1="8" x2="17" y2="13" />
+                </svg>
+              </div>
+              <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.125rem', color: '#111827' }}>
+                {t('meeting.removedFromMeetingTitle')}
+              </h3>
+              <p style={{ margin: '0 0 1.5rem', color: '#4b5563', lineHeight: 1.6, fontSize: '0.9375rem' }}>
+                {t('meeting.removedFromMeetingDesc')}
               </p>
               <button
                 type="button"

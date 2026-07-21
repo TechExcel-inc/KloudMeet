@@ -142,3 +142,39 @@ export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * Host/co-host eject: notify target then remove from LiveKit room.
+ * Returns true when removeParticipant succeeds.
+ */
+export async function removeParticipantFromRoom(
+  roomName: string,
+  identity: string,
+): Promise<boolean> {
+  const client = getRoomServiceClient();
+  if (!client) {
+    console.warn('[remove-participant] No RoomServiceClient available');
+    return false;
+  }
+
+  const notice = new TextEncoder().encode(
+    JSON.stringify({ type: 'REMOVED_FROM_MEETING', identity }),
+  );
+  try {
+    await client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
+      destinationIdentities: [identity],
+      topic: 'meeting-control',
+    });
+    await new Promise((r) => setTimeout(r, 150));
+  } catch (sendErr) {
+    console.warn('[remove-participant] sendData failed (non-fatal)', identity, sendErr);
+  }
+
+  try {
+    await client.removeParticipant(roomName, identity);
+    return true;
+  } catch (e) {
+    console.error('[remove-participant] removeParticipant failed', identity, e);
+    return false;
+  }
+}

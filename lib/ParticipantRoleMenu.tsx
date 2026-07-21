@@ -16,6 +16,7 @@ export interface ParticipantRoleActionsConfig {
   onSetCohost?: (identity: string) => void;
   onRemoveCohost?: (identity: string) => void;
   onSetHost?: (identity: string) => void;
+  onRemoveFromMeeting?: (identity: string) => void;
 }
 
 export type ParticipantRoleMenuBridge = {
@@ -323,10 +324,12 @@ function ParticipantRoleDropdownContent({
     copresenterIdentities,
     cohostIdentities,
     localIdentity,
+    canManageRoles,
     onAddCopresenter,
     onRemoveCopresenter,
     onSetCohost,
     onRemoveCohost,
+    onRemoveFromMeeting,
     closeMenu: ctxCloseMenu,
     openHostPicker: ctxOpenHostPicker,
   } = ctx;
@@ -341,6 +344,8 @@ function ParticipantRoleDropdownContent({
   const isLocalParticipant = identity === localIdentity;
   const isThisCohost = cohostIdentities.includes(identity);
   const isThisCopresenter = copresenterIdentities.includes(identity);
+  const canRemoveFromMeeting =
+    canManageRoles && !isThisHost && !isLocalParticipant && !!onRemoveFromMeeting;
 
   return (
     <div className="kloud-more-dropdown" onMouseDown={(e) => e.stopPropagation()}>
@@ -419,6 +424,23 @@ function ParticipantRoleDropdownContent({
           Transfer Host
         </button>
       )}
+      {canRemoveFromMeeting && (
+        <button
+          className="kloud-more-dropdown-item danger"
+          onClick={() => {
+            onRemoveFromMeeting?.(identity);
+            closeMenu();
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
+            <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <line x1="17" y1="8" x2="22" y2="13" />
+            <line x1="22" y1="8" x2="17" y2="13" />
+          </svg>
+          Remove from meeting
+        </button>
+      )}
     </div>
   );
 }
@@ -430,10 +452,12 @@ function ParticipantRoleDropdownPortal({
   identity: string;
   anchorRect: DOMRect;
 }) {
+  // 右对齐锚点，宽度由菜单文字决定（不换行）
   const style: React.CSSProperties = {
     position: 'fixed',
     top: anchorRect.bottom + 4,
-    left: Math.max(8, anchorRect.right - 180),
+    right: Math.max(8, window.innerWidth - anchorRect.right),
+    left: 'auto',
     zIndex: 100000,
   };
 

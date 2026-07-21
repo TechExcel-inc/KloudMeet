@@ -3,18 +3,39 @@
    Auto-hiding toolbar with view tab switching
    ============================================ */
 
-/* Trigger zone at bottom of viewport — restores hidden toolbar on hover/tap. */
+/* Trigger zone at bottom of viewport — restores hidden toolbar on hover (desktop). */
 .hoverZone {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  height: 80px;   /* Matches toolbar height + buffer */
+  height: var(--kloud-mobile-toolbar-height, 80px);
   z-index: 1000;  /* Below toolbar/action sheets, above meeting content */
   cursor: default;
+  /* 仅悬停唤出：不拦截点击，点击由 bottomNavCatchZone / 空白区逻辑处理 */
+  pointer-events: none;
 }
 
-/* 触控设备：热区不抢点击（浮窗/页面可点）；桌面仍可靠悬停唤出底栏 */
+@media (hover: hover) and (pointer: fine) {
+  .hoverZone {
+    pointer-events: auto;
+  }
+}
+
+/* 底栏隐藏时占住底部导航区域，吞掉点击，避免误唤出底栏 */
+.bottomNavCatchZone {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: var(--kloud-mobile-toolbar-height, 80px);
+  z-index: 999;
+  pointer-events: auto;
+  cursor: default;
+  background: transparent;
+}
+
+/* 触控设备：悬停热区不抢事件 */
 @media (hover: none), (pointer: coarse) {
   .hoverZone {
     pointer-events: none;
@@ -438,6 +459,25 @@
   min-height: 44px;
   position: relative;
 }
+
+.liveDocMenuBadge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.liveDocMenuBadge svg {
+  width: 8px;
+  height: 8px;
+}
 .mobileBtn svg {
   width: 24px;
   height: 24px;
@@ -655,6 +695,118 @@
 }
 .actionSheetItem.active svg {
   opacity: 1;
+}
+
+.actionSheetItemLabel {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.actionSheetItemMeta {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.langBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.actionSheetItem.active .langBadge {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: #93c5fd;
+}
+
+.langMenuAnchor {
+  position: relative;
+  display: block;
+  width: 100%;
+  align-self: stretch;
+}
+
+.langMenuAnchor .actionSheetItem {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.langChevronLeft {
+  width: 16px !important;
+  height: 16px !important;
+  opacity: 0.65;
+  flex-shrink: 0;
+}
+
+.langFlyout {
+  width: max-content;
+  min-width: 156px;
+  padding: 6px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.98);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.langFlyoutItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+
+.langFlyoutItem:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.langFlyoutItemActive {
+  background: rgba(59, 130, 246, 0.16);
+  color: #93c5fd;
+}
+
+.langFlyoutItemMeta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.langFlyoutItemActive .langBadge {
+  background: rgba(59, 130, 246, 0.22);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #93c5fd;
 }
 
 .actionSheetGroup {

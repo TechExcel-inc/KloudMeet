@@ -856,7 +856,8 @@ export const chatAndAttendeeStyles = `
     position: absolute;
     right: 0;
     top: 32px;
-    min-width: 180px;
+    width: max-content;
+    min-width: max-content;
     background: rgba(15, 23, 42, 0.98);
     backdrop-filter: blur(16px);
     border: 1px solid rgba(255,255,255,0.12);
@@ -885,6 +886,7 @@ export const chatAndAttendeeStyles = `
     cursor: pointer;
     transition: background 0.12s;
     text-align: left;
+    white-space: nowrap;
   }
   .kloud-more-dropdown-item:hover {
     background: rgba(255,255,255,0.08);
@@ -894,6 +896,16 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-more-dropdown-item.active svg {
     color: #4ade80;
+  }
+  .kloud-more-dropdown-item.danger {
+    color: #f87171;
+  }
+  .kloud-more-dropdown-item.danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+    color: #fca5a5;
+  }
+  .kloud-more-dropdown-item.danger svg {
+    color: inherit;
   }
   .kloud-more-dropdown-item svg {
     flex-shrink: 0;

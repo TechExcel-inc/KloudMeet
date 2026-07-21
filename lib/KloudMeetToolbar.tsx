@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
-import { useI18n } from './i18n';
+import { useI18n, LOCALE_OPTIONS } from './i18n';
+import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
 import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
 
@@ -195,6 +196,7 @@ export function KloudMeetToolbar({
   visibleRef.current = visible;
   const attendeeOpenRef = useRef(attendeeOpen);
   attendeeOpenRef.current = attendeeOpen;
+  const lastPointerClientYRef = useRef(0);
   const [showSTTSettings, setShowSTTSettings] = useState(false);
   const [showCCSettings, setShowCCSettings] = useState(false);
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
@@ -233,6 +235,41 @@ export function KloudMeetToolbar({
   }, [chatOpen]);
 
   const revealToolbar = () => setVisible(true);
+
+  const getBottomNavZoneHeightPx = React.useCallback((): number => {
+    const toolbarEl = toolbarRef.current;
+    if (toolbarEl) {
+      const h = toolbarEl.offsetHeight;
+      if (h > 0) return h + 4;
+    }
+    return 80;
+  }, []);
+
+  const isClientYInBottomNavZone = React.useCallback(
+    (clientY: number): boolean => {
+      if (typeof window === 'undefined') return false;
+      return clientY >= window.innerHeight - getBottomNavZoneHeightPx();
+    },
+    [getBottomNavZoneHeightPx],
+  );
+
+  useEffect(() => {
+    const trackPointerY = (e: PointerEvent | TouchEvent | MouseEvent) => {
+      if ('clientY' in e && typeof e.clientY === 'number') {
+        lastPointerClientYRef.current = e.clientY;
+        return;
+      }
+      if ('touches' in e && e.touches[0]) {
+        lastPointerClientYRef.current = e.touches[0].clientY;
+      }
+    };
+    window.addEventListener('pointerdown', trackPointerY, true);
+    window.addEventListener('touchstart', trackPointerY, true);
+    return () => {
+      window.removeEventListener('pointerdown', trackPointerY, true);
+      window.removeEventListener('touchstart', trackPointerY, true);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -371,7 +408,13 @@ export function KloudMeetToolbar({
       setVisible(false);
     };
 
-    const handleMobileBlankTap = (target: Element) => {
+    const handleMobileBlankTap = (target: Element, clientY?: number) => {
+      // 底部导航栏区域：不触发空白点击显隐（只能点向上按钮或底栏上方空白区）
+      const y = typeof clientY === 'number' ? clientY : lastPointerClientYRef.current;
+      if (isClientYInBottomNavZone(y)) {
+        return;
+      }
+
       if (isChromeTarget(target) || isInteractiveVideoTarget(target)) {
         if (visibleRef.current) startTimer();
         return;
@@ -394,12 +437,22 @@ export function KloudMeetToolbar({
         }
       }
 
-      handleMobileBlankTap(e.target as Element);
+      let clientY: number | undefined;
+      if ('clientY' in e && typeof e.clientY === 'number') {
+        clientY = e.clientY;
+      } else if ('touches' in e && e.touches[0]) {
+        clientY = e.touches[0].clientY;
+      }
+
+      handleMobileBlankTap(e.target as Element, clientY);
     };
 
     const handleBlankTapEvent = (e: Event) => {
-      const detail = (e as CustomEvent<{ target?: Element }>).detail;
-      handleMobileBlankTap(detail?.target ?? (document.body as Element));
+      const detail = (e as CustomEvent<{ target?: Element; clientY?: number }>).detail;
+      handleMobileBlankTap(
+        detail?.target ?? (document.body as Element),
+        detail?.clientY,
+      );
     };
 
     const attachVideoWrapper = () => {
@@ -430,7 +483,7 @@ export function KloudMeetToolbar({
       document.removeEventListener('touchstart', handleBodyClick, { capture: true });
       document.removeEventListener('pointerdown', handleBodyClick, { capture: true });
     };
-  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen]);
+  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, isClientYInBottomNavZone]);
 
   // LiveDoc iframe click toggles toolbar (desktop + mobile when in iframe).
   useEffect(() => {
@@ -447,6 +500,10 @@ export function KloudMeetToolbar({
             ? (payload as { data?: { show?: unknown } }).data
             : null;
         const show = data?.show === 1 || data?.show === true;
+        // 点击落在底部导航栏区域时：不因空白点击唤出底栏（仍可用中间向上按钮）
+        if (show && isClientYInBottomNavZone(lastPointerClientYRef.current)) {
+          return;
+        }
         setVisible(show);
         return;
       }
@@ -468,7 +525,7 @@ export function KloudMeetToolbar({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, []);
+  }, [isClientYInBottomNavZone]);
 
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
@@ -726,12 +783,15 @@ export function KloudMeetToolbar({
 
       {!visible && (
         <>
-          <div
-            className={styles.hoverZone}
-            onMouseEnter={revealToolbar}
-            onPointerDown={revealToolbar}
-            onTouchStart={revealToolbar}
-          />
+          {/* 底部导航栏占位：吞掉点击，不唤出底栏；仅中间向上按钮可从底部唤出 */}
+          <div className={styles.bottomNavCatchZone} aria-hidden />
+          {/* 非 LiveDoc：桌面悬停仍可唤出（不响应点击） */}
+          {activeView !== 'liveDoc' && (
+            <div
+              className={styles.hoverZone}
+              onMouseEnter={revealToolbar}
+            />
+          )}
           <button
             type="button"
             className={styles.chevronHandle}
@@ -824,19 +884,34 @@ export function KloudMeetToolbar({
               )}
             </div>
 
-            {/* 3. LiveDoc — 手机不展示 Live Doc Menu，仅切换视图 */}
+            {/* 3. LiveDoc — 与 Web 一致：已在 LiveDoc 且插件就绪时再次点击打开文档弹窗 */}
             <button
               className={`${styles.mobileBtn} ${activeView === 'liveDoc' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
               onClick={() => {
                 if (!canSwitchViews) return;
-                onViewChange('liveDoc');
+                if (activeView === 'liveDoc' && liveDocPluginLoaded) {
+                  postToggleDocPopup();
+                } else {
+                  onViewChange('liveDoc');
+                }
               }}
               aria-label={t('toolbar.liveDoc')}
               title={t('toolbar.liveDoc')}
+              style={{ position: 'relative' }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
+              {activeView === 'liveDoc' && liveDocPluginLoaded && (
+                <span
+                  className={styles.liveDocMenuBadge}
+                  aria-hidden
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
+                </span>
+              )}
             </button>
 
             {/* 4. Webcam */}
@@ -1528,11 +1603,77 @@ function ActiveSheetContent({
   localSubtitleVisible,
   onOpenDesktopApp,
 }: any) {
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
+  const [langOpen, setLangOpen] = useState(false);
+  const langAnchorRef = useRef<HTMLDivElement | null>(null);
+  const langCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [langFlyoutStyle, setLangFlyoutStyle] = useState<React.CSSProperties | null>(null);
+  const currentLocale = LOCALE_OPTIONS.find((opt) => opt.code === locale) ?? LOCALE_OPTIONS[0];
+
+  const clearLangCloseTimer = () => {
+    if (langCloseTimerRef.current) {
+      clearTimeout(langCloseTimerRef.current);
+      langCloseTimerRef.current = null;
+    }
+  };
+
+  const updateLangFlyoutPosition = () => {
+    const rect = langAnchorRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const flyoutWidth = 168;
+    const gap = 8;
+    const openLeft = rect.left >= flyoutWidth + gap + 8;
+    setLangFlyoutStyle({
+      position: 'fixed',
+      top: Math.min(
+        Math.max(8, rect.top + rect.height / 2),
+        window.innerHeight - 8,
+      ),
+      ...(openLeft
+        ? { right: window.innerWidth - rect.left + gap, left: 'auto' }
+        : { left: Math.min(rect.right + gap, window.innerWidth - flyoutWidth - 8), right: 'auto' }),
+      transform: 'translateY(-50%)',
+      zIndex: 13000,
+    });
+  };
+
+  const openLangFlyout = () => {
+    clearLangCloseTimer();
+    updateLangFlyoutPosition();
+    setLangOpen(true);
+  };
+
+  const scheduleCloseLangFlyout = () => {
+    clearLangCloseTimer();
+    langCloseTimerRef.current = setTimeout(() => setLangOpen(false), 120);
+  };
+
+  useEffect(() => {
+    if (activeSheet !== 'more') setLangOpen(false);
+  }, [activeSheet]);
+
+  useEffect(() => {
+    if (!langOpen) return;
+    const onResize = () => updateLangFlyoutPosition();
+    window.addEventListener('resize', onResize);
+    window.addEventListener('scroll', onResize, true);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('scroll', onResize, true);
+    };
+  }, [langOpen]);
+
+  useEffect(() => () => clearLangCloseTimer(), []);
+
   const showComingSoon = (feature: string) => {
     setToastMsg(t('toolbar.comingSoon', { feature }));
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+  };
+
+  const handleSelectLocale = (code: Locale) => {
+    setLocale(code);
+    setLangOpen(false);
   };
 
   return (
@@ -1660,6 +1801,89 @@ function ActiveSheetContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
             {t('toolbar.openDesktop.menuItem')}
           </button>
+
+          {/* 语言：悬停/点击时在左侧弹出 */}
+          <div
+            ref={langAnchorRef}
+            className={styles.langMenuAnchor}
+            onMouseEnter={openLangFlyout}
+            onMouseLeave={scheduleCloseLangFlyout}
+          >
+            <button
+              type="button"
+              className={`${styles.actionSheetItem}${langOpen ? ` ${styles.active}` : ''}`}
+              onClick={() => {
+                if (langOpen) {
+                  setLangOpen(false);
+                  return;
+                }
+                openLangFlyout();
+              }}
+              aria-expanded={langOpen}
+              aria-haspopup="listbox"
+              aria-label={t('toolbar.language')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="2" y1="12" x2="22" y2="12" />
+                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+              </svg>
+              <span className={styles.actionSheetItemLabel}>{t('toolbar.language')}</span>
+              <span className={styles.actionSheetItemMeta}>
+                <span className={styles.langBadge}>{currentLocale.shortCode}</span>
+                <svg
+                  className={styles.langChevronLeft}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  width="16"
+                  height="16"
+                  aria-hidden
+                >
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </span>
+            </button>
+            {langOpen &&
+              langFlyoutStyle &&
+              createPortal(
+                <div
+                  className={styles.langFlyout}
+                  style={langFlyoutStyle}
+                  role="listbox"
+                  aria-label={t('toolbar.language')}
+                  onMouseEnter={openLangFlyout}
+                  onMouseLeave={scheduleCloseLangFlyout}
+                >
+                  {LOCALE_OPTIONS.map((opt) => {
+                    const selected = opt.code === locale;
+                    return (
+                      <button
+                        key={opt.code}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={`${styles.langFlyoutItem}${selected ? ` ${styles.langFlyoutItemActive}` : ''}`}
+                        onClick={() => handleSelectLocale(opt.code)}
+                      >
+                        <span>{opt.label}</span>
+                        <span className={styles.langFlyoutItemMeta}>
+                          {selected && (
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" aria-hidden>
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                          <span className={styles.langBadge}>{opt.shortCode}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>,
+                document.body,
+              )}
+          </div>
+
           <button className={styles.actionSheetItem} onClick={() => { onOpenHelp?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
             {t('toolbar.help')}
