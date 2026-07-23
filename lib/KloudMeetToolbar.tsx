@@ -198,6 +198,8 @@ export function KloudMeetToolbar({
   attendeeOpenRef.current = attendeeOpen;
   const lastPointerClientYRef = useRef(0);
   const desktopAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 父页自行隐藏底栏（如离开 3s）后，与插件 chrome 状态可能短暂不同步 */
+  const parentOnlyHiddenRef = useRef(false);
   const chatOpenRef = useRef(chatOpen);
   chatOpenRef.current = chatOpen;
   const inviteMenuOpenRef = useRef(inviteMenuOpen);
@@ -229,6 +231,7 @@ export function KloudMeetToolbar({
   }, []);
 
   useEffect(() => {
+    parentOnlyHiddenRef.current = false;
     setVisible(true);
   }, [activeView]);
 
@@ -268,12 +271,16 @@ export function KloudMeetToolbar({
       ) {
         return;
       }
+      if (visibleRef.current) {
+        parentOnlyHiddenRef.current = true;
+      }
       setVisible(false);
     }, 3000);
   }, [isMobile, clearDesktopToolbarAutoHide]);
 
   const revealToolbar = () => {
     clearDesktopToolbarAutoHide();
+    parentOnlyHiddenRef.current = false;
     setVisible(true);
   };
 
@@ -568,11 +575,15 @@ export function KloudMeetToolbar({
           typeof payload === 'object' && payload !== null && 'data' in payload
             ? (payload as { data?: { show?: unknown } }).data
             : null;
-        const show = data?.show === 1 || data?.show === true;
-        // 点击落在底部导航栏区域时：不因空白点击唤出底栏（仍可用中间向上按钮 / 悬停）
-        if (show && isClientYInBottomNavZone(lastPointerClientYRef.current)) {
-          return;
+        let show = data?.show === 1 || data?.show === true;
+
+        // 父页曾单独隐藏底栏（离开 3s）时，插件仍认为可见，空白点击会先发 show:0。
+        // 改判为显示，保留点击空白显隐（不改插件）。
+        if (!show && parentOnlyHiddenRef.current) {
+          show = true;
         }
+        parentOnlyHiddenRef.current = false;
+
         setVisible(show);
         if (show) {
           clearDesktopToolbarAutoHide();
@@ -580,7 +591,7 @@ export function KloudMeetToolbar({
         return;
       }
 
-      // LiveDoc iframe：鼠标移到底部导航区域时唤出底栏（与桌面 hoverZone 同一套显示逻辑）
+      // LiveDoc iframe：仅中间向上图标附近才唤出底栏
       if (msgType === 'mousemove') {
         if (isMobile) return;
         const data =
@@ -594,6 +605,7 @@ export function KloudMeetToolbar({
           !!(data as { showBottomToolbar?: unknown }).showBottomToolbar;
         if (showBottomToolbar) {
           clearDesktopToolbarAutoHide();
+          parentOnlyHiddenRef.current = false;
           setVisible(true);
         }
         return;
@@ -616,7 +628,7 @@ export function KloudMeetToolbar({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isClientYInBottomNavZone, isMobile, clearDesktopToolbarAutoHide]);
+  }, [isMobile, clearDesktopToolbarAutoHide]);
 
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
@@ -871,9 +883,9 @@ export function KloudMeetToolbar({
 
       {!visible && (
         <>
-          {/* 底部导航栏占位：吞掉点击，避免误点唤出；桌面仍靠 hoverZone 悬停唤出 */}
+          {/* 底部导航栏占位：吞掉点击，避免误点唤出；桌面仅中间图标附近悬停唤出 */}
           <div className={styles.bottomNavCatchZone} aria-hidden />
-          {/* 桌面悬停底部唤出底栏（含 LiveDoc，与 webcam/shareScreen 一致） */}
+          {/* 桌面悬停中间向上图标附近唤出底栏 */}
           <div
             className={styles.hoverZone}
             onMouseEnter={revealToolbar}
@@ -882,6 +894,7 @@ export function KloudMeetToolbar({
             type="button"
             className={styles.chevronHandle}
             onClick={revealToolbar}
+            onMouseEnter={revealToolbar}
             aria-label={t('toolbar.showToolbar') || 'Show toolbar'}
             title={t('toolbar.showToolbar') || 'Show toolbar'}
           >

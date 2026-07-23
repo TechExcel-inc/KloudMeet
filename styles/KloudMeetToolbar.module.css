@@ -3,13 +3,14 @@
    Auto-hiding toolbar with view tab switching
    ============================================ */
 
-/* Trigger zone at bottom of viewport — restores hidden toolbar on hover (desktop). */
+/* Trigger zone near center chevron — restores hidden toolbar on hover (desktop). */
 .hoverZone {
   position: fixed;
   bottom: 0;
-  left: 0;
-  right: 0;
-  height: var(--kloud-mobile-toolbar-height, 80px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 70px;
   z-index: 1000;  /* Below toolbar/action sheets, above meeting content */
   cursor: default;
   /* 仅悬停唤出：不拦截点击，点击由 bottomNavCatchZone / 空白区逻辑处理 */
@@ -49,15 +50,15 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 1002;
-  width: 66px;
-  height: 36px;
+  width: 60px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(30, 30, 40, 0.9);
-  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
   border-bottom: none;
-  border-radius: 16px 16px 0 0;
+  border-radius: 12px 12px 0 0;
   cursor: pointer;
   transition: opacity 0.3s ease;
   padding: 0;
@@ -65,8 +66,8 @@
 }
 
 .chevronHandle svg {
-  width: 28px;
-  height: 28px;
+  width: 18px;
+  height: 18px;
   color: rgba(255, 255, 255, 0.75);
   transition: color 0.2s ease;
 }
