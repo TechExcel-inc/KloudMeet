@@ -49,23 +49,25 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 1002;
-  width: 64px;
-  height: 24px;
+  width: 66px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: rgba(30, 30, 40, 0.9);
-  border: none;
-  border-radius: 12px 12px 0 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.9);
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
   cursor: pointer;
   transition: opacity 0.3s ease;
   padding: 0;
+  box-sizing: border-box;
 }
 
 .chevronHandle svg {
-  width: 20px;
-  height: 20px;
-  color: rgba(255, 255, 255, 0.6);
+  width: 28px;
+  height: 28px;
+  color: rgba(255, 255, 255, 0.75);
   transition: color 0.2s ease;
 }
 
@@ -661,6 +663,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: min(70vh, calc(100vh - 120px));
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
 }
 .actionSheetItem {
   display: flex;
@@ -926,7 +932,8 @@
 .toolbarBubble {
   position: fixed;
   z-index: 12001;
-  max-height: min(72vh, 420px);
+  /* 按可视高度自适应：够用则撑开无滚动条，超出再滚动（勿再用 420px 硬顶） */
+  max-height: min(80vh, calc(100vh - 96px));
   display: flex;
   flex-direction: column;
   background: rgba(15, 23, 42, 0.98);
@@ -1064,9 +1071,11 @@
   display: flex;
   flex-direction: column;
   gap: 6px;
+  /* 内容未溢出时不占滚动条；仅超出 max-height 才滚动 */
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  scrollbar-gutter: auto;
 }
 
 .toolbarBubbleList .actionSheetItem {

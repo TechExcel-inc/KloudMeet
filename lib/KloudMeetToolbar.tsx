@@ -197,6 +197,12 @@ export function KloudMeetToolbar({
   const attendeeOpenRef = useRef(attendeeOpen);
   attendeeOpenRef.current = attendeeOpen;
   const lastPointerClientYRef = useRef(0);
+  const desktopAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const chatOpenRef = useRef(chatOpen);
+  chatOpenRef.current = chatOpen;
+  const inviteMenuOpenRef = useRef(inviteMenuOpen);
+  inviteMenuOpenRef.current = inviteMenuOpen;
+  const isMobile = useToolbarIsMobile();
   const [showSTTSettings, setShowSTTSettings] = useState(false);
   const [showCCSettings, setShowCCSettings] = useState(false);
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
@@ -234,7 +240,71 @@ export function KloudMeetToolbar({
     }
   }, [chatOpen]);
 
-  const revealToolbar = () => setVisible(true);
+  const clearDesktopToolbarAutoHide = React.useCallback(() => {
+    if (desktopAutoHideTimerRef.current) {
+      clearTimeout(desktopAutoHideTimerRef.current);
+      desktopAutoHideTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleDesktopToolbarAutoHide = React.useCallback(() => {
+    if (isMobile) return;
+    if (
+      activeSheetRef.current ||
+      chatOpenRef.current ||
+      attendeeOpenRef.current ||
+      inviteMenuOpenRef.current
+    ) {
+      return;
+    }
+    clearDesktopToolbarAutoHide();
+    desktopAutoHideTimerRef.current = setTimeout(() => {
+      desktopAutoHideTimerRef.current = null;
+      if (
+        activeSheetRef.current ||
+        chatOpenRef.current ||
+        attendeeOpenRef.current ||
+        inviteMenuOpenRef.current
+      ) {
+        return;
+      }
+      setVisible(false);
+    }, 3000);
+  }, [isMobile, clearDesktopToolbarAutoHide]);
+
+  const revealToolbar = () => {
+    clearDesktopToolbarAutoHide();
+    setVisible(true);
+  };
+
+  const isRelatedChromeTarget = React.useCallback((target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    return !!(
+      toolbarRef.current?.contains(target) ||
+      desktopBubbleRef.current?.contains(target) ||
+      target.closest?.('.lk-device-menu, .lk-menu, .kloud-modal')
+    );
+  }, []);
+
+  const handleToolbarMouseEnter = () => {
+    if (isMobile) return;
+    clearDesktopToolbarAutoHide();
+  };
+
+  const handleToolbarMouseLeave = (e: React.MouseEvent) => {
+    if (isMobile) return;
+    if (isRelatedChromeTarget(e.relatedTarget)) return;
+    scheduleDesktopToolbarAutoHide();
+  };
+
+  useEffect(() => {
+    if (isMobile) return;
+    if (activeSheet || chatOpen || attendeeOpen || inviteMenuOpen) {
+      clearDesktopToolbarAutoHide();
+    }
+  }, [isMobile, activeSheet, chatOpen, attendeeOpen, inviteMenuOpen, clearDesktopToolbarAutoHide]);
+
+  useEffect(() => () => clearDesktopToolbarAutoHide(), [clearDesktopToolbarAutoHide]);
 
   const getBottomNavZoneHeightPx = React.useCallback((): number => {
     const toolbarEl = toolbarRef.current;
@@ -335,7 +405,6 @@ export function KloudMeetToolbar({
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [inviteMenuOpen]);
 
-  const isMobile = useToolbarIsMobile();
   const canUseMediaDevices =
     typeof window !== 'undefined' &&
     typeof navigator !== 'undefined' &&
@@ -500,11 +569,33 @@ export function KloudMeetToolbar({
             ? (payload as { data?: { show?: unknown } }).data
             : null;
         const show = data?.show === 1 || data?.show === true;
-        // 点击落在底部导航栏区域时：不因空白点击唤出底栏（仍可用中间向上按钮）
+        // 点击落在底部导航栏区域时：不因空白点击唤出底栏（仍可用中间向上按钮 / 悬停）
         if (show && isClientYInBottomNavZone(lastPointerClientYRef.current)) {
           return;
         }
         setVisible(show);
+        if (show) {
+          clearDesktopToolbarAutoHide();
+        }
+        return;
+      }
+
+      // LiveDoc iframe：鼠标移到底部导航区域时唤出底栏（与桌面 hoverZone 同一套显示逻辑）
+      if (msgType === 'mousemove') {
+        if (isMobile) return;
+        const data =
+          typeof payload === 'object' && payload !== null && 'data' in payload
+            ? (payload as { data?: { showBottomToolbar?: unknown } }).data
+            : null;
+        const showBottomToolbar =
+          typeof data === 'object' &&
+          data !== null &&
+          'showBottomToolbar' in data &&
+          !!(data as { showBottomToolbar?: unknown }).showBottomToolbar;
+        if (showBottomToolbar) {
+          clearDesktopToolbarAutoHide();
+          setVisible(true);
+        }
         return;
       }
 
@@ -525,7 +616,7 @@ export function KloudMeetToolbar({
 
     window.addEventListener('message', handleMessage);
     return () => window.removeEventListener('message', handleMessage);
-  }, [isClientYInBottomNavZone]);
+  }, [isClientYInBottomNavZone, isMobile, clearDesktopToolbarAutoHide]);
 
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
@@ -556,12 +647,11 @@ export function KloudMeetToolbar({
     const layout = () => {
       const r = anchorEl.getBoundingClientRect();
       const availableHeight = Math.max(240, r.top - 24);
+      // more/exit/recording：用满按钮上方可用高度，内容够则不出现滚动条
       const preferredMaxHeight =
-        desktopAnchorBubbleKind === 'chat'
+        desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
           ? 500
-          : desktopAnchorBubbleKind === 'attendee'
-            ? 500
-            : 440;
+          : availableHeight;
       const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
       const height = isPanel ? maxHeight : undefined;
       const cx = r.left + r.width / 2;
@@ -580,7 +670,7 @@ export function KloudMeetToolbar({
     };
 
     layout();
-  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen, inviteMenuOpen]);
+  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen, inviteMenuOpen, activeView]);
 
   useEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) return;
@@ -603,11 +693,9 @@ export function KloudMeetToolbar({
       const r = anchorEl.getBoundingClientRect();
       const availableHeight = Math.max(240, r.top - 24);
       const preferredMaxHeight =
-        desktopAnchorBubbleKind === 'chat'
+        desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
           ? 500
-          : desktopAnchorBubbleKind === 'attendee'
-            ? 500
-            : 440;
+          : availableHeight;
       const maxHeight = Math.min(preferredMaxHeight, Math.floor(availableHeight));
       const height = isPanel ? maxHeight : undefined;
       const cx = r.left + r.width / 2;
@@ -783,15 +871,13 @@ export function KloudMeetToolbar({
 
       {!visible && (
         <>
-          {/* 底部导航栏占位：吞掉点击，不唤出底栏；仅中间向上按钮可从底部唤出 */}
+          {/* 底部导航栏占位：吞掉点击，避免误点唤出；桌面仍靠 hoverZone 悬停唤出 */}
           <div className={styles.bottomNavCatchZone} aria-hidden />
-          {/* 非 LiveDoc：桌面悬停仍可唤出（不响应点击） */}
-          {activeView !== 'liveDoc' && (
-            <div
-              className={styles.hoverZone}
-              onMouseEnter={revealToolbar}
-            />
-          )}
+          {/* 桌面悬停底部唤出底栏（含 LiveDoc，与 webcam/shareScreen 一致） */}
+          <div
+            className={styles.hoverZone}
+            onMouseEnter={revealToolbar}
+          />
           <button
             type="button"
             className={styles.chevronHandle}
@@ -811,6 +897,8 @@ export function KloudMeetToolbar({
         ref={toolbarRef}
         data-skymeet-toolbar="true"
         className={`${styles.toolbar} ${isMobile ? styles.mobileToolbar : ''} ${!visible ? styles.toolbarHidden : ''}`}
+        onMouseEnter={handleToolbarMouseEnter}
+        onMouseLeave={handleToolbarMouseLeave}
       >
         {isMobile ? (
           <>
@@ -1729,6 +1817,26 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
+          {activeView === 'liveDoc' && (
+            <button
+              type="button"
+              className={styles.actionSheetItem}
+              onClick={() => {
+                const iframe =
+                  (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null) ??
+                  document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+                iframe?.contentWindow?.postMessage({ type: 'Kloud-ShowAiPresentThink', show: 1 }, '*');
+                setActiveSheet(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M8 21h8M12 18v3" strokeLinecap="round" />
+                <path d="M8 10h.01M12 10h.01M16 10h.01" strokeLinecap="round" />
+              </svg>
+              {t('toolbar.aiPresent')}
+            </button>
+          )}
           {!isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
