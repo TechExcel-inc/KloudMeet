@@ -80,6 +80,8 @@ interface KloudMeetToolbarProps {
   hasScreenShare: boolean;
   isDesktop: boolean;
   canSwitchViews: boolean;
+  /** Host / Co-host / Presenter：可切换 LiveDoc Annotation */
+  canToggleLiveDocAnnotation?: boolean;
   chatOpen: boolean;
   onToggleChat: () => void;
   attendeeOpen: boolean;
@@ -136,6 +138,7 @@ export function KloudMeetToolbar({
   hasScreenShare,
   isDesktop,
   canSwitchViews,
+  canToggleLiveDocAnnotation = false,
   chatOpen,
   onToggleChat,
   attendeeOpen,
@@ -210,6 +213,7 @@ export function KloudMeetToolbar({
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
+  const [liveDocAnnotationEnabled, setLiveDocAnnotationEnabled] = useState(true);
 
   const clampChatBubbleRect = React.useCallback((rect: ChatBubbleRect): ChatBubbleRect => {
     if (typeof window === 'undefined') return rect;
@@ -616,6 +620,15 @@ export function KloudMeetToolbar({
         return;
       }
 
+      if (msgType === 'showAnnotationPanel') {
+        const status =
+          typeof payload === 'object' && payload !== null && 'status' in payload
+            ? (payload as { status?: unknown }).status
+            : null;
+        setLiveDocAnnotationEnabled(status === 1 || status === true);
+        return;
+      }
+
       if (msgType === 'onKloudActionDialogVisibleChange') {
         const data =
           typeof payload === 'object' && payload !== null && 'data' in payload
@@ -849,6 +862,63 @@ export function KloudMeetToolbar({
     iframe.contentWindow.postMessage({ type: 'Kloud-ToggleDocPopup' }, '*');
   };
 
+  const postSetLiveDocAnnotation = (enabled: boolean) => {
+    setLiveDocAnnotationEnabled(enabled);
+    const iframe =
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
+      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+    if (!iframe?.contentWindow) return;
+    iframe.contentWindow.postMessage(
+      { type: 'showAnnotationPanel', status: enabled ? 1 : 0 },
+      '*',
+    );
+  };
+
+  const handleLiveDocAnnotationBadgeClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!canToggleLiveDocAnnotation || !liveDocPluginLoaded) return;
+    postSetLiveDocAnnotation(!liveDocAnnotationEnabled);
+  };
+
+  const handleLiveDocTabClick = () => {
+    if (activeView === 'liveDoc' && liveDocPluginLoaded) {
+      postToggleDocPopup();
+      return;
+    }
+    onViewChange('liveDoc');
+  };
+
+  const renderLiveDocAnnotationBadge = () => {
+    if (!canToggleLiveDocAnnotation || activeView !== 'liveDoc' || !liveDocPluginLoaded) {
+      return null;
+    }
+    return (
+      <span
+        role="button"
+        tabIndex={0}
+        className={`${styles.liveDocMenuBadge} ${liveDocAnnotationEnabled ? styles.liveDocMenuBadgeOn : styles.liveDocMenuBadgeOff}`}
+        onClick={handleLiveDocAnnotationBadgeClick}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
+          }
+        }}
+        title={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
+        aria-label={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
+        aria-pressed={liveDocAnnotationEnabled}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
+          {liveDocAnnotationEnabled ? (
+            <path d="M18 15l-6-6-6 6" />
+          ) : (
+            <path d="M6 9l6 6 6-6" />
+          )}
+        </svg>
+      </span>
+    );
+  };
+
   const desktopBubbleStyle = desktopBubblePos
     ? ({
       top:
@@ -990,11 +1060,7 @@ export function KloudMeetToolbar({
               className={`${styles.mobileBtn} ${activeView === 'liveDoc' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
               onClick={() => {
                 if (!canSwitchViews) return;
-                if (activeView === 'liveDoc' && liveDocPluginLoaded) {
-                  postToggleDocPopup();
-                } else {
-                  onViewChange('liveDoc');
-                }
+                handleLiveDocTabClick();
               }}
               aria-label={t('toolbar.liveDoc')}
               title={t('toolbar.liveDoc')}
@@ -1003,16 +1069,7 @@ export function KloudMeetToolbar({
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              {activeView === 'liveDoc' && liveDocPluginLoaded && (
-                <span
-                  className={styles.liveDocMenuBadge}
-                  aria-hidden
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
-                    <path d="M18 15l-6-6-6 6" />
-                  </svg>
-                </span>
-              )}
+              {renderLiveDocAnnotationBadge()}
             </button>
 
             {/* 4. Webcam */}
@@ -1137,25 +1194,13 @@ export function KloudMeetToolbar({
                 <>
                   <button
                     className={`${styles.tabBtn} ${activeView === 'liveDoc' ? styles.tabBtnActive : ''}`}
-                    onClick={() => {
-                      if (activeView === 'liveDoc' && liveDocPluginLoaded) {
-                        postToggleDocPopup();
-                      } else {
-                        onViewChange('liveDoc');
-                      }
-                    }}
+                    onClick={handleLiveDocTabClick}
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     {t('toolbar.liveDoc')}
-                    {activeView === 'liveDoc' && liveDocPluginLoaded && (
-                      <span style={{ position: 'absolute', top: '2px', right: '2px', width: '12px', height: '12px', borderRadius: '50%', background: '#3b82f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4" style={{ width: '8px', height: '8px' }}>
-                          <path d="M18 15l-6-6-6 6" />
-                        </svg>
-                      </span>
-                    )}
+                    {renderLiveDocAnnotationBadge()}
                   </button>
                   {false && activeView === 'liveDoc' && liveDocPluginLoaded && (
                     <button
@@ -1361,7 +1406,15 @@ export function KloudMeetToolbar({
           <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
             <div className={styles.actionSheetHeader}>
               <span className={styles.actionSheetTitle}>
-                {activeSheet === 'views' ? t('toolbar.selectViewLayout') : activeSheet === 'recording' ? t('toolbar.recordingControls') : activeSheet === 'exit' ? t('toolbar.leaveMeeting') : t('toolbar.moreOptions')}
+                {activeSheet === 'views'
+                  ? t('toolbar.selectViewLayout')
+                  : activeSheet === 'recording'
+                    ? t('toolbar.recordingControls')
+                    : activeSheet === 'exit'
+                      ? t('toolbar.leaveMeeting')
+                      : activeSheet === 'speaker'
+                        ? t('toolbar.speakerSettings')
+                        : t('toolbar.moreOptions')}
               </span>
               <button type="button" className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
             </div>
@@ -1393,11 +1446,14 @@ export function KloudMeetToolbar({
                 canToggleCaptions={canToggleCaptions}
                 captionsEnabled={captionsEnabled}
                 onToggleCaptions={onToggleCaptions}
+                mobileAudioState={mobileAudioState}
+                setMobileAudioState={setMobileAudioState}
                 handleToggleChat={handleToggleChat}
                 onOpenSTTSettings={() => setShowSTTSettings(true)}
                 onOpenCCSettings={() => setShowCCSettings(true)}
                 localSubtitleVisible={localSubtitleVisible}
                 onOpenDesktopApp={onOpenDesktopApp}
+                isMobile={isMobile}
               />
             </div>
           </div>
@@ -1559,6 +1615,7 @@ export function KloudMeetToolbar({
                       onOpenCCSettings={() => setShowCCSettings(true)}
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
+                      isMobile={false}
                     />
                   </div>
                 )}
@@ -1582,18 +1639,57 @@ export function KloudMeetToolbar({
           id="mobileTopRightBtn"
           className={`${styles.mobileTopActions} ${!visible ? styles.mobileTopActionsHidden : ''}`}
         >
-          {/* Speaker button */}
-          <button
-            type="button"
-            className={styles.mobileTopBtn}
-            onClick={(e) => { e.stopPropagation(); openSheet('speaker'); }}
-            aria-label={t('toolbar.speakerSettings') || 'Speaker Settings'}
-            title={t('toolbar.speakerSettings') || 'Speaker Settings'}
-          >
-            {mobileAudioState === 'speaker' && <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>}
-            {mobileAudioState === 'earpiece' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>}
-            {mobileAudioState === 'bluetooth' && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>}
-          </button>
+          {/* Invite — replaces Speaker on phone browser */}
+          <div data-invite-menu-anchor="true" className={styles.mobileTopInviteAnchor}>
+            <button
+              type="button"
+              className={`${styles.mobileTopBtn} ${inviteMenuOpen ? styles.mobileTopBtnInviteActive : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setInviteMenuOpen((prev) => {
+                  const next = !prev;
+                  if (next) onOpenSheet?.();
+                  return next;
+                });
+              }}
+              aria-label={t('toolbar.invite')}
+              title={t('toolbar.invite')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+              </svg>
+            </button>
+            {inviteMenuOpen && (
+              <div className={`${styles.inviteDropdown} ${styles.inviteDropdownFromTop}`} role="menu">
+                <button
+                  type="button"
+                  className={styles.inviteDropdownItem}
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+                    showInviteToast(t('toolbar.inviteCopied'));
+                    closeInviteMenu();
+                  }}
+                >
+                  {t('schedule.copyLink')}
+                </button>
+                <button
+                  type="button"
+                  className={styles.inviteDropdownItem}
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                    showInviteToast(t('schedule.inviteCopied'));
+                    closeInviteMenu();
+                  }}
+                >
+                  {t('schedule.copyInvite')}
+                </button>
+              </div>
+            )}
+          </div>
 
           {/* Chat button */}
           <button
@@ -1703,6 +1799,7 @@ function ActiveSheetContent({
   onOpenCCSettings,
   localSubtitleVisible,
   onOpenDesktopApp,
+  isMobile,
 }: any) {
   const { t, locale, setLocale } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
@@ -1830,6 +1927,22 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
+          {isMobile && (
+            <button
+              type="button"
+              className={styles.actionSheetItem}
+              onClick={() => setActiveSheet('speaker')}
+            >
+              {mobileAudioState === 'earpiece' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>
+              ) : mobileAudioState === 'bluetooth' ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+              )}
+              {t('toolbar.speakerSettings')}
+            </button>
+          )}
           {activeView === 'liveDoc' && (
             <button
               type="button"

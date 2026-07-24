@@ -7541,6 +7541,7 @@ export function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
+          canToggleLiveDocAnnotation={canBroadcastViewChange}
           canEndForAll={isHost || isCohost}
           isRecording={isRecording}
           onOpenRecordPopup={() => setShowRecordPopup(true)}
