@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TokenVerifier } from 'livekit-server-sdk';
 import { prisma } from '@/lib/db';
+import {
+  decodeChatContent,
+  encodeChatContent,
+  isChatAttachment,
+  type ChatAttachment,
+  type ChatMessageKind,
+} from '@/lib/chatProtocol';
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY_MESSAGES = 500;
@@ -9,6 +16,8 @@ const MAX_CLIENT_MESSAGE_ID_LENGTH = 191;
 interface ChatMessageBody {
   clientMessageId?: unknown;
   message?: unknown;
+  kind?: unknown;
+  attachment?: unknown;
 }
 
 interface VerifiedParticipant {
@@ -22,6 +31,8 @@ interface SerializedChatMessage {
   senderName: string;
   message: string;
   timestamp: number;
+  kind?: ChatMessageKind;
+  attachment?: ChatAttachment;
 }
 
 function getBearerToken(request: NextRequest): string {
@@ -70,12 +81,15 @@ function serializeMessage(message: {
   content: string;
   sentAt: Date;
 }): SerializedChatMessage {
+  const decoded = decodeChatContent(message.content);
   return {
     clientMessageId: message.clientMessageId,
     senderIdentity: message.senderIdentity,
     senderName: message.senderName,
-    message: message.content,
+    message: decoded.message,
     timestamp: message.sentAt.getTime(),
+    kind: decoded.kind,
+    attachment: decoded.attachment,
   };
 }
 
@@ -145,11 +159,17 @@ export async function POST(
     const clientMessageId =
       typeof body.clientMessageId === 'string' ? body.clientMessageId.trim() : '';
     const message = typeof body.message === 'string' ? body.message.trim() : '';
+    const kind = body.kind === 'livedoc' ? 'livedoc' : 'text';
+    const attachment = isChatAttachment(body.attachment) ? body.attachment : undefined;
+
     if (!clientMessageId || clientMessageId.length > MAX_CLIENT_MESSAGE_ID_LENGTH) {
       return NextResponse.json({ error: 'Invalid client message ID' }, { status: 400 });
     }
     if (!message || message.length > MAX_MESSAGE_LENGTH) {
       return NextResponse.json({ error: 'Invalid message' }, { status: 400 });
+    }
+    if (kind === 'livedoc' && !attachment) {
+      return NextResponse.json({ error: 'Livedoc message requires attachment' }, { status: 400 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -159,6 +179,8 @@ export async function POST(
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
+
+    const content = encodeChatContent({ message, kind, attachment });
 
     const saved = await prisma.meetingChatMessage.upsert({
       where: {
@@ -173,7 +195,7 @@ export async function POST(
         clientMessageId,
         senderIdentity: participant.identity,
         senderName: participant.name,
-        content: message,
+        content,
         sentAt: new Date(),
       },
       select: {

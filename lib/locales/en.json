@@ -539,6 +539,13 @@
   "chat.noMessages": "No messages yet. Say hello! 👋",
   "chat.you": "You",
   "chat.typeMessage": "Type a message...",
+  "chat.attachFile": "Attach file",
+  "chat.openLiveDoc": "Open as LiveDoc",
+  "chat.docUploading": "Uploading…",
+  "chat.docConverting": "Converting…",
+  "chat.docFailed": "Upload failed",
+  "chat.sharedFile": "Shared",
+  "chat.sharedLiveDoc": "Shared a LiveDoc",
 
   "replay.loading": "Loading replay...",
   "replay.notReady": "Video Not Ready",

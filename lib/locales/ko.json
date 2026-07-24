@@ -518,6 +518,13 @@
   "chat.noMessages": "아직 메시지가 없습니다. 인사해 보세요! 👋",
   "chat.you": "나",
   "chat.typeMessage": "메시지 입력...",
+  "chat.attachFile": "파일 첨부",
+  "chat.openLiveDoc": "LiveDoc으로 열기",
+  "chat.docUploading": "업로드 중…",
+  "chat.docConverting": "변환 중…",
+  "chat.docFailed": "업로드 실패",
+  "chat.sharedFile": "공유",
+  "chat.sharedLiveDoc": "LiveDoc을 공유했습니다",
 
   "replay.loading": "다시보기 로딩 중...",
   "replay.notReady": "동영상 준비 중",

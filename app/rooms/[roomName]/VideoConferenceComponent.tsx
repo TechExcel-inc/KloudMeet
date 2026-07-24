@@ -71,8 +71,23 @@ import {
   ChatPanel,
   AttendeePanel,
   chatAndAttendeeStyles,
-  type ChatMsg,
 } from '@/lib/ChatAndAttendeePanel';
+import {
+  CHAT_OPEN_DOCUMENT_TYPE,
+  CHAT_PING_TYPE,
+  CHAT_PONG_TYPE,
+  CHAT_UPLOAD_REQUEST_TYPE,
+  CHAT_UPLOAD_RESULT_TYPE,
+  createChatMessageId,
+  getLiveDocIframe,
+  isChatAttachment,
+  isChatWireMessage,
+  postToLiveDocIframe,
+  wireToChatMsg,
+  type ChatAttachment,
+  type ChatMsg,
+  type ChatWireMessage,
+} from '@/lib/chatProtocol';
 import { getInitials } from '@/lib/getInitials';
 import {
   ParticipantRoleMenuProvider,
@@ -125,57 +140,40 @@ import {
   SCREEN_SHARE_CAPTURE,
 } from './roomConstants';
 
-interface ChatWireMessage {
-  type: 'chat';
-  clientMessageId?: string;
-  senderIdentity: string;
-  senderName: string;
-  message: string;
-  timestamp: number;
-}
-
 interface PersistedChatMessage {
   clientMessageId: string;
   senderIdentity: string;
   senderName: string;
   message: string;
   timestamp: number;
+  kind?: ChatMsg['kind'];
+  attachment?: ChatAttachment;
 }
 
 interface ChatHistoryResponse {
   messages?: unknown;
 }
 
-function isChatWireMessage(value: unknown): value is ChatWireMessage {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    candidate.type === 'chat' &&
-    (candidate.clientMessageId === undefined || typeof candidate.clientMessageId === 'string') &&
-    typeof candidate.senderIdentity === 'string' &&
-    typeof candidate.senderName === 'string' &&
-    typeof candidate.message === 'string' &&
-    typeof candidate.timestamp === 'number' &&
-    Number.isFinite(candidate.timestamp)
-  );
-}
-
 function isPersistedChatMessage(value: unknown): value is PersistedChatMessage {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.clientMessageId === 'string' &&
-    typeof candidate.senderIdentity === 'string' &&
-    typeof candidate.senderName === 'string' &&
-    typeof candidate.message === 'string' &&
-    typeof candidate.timestamp === 'number' &&
-    Number.isFinite(candidate.timestamp)
-  );
-}
-
-function getChatMessageId(message: ChatWireMessage): string {
-  return message.clientMessageId ??
-    `legacy:${message.senderIdentity}:${message.timestamp}:${message.message}`;
+  if (
+    typeof candidate.clientMessageId !== 'string' ||
+    typeof candidate.senderIdentity !== 'string' ||
+    typeof candidate.senderName !== 'string' ||
+    typeof candidate.message !== 'string' ||
+    typeof candidate.timestamp !== 'number' ||
+    !Number.isFinite(candidate.timestamp)
+  ) {
+    return false;
+  }
+  if (candidate.kind !== undefined && candidate.kind !== 'text' && candidate.kind !== 'livedoc') {
+    return false;
+  }
+  if (candidate.attachment !== undefined && !isChatAttachment(candidate.attachment)) {
+    return false;
+  }
+  return true;
 }
 
 function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
@@ -184,13 +182,6 @@ function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
     byId.set(message.clientMessageId, message);
   }
   return Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp);
-}
-
-function createChatMessageId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function VideoConferenceComponent(props: {
@@ -3904,6 +3895,156 @@ export function VideoConferenceComponent(props: {
   const chatEncoder = React.useMemo(() => new TextEncoder(), []);
   const chatDecoder = React.useMemo(() => new TextDecoder(), []);
   const [chatMessages, setChatMessages] = React.useState<ChatMsg[]>([]);
+  const [chatAttachBusy, setChatAttachBusy] = React.useState(false);
+  const pendingChatUploadRef = React.useRef<{ requestId: string } | null>(null);
+  const livedocInstanceIdRef = React.useRef(livedocInstanceId);
+  livedocInstanceIdRef.current = livedocInstanceId;
+
+  const waitForLiveDocIframe = React.useCallback(async (timeoutMs = 20000): Promise<boolean> => {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      if (getLiveDocIframe()?.contentWindow) return true;
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+    }
+    return !!getLiveDocIframe()?.contentWindow;
+  }, []);
+
+  const waitForLivedocInstanceId = React.useCallback(async (timeoutMs = 25000): Promise<string | null> => {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const id = livedocInstanceIdRef.current;
+      if (id) return id;
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
+    }
+    return livedocInstanceIdRef.current;
+  }, []);
+
+  const waitForLiveDocPluginReady = React.useCallback(async (timeoutMs = 25000): Promise<boolean> => {
+    const iframe = getLiveDocIframe();
+    if (!iframe?.contentWindow) return false;
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        window.removeEventListener('message', onMessage);
+        resolve(ok);
+      };
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data as { type?: unknown } | null;
+        if (!data || typeof data !== 'object' || data.type !== 'onkloudloaded') return;
+        if (event.source && event.source !== iframe.contentWindow) return;
+        finish(true);
+      };
+      const timer = window.setTimeout(() => finish(false), timeoutMs);
+      window.addEventListener('message', onMessage);
+    });
+  }, []);
+
+  /** Confirm MainStage OnMessage is listening (works even if onkloudloaded already fired). */
+  const waitForLiveDocChatBridge = React.useCallback(async (timeoutMs = 20000): Promise<boolean> => {
+    const started = Date.now();
+    const pingId = createChatMessageId();
+    return await new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        window.clearInterval(pingTimer);
+        window.clearTimeout(deadline);
+        window.removeEventListener('message', onMessage);
+        resolve(ok);
+      };
+      const onMessage = (event: MessageEvent) => {
+        const data = event.data as { type?: unknown; requestId?: unknown } | null;
+        if (!data || typeof data !== 'object' || data.type !== CHAT_PONG_TYPE) return;
+        if (data.requestId && data.requestId !== pingId) return;
+        finish(true);
+      };
+      const ping = () => {
+        postToLiveDocIframe({ type: CHAT_PING_TYPE, requestId: pingId });
+      };
+      window.addEventListener('message', onMessage);
+      ping();
+      const pingTimer = window.setInterval(ping, 500);
+      const deadline = window.setTimeout(() => finish(false), timeoutMs);
+      // Keep pinging while iframe may still be mounting
+      void (async () => {
+        while (!settled && Date.now() - started < timeoutMs) {
+          if (!getLiveDocIframe()?.contentWindow) {
+            await new Promise((r) => window.setTimeout(r, 200));
+            continue;
+          }
+          await new Promise((r) => window.setTimeout(r, 500));
+        }
+      })();
+    });
+  }, []);
+
+  const ensureLiveDocViewReady = React.useCallback(async (): Promise<boolean> => {
+    // Mount LiveDoc (creates instance for host; guests wait for LIVEDOC_INSTANCE)
+    setLivedocHasBeenActivated(true);
+    setActiveView('liveDoc');
+    const id = await waitForLivedocInstanceId();
+    if (!id) return false;
+    const iframeReady = await waitForLiveDocIframe();
+    if (!iframeReady) return false;
+    // Ping/pong confirms MainStage OnMessage (incl. ChatUpload) is listening.
+    // Do NOT short-circuit with a timer — early posts are silently lost.
+    const bridgeReady = await waitForLiveDocChatBridge(25000);
+    if (!bridgeReady) {
+      // Last chance: wait for onkloudloaded then ping again
+      const pluginOk = await waitForLiveDocPluginReady(5000);
+      if (!pluginOk) return false;
+      const retry = await waitForLiveDocChatBridge(10000);
+      if (!retry) return false;
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 300));
+    return true;
+  }, [waitForLiveDocIframe, waitForLivedocInstanceId, waitForLiveDocPluginReady, waitForLiveDocChatBridge]);
+
+  const persistChatMessage = React.useCallback(
+    async (body: {
+      clientMessageId: string;
+      message: string;
+      kind?: ChatMsg['kind'];
+      attachment?: ChatAttachment;
+    }): Promise<void> => {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetchWithTimeout(
+            `/api/meetings/${encodeURIComponent(meetingRoomName)}/chat-messages`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${connectionDetailsRef.current.participantToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(body),
+            },
+          );
+          if (response.ok || response.status < 500) return;
+        } catch (error) {
+          if (attempt === 1 || (error instanceof Error && error.name === 'AbortError')) return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+      }
+    },
+    [meetingRoomName],
+  );
+
+  const publishChatWire = React.useCallback(
+    (wire: ChatWireMessage) => {
+      const payload = chatEncoder.encode(JSON.stringify(wire));
+      room.localParticipant
+        .publishData(payload, { reliable: true, topic: CHAT_TOPIC })
+        .catch(() => {
+          room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
+        });
+    },
+    [room, chatEncoder],
+  );
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -3926,8 +4067,14 @@ export function VideoConferenceComponent(props: {
         const history = body.messages
           .filter(isPersistedChatMessage)
           .map<ChatMsg>((message) => ({
-            ...message,
+            clientMessageId: message.clientMessageId,
+            senderIdentity: message.senderIdentity,
+            senderName: message.senderName,
+            message: message.message,
+            timestamp: message.timestamp,
             isLocal: message.senderIdentity === room.localParticipant.identity,
+            kind: message.kind,
+            attachment: message.attachment,
           }));
         setChatMessages((current) => mergeChatMessages(current, history));
       } catch (error) {
@@ -3951,14 +4098,7 @@ export function VideoConferenceComponent(props: {
       try {
         const data: unknown = JSON.parse(chatDecoder.decode(payload));
         if (!isChatWireMessage(data)) return;
-        const incoming: ChatMsg = {
-          clientMessageId: getChatMessageId(data),
-          senderIdentity: data.senderIdentity,
-          senderName: data.senderName,
-          message: data.message,
-          timestamp: data.timestamp,
-          isLocal: data.senderIdentity === room.localParticipant.identity,
-        };
+        const incoming = wireToChatMsg(data, room.localParticipant.identity);
         setChatMessages((current) => mergeChatMessages(current, [incoming]));
       } catch (e) {
         console.error('Chat message parse error:', e);
@@ -3976,55 +4116,189 @@ export function VideoConferenceComponent(props: {
       const clientMessageId = createChatMessageId();
       const senderName =
         room.localParticipant.name || room.localParticipant.identity || 'You';
-      const localMessage: ChatMsg = {
+      const wire: ChatWireMessage = {
+        type: 'chat',
         clientMessageId,
         senderIdentity: room.localParticipant.identity,
         senderName,
         message: text,
         timestamp: now,
-        isLocal: true,
+        kind: 'text',
       };
-      setChatMessages((current) => mergeChatMessages(current, [localMessage]));
-      const payload = chatEncoder.encode(
-        JSON.stringify({
-          type: 'chat',
-          clientMessageId,
-          senderIdentity: room.localParticipant.identity,
-          senderName,
-          message: text,
-          timestamp: now,
-        }),
+      setChatMessages((current) =>
+        mergeChatMessages(current, [wireToChatMsg(wire, room.localParticipant.identity)]),
       );
-      room.localParticipant
-        .publishData(payload, { reliable: true, topic: CHAT_TOPIC })
-        .catch(() => {
-          room.localParticipant.publishData(payload, { topic: CHAT_TOPIC }).catch(console.error);
-        });
-
-      const persistMessage = async (): Promise<void> => {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-          try {
-            const response = await fetchWithTimeout(
-              `/api/meetings/${encodeURIComponent(meetingRoomName)}/chat-messages`,
-              {
-                method: 'POST',
-                headers: {
-                  Authorization: `Bearer ${connectionDetailsRef.current.participantToken}`,
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ clientMessageId, message: text }),
-              },
-            );
-            if (response.ok || response.status < 500) return;
-          } catch (error) {
-            if (attempt === 1 || (error instanceof Error && error.name === 'AbortError')) return;
-          }
-          await new Promise((resolve) => window.setTimeout(resolve, 500));
-        }
-      };
-      void persistMessage();
+      publishChatWire(wire);
+      void persistChatMessage({ clientMessageId, message: text, kind: 'text' });
     },
-    [room, chatEncoder, meetingRoomName],
+    [room, publishChatWire, persistChatMessage],
+  );
+
+  const sendLivedocChatMessage = React.useCallback(
+    (attachment: ChatAttachment) => {
+      const now = Date.now();
+      const clientMessageId = createChatMessageId();
+      const senderName =
+        room.localParticipant.name || room.localParticipant.identity || 'You';
+      const message = attachment.fileName
+        ? `${t('chat.sharedFile') || 'Shared'}: ${attachment.fileName}`
+        : (t('chat.sharedLiveDoc') || 'Shared a LiveDoc');
+      const wire: ChatWireMessage = {
+        type: 'chat',
+        clientMessageId,
+        senderIdentity: room.localParticipant.identity,
+        senderName,
+        message,
+        timestamp: now,
+        kind: 'livedoc',
+        attachment,
+      };
+      setChatMessages((current) =>
+        mergeChatMessages(current, [wireToChatMsg(wire, room.localParticipant.identity)]),
+      );
+      publishChatWire(wire);
+      void persistChatMessage({
+        clientMessageId,
+        message,
+        kind: 'livedoc',
+        attachment,
+      });
+    },
+    [room, publishChatWire, persistChatMessage, t],
+  );
+
+  const openLivedocFromChat = React.useCallback(
+    async (msg: ChatMsg) => {
+      const itemId = msg.attachment?.itemId;
+      if (!itemId || itemId <= 0) return;
+      const ready = await ensureLiveDocViewReady();
+      if (!ready) {
+        console.warn('[chat] LiveDoc iframe not ready for open');
+        return;
+      }
+      postToLiveDocIframe({
+        type: CHAT_OPEN_DOCUMENT_TYPE,
+        itemId,
+        pageNumber: 1,
+        sendmsg: true,
+      });
+    },
+    [ensureLiveDocViewReady],
+  );
+
+  const handleAttachFile = React.useCallback(async (file: File) => {
+    if (chatAttachBusy) return;
+    if (!file) return;
+    setChatAttachBusy(true);
+    const requestId = createChatMessageId();
+    pendingChatUploadRef.current = { requestId };
+    try {
+      const ready = await ensureLiveDocViewReady();
+      if (!ready) {
+        console.warn('[chat] LiveDoc not ready for upload (no instance or iframe)');
+        pendingChatUploadRef.current = null;
+        setChatAttachBusy(false);
+        return;
+      }
+      // Cross-origin iframe: File may not clone reliably; send ArrayBuffer instead
+      const fileBuffer = await file.arrayBuffer();
+      const payload = {
+        type: CHAT_UPLOAD_REQUEST_TYPE,
+        requestId,
+        fileName: file.name,
+        fileType: file.type || '',
+        fileSize: file.size,
+        fileBuffer,
+      };
+      // Post once after chat bridge is ready (ensureLiveDocViewReady waited for pong)
+      let posted = postToLiveDocIframe(payload);
+      if (!posted) {
+        for (let i = 0; i < 10 && !posted; i += 1) {
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+          posted = postToLiveDocIframe(payload);
+        }
+      }
+      if (!posted) {
+        pendingChatUploadRef.current = null;
+        setChatAttachBusy(false);
+        return;
+      }
+      window.setTimeout(() => {
+        if (pendingChatUploadRef.current?.requestId === requestId) {
+          pendingChatUploadRef.current = null;
+          setChatAttachBusy(false);
+        }
+      }, 180000);
+    } catch (error) {
+      console.error('[chat] attach file failed', error);
+      pendingChatUploadRef.current = null;
+      setChatAttachBusy(false);
+    }
+  }, [chatAttachBusy, ensureLiveDocViewReady]);
+
+  React.useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      const data = event.data as Record<string, unknown> | null;
+      if (!data || typeof data !== 'object') return;
+      if (data.type !== CHAT_UPLOAD_RESULT_TYPE) return;
+      const pending = pendingChatUploadRef.current;
+      // While a chat upload is in flight, accept the next result (requestId may differ
+      // if MainStage rebuilt / duplicate-handled the file).
+      if (!pending) return;
+      pendingChatUploadRef.current = null;
+      setChatAttachBusy(false);
+
+      const status =
+        data.status === 'failed' || data.status === 'converting' || data.status === 'uploading'
+          ? data.status
+          : 'ready';
+      const itemId = typeof data.itemId === 'number' ? data.itemId : Number(data.itemId);
+      const fileName =
+        typeof data.fileName === 'string' && data.fileName.trim()
+          ? data.fileName.trim()
+          : 'Document';
+      if (status === 'failed' || !Number.isFinite(itemId) || itemId <= 0) {
+        return;
+      }
+      const attachmentIdRaw = data.attachmentId;
+      const attachmentId =
+        typeof attachmentIdRaw === 'number'
+          ? attachmentIdRaw
+          : Number.isFinite(Number(attachmentIdRaw))
+            ? Number(attachmentIdRaw)
+            : undefined;
+      sendLivedocChatMessage({
+        itemId,
+        attachmentId,
+        fileName,
+        livedocInstanceId: livedocInstanceIdRef.current ?? undefined,
+        status,
+      });
+      // Ensure stage shows the shared doc for the uploader
+      if (status === 'ready') {
+        void ensureLiveDocViewReady().then((ready) => {
+          if (!ready) return;
+          postToLiveDocIframe({
+            type: CHAT_OPEN_DOCUMENT_TYPE,
+            itemId,
+            pageNumber: 1,
+            sendmsg: true,
+          });
+        });
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [sendLivedocChatMessage, ensureLiveDocViewReady]);
+
+  const chatPanelNode = (
+    <ChatPanel
+      messages={chatMessages}
+      onSend={sendChatMessage}
+      onAttachFile={handleAttachFile}
+      onOpenLivedoc={openLivedocFromChat}
+      attachBusy={chatAttachBusy}
+    />
   );
 
   return (
@@ -5375,7 +5649,7 @@ export function VideoConferenceComponent(props: {
                 </button>
               </div>
               <div className="chat-overlay-body">
-                <ChatPanel messages={chatMessages} onSend={sendChatMessage} />
+                {chatPanelNode}
               </div>
             </div>
           )}
@@ -7297,9 +7571,7 @@ export function VideoConferenceComponent(props: {
             setAttendeeOpen(false);
           }}
           chatPanelSlot={
-            isToolbarMobile ? undefined : (
-              <ChatPanel messages={chatMessages} onSend={sendChatMessage} />
-            )
+            isToolbarMobile ? undefined : chatPanelNode
           }
           attendeePanelSlot={
             isToolbarMobile ? undefined : (

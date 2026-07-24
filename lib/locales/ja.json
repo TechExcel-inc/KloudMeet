@@ -518,6 +518,13 @@
   "chat.noMessages": "まだメッセージはありません。挨拶してみましょう！ 👋",
   "chat.you": "あなた",
   "chat.typeMessage": "メッセージを入力...",
+  "chat.attachFile": "ファイルを添付",
+  "chat.openLiveDoc": "LiveDocとして開く",
+  "chat.docUploading": "アップロード中…",
+  "chat.docConverting": "変換中…",
+  "chat.docFailed": "アップロード失敗",
+  "chat.sharedFile": "共有",
+  "chat.sharedLiveDoc": "LiveDocを共有しました",
 
   "replay.loading": "再生を読み込み中...",
   "replay.notReady": "動画はまだ準備できていません",

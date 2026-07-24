@@ -4,28 +4,36 @@ import { RoomEvent, Track } from 'livekit-client';
 import { useI18n } from './i18n';
 import { getInitials } from './getInitials';
 import { ParticipantAttendeeRowMoreMenu } from './ParticipantRoleMenu';
+import type { ChatMsg } from './chatProtocol';
+
+export type { ChatMsg } from './chatProtocol';
 
 // ════════════════════════════════════
 // Custom Chat Panel (uses publishData directly)
 // ════════════════════════════════════
-export interface ChatMsg {
-  clientMessageId: string;
-  senderIdentity: string;
-  senderName: string;
-  message: string;
-  timestamp: number;
-  isLocal: boolean;
-}
-
 export interface ChatPanelProps {
   messages: ChatMsg[];
   onSend: (message: string) => void;
+  /** Selected local file to upload into LiveDoc (picker opens in chat, keeps user gesture) */
+  onAttachFile?: (file: File) => void;
+  /** Open a livedoc attachment on the meeting stage */
+  onOpenLivedoc?: (msg: ChatMsg) => void;
+  attachBusy?: boolean;
+  attachDisabled?: boolean;
 }
 
-export function ChatPanel({ messages, onSend }: ChatPanelProps) {
+export function ChatPanel({
+  messages,
+  onSend,
+  onAttachFile,
+  onOpenLivedoc,
+  attachBusy = false,
+  attachDisabled = false,
+}: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
   useEffect(() => {
@@ -57,25 +65,105 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
     sendDraft();
   }, [sendDraft]);
 
+  const handleAttachClick = useCallback(() => {
+    if (attachDisabled || attachBusy || !onAttachFile) return;
+    // Must open picker synchronously in the click handler (browser user-gesture requirement)
+    fileInputRef.current?.click();
+  }, [attachDisabled, attachBusy, onAttachFile]);
+
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file || !onAttachFile) return;
+    onAttachFile(file);
+  }, [onAttachFile]);
+
   return (
     <div className="kloud-chat-panel">
       <div className="kloud-chat-messages">
         {messages.length === 0 && (
           <div className="kloud-chat-empty">{t('chat.noMessages') || 'No messages yet. Say hello! 👋'}</div>
         )}
-        {messages.map((msg) => (
-          <div key={msg.clientMessageId} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
-            <div className="kloud-chat-meta">
-              <span className="kloud-chat-sender">{msg.isLocal ? (t('chat.you') || 'You') : msg.senderName}</span>
-              <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        {messages.map((msg) => {
+          const isLivedoc = msg.kind === 'livedoc' && msg.attachment;
+          const status = msg.attachment?.status;
+          const canOpen =
+            isLivedoc &&
+            status === 'ready' &&
+            typeof msg.attachment?.itemId === 'number' &&
+            msg.attachment.itemId > 0;
+          return (
+            <div key={msg.clientMessageId} className={`kloud-chat-entry ${msg.isLocal ? 'local' : 'remote'}`}>
+              <div className="kloud-chat-meta">
+                <span className="kloud-chat-sender">{msg.isLocal ? (t('chat.you') || 'You') : msg.senderName}</span>
+                <span className="kloud-chat-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+              {isLivedoc ? (
+                <button
+                  type="button"
+                  className={`kloud-chat-doc-card ${canOpen ? 'clickable' : ''}`}
+                  disabled={!canOpen}
+                  onClick={() => {
+                    if (canOpen && onOpenLivedoc) onOpenLivedoc(msg);
+                  }}
+                  title={canOpen ? (t('chat.openLiveDoc') || 'Open as LiveDoc') : undefined}
+                >
+                  <span className="kloud-chat-doc-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </span>
+                  <span className="kloud-chat-doc-body">
+                    <span className="kloud-chat-doc-name">{msg.attachment?.fileName || msg.message}</span>
+                    <span className="kloud-chat-doc-status">
+                      {status === 'converting'
+                        ? (t('chat.docConverting') || 'Converting…')
+                        : status === 'uploading'
+                          ? (t('chat.docUploading') || 'Uploading…')
+                          : status === 'failed'
+                            ? (t('chat.docFailed') || 'Upload failed')
+                            : (t('chat.openLiveDoc') || 'Open as LiveDoc')}
+                    </span>
+                  </span>
+                </button>
+              ) : (
+                <div className="kloud-chat-text">{msg.message}</div>
+              )}
             </div>
-            <div className="kloud-chat-text">{msg.message}</div>
-          </div>
-        ))}
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
       <form className="kloud-chat-form" onSubmit={handleSend}>
         <div className="kloud-chat-input-shell">
+          {onAttachFile && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="kloud-chat-file-input"
+                accept=".stl,.sldprt,.slddrw,.dwg,.zip,.key,.pages,.numbers,.mp3,.m4a,.mp4,.jpg,.jpeg,.png,.doc,.docx,.ppt,.pptx,.pdf,.xls,.xlsx,.rar,.rp,.sketch,.psd,.js,.txt,.md,.html,.ico,.xmind,.xd,.svg,.ai,.css,.json,video/mp4,image/jpeg,image/png,application/pdf"
+                onChange={handleFileInputChange}
+              />
+              <button
+                type="button"
+                className="kloud-chat-attach"
+                onClick={handleAttachClick}
+                disabled={attachDisabled || attachBusy}
+                title={t('chat.attachFile') || 'Attach file'}
+                aria-label={t('chat.attachFile') || 'Attach file'}
+              >
+                {attachBusy ? (
+                  <span className="kloud-chat-attach-spinner" />
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16 }}>
+                    <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+                  </svg>
+                )}
+              </button>
+            </>
+          )}
           <textarea
             ref={textareaRef}
             value={draft}
@@ -432,6 +520,65 @@ export const chatAndAttendeeStyles = `
     max-width: 85%;
     word-break: break-word;
   }
+  .kloud-chat-doc-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 90%;
+    padding: 8px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    text-align: left;
+    cursor: default;
+  }
+  .kloud-chat-entry.local .kloud-chat-doc-card {
+    align-self: flex-end;
+    background: rgba(59, 130, 246, 0.28);
+    border-color: rgba(59, 130, 246, 0.28);
+  }
+  .kloud-chat-entry.remote .kloud-chat-doc-card {
+    align-self: flex-start;
+  }
+  .kloud-chat-doc-card.clickable {
+    cursor: pointer;
+  }
+  .kloud-chat-doc-card.clickable:hover {
+    border-color: rgba(96, 165, 250, 0.55);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+  }
+  .kloud-chat-doc-card:disabled {
+    opacity: 0.75;
+    cursor: default;
+  }
+  .kloud-chat-doc-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+  .kloud-chat-doc-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .kloud-chat-doc-name {
+    font-size: 13px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kloud-chat-doc-status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.55);
+  }
   .kloud-chat-form {
     padding: 10px 12px 12px;
     border-top: 1px solid rgba(255,255,255,0.08);
@@ -440,8 +587,9 @@ export const chatAndAttendeeStyles = `
   .kloud-chat-input-shell {
     position: relative;
     display: flex;
+    align-items: flex-end;
     min-height: 54px;
-    padding: 10px 44px 10px 12px;
+    padding: 10px 44px 10px 40px;
     background: rgba(255,255,255,0.1);
     border: 1px solid rgba(255,255,255,0.13);
     border-radius: 18px;
@@ -449,6 +597,43 @@ export const chatAndAttendeeStyles = `
       inset 0 1px 0 rgba(255,255,255,0.05),
       0 10px 26px rgba(0,0,0,0.18);
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .kloud-chat-attach {
+    position: absolute;
+    left: 8px;
+    bottom: 8px;
+    width: 30px;
+    height: 30px;
+    border: none;
+    border-radius: 15px;
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.85);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, opacity 0.15s;
+  }
+  .kloud-chat-file-input {
+    display: none;
+  }
+  .kloud-chat-attach:hover:not(:disabled) {
+    background: rgba(255,255,255,0.16);
+  }
+  .kloud-chat-attach:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .kloud-chat-attach-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255,255,255,0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: kloud-chat-spin 0.7s linear infinite;
+  }
+  @keyframes kloud-chat-spin {
+    to { transform: rotate(360deg); }
   }
   .kloud-chat-input-shell:focus-within {
     background: rgba(255,255,255,0.13);

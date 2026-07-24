@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { decodeChatContent } from '@/lib/chatProtocol';
 
 const DEFAULT_PAGE_SIZE = 200;
 const MAX_PAGE_SIZE = 500;
@@ -66,13 +67,18 @@ export async function GET(
 
     return NextResponse.json({
       meeting,
-      messages: messages.map((message) => ({
-        clientMessageId: message.clientMessageId,
-        senderIdentity: message.senderIdentity,
-        senderName: message.senderName,
-        message: message.content,
-        timestamp: message.sentAt.getTime(),
-      })),
+      messages: messages.map((message) => {
+        const decoded = decodeChatContent(message.content);
+        return {
+          clientMessageId: message.clientMessageId,
+          senderIdentity: message.senderIdentity,
+          senderName: message.senderName,
+          message: decoded.message,
+          kind: decoded.kind,
+          attachment: decoded.attachment,
+          timestamp: message.sentAt.getTime(),
+        };
+      }),
       page,
       pageSize,
       total,

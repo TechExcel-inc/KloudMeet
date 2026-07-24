@@ -523,6 +523,13 @@
   "chat.noMessages": "暂无消息。打个招呼吧！👋",
   "chat.you": "你",
   "chat.typeMessage": "输入消息...",
+  "chat.attachFile": "上传文件",
+  "chat.openLiveDoc": "作为活文档打开",
+  "chat.docUploading": "上传中…",
+  "chat.docConverting": "转换中…",
+  "chat.docFailed": "上传失败",
+  "chat.sharedFile": "分享了",
+  "chat.sharedLiveDoc": "分享了一个活文档",
 
   "replay.loading": "正在加载回放...",
   "replay.notReady": "视频暂未就绪",
