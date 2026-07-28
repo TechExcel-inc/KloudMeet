@@ -29,6 +29,10 @@ import {
   postLivedocRoleToIframe,
   useToolbarIsMobile,
 } from '@/lib/useToolbarIsMobile';
+import {
+  unlockMobileRoomAudio,
+  unlockMobileRoomAudioOnGesture,
+} from '@/lib/mobileAudioUnlock';
 import { ConnectionDetails } from '@/lib/types';
 import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
@@ -866,8 +870,9 @@ export function VideoConferenceComponent(props: {
                   room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
                 }
 
-                if (isToolbarMobile) {
-                  room.startAudio().catch(() => null);
+                // 同步 UA：hook 首帧可能仍为 false，移动端入会后首次 startAudio 不能漏
+                if (isToolbarMobileUserAgent()) {
+                  void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
                 }
               };
               enableDevices();
@@ -1069,34 +1074,37 @@ export function VideoConferenceComponent(props: {
   // iOS/Android 浏览器在息屏或切后台时会 suspend AudioContext，
   // 当页面重新可见时，调用 room.startAudio() 恢复音频播放。
   React.useEffect(() => {
-    const handleVisibilityChange = async () => {
+    if (!isToolbarMobileUserAgent()) return;
+
+    const resumeAudio = () => {
+      void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+    };
+
+    const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
-        try {
-          await room.startAudio();
-          console.log('[KloudMeet] Audio resumed after visibility change');
-        } catch (e) {
-          console.warn('[KloudMeet] Audio resume after screen-on failed:', e);
-        }
+        resumeAudio();
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pageshow', resumeAudio);
+    window.addEventListener('focus', resumeAudio);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pageshow', resumeAudio);
+      window.removeEventListener('focus', resumeAudio);
     };
   }, [room]);
 
   // ── 移动端远程音频：与 Web 端 RoomAudioRenderer 对齐，但单独挂载并主动 startAudio ──
   // iOS/微信等在他人入会或轨道订阅后常需再次 startAudio，否则听不到对方声音。
   React.useEffect(() => {
-    if (!isToolbarMobile) return;
+    if (!isToolbarMobileUserAgent()) return;
 
     setCanPlaybackAudio(room.canPlaybackAudio);
 
     const recoverRemoteAudio = () => {
-      room.startAudio()
-        .then(() => setCanPlaybackAudio(true))
-        .catch(() => setCanPlaybackAudio(room.canPlaybackAudio));
+      void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
     };
 
     const handleTrackSubscribed = (
@@ -1114,7 +1122,8 @@ export function VideoConferenceComponent(props: {
         participant.audioTrackPublications.forEach((publication) => {
           if (
             publication.source === Track.Source.Microphone ||
-            publication.source === Track.Source.ScreenShareAudio
+            publication.source === Track.Source.ScreenShareAudio ||
+            publication.source === Track.Source.Unknown
           ) {
             if (!publication.isSubscribed) {
               publication.setSubscribed(true);
@@ -1141,6 +1150,7 @@ export function VideoConferenceComponent(props: {
     room.on(RoomEvent.Reconnected, recoverRemoteAudio);
     room.on(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', recoverRemoteAudio);
 
     return () => {
       room.off(RoomEvent.ParticipantConnected, handleParticipantConnected);
@@ -1148,8 +1158,30 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Reconnected, recoverRemoteAudio);
       room.off(RoomEvent.AudioPlaybackStatusChanged, handleAudioPlaybackStatusChanged);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', recoverRemoteAudio);
     };
-  }, [isToolbarMobile, room]);
+  }, [room]);
+
+  // ── 移动端：任意点击、触摸时在用户手势内重新解锁远程音频 ──
+  // 他人入会后的 programmatic startAudio 常被移动浏览器拦截；手势内再 unlock 最稳。
+  React.useEffect(() => {
+    if (!isToolbarMobileUserAgent()) return;
+
+    const onGesture = () => {
+      if (room.state !== ConnectionState.Connected) return;
+      unlockMobileRoomAudioOnGesture(room, (ok) => setCanPlaybackAudio(ok));
+    };
+
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    document.addEventListener('touchstart', onGesture, opts);
+    document.addEventListener('pointerdown', onGesture, opts);
+    document.addEventListener('click', onGesture, opts);
+    return () => {
+      document.removeEventListener('touchstart', onGesture, opts);
+      document.removeEventListener('pointerdown', onGesture, opts);
+      document.removeEventListener('click', onGesture, opts);
+    };
+  }, [room]);
 
   // ── Wake Lock: 防止手机息屏中断音频 ──
   // 在支持 Wake Lock API 的浏览器上，保持屏幕唤醒以避免
@@ -1191,12 +1223,13 @@ export function VideoConferenceComponent(props: {
     };
   }, []);
 
-  // ── 静音音频保活：防止 iOS Safari 息屏时挂起 WebRTC ──
-  // iOS Safari（以及部分 Android 浏览器）在息屏后会暂停页面中所有音频。
+  // ── 静音音频保活：防止移动端息屏时挂起 WebRTC ──
+  // iOS Safari / Android Chrome / 各类 WebView 在息屏后会暂停页面中所有音频。
   // 通过在一个隐藏的 <audio> 元素中循环播放极短的静音音频，
   // 可以保持浏览器的音频会话处于激活状态，从而让 WebRTC 的音频流持续工作。
-  // 这样即使息屏，双方也能继续听到对方说话。
   React.useEffect(() => {
+    if (!isToolbarMobileUserAgent()) return;
+
     // 1秒静音 WAV：44字节 WAV 头 + 8000个零采样（8kHz mono 8-bit, ~1 秒）
     // 用 base64 data URL 避免额外文件请求
     const createSilentWav = (): string => {
@@ -1250,22 +1283,19 @@ export function VideoConferenceComponent(props: {
 
     const startKeepAlive = () => {
       if (started) return;
-      started = true;
       try {
         audio = new Audio(createSilentWav());
         audio.loop = true;
         audio.volume = 0.01; // 几乎静音，但非零以保持音频会话
-        // Safari 需要 playsinline
+        // Safari / 移动端 WebView 需要 playsinline
         audio.setAttribute('playsinline', 'true');
         audio.setAttribute('webkit-playsinline', 'true');
-        audio.play().then(() => {
-          console.log('[KloudMeet] Silent audio keep-alive started');
-        }).catch((e) => {
-          console.warn('[KloudMeet] Silent audio keep-alive autoplay blocked:', e);
+        void audio.play().then(() => {
+          started = true;
+        }).catch(() => {
           started = false;
         });
-      } catch (e) {
-        console.warn('[KloudMeet] Silent audio keep-alive creation failed:', e);
+      } catch {
         started = false;
       }
     };
@@ -1273,29 +1303,33 @@ export function VideoConferenceComponent(props: {
     // 进入会议后立即尝试播放（此时已有用户交互，一般不会被阻止）
     startKeepAlive();
 
-    // 如果第一次被 autoplay policy 阻止，下一次用户交互时重试
+    // 移动端可能多次拦截：每次用户交互都重试，直到成功
     const retryOnInteraction = () => {
       if (!started) {
         startKeepAlive();
+      } else if (audio?.paused) {
+        void audio.play().catch(() => null);
       }
     };
-    document.addEventListener('click', retryOnInteraction, { once: true });
-    document.addEventListener('touchstart', retryOnInteraction, { once: true });
+    document.addEventListener('click', retryOnInteraction, { capture: true, passive: true });
+    document.addEventListener('touchstart', retryOnInteraction, { capture: true, passive: true });
 
     // 页面恢复可见时确保还在播放
     const handleVisibilityForKeepAlive = () => {
       if (document.visibilityState === 'visible' && audio) {
         if (audio.paused) {
-          audio.play().catch(() => { });
+          void audio.play().catch(() => null);
         }
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityForKeepAlive);
+    window.addEventListener('pageshow', handleVisibilityForKeepAlive);
 
     return () => {
-      document.removeEventListener('click', retryOnInteraction);
-      document.removeEventListener('touchstart', retryOnInteraction);
+      document.removeEventListener('click', retryOnInteraction, true);
+      document.removeEventListener('touchstart', retryOnInteraction, true);
       document.removeEventListener('visibilitychange', handleVisibilityForKeepAlive);
+      window.removeEventListener('pageshow', handleVisibilityForKeepAlive);
       if (audio) {
         audio.pause();
         audio.src = '';
@@ -4093,8 +4127,8 @@ export function VideoConferenceComponent(props: {
     <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
       <RoomContext.Provider value={room}>
         <ParticipantRoleMenuProvider {...participantRoleActions}>
-        {/* 有屏幕共享时走 VideoConference 自带 RoomAudioRenderer，避免双挂载回声 */}
-        {isToolbarMobile && !hasScreenShare && <KloudMobileRoomAudioRenderer />}
+        {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
+        {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
         <KeyboardShortcuts />
 
         {/* ── Host ended meeting (remote end or END_MEETING) ── */}
@@ -4479,7 +4513,7 @@ export function VideoConferenceComponent(props: {
                               room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
                             }
                             if (isToolbarMobileUserAgent()) {
-                              room.startAudio().catch(() => null);
+                              void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
                             }
                           };
                           enableRetryDevices();
@@ -5112,10 +5146,11 @@ export function VideoConferenceComponent(props: {
               >
                 <button
                   onClick={() => {
-                    // 强制 play 页面上所有视频（需要在用户点击事件内触发，微信才会允许）
+                    // 强制 play 页面上所有视频 + 解锁远程音频（需在用户手势内）
                     document.querySelectorAll('video').forEach((v) => {
                       v.play().catch(() => null);
                     });
+                    void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
                     setNeedsPlayTap(false);
                   }}
                   style={{
@@ -7156,9 +7191,7 @@ export function VideoConferenceComponent(props: {
             <button
               type="button"
               onClick={() => {
-                room.startAudio()
-                  .then(() => setCanPlaybackAudio(true))
-                  .catch(() => setCanPlaybackAudio(room.canPlaybackAudio));
+                void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
               }}
               style={{
                 display: 'flex',

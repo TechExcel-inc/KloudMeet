@@ -31,6 +31,7 @@ import {
   LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH,
   LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
 } from './roomConstants';
+import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
 
 export type KloudTileMediaRestrictionProps = {
   hostMutedIdentities: string[];
@@ -183,6 +184,7 @@ export const MAX_VISIBLE = 16;
 const MOBILE_AUDIO_SOURCES = new Set<Track.Source>([
   Track.Source.Microphone,
   Track.Source.ScreenShareAudio,
+  Track.Source.Unknown,
 ]);
 
 function collectMobileRemoteAudioTracks(room: Room) {
@@ -225,7 +227,7 @@ export function KloudMobileRoomAudioRenderer() {
         });
       });
 
-      void room.startAudio().catch(() => null);
+      void unlockMobileRoomAudio(room);
       if (requestedSubscription) {
         setSyncToken((v) => v + 1);
       }
@@ -261,12 +263,20 @@ export function KloudMobileRoomAudioRenderer() {
         syncRemoteAudio();
       }
     };
+    // 切后台 / 浮窗 / 返回时 visibilitychange 不一定可靠
+    const handlePageShow = () => {
+      syncRemoteAudio();
+    };
     document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('pageshow', handlePageShow);
+    window.addEventListener('focus', handlePageShow);
 
     return () => {
       events.forEach((event) => room.off(event, syncRemoteAudio));
       window.clearInterval(intervalId);
       document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('pageshow', handlePageShow);
+      window.removeEventListener('focus', handlePageShow);
     };
   }, [room]);
 
@@ -275,8 +285,22 @@ export function KloudMobileRoomAudioRenderer() {
     [room, syncToken],
   );
 
+  // 不用 display:none：部分移动端 WebView 会拒绝播放被 display:none 的 <audio>
   return (
-    <div style={{ display: 'none' }} aria-hidden="true">
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'fixed',
+        left: 0,
+        bottom: 0,
+        width: 1,
+        height: 1,
+        opacity: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        zIndex: -1,
+      }}
+    >
       {audioTracks.map(({ participant, publication, source }) => (
         <AudioTrack
           key={`${participant.identity}-${publication.trackSid}`}

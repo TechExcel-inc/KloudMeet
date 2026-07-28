@@ -37,7 +37,10 @@ export function postLivedocRoleToIframe(role: string): void {
 
 /** 与 KloudMeetToolbar 一致的移动设备 UA 判定（用于 Chat/Attendees 桌面气泡 vs 侧栏浮层）。 */
 export function useToolbarIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
+  // 同步 UA，避免首屏 isMobile=false 导致 connect / 音频渲染器晚一拍
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== 'undefined' ? isToolbarMobileUserAgent() : false,
+  );
 
   useEffect(() => {
     setIsMobile(isToolbarMobileUserAgent());

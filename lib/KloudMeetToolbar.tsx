@@ -173,6 +173,7 @@ export function KloudMeetToolbar({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
+  const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const recordMenuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -382,6 +383,7 @@ export function KloudMeetToolbar({
   }, []);
 
   const closeInviteMenu = () => setInviteMenuOpen(false);
+  const closeViewModeMenu = () => setViewModeMenuOpen(false);
 
   const showInviteToast = (msg: string) => {
     setToastMsg(msg);
@@ -392,6 +394,7 @@ export function KloudMeetToolbar({
   // Synchronous wrapper: close Chat/Attendee BEFORE opening a sheet
   const openSheet = (sheet: ActionSheetType) => {
     closeInviteMenu();
+    closeViewModeMenu();
     if (sheet !== null) {
       onOpenSheet?.(); // closes Chat & Attendee in parent synchronously
     }
@@ -400,15 +403,21 @@ export function KloudMeetToolbar({
 
   const handleToggleChat = () => {
     closeInviteMenu();
+    closeViewModeMenu();
     setActiveSheet(null); // close any open sheet
     onToggleChat();
   };
 
   const handleToggleAttendee = () => {
     closeInviteMenu();
+    closeViewModeMenu();
     setActiveSheet(null); // close any open sheet
     onToggleAttendee();
   };
+
+  useEffect(() => {
+    if (!visible) closeViewModeMenu();
+  }, [visible]);
 
   useEffect(() => {
     if (!inviteMenuOpen) return;
@@ -421,6 +430,22 @@ export function KloudMeetToolbar({
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [inviteMenuOpen]);
+
+  useEffect(() => {
+    if (!viewModeMenuOpen) return;
+    const onDocPointerDown = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-view-mode-menu-anchor="true"]')) {
+        setViewModeMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocPointerDown);
+    document.addEventListener('touchstart', onDocPointerDown);
+    return () => {
+      document.removeEventListener('mousedown', onDocPointerDown);
+      document.removeEventListener('touchstart', onDocPointerDown);
+    };
+  }, [viewModeMenuOpen]);
 
   const canUseMediaDevices =
     typeof window !== 'undefined' &&
@@ -491,6 +516,7 @@ export function KloudMeetToolbar({
       if (attendeeOpenRef.current) handleToggleAttendee();
       if (activeSheetRef.current) setActiveSheet(null);
       closeInviteMenu();
+      closeViewModeMenu();
       setVisible(false);
     };
 
@@ -649,13 +675,13 @@ export function KloudMeetToolbar({
     return () => window.removeEventListener('message', handleMessage);
   }, [isMobile, clearDesktopToolbarAutoHide]);
 
-  // 失去 host/co-host/presenter 时关闭协作文档菜单弹窗
+  // 失去 host/co-host/presenter 时关闭协作文档 righttab-popup
   useEffect(() => {
     if (canShowOperatorMenus || !liveDocActionDialogVisible) return;
     const iframe =
       (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-    iframe?.contentWindow?.postMessage({ type: 'Kloud-ShowActionDialog', show: 0 }, '*');
+    iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
     setLiveDocActionDialogVisible(false);
   }, [canShowOperatorMenus, liveDocActionDialogVisible]);
 
@@ -840,7 +866,7 @@ export function KloudMeetToolbar({
     onShareScreen();
   };
 
-  const handleLiveDocSettingsClick = (e: React.MouseEvent<HTMLElement>) => {
+  const handleLiveDocSettingsClick = () => {
     if (!canShowOperatorMenus) return;
     const show = liveDocActionDialogVisible ? 0 : 1;
     const iframe =
@@ -848,17 +874,12 @@ export function KloudMeetToolbar({
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
 
     if (!iframe?.contentWindow) return;
-    const iRect = iframe.getBoundingClientRect();
-    const t = e.currentTarget.getBoundingClientRect();
-    const cx = t.left + t.width / 2 - iRect.left;
-    const cy = t.top + t.height / 2 - iRect.top;
-    const pad = 12;
-    const x = Math.round(Math.min(Math.max(cx, pad), Math.max(pad, iRect.width - pad)));
-    const y = Math.round(Math.min(Math.max(cy, pad), Math.max(pad, iRect.height - pad)));
+    // 打开 iframe 内 righttab-popup（MainStage showDocPanelPopup），不再用 actiondialog
     iframe.contentWindow.postMessage(
-      { type: 'Kloud-ShowActionDialog', x, y, show },
+      { type: 'Kloud-ToggleDocPopup', show },
       '*',
     );
+    setLiveDocActionDialogVisible(show === 1);
   };
 
   /** Align with Dev MainStage: handleShowLiveDocPanel + clickTab + close action dialog */
@@ -897,45 +918,15 @@ export function KloudMeetToolbar({
     onViewChange('liveDoc');
   };
 
-  const renderLiveDocAnnotationBadge = () => {
-    if (!canToggleLiveDocAnnotation || activeView !== 'liveDoc' || !liveDocPluginLoaded) {
-      return null;
-    }
-    return (
-      <span
-        role="button"
-        tabIndex={0}
-        className={`${styles.liveDocMenuBadge} ${liveDocAnnotationEnabled ? styles.liveDocMenuBadgeOn : styles.liveDocMenuBadgeOff}`}
-        onClick={handleLiveDocAnnotationBadgeClick}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
-          }
-        }}
-        title={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
-        aria-label={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
-        aria-pressed={liveDocAnnotationEnabled}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
-          {liveDocAnnotationEnabled ? (
-            <path d="M18 15l-6-6-6 6" />
-          ) : (
-            <path d="M6 9l6 6 6-6" />
-          )}
-        </svg>
-      </span>
-    );
-  };
-
-  /** LiveDoc 设置：仅 LiveDoc 模式 + host/co-host/presenter 显示 */
+  /** LiveDoc AI：仅 LiveDoc 模式 + host/co-host/presenter 显示 */
   const renderLiveDocSettingsButton = (variant: 'desktop' | 'mobile') => {
     if (!canShowOperatorMenus || activeView !== 'liveDoc' || !liveDocPluginLoaded) {
       return null;
     }
     const className =
       variant === 'mobile'
-        ? `${styles.mobileBtn} ${liveDocActionDialogVisible ? styles.active : ''}`
-        : `${styles.tabBtn} ${liveDocActionDialogVisible ? styles.tabBtnActive : ''}`;
+        ? `${styles.mobileBtn} ${styles.liveDocAiBtn} ${liveDocActionDialogVisible ? styles.active : ''}`
+        : `${styles.tabBtn} ${styles.liveDocAiBtn} ${liveDocActionDialogVisible ? styles.tabBtnActive : ''}`;
     return (
       <button
         type="button"
@@ -945,13 +936,36 @@ export function KloudMeetToolbar({
         aria-label={t('toolbar.liveDocMenu')}
         aria-pressed={liveDocActionDialogVisible}
       >
-        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-          <path d="M22.3865 15.2115C22.3287 14.9062 22.1794 14.6257 21.9583 14.4073C21.7373 14.1889 21.455 14.043 21.149 13.989C21.1034 13.9831 21.0599 13.9664 21.0221 13.9403C20.9843 13.9142 20.9532 13.8795 20.9315 13.839C20.91 13.7982 20.8976 13.7531 20.8953 13.707C20.893 13.6609 20.9007 13.6149 20.918 13.572C21.0246 13.2792 21.0436 12.9615 20.9724 12.6581C20.9013 12.3546 20.7432 12.0785 20.5175 11.8635C19.9415 11.2851 19.2427 10.8437 18.473 10.572C18.3239 10.5232 18.1678 10.4988 18.011 10.5C17.7706 10.4999 17.533 10.5505 17.3136 10.6484C17.0941 10.7464 16.8978 10.8895 16.7375 11.0685C16.7119 11.1045 16.6782 11.1337 16.6391 11.1539C16.5999 11.1742 16.5565 11.1847 16.5125 11.1847C16.4684 11.1847 16.425 11.1742 16.3859 11.1539C16.3467 11.1337 16.313 11.1045 16.2875 11.0685C16.1729 10.8948 16.0173 10.7521 15.8344 10.6529C15.6515 10.5537 15.447 10.5012 15.239 10.5C15.0813 10.5004 14.9248 10.5263 14.7755 10.5765C13.9343 10.8451 13.1583 11.2859 12.497 11.871C12.272 12.0858 12.1143 12.3614 12.0432 12.6643C11.9721 12.9671 11.9906 13.2841 12.0965 13.5765C12.1137 13.6194 12.1215 13.6654 12.1191 13.7115C12.1168 13.7576 12.1045 13.8027 12.083 13.8435C12.0613 13.8841 12.0303 13.9189 11.9924 13.945C11.9546 13.9711 11.9111 13.9877 11.8655 13.9935C11.5604 14.0481 11.2791 14.194 11.0589 14.4121C10.8387 14.6302 10.69 14.91 10.6325 15.2145C10.4585 16.0652 10.4585 16.9423 10.6325 17.793C10.6902 18.0984 10.8395 18.3789 11.0606 18.5973C11.2816 18.8157 11.5639 18.9615 11.87 19.0155C11.9157 19.021 11.9594 19.0375 11.9972 19.0637C12.0351 19.0898 12.0661 19.1248 12.0875 19.1655C12.109 19.2064 12.1213 19.2514 12.1236 19.2976C12.126 19.3437 12.1182 19.3897 12.101 19.4325C11.9941 19.7253 11.9749 20.0428 12.0458 20.3463C12.1166 20.6497 12.2745 20.9259 12.5 21.141C13.1191 21.7213 13.8557 22.1618 14.66 22.4325C14.9478 22.5297 15.2588 22.5345 15.5495 22.4463C15.8402 22.3581 16.0961 22.1813 16.2815 21.9405C16.307 21.9046 16.3407 21.8753 16.3799 21.8551C16.419 21.8349 16.4624 21.8244 16.5065 21.8244C16.5505 21.8244 16.5939 21.8349 16.6331 21.8551C16.6722 21.8753 16.7059 21.9046 16.7315 21.9405C16.8702 22.1161 17.0472 22.2577 17.2489 22.3547C17.4506 22.4516 17.6717 22.5013 17.8955 22.5C18.0526 22.4998 18.2086 22.4739 18.3575 22.4235C19.1608 22.1542 19.8965 21.7147 20.5145 21.135C20.7403 20.9196 20.8984 20.6428 20.9693 20.3388C21.0402 20.0348 21.0208 19.7167 20.9135 19.4235C20.8966 19.3806 20.8891 19.3346 20.8914 19.2886C20.8937 19.2425 20.9058 19.1975 20.927 19.1565C20.9484 19.1156 20.9796 19.0805 21.0178 19.0543C21.056 19.0282 21.1 19.0118 21.146 19.0065C21.4526 18.9528 21.7356 18.8069 21.9573 18.5882C22.1789 18.3695 22.3286 18.0885 22.3865 17.7825C22.5605 16.9329 22.5605 16.0567 22.3865 15.207V15.2115ZM20.918 17.4615C20.6482 17.505 20.3918 17.6092 20.1683 17.7665C19.9448 17.9237 19.76 18.1298 19.628 18.369C19.4949 18.6119 19.4156 18.8804 19.3954 19.1566C19.3752 19.4327 19.4146 19.71 19.511 19.9695C19.0466 20.4023 18.4954 20.7311 17.894 20.934C17.7318 20.7202 17.5224 20.5469 17.2821 20.4275C17.0417 20.3081 16.777 20.246 16.5087 20.246C16.2404 20.246 15.9757 20.3081 15.7354 20.4275C15.495 20.5469 15.2856 20.7202 15.1235 20.934C14.5199 20.7334 13.9664 20.4055 13.5005 19.9725C13.5964 19.7134 13.6356 19.4367 13.6155 19.1611C13.5953 18.8855 13.5162 18.6174 13.3835 18.375C13.2517 18.1361 13.0674 17.9303 12.8445 17.7731C12.6215 17.6159 12.3657 17.5114 12.0965 17.4675C12.0323 17.149 12.0001 16.8249 12.0005 16.5C12.0004 16.1745 12.0336 15.8498 12.0995 15.531C12.3672 15.4879 12.6217 15.3845 12.8436 15.2286C13.0655 15.0726 13.2491 14.8683 13.3805 14.631C13.5141 14.3885 13.594 14.12 13.6147 13.8439C13.6354 13.5677 13.5964 13.2903 13.5005 13.0305C13.9659 12.5949 14.5194 12.2639 15.1235 12.06C15.2856 12.2739 15.495 12.4472 15.7354 12.5666C15.9757 12.686 16.2404 12.7481 16.5087 12.7481C16.777 12.7481 17.0417 12.686 17.2821 12.5666C17.5224 12.4472 17.7318 12.2739 17.894 12.06C18.4971 12.2625 19.0497 12.5925 19.514 13.0275C19.4183 13.2868 19.3794 13.5636 19.3998 13.8392C19.4203 14.1147 19.4996 14.3827 19.6325 14.625C19.7641 14.863 19.9483 15.0678 20.1711 15.2237C20.3939 15.3797 20.6493 15.4828 20.918 15.525C21.0499 16.1638 21.0499 16.8228 20.918 17.4615Z" fill="currentColor" />
-          <path d="M16.5 14.16C16.033 14.1414 15.571 14.263 15.1736 14.5091C14.7762 14.7551 14.4615 15.1144 14.2699 15.5407C14.0783 15.9671 14.0186 16.441 14.0985 16.9015C14.1783 17.3621 14.3941 17.7882 14.7181 18.1251C15.0421 18.462 15.4594 18.6944 15.9164 18.7922C16.3735 18.8901 16.8494 18.849 17.2829 18.6743C17.7164 18.4995 18.0878 18.1991 18.3492 17.8117C18.6107 17.4242 18.7502 16.9674 18.75 16.5C18.7609 15.8916 18.5302 15.3038 18.1084 14.8652C17.6867 14.4266 17.1083 14.173 16.5 14.16ZM16.5 17.28C16.3446 17.286 16.1909 17.2454 16.0588 17.1634C15.9266 17.0814 15.822 16.9618 15.7583 16.8199C15.6947 16.678 15.6749 16.5203 15.7015 16.3671C15.7281 16.2138 15.8 16.0721 15.9078 15.96C16.0155 15.8478 16.1544 15.7705 16.3065 15.7379C16.4585 15.7053 16.6169 15.7189 16.7611 15.777C16.9054 15.835 17.0291 15.9349 17.1162 16.0637C17.2033 16.1925 17.2499 16.3445 17.25 16.5C17.2536 16.7028 17.1767 16.8987 17.0361 17.0449C16.8956 17.1911 16.7028 17.2757 16.5 17.28ZM9.75 7.5H5.25C5.05109 7.5 4.86032 7.57902 4.71967 7.71967C4.57902 7.86032 4.5 8.05109 4.5 8.25C4.5 8.44891 4.57902 8.63968 4.71967 8.78033C4.86032 8.92098 5.05109 9 5.25 9H9.75C9.94891 9 10.1397 8.92098 10.2803 8.78033C10.421 8.63968 10.5 8.44891 10.5 8.25C10.5 8.05109 10.421 7.86032 10.2803 7.71967C10.1397 7.57902 9.94891 7.5 9.75 7.5ZM9.75 12H5.25C5.05109 12 4.86032 12.079 4.71967 12.2197C4.57902 12.3603 4.5 12.5511 4.5 12.75C4.5 12.9489 4.57902 13.1397 4.71967 13.2803C4.86032 13.421 5.05109 13.5 5.25 13.5H9.75C9.94891 13.5 10.1397 13.421 10.2803 13.2803C10.421 13.1397 10.5 12.9489 10.5 12.75C10.5 12.5511 10.421 12.3603 10.2803 12.2197C10.1397 12.079 9.94891 12 9.75 12Z" fill="currentColor" />
-          <path d="M3 3H12V7.5C12 7.89783 12.158 8.27936 12.4393 8.56066C12.7206 8.84197 13.1022 9 13.5 9H19.5V8.1225C19.5002 7.92493 19.4613 7.72927 19.3856 7.54676C19.3099 7.36425 19.1989 7.19849 19.059 7.059L13.941 1.9395C13.8014 1.79985 13.6356 1.68913 13.4531 1.61371C13.2706 1.53829 13.075 1.49965 12.8775 1.5H3C2.60218 1.5 2.22064 1.65804 1.93934 1.93934C1.65804 2.22065 1.5 2.60218 1.5 3V21C1.5 21.3978 1.65804 21.7794 1.93934 22.0607C2.22064 22.342 2.60218 22.5 3 22.5H10.5V21H3V3ZM13.5 7.5V3.621L17.3775 7.5H13.5Z" fill="currentColor" />
-          <path d="M8.25 18C8.44891 18 8.63968 17.921 8.78033 17.7803C8.92098 17.6397 9 17.4489 9 17.25C9 17.0511 8.92098 16.8603 8.78033 16.7197C8.63968 16.579 8.44891 16.5 8.25 16.5H5.25C5.05109 16.5 4.86032 16.579 4.71967 16.7197C4.57902 16.8603 4.5 17.0511 4.5 17.25C4.5 17.4489 4.57902 17.6397 4.71967 17.7803C4.86032 17.921 5.05109 18 5.25 18H8.25Z" fill="currentColor" />
-        </svg>
-        {renderLiveDocAnnotationBadge()}
+        <span className={styles.liveDocAiIconWrap}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className={styles.liveDocAiBadge} aria-hidden="true">AI</span>
+        </span>
+        {canToggleLiveDocAnnotation && (
+          <span
+            role="button"
+            tabIndex={0}
+            className={`${styles.liveDocAiArrowBadge} ${liveDocAnnotationEnabled ? styles.liveDocMenuBadgeOn : styles.liveDocMenuBadgeOff}`}
+            onClick={handleLiveDocAnnotationBadgeClick}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
+              }
+            }}
+            title={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
+            aria-label={liveDocAnnotationEnabled ? 'Disable Annotation' : 'Enable Annotation'}
+            aria-pressed={liveDocAnnotationEnabled}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
+              {liveDocAnnotationEnabled ? (
+                <path d="M18 15l-6-6-6 6" />
+              ) : (
+                <path d="M6 9l6 6 6-6" />
+              )}
+            </svg>
+          </span>
+        )}
         {variant === 'desktop' ? t('toolbar.liveDocMenu') : null}
       </button>
     );
@@ -1093,60 +1107,157 @@ export function KloudMeetToolbar({
               )}
             </div>
 
-            {/* 3. LiveDoc — 仅 host / co-host / presenter */}
+            {/* 3. 视图模式（活文档 / Webcam / 屏幕共享合并）— 仅 host / co-host / presenter */}
             {canShowOperatorMenus && (
+              <div className={styles.viewModeBtnWrap} data-view-mode-menu-anchor="true">
+                <button
+                  type="button"
+                  className={`${styles.mobileBtn} ${styles.active}`}
+                  onClick={() => {
+                    closeInviteMenu();
+                    setActiveSheet(null);
+                    setViewModeMenuOpen((prev) => !prev);
+                  }}
+                  aria-label={
+                    activeView === 'liveDoc'
+                      ? t('toolbar.liveDoc')
+                      : activeView === 'webcam'
+                        ? t('toolbar.webcam')
+                        : t('toolbar.shareScreen')
+                  }
+                  aria-expanded={viewModeMenuOpen}
+                  aria-haspopup="menu"
+                  title={
+                    activeView === 'liveDoc'
+                      ? t('toolbar.liveDoc')
+                      : activeView === 'webcam'
+                        ? t('toolbar.webcam')
+                        : t('toolbar.shareScreen')
+                  }
+                >
+                  {activeView === 'liveDoc' ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  ) : activeView === 'webcam' ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                      strokeWidth="1.5"
+                    >
+                      <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                    </svg>
+                  )}
+                  <span className={styles.viewModeMenuBadge} aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+                      <path d="M18 15l-6-6-6 6" />
+                    </svg>
+                  </span>
+                </button>
+                {viewModeMenuOpen && (
+                  <div className={styles.viewModeMenu} role="menu">
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={activeView === 'liveDoc'}
+                      className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+                      onClick={() => {
+                        if (!canSwitchViews) return;
+                        handleLiveDocTabClick();
+                        closeViewModeMenu();
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDoc')}</span>
+                      {activeView === 'liveDoc' && (
+                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={activeView === 'webcam'}
+                      className={`${styles.viewModeMenuItem} ${activeView === 'webcam' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+                      onClick={() => {
+                        if (!canSwitchViews) return;
+                        onViewChange('webcam');
+                        closeViewModeMenu();
+                      }}
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcam')}</span>
+                      {activeView === 'webcam' && (
+                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={activeView === 'shareScreen' || screenShareActive}
+                      className={`${styles.viewModeMenuItem} ${activeView === 'shareScreen' || screenShareActive ? styles.viewModeMenuItemActive : ''}`}
+                      onClick={() => {
+                        handleShareScreenClick();
+                        closeViewModeMenu();
+                      }}
+                    >
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                        strokeWidth="1.5"
+                      >
+                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span
+                        className={`${styles.viewModeMenuItemLabel} ${hasScreenShare && !screenShareActive ? styles.viewModeMenuItemWarn : ''}`}
+                      >
+                        {t('toolbar.shareScreen')}
+                      </span>
+                      {(activeView === 'shareScreen' || screenShareActive) && (
+                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 4. Screen Share — 非操作者仍单独显示 */}
+            {!canShowOperatorMenus && (
               <button
-                className={`${styles.mobileBtn} ${activeView === 'liveDoc' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
-                onClick={() => {
-                  if (!canSwitchViews) return;
-                  handleLiveDocTabClick();
-                }}
-                aria-label={t('toolbar.liveDoc')}
-                title={t('toolbar.liveDoc')}
-                style={{ position: 'relative' }}
+                className={`${styles.mobileBtn} ${activeView === 'shareScreen' || screenShareActive ? styles.active : ''}`}
+                onClick={handleShareScreenClick}
+                aria-label={t('toolbar.shareScreen')}
+                title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                <svg viewBox="0 0 24 24" fill="none"
+                  stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                  strokeWidth="1.5"
+                >
+                  <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </button>
             )}
 
-            {/* 4. Webcam — 仅 host / co-host / presenter */}
-            {canShowOperatorMenus && (
-              <button
-                className={`${styles.mobileBtn} ${activeView === 'webcam' ? styles.active : ''} ${!canSwitchViews ? styles.disabled : ''}`}
-                onClick={() => {
-                  if (!canSwitchViews) return;
-                  onViewChange('webcam');
-                }}
-                aria-label={t('toolbar.webcam')}
-                title={t('toolbar.webcam')}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-              </button>
-            )}
-
-            {/* 5. Screen Share */}
-            <button
-              className={`${styles.mobileBtn} ${activeView === 'shareScreen' || screenShareActive ? styles.active : ''}`}
-              onClick={handleShareScreenClick}
-              aria-label={t('toolbar.shareScreen')}
-              title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
-            >
-              <svg viewBox="0 0 24 24" fill="none"
-                stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
-                strokeWidth="1.5"
-              >
-                <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </button>
-
-            {/* 6. LiveDoc 设置：仅 LiveDoc 模式，与 iframe 右上角同功能 */}
+            {/* 5. LiveDoc 设置：仅 LiveDoc 模式，与 iframe 右上角同功能 */}
             {renderLiveDocSettingsButton('mobile')}
 
-            {/* 7. More */}
+            {/* 6. More */}
             <button
               className={styles.mobileBtn}
               onClick={() => openSheet('more')}
@@ -1682,6 +1793,7 @@ export function KloudMeetToolbar({
               className={`${styles.mobileTopBtn} ${inviteMenuOpen ? styles.mobileTopBtnInviteActive : ''}`}
               onClick={(e) => {
                 e.stopPropagation();
+                closeViewModeMenu();
                 setInviteMenuOpen((prev) => {
                   const next = !prev;
                   if (next) onOpenSheet?.();

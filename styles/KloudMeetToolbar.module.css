@@ -299,6 +299,76 @@
   transition: all 0.2s ease;
 }
 
+/* LiveDoc AI 底栏按钮：文档图标 + AI 角标 + 向上箭头 */
+.liveDocAiBtn {
+  gap: 2px;
+}
+
+/* 与其它 tab 图标同尺寸，避免整体下移 */
+.liveDocAiIconWrap {
+  position: relative;
+  display: block;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+
+.mobileBtn.liveDocAiBtn .liveDocAiIconWrap {
+  width: 24px;
+  height: 24px;
+}
+
+.liveDocAiIconWrap > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.liveDocAiBadge {
+  position: absolute;
+  right: -6px;
+  bottom: -3px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: #3b82f6;
+  color: #fff;
+  font-size: 7px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* 箭头钉在整个按钮 item 的右上角（相对 .mobileBtn / .tabBtn） */
+.liveDocAiArrowBadge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  cursor: pointer;
+  z-index: 3;
+  border: none;
+  padding: 0;
+}
+
+.liveDocAiArrowBadge svg {
+  width: 8px !important;
+  height: 8px !important;
+  pointer-events: none;
+}
+
+.mobileBtn.liveDocAiBtn {
+  max-width: 52px;
+}
+
 .liveDocMenuBtn:hover {
   background: rgba(255, 255, 255, 0.08);
   color: rgba(255, 255, 255, 0.95);
@@ -461,6 +531,133 @@
   max-width: 52px;
   min-height: 44px;
   position: relative;
+}
+
+/* 移动端：活文档 / Webcam / 屏幕共享合并按钮 */
+.viewModeBtnWrap {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewModeBtnWrap .mobileBtn {
+  flex: 1 1 auto;
+  width: 100%;
+  max-width: none;
+}
+
+.viewModeMenuBadge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3b82f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.viewModeMenuBadge svg {
+  width: 8px;
+  height: 8px;
+}
+
+.viewModeMenu {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 196px;
+  padding: 6px;
+  background: #1c1c28;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  z-index: 1102;
+  box-sizing: border-box;
+}
+
+.viewModeMenu::after {
+  content: '';
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 7px solid #1c1c28;
+}
+
+.viewModeMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  min-height: 44px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.viewModeMenuItem svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.viewModeMenuItem:active {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.viewModeMenuItemActive {
+  background: rgba(59, 130, 246, 0.22);
+  color: #93bbfc;
+}
+
+.viewModeMenuItemActive svg {
+  opacity: 1;
+}
+
+.viewModeMenuItemDisabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.viewModeMenuItemLabel {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.viewModeMenuItemWarn {
+  color: #fb923c;
+}
+
+.viewModeMenuCheck {
+  width: 18px !important;
+  height: 18px !important;
+  margin-left: auto;
+  flex-shrink: 0;
+  color: #3b82f6;
+  stroke: #3b82f6;
 }
 
 .liveDocMenuBadge {
