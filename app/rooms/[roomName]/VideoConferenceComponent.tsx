@@ -137,8 +137,6 @@ import {
   FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN,
   FLOATING_WEBCAM_RIGHT_INSET,
   FLOATING_WEBCAM_TOP_INSET,
-  LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH,
-  LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
   SCREEN_SHARE_CAPTURE,
 } from './roomConstants';
 
@@ -3148,271 +3146,24 @@ export function VideoConferenceComponent(props: {
     return () => clearInterval(interval);
   }, [room]);
 
-  const [liveDocFilePanelVisible, setLiveDocFilePanelVisible] = React.useState(false);
-  const [liveDocFilePanelWidth, setLiveDocFilePanelWidth] = React.useState(
-    LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
-  );
   /** 浮窗拖拽中：供 LiveDoc postMessage 守卫使用（须早于 message effect） */
   const isDragging = React.useRef(false);
   const clearFloatingDragListenersRef = React.useRef<() => void>(() => {});
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
+  // 不再根据 FilePanelVisibleChange 挪动 floating-webcam-panel（右侧已是居中弹窗）
   React.useEffect(() => {
-    const getPanelVisibility = (data: {
-      Show?: unknown;
-      show?: unknown;
-      visible?: unknown;
-      isVisible?: unknown;
-      IsVisible?: unknown;
-      IsShow?: unknown;
-      expanded?: unknown;
-      isExpanded?: unknown;
-      data?: {
-        Show?: unknown;
-        show?: unknown;
-        visible?: unknown;
-        isVisible?: unknown;
-        IsVisible?: unknown;
-        IsShow?: unknown;
-        expanded?: unknown;
-        isExpanded?: unknown;
-        panel?: {
-          Show?: unknown;
-          show?: unknown;
-          visible?: unknown;
-          isVisible?: unknown;
-          IsVisible?: unknown;
-          IsShow?: unknown;
-          expanded?: unknown;
-          isExpanded?: unknown;
-        };
-      };
-      panel?: {
-        Show?: unknown;
-        show?: unknown;
-        visible?: unknown;
-        isVisible?: unknown;
-        IsVisible?: unknown;
-        IsShow?: unknown;
-        expanded?: unknown;
-        isExpanded?: unknown;
-      };
-    }) => {
-      const value =
-        data.data?.panel?.show ??
-        data.data?.panel?.Show ??
-        data.data?.panel?.visible ??
-        data.data?.panel?.isVisible ??
-        data.data?.panel?.IsVisible ??
-        data.data?.panel?.IsShow ??
-        data.data?.panel?.expanded ??
-        data.data?.panel?.isExpanded ??
-        data.data?.show ??
-        data.data?.Show ??
-        data.data?.visible ??
-        data.data?.isVisible ??
-        data.data?.IsVisible ??
-        data.data?.IsShow ??
-        data.data?.expanded ??
-        data.data?.isExpanded ??
-        data.panel?.show ??
-        data.panel?.Show ??
-        data.panel?.visible ??
-        data.panel?.isVisible ??
-        data.panel?.IsVisible ??
-        data.panel?.IsShow ??
-        data.panel?.expanded ??
-        data.panel?.isExpanded ??
-        data.show ??
-        data.Show ??
-        data.visible ??
-        data.isVisible ??
-        data.IsVisible ??
-        data.IsShow ??
-        data.expanded ??
-        data.isExpanded;
-
-      if (typeof value === 'boolean') return value;
-      if (typeof value === 'number') return value === 1;
-      if (typeof value === 'string') return value === '1' || value.toLowerCase() === 'true';
-      return null;
-    };
-
-    const getPanelWidth = (data: {
-      width?: unknown;
-      panelWidth?: unknown;
-      filePanelWidth?: unknown;
-      sidebarWidth?: unknown;
-      rightPanelWidth?: unknown;
-      Width?: unknown;
-      panel?: {
-        width?: unknown;
-        Width?: unknown;
-        panelWidth?: unknown;
-        filePanelWidth?: unknown;
-        sidebarWidth?: unknown;
-        rightPanelWidth?: unknown;
-      };
-      data?: {
-        width?: unknown;
-        panelWidth?: unknown;
-        filePanelWidth?: unknown;
-        sidebarWidth?: unknown;
-        rightPanelWidth?: unknown;
-        Width?: unknown;
-        panel?: {
-          width?: unknown;
-          Width?: unknown;
-          panelWidth?: unknown;
-          filePanelWidth?: unknown;
-          sidebarWidth?: unknown;
-          rightPanelWidth?: unknown;
-        };
-      };
-    }) => {
-      const candidate =
-        data.data?.panel?.filePanelWidth ??
-        data.data?.panel?.panelWidth ??
-        data.data?.panel?.rightPanelWidth ??
-        data.data?.panel?.sidebarWidth ??
-        data.data?.panel?.width ??
-        data.data?.panel?.Width ??
-        data.data?.filePanelWidth ??
-        data.data?.panelWidth ??
-        data.data?.rightPanelWidth ??
-        data.data?.sidebarWidth ??
-        data.data?.width ??
-        data.data?.Width ??
-        data.panel?.filePanelWidth ??
-        data.panel?.panelWidth ??
-        data.panel?.rightPanelWidth ??
-        data.panel?.sidebarWidth ??
-        data.panel?.width ??
-        data.panel?.Width ??
-        data.filePanelWidth ??
-        data.panelWidth ??
-        data.rightPanelWidth ??
-        data.sidebarWidth ??
-        data.width ??
-        data.Width;
-
-      const width =
-        typeof candidate === 'number'
-          ? candidate
-          : typeof candidate === 'string'
-            ? Number(candidate)
-            : NaN;
-
-      if (!Number.isFinite(width)) return null;
-      // Guardrail: LiveDoc right panel should be in a sane range.
-      return Math.max(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH, Math.min(480, width));
-    };
-
     const handler = (e: MessageEvent) => {
       if (!e.data || typeof e.data !== 'object') return;
-      const data = e.data as {
-        type?: string;
-        Show?: unknown;
-        show?: unknown;
-        visible?: unknown;
-        isVisible?: unknown;
-        IsVisible?: unknown;
-        IsShow?: unknown;
-        expanded?: unknown;
-        isExpanded?: unknown;
-        width?: unknown;
-        panelWidth?: unknown;
-        filePanelWidth?: unknown;
-        sidebarWidth?: unknown;
-        rightPanelWidth?: unknown;
-        Width?: unknown;
-        panel?: {
-          Show?: unknown;
-          show?: unknown;
-          visible?: unknown;
-          isVisible?: unknown;
-          IsVisible?: unknown;
-          IsShow?: unknown;
-          expanded?: unknown;
-          isExpanded?: unknown;
-          width?: unknown;
-          Width?: unknown;
-          panelWidth?: unknown;
-          filePanelWidth?: unknown;
-          sidebarWidth?: unknown;
-          rightPanelWidth?: unknown;
-        };
-        data?: {
-          Show?: unknown;
-          show?: unknown;
-          visible?: unknown;
-          isVisible?: unknown;
-          IsVisible?: unknown;
-          IsShow?: unknown;
-          expanded?: unknown;
-          isExpanded?: unknown;
-          width?: unknown;
-          panelWidth?: unknown;
-          filePanelWidth?: unknown;
-          sidebarWidth?: unknown;
-          rightPanelWidth?: unknown;
-          Width?: unknown;
-          panel?: {
-            Show?: unknown;
-            show?: unknown;
-            visible?: unknown;
-            isVisible?: unknown;
-            IsVisible?: unknown;
-            IsShow?: unknown;
-            expanded?: unknown;
-            isExpanded?: unknown;
-            width?: unknown;
-            Width?: unknown;
-            panelWidth?: unknown;
-            filePanelWidth?: unknown;
-            sidebarWidth?: unknown;
-            rightPanelWidth?: unknown;
-          };
-        };
-      };
-      if (
-        process.env.NODE_ENV === 'development' &&
-        typeof data.type === 'string' &&
-        (data.type.toLowerCase().includes('kloud') || data.type.toLowerCase().includes('file'))
-      ) {
-        console.debug('[LiveDoc postMessage]', data);
-      }
+      const data = e.data as { type?: string };
       if (e.data.type === 'Kloud-ShowWebcamView') {
         setShowWebcamSidebar(true);
-        setLiveDocFilePanelVisible(false);
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
       } else if (data.type === 'onkloudloaded') {
         // ② 文档加载完成：再释放一次，并恢复 iframe 可点
         clearFloatingDragListenersRef.current();
         setShowWebcamSidebar(false);
-        setLiveDocFilePanelVisible(false);
-        setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
-      } else if (
-        data.type === 'onKloudFilePanelVisibleChange' ||
-        data.type === 'Kloud-FilePanelVisibleChange' ||
-        data.type === 'Kloud-ShowFilePanel' ||
-        !!data.type?.toLowerCase().includes('filepanel')
-      ) {
-        if (isDragging.current) return;
-        const visible = getPanelVisibility(data);
-        if (visible !== null) {
-          setLiveDocFilePanelVisible(visible);
-        }
-        const panelWidth = getPanelWidth(data);
-        if (panelWidth !== null) {
-          setLiveDocFilePanelWidth(panelWidth);
-        } else if (visible !== null) {
-          // Fallback if plugin message omits width.
-          setLiveDocFilePanelWidth(
-            visible ? LIVEDOC_FILE_PANEL_EXPANDED_WIDTH : LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH,
-          );
-        }
       }
     };
     window.addEventListener('message', handler);
@@ -3422,15 +3173,9 @@ export function VideoConferenceComponent(props: {
   // LiveDoc 主区域显示时：右侧面板已改为居中弹窗模态（LiveDoc Popup Modal），
   // 不再常驻右侧，因此 KloudMeet 侧也不再预留面板宽度。
   React.useEffect(() => {
+    setShowWebcamSidebar(false);
     if (shouldDisplayLiveDoc) {
-      setShowWebcamSidebar(false);
-      setLiveDocFilePanelVisible(false);
-      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
       postKloudShowFilePanelToIframe(0);
-    } else {
-      setShowWebcamSidebar(false);
-      setLiveDocFilePanelVisible(false);
-      setLiveDocFilePanelWidth(LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH);
     }
   }, [shouldDisplayLiveDoc, isToolbarMobile]);
 
@@ -3446,12 +3191,10 @@ export function VideoConferenceComponent(props: {
   const dragOffset = React.useRef({ x: 0, y: 0 });
   const floatingPosRef = React.useRef(floatingPos);
   const floatingPosLayoutRef = React.useRef(floatingPosLayout);
-  /** 文件栏完全隐藏时不占位，避免仍按「折叠宽度」把浮窗拦在距右缘 56px+ 处 */
-  const effectiveLiveDocPanelWidth = liveDocFilePanelVisible ? liveDocFilePanelWidth : 0;
+  // LiveDoc 文件/菜单面板已是居中弹窗，不再按面板显隐或宽度挪动 floating-webcam-panel
   const floatingRightInset =
     activeView === 'liveDoc' && !hasScreenShare
-      ? effectiveLiveDocPanelWidth +
-        FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
+      ? FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
       : FLOATING_WEBCAM_RIGHT_INSET;
   const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
   /** 共享方 LiveDoc / 纯 LiveDoc / 非共享方且左侧栏已折叠时显示浮窗 */
@@ -5209,7 +4952,6 @@ export function VideoConferenceComponent(props: {
                 const handleFileClick = () => {
                   // Switch to floating mode
                   setShowWebcamSidebar(false);
-                  setLiveDocFilePanelVisible(true);
                   // Send message to iframe
                   const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
                   if (iframe?.contentWindow) {
@@ -6394,8 +6136,15 @@ export function VideoConferenceComponent(props: {
                background: transparent;
                backdrop-filter: none;
             }
-            /* 右侧小格：麦克风默认隐藏，悬停头像再显示（左侧 hero 不受影响） */
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator {
+            /*
+             * 浮窗列表 mic/cam（左侧图标区）：
+             * - 自己：始终显示
+             * - 他人开麦/开摄像头：始终显示
+             * - 他人关麦/关摄像头：默认隐藏，悬停头像再显示
+             * - 主持禁音 / 全员静音强制态：始终显示（红标）
+             */
+            .floating-webcam-panel .floating-grid-tile .kloud-custom-mic-indicator[data-kloud-muted="true"]:not(.self-interactive):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
+            .floating-webcam-panel .floating-grid-tile .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not(.self-interactive):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled) {
               opacity: 0;
               width: 0 !important;
               min-width: 0 !important;
@@ -6407,86 +6156,18 @@ export function VideoConferenceComponent(props: {
               pointer-events: none;
               transition: opacity 0.18s ease, width 0.18s ease, min-width 0.18s ease, height 0.18s ease;
             }
-            /* 主持禁音 / 全员静音：小格也始终显示红色麦克风 */
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.kloud-custom-mic--force-muted,
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-mic-indicator.self-interactive {
-              opacity: 1 !important;
-              width: 20px !important;
-              min-width: 20px !important;
-              height: 20px !important;
-              min-height: 20px !important;
-              padding: 3px !important;
-              overflow: visible !important;
-              pointer-events: auto !important;
-            }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator {
-              opacity: 0;
-              width: 0 !important;
-              min-width: 0 !important;
-              height: 0 !important;
-              min-height: 0 !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              overflow: hidden;
-              pointer-events: none;
-            }
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled,
-            .floating-expanded-rest-scroll .floating-grid-tile--compact .kloud-custom-cam-indicator.self-interactive {
-              opacity: 1 !important;
-              width: 20px !important;
-              min-width: 20px !important;
-              height: 20px !important;
-              min-height: 20px !important;
-              padding: 3px !important;
-              overflow: visible !important;
-              pointer-events: auto !important;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator {
+            .floating-webcam-panel .floating-grid-tile--hero:hover .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-grid-tile--hero:hover .kloud-custom-cam-indicator,
+            .floating-webcam-panel .floating-compact-slot:hover .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-compact-slot:hover .kloud-custom-cam-indicator {
               opacity: 1;
               width: 20px !important;
               min-width: 20px !important;
               height: 20px !important;
               min-height: 20px !important;
               padding: 3px !important;
+              overflow: visible;
               pointer-events: auto;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-force-muted="true"],
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] {
-              width: 20px !important;
-              height: 20px !important;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator.operator-interactive {
-              width: 20px !important;
-              min-width: 20px !important;
-              height: 20px !important;
-              min-height: 20px !important;
-              padding: 3px !important;
-              margin: 0;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-mic-indicator.self-interactive {
-              width: 20px !important;
-              min-width: 20px !important;
-              height: 20px !important;
-              min-height: 20px !important;
-              padding: 3px !important;
-              margin: 0;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator {
-              opacity: 1;
-              width: 20px !important;
-              min-width: 20px !important;
-              height: 20px !important;
-              min-height: 20px !important;
-              padding: 3px !important;
-              pointer-events: auto;
-            }
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator[data-kloud-host-restricted="true"],
-            .floating-expanded-rest-scroll .floating-compact-slot:hover .kloud-custom-cam-indicator.kloud-custom-cam--force-disabled {
-              width: 20px !important;
-              height: 20px !important;
             }
             .floating-grid-tile {
                display: block;
@@ -7586,6 +7267,8 @@ export function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
+          canToggleLiveDocAnnotation={canBroadcastViewChange}
+          canShowOperatorMenus={canBroadcastViewChange}
           canEndForAll={isHost || isCohost}
           isRecording={isRecording}
           onOpenRecordPopup={() => setShowRecordPopup(true)}
