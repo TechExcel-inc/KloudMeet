@@ -7,8 +7,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 
 /**
- * Proxies MeetingServer meeting_document/item with SSO UserToken so KloudMeet
+ * Proxies MeetingServer meeting_document/item with PeerTime UserToken so KloudMeet
  * post-meeting chat can enforce the same ACL before opening a livedoc card.
+ *
+ * Token resolution: explicit UserToken header (instant / client) → SSO cookie.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const member = await requireSession(request);
@@ -20,19 +22,24 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Invalid itemId' }, { status: 400 });
   }
 
+  const headerToken =
+    request.headers.get('UserToken')?.trim() ||
+    request.headers.get('usertoken')?.trim() ||
+    '';
   const sso = request.cookies.get('kloud_sso_token')?.value;
-  if (!sso) {
+  let userToken = headerToken;
+  if (!userToken && sso) {
+    try {
+      userToken = decodeURIComponent(sso);
+    } catch {
+      userToken = sso;
+    }
+  }
+  if (!userToken) {
     return NextResponse.json(
-      { error: 'Missing PeerTime SSO token; sign in via Kloud to open documents' },
+      { error: 'Missing PeerTime UserToken; sign in via Kloud or rejoin a meeting first' },
       { status: 403 },
     );
-  }
-
-  let userToken = sso;
-  try {
-    userToken = decodeURIComponent(sso);
-  } catch {
-    // keep raw
   }
 
   const { url, headers: loopbackHeaders } = buildMeetingServerUrl(

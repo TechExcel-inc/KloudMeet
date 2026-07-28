@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { useI18n } from '@/lib/i18n';
 import { authHeaders } from '@/lib/kloudSession';
+import { createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import type { ChatAttachment, ChatMessageKind } from '@/lib/chatProtocol';
 import styles from '@/styles/MeetingChatHistory.module.css';
@@ -157,9 +158,22 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
   const openLivedocAttachment = React.useCallback(async (attachment: ChatAttachment) => {
     setOpeningItemId(attachment.itemId);
     try {
+      // Same PeerTime identity used during in-meeting upload / LessonMember sync.
+      const displayName =
+        currentUser?.displayName?.trim() ||
+        currentUser?.username?.trim() ||
+        currentUser?.email?.trim() ||
+        'Guest';
+      const peerTimeToken = await createOrUpdateInstantAccount(displayName);
       const response = await fetch(
         `/api/livedoc/document-access?itemId=${encodeURIComponent(String(attachment.itemId))}`,
-        { headers: authHeaders(), cache: 'no-store' },
+        {
+          headers: {
+            ...authHeaders(),
+            UserToken: peerTimeToken,
+          },
+          cache: 'no-store',
+        },
       );
       if (response.status === 401) {
         handleKloudSessionExpired();
@@ -179,7 +193,7 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
     } finally {
       setOpeningItemId(null);
     }
-  }, [t]);
+  }, [currentUser, t]);
 
   return (
     <main className={styles.page}>
