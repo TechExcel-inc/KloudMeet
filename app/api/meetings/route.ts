@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
 
 export async function POST(request: NextRequest) {
   const member = await requireSession(request);
@@ -22,10 +23,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
+    const accountId = await resolveMemberAccountId(member.id);
+
     const meeting = await prisma.meeting.create({
       data: {
         roomName,
         createdByMemberId: member.id,
+        accountId: accountId ?? undefined,
         title,
         description,
         scheduledFor: scheduledFor ? new Date(scheduledFor) : undefined,

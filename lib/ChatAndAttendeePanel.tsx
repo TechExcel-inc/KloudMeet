@@ -31,6 +31,7 @@ export function ChatPanel({
   attachDisabled = false,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
+  const [showUploadConsent, setShowUploadConsent] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -67,9 +68,19 @@ export function ChatPanel({
 
   const handleAttachClick = useCallback(() => {
     if (attachDisabled || attachBusy || !onAttachFile) return;
-    // Must open picker synchronously in the click handler (browser user-gesture requirement)
-    fileInputRef.current?.click();
+    // Require explicit consent before opening the file picker
+    setShowUploadConsent(true);
   }, [attachDisabled, attachBusy, onAttachFile]);
+
+  const handleUploadConsentCancel = useCallback(() => {
+    setShowUploadConsent(false);
+  }, []);
+
+  const handleUploadConsentAgree = useCallback(() => {
+    setShowUploadConsent(false);
+    // Open picker in the Agree click handler (preserves user gesture)
+    fileInputRef.current?.click();
+  }, []);
 
   const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -181,6 +192,33 @@ export function ChatPanel({
           </button>
         </div>
       </form>
+      {showUploadConsent && (
+        <div
+          className="kloud-confirm-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kloud-chat-upload-consent-title"
+          onMouseDown={handleUploadConsentCancel}
+        >
+          <div className="kloud-confirm-dialog" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="kloud-confirm-title" id="kloud-chat-upload-consent-title">
+              {t('chat.uploadConsentTitle') || 'Share with attendees?'}
+            </div>
+            <div className="kloud-confirm-text">
+              {t('chat.uploadConsentBody') ||
+                'This article will be available to meeting attendees and will remain viewable after the meeting ends.'}
+            </div>
+            <div className="kloud-confirm-actions">
+              <button type="button" className="kloud-confirm-cancel" onClick={handleUploadConsentCancel}>
+                {t('chat.uploadConsentCancel') || t('common.cancel') || 'Cancel'}
+              </button>
+              <button type="button" className="kloud-confirm-proceed" onClick={handleUploadConsentAgree}>
+                {t('chat.uploadConsentAgree') || 'Agree and upload'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -463,6 +501,7 @@ export const chatAndAttendeeStyles = `
     display: flex;
     flex-direction: column;
     height: 100%;
+    position: relative;
   }
   .kloud-chat-messages {
     flex: 1;
@@ -1118,6 +1157,10 @@ export const chatAndAttendeeStyles = `
     text-align: center;
     box-shadow: 0 12px 40px rgba(0,0,0,0.5);
     animation: kloud-dialog-in 0.15s ease-out;
+  }
+  .kloud-chat-panel .kloud-confirm-dialog {
+    max-width: 320px;
+    text-align: left;
   }
   @keyframes kloud-dialog-in {
     from { opacity: 0; transform: scale(0.95); }

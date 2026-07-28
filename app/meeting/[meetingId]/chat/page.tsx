@@ -7,6 +7,7 @@ import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { useI18n } from '@/lib/i18n';
 import { authHeaders } from '@/lib/kloudSession';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
+import type { ChatAttachment, ChatMessageKind } from '@/lib/chatProtocol';
 import styles from '@/styles/MeetingChatHistory.module.css';
 
 interface MeetingInfo {
@@ -23,6 +24,8 @@ interface HistoryMessage {
   senderName: string;
   message: string;
   timestamp: number;
+  kind?: ChatMessageKind;
+  attachment?: ChatAttachment;
 }
 
 interface HistoryResponse {
@@ -76,6 +79,11 @@ function isOwnHistoryMessage(message: HistoryMessage, currentUser: StoredAuthUse
   return ownNames.some((value) => value === message.senderIdentity || value === message.senderName);
 }
 
+function resolveLiveDocOpenUrl(attachment: ChatAttachment): string {
+  const base = (process.env.NEXT_PUBLIC_LIVEDOC_BASE_URL ?? 'https://kloud.cn').replace(/\/$/, '');
+  return `${base}/liveDoc/${attachment.itemId}`;
+}
+
 /** MeetingChatHistoryPage — 显示指定会议的完整会后聊天记录。 */
 export default function MeetingChatHistoryPage(): React.ReactElement {
   const params = useParams<{ meetingId: string }>();
@@ -85,6 +93,7 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
   const [currentUser, setCurrentUser] = React.useState<StoredAuthUser | null>(null);
+  const [openingItemId, setOpeningItemId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
     setCurrentUser(getStoredAuthUser());
@@ -145,6 +154,33 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
     return () => controller.abort();
   }, [params.meetingId]);
 
+  const openLivedocAttachment = React.useCallback(async (attachment: ChatAttachment) => {
+    setOpeningItemId(attachment.itemId);
+    try {
+      const response = await fetch(
+        `/api/livedoc/document-access?itemId=${encodeURIComponent(String(attachment.itemId))}`,
+        { headers: authHeaders(), cache: 'no-store' },
+      );
+      if (response.status === 401) {
+        handleKloudSessionExpired();
+        return;
+      }
+      if (response.status === 403) {
+        window.alert(t('chatHistory.noAccess') || 'No permission to open this document');
+        return;
+      }
+      if (!response.ok) {
+        window.alert(t('chatHistory.openFailed') || 'Failed to open document');
+        return;
+      }
+      window.open(resolveLiveDocOpenUrl(attachment), '_blank', 'noopener,noreferrer');
+    } catch {
+      window.alert(t('chatHistory.openFailed') || 'Failed to open document');
+    } finally {
+      setOpeningItemId(null);
+    }
+  }, [t]);
+
   return (
     <main className={styles.page}>
       <section className={styles.panel}>
@@ -176,6 +212,8 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
             <div className={styles.messageList}>
               {messages.map((message) => {
                 const isOwn = isOwnHistoryMessage(message, currentUser);
+                const isLivedoc =
+                  message.kind === 'livedoc' || !!message.attachment;
                 return (
                   <article
                     key={message.clientMessageId}
@@ -191,7 +229,27 @@ export default function MeetingChatHistoryPage(): React.ReactElement {
                           {new Date(message.timestamp).toLocaleString()}
                         </time>
                       </div>
-                      <p>{message.message}</p>
+                      {isLivedoc && message.attachment ? (
+                        <button
+                          type="button"
+                          className={styles.livedocCard}
+                          disabled={openingItemId === message.attachment.itemId}
+                          onClick={() => {
+                            void openLivedocAttachment(message.attachment!);
+                          }}
+                        >
+                          <span className={styles.livedocCardTitle}>
+                            {message.attachment.fileName || message.message}
+                          </span>
+                          <span className={styles.livedocCardMeta}>
+                            {openingItemId === message.attachment.itemId
+                              ? (t('chatHistory.opening') || 'Opening…')
+                              : (t('chatHistory.openDoc') || 'Open document')}
+                          </span>
+                        </button>
+                      ) : (
+                        <p>{message.message}</p>
+                      )}
                     </div>
                   </article>
                 );

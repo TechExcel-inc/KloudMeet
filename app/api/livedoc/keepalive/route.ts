@@ -3,6 +3,7 @@ import {
   ensureHostBypassesProxy,
   formatUpstreamFetchError,
 } from '@/lib/peertimeUpstream';
+import { resolvePeerTimeCompanyId } from '@/lib/peerTimeCompany';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -16,7 +17,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: 'Missing UserToken header' }, { status: 400 });
   }
 
-  let payload: { jitsiInstanceId?: string; livedocMeetingId?: number | string | null };
+  let payload: {
+    jitsiInstanceId?: string;
+    livedocMeetingId?: number | string | null;
+    companyId?: unknown;
+  };
   try {
     payload = await request.json();
   } catch {
@@ -34,6 +39,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ? Number(payload.livedocMeetingId)
         : null;
 
+  const companyId = await resolvePeerTimeCompanyId({
+    request,
+    userToken,
+    explicitCompanyId: payload.companyId,
+  });
+
   let upstream: Response;
   try {
     upstream = await fetch(url, {
@@ -46,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body: JSON.stringify({
         jitsiInstanceId: payload.jitsiInstanceId,
         livedocMeetingId: Number.isFinite(livedocMeetingId) ? livedocMeetingId : null,
-        companyId: 3255,
+        companyId,
       }),
     });
   } catch (error) {

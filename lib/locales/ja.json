@@ -525,6 +525,10 @@
   "chat.docFailed": "アップロード失敗",
   "chat.sharedFile": "共有",
   "chat.sharedLiveDoc": "LiveDocを共有しました",
+  "chat.uploadConsentTitle": "参加者に共有しますか？",
+  "chat.uploadConsentBody": "この記事は会議の参加者に公開され、会議終了後も閲覧できます。",
+  "chat.uploadConsentAgree": "同意してアップロード",
+  "chat.uploadConsentCancel": "キャンセル",
 
   "replay.loading": "再生を読み込み中...",
   "replay.notReady": "動画はまだ準備できていません",
@@ -573,6 +577,10 @@
   "chatHistory.loading": "チャット履歴を読み込み中…",
   "chatHistory.loadFailed": "チャット履歴を読み込めませんでした。",
   "chatHistory.empty": "この会議には保存されたチャットメッセージがありません。",
+  "chatHistory.openDoc": "ドキュメントを開く",
+  "chatHistory.opening": "開いています…",
+  "chatHistory.noAccess": "このドキュメントを開く権限がありません。",
+  "chatHistory.openFailed": "ドキュメントを開けませんでした。",
 
   "livedoc.errorTitle": "ドキュメントセッションを作成できません",
   "livedoc.creating": "ドキュメントセッションを作成中…",

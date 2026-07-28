@@ -169,6 +169,43 @@
   border-color: transparent;
 }
 
+.livedocCard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-width: 360px;
+  padding: 12px 14px;
+  text-align: left;
+  color: inherit;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.livedocCard:hover:not(:disabled) {
+  border-color: #818cf8;
+  background: #eef2ff;
+}
+
+.livedocCard:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.livedocCardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.livedocCardMeta {
+  font-size: 12px;
+  color: #64748b;
+}
+
 :global(html[data-theme='dark']) .page {
   background:
     radial-gradient(circle at top left, rgba(99, 102, 241, 0.2), transparent 34%),
@@ -196,6 +233,15 @@
   color: #fff;
   background: linear-gradient(135deg, #2563eb, #4f46e5);
   border-color: transparent;
+}
+
+:global(html[data-theme='dark']) .livedocCard {
+  background: #1e293b;
+  border-color: #334155;
+}
+
+:global(html[data-theme='dark']) .livedocCardTitle {
+  color: #e2e8f0;
 }
 
 :global(html[data-theme='dark']) .messageRow {

@@ -10,11 +10,13 @@ import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary
 import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { HelpModal } from '@/lib/HelpModal';
 import {
+  bindLivedocToMeeting,
   createLivedocInstance,
   createOrUpdateInstantAccount,
   keepLivedocInstanceActive,
   resolveJitsiInstanceId,
   resolveLiveDocEmbedRole,
+  syncLivedocLessonMember,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
@@ -2022,6 +2024,20 @@ export function VideoConferenceComponent(props: {
         setLivedocInstanceId(id);
         authState.current.livedocInstanceId = id;
         sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
+        try {
+          await bindLivedocToMeeting({
+            roomName: meetingRoomName,
+            livedocInstanceId: id,
+            livekitToken: connectionDetailsRef.current.participantToken,
+          });
+        } catch (bindError) {
+          console.warn('[LiveDoc] bind-livedoc failed', bindError);
+        }
+        try {
+          await syncLivedocLessonMember({ userToken, livedocInstanceId: id });
+        } catch (syncError) {
+          console.warn('[LiveDoc] sync-member failed', syncError);
+        }
       } catch (e) {
         if (!cancelled) {
           livedocHostBootstrappedRef.current = true;
@@ -2041,8 +2057,37 @@ export function VideoConferenceComponent(props: {
     livekitConnected,
     isHost,
     jitsiInstanceId,
+    meetingRoomName,
     props.userChoices.username,
     sendMeetingMsg,
+  ]);
+
+  // Non-host (and host) attendees: register as LessonMember for post-meeting doc ACL
+  const livedocMemberSyncedRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!livekitConnected || meetingEndedByHost || !livedocInstanceId) return;
+    if (livedocMemberSyncedRef.current === livedocInstanceId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const userToken = await createOrUpdateInstantAccount(props.userChoices.username);
+        if (cancelled) return;
+        await syncLivedocLessonMember({ userToken, livedocInstanceId });
+        if (!cancelled) {
+          livedocMemberSyncedRef.current = livedocInstanceId;
+        }
+      } catch (error) {
+        console.warn('[LiveDoc] attendee sync-member failed:', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    livekitConnected,
+    meetingEndedByHost,
+    livedocInstanceId,
+    props.userChoices.username,
   ]);
 
   React.useEffect(() => {

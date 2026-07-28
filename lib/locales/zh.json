@@ -530,6 +530,10 @@
   "chat.docFailed": "上传失败",
   "chat.sharedFile": "分享了",
   "chat.sharedLiveDoc": "分享了一个活文档",
+  "chat.uploadConsentTitle": "向参会人分享？",
+  "chat.uploadConsentBody": "文章将对参会人开放，会议结束后仍可查看。",
+  "chat.uploadConsentAgree": "同意并上传",
+  "chat.uploadConsentCancel": "取消",
 
   "replay.loading": "正在加载回放...",
   "replay.notReady": "视频暂未就绪",
@@ -578,6 +582,10 @@
   "chatHistory.loading": "正在加载聊天记录…",
   "chatHistory.loadFailed": "无法加载聊天记录。",
   "chatHistory.empty": "该会议没有保存的聊天消息。",
+  "chatHistory.openDoc": "打开文档",
+  "chatHistory.opening": "正在打开…",
+  "chatHistory.noAccess": "你没有权限打开此文档。",
+  "chatHistory.openFailed": "打开文档失败。",
 
   "livedoc.errorTitle": "无法创建文档会话",
   "livedoc.creating": "正在创建文档会话…",

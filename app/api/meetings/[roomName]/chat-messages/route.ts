@@ -174,10 +174,30 @@ export async function POST(
 
     const meeting = await prisma.meeting.findUnique({
       where: { roomName },
-      select: { id: true },
+      select: { id: true, kloudMeetingId: true },
     });
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+
+    if (kind === 'livedoc' && attachment) {
+      if (!attachment.livedocInstanceId) {
+        return NextResponse.json(
+          { error: 'Livedoc attachment requires livedocInstanceId' },
+          { status: 400 },
+        );
+      }
+      const attachmentLessonId = Number(attachment.livedocInstanceId);
+      if (
+        meeting.kloudMeetingId != null &&
+        Number.isFinite(attachmentLessonId) &&
+        attachmentLessonId !== meeting.kloudMeetingId
+      ) {
+        return NextResponse.json(
+          { error: 'Livedoc attachment does not belong to this meeting' },
+          { status: 403 },
+        );
+      }
     }
 
     const content = encodeChatContent({ message, kind, attachment });

@@ -217,3 +217,52 @@ export async function keepLivedocInstanceActive({
   }
   return String(result.data);
 }
+
+/** Bind PeerTime lessonId onto KloudMeet Meeting.kloudMeetingId (LiveKit auth). */
+export async function bindLivedocToMeeting({
+  roomName,
+  livedocInstanceId,
+  livekitToken,
+}: {
+  roomName: string;
+  livedocInstanceId: string;
+  livekitToken: string;
+}): Promise<void> {
+  const response = await fetch(
+    `/api/meetings/${encodeURIComponent(roomName)}/bind-livedoc`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${livekitToken}`,
+      },
+      body: JSON.stringify({ livedocInstanceId }),
+    },
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`bind-livedoc: ${response.status} ${text}`);
+  }
+}
+
+/** Ensure current PeerTime user is LessonMember (Auditor) for post-meeting ACL. */
+export async function syncLivedocLessonMember({
+  userToken,
+  livedocInstanceId,
+}: {
+  userToken: string;
+  livedocInstanceId: string;
+}): Promise<void> {
+  const response = await fetch('/api/livedoc/sync-member', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      UserToken: userToken,
+    },
+    body: JSON.stringify({ livedocInstanceId }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`sync-member: ${response.status} ${text}`);
+  }
+}

@@ -546,6 +546,10 @@
   "chat.docFailed": "Upload failed",
   "chat.sharedFile": "Shared",
   "chat.sharedLiveDoc": "Shared a LiveDoc",
+  "chat.uploadConsentTitle": "Share with attendees?",
+  "chat.uploadConsentBody": "This article will be available to meeting attendees and will remain viewable after the meeting ends.",
+  "chat.uploadConsentAgree": "Agree and upload",
+  "chat.uploadConsentCancel": "Cancel",
 
   "replay.loading": "Loading replay...",
   "replay.notReady": "Video Not Ready",
@@ -594,6 +598,10 @@
   "chatHistory.loading": "Loading chat history…",
   "chatHistory.loadFailed": "Unable to load chat history.",
   "chatHistory.empty": "No chat messages were saved for this meeting.",
+  "chatHistory.openDoc": "Open document",
+  "chatHistory.opening": "Opening…",
+  "chatHistory.noAccess": "You do not have permission to open this document.",
+  "chatHistory.openFailed": "Failed to open document.",
 
   "livedoc.errorTitle": "Failed to create document session",
   "livedoc.creating": "Creating document session…",

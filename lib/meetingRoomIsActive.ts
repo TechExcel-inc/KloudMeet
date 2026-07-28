@@ -148,10 +148,13 @@ export async function ensurePersonalRoomMeeting(
           data: { roomName: `${archiveFrom}_${meeting.id}` },
         });
       }
+      const { resolveMemberAccountId } = await import('@/lib/peerTimeCompany');
+      const accountId = await resolveMemberAccountId(owner.id);
       meeting = await prisma.meeting.create({
         data: {
           roomName: canonical,
           createdByMemberId: owner.id,
+          accountId: accountId ?? undefined,
           title: `${owner.fullName || owner.username}'s Room`,
           status: 'ACTIVE',
         },

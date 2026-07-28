@@ -525,6 +525,10 @@
   "chat.docFailed": "업로드 실패",
   "chat.sharedFile": "공유",
   "chat.sharedLiveDoc": "LiveDoc을 공유했습니다",
+  "chat.uploadConsentTitle": "참석자와 공유할까요?",
+  "chat.uploadConsentBody": "이 문서는 회의 참석자에게 공개되며, 회의가 끝난 후에도 볼 수 있습니다.",
+  "chat.uploadConsentAgree": "동의하고 업로드",
+  "chat.uploadConsentCancel": "취소",
 
   "replay.loading": "다시보기 로딩 중...",
   "replay.notReady": "동영상 준비 중",
@@ -573,6 +577,10 @@
   "chatHistory.loading": "채팅 기록을 불러오는 중…",
   "chatHistory.loadFailed": "채팅 기록을 불러올 수 없습니다.",
   "chatHistory.empty": "이 회의에 저장된 채팅 메시지가 없습니다.",
+  "chatHistory.openDoc": "문서 열기",
+  "chatHistory.opening": "여는 중…",
+  "chatHistory.noAccess": "이 문서를 열 권한이 없습니다.",
+  "chatHistory.openFailed": "문서를 열 수 없습니다.",
 
   "livedoc.errorTitle": "문서 세션을 만들 수 없습니다",
   "livedoc.creating": "문서 세션을 만드는 중…",
