@@ -7,7 +7,8 @@ import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
-import { KloudMeetToolbar, ViewMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
+import { KloudMeetToolbar, ViewMode, WebcamLayoutMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
+import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
 import {
   bindLivedocToMeeting,
@@ -40,7 +41,6 @@ import {
   LocalUserChoices,
   PreJoin,
   RoomContext,
-  VideoConference,
   VideoTrack,
   useTracks,
   ParticipantTile,
@@ -210,6 +210,7 @@ export function VideoConferenceComponent(props: {
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
   const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
+  const [webcamLayoutMode, setWebcamLayoutMode] = React.useState<WebcamLayoutMode>('tile');
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
   // Stores the mic state BEFORE a MUTE_ALL command arrived, so UNMUTE_ALL can restore it.
   const preMuteAllMicRef = React.useRef<boolean | null>(null);
@@ -5060,20 +5061,25 @@ export function VideoConferenceComponent(props: {
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
-            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''}`}
+            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
             style={{
               flex: 1,
               position: 'relative',
-              display: shouldDisplayLiveDoc ? 'none' : 'block',
+              display: shouldDisplayLiveDoc ? 'none' : 'flex',
+              flexDirection: 'column',
+              minHeight: 0,
+              height: '100%',
+              overflow: 'hidden',
             }}
           >
-            {isToolbarMobile && activeView === 'webcam' && !hasScreenShare ? (
+            {isToolbarMobile && activeView === 'webcam' && !hasScreenShare && webcamLayoutMode === 'tile' ? (
               <MobileVideoLayout />
-            ) : isToolbarMobile && !hasScreenShare ? (
+            ) : isToolbarMobile && !hasScreenShare && webcamLayoutMode === 'tile' ? (
               <ConnectionStateToast />
             ) : (
               <VideoConferenceErrorBoundary>
-                <VideoConference
+                <KloudVideoConference
+                  webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
                   chatMessageFormatter={formatChatMessageLinks}
                   SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
                 />
@@ -5762,6 +5768,61 @@ export function VideoConferenceComponent(props: {
               }
               /* .screenshare-overlay-badge moved to static block for simpler transitions */
 
+            `
+              : ''
+            }
+
+            ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight'
+              ? `
+              /* Webcam Spotlight: reuse focus + carousel layout */
+              .sky-meet-video-wrapper.webcam-spotlight .lk-video-conference,
+              .sky-meet-video-wrapper.webcam-spotlight .lk-room-container { padding: 0 !important; }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-video-conference-inner {
+                padding: 0 !important;
+                margin: 0 !important;
+                display: flex !important;
+                flex-direction: row-reverse !important;
+                width: 100% !important;
+                height: 100% !important;
+                min-height: 0 !important;
+              }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout-wrapper,
+              .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout {
+                flex: 1 !important;
+                display: flex !important;
+                width: 100% !important;
+                height: 100% !important;
+                min-width: 0 !important;
+                background: #000 !important;
+                align-items: center !important;
+                justify-content: center !important;
+              }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout .lk-participant-tile {
+                width: 100% !important;
+                height: 100% !important;
+              }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-carousel {
+                --spotlight-aside-tile: 120px;
+                width: calc(var(--spotlight-aside-tile) + 16px) !important;
+                min-width: calc(var(--spotlight-aside-tile) + 16px) !important;
+                max-width: calc(var(--spotlight-aside-tile) + 16px) !important;
+                height: 100% !important;
+                overflow-y: auto !important;
+                padding: 8px !important;
+                gap: 8px !important;
+                box-sizing: border-box !important;
+                border-right: 1px solid rgba(255,255,255,0.1) !important;
+              }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-carousel > .lk-participant-tile {
+                width: var(--spotlight-aside-tile) !important;
+                max-width: var(--spotlight-aside-tile) !important;
+                height: auto !important;
+                aspect-ratio: 1 / 1 !important;
+              }
+              .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout > .lk-participant-tile .lk-focus-toggle-button,
+              .sky-meet-video-wrapper.webcam-spotlight .lk-carousel > .lk-participant-tile .lk-focus-toggle-button {
+                display: none !important;
+              }
             `
               : ''
             }
@@ -7300,12 +7361,19 @@ export function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
+          webcamLayoutMode={webcamLayoutMode}
+          onWebcamLayoutChange={setWebcamLayoutMode}
           canToggleLiveDocAnnotation={canBroadcastViewChange}
           canShowOperatorMenus={canBroadcastViewChange}
           canEndForAll={isHost || isCohost}
+          canRecord={isHost || isCohost}
           isRecording={isRecording}
-          onOpenRecordPopup={() => setShowRecordPopup(true)}
-          onStopRecording={() => handleToggleRecording('stop')}
+          onOpenRecordPopup={() => {
+            if (isHost || isCohost) setShowRecordPopup(true);
+          }}
+          onStopRecording={() => {
+            if (isHost || isCohost) handleToggleRecording('stop');
+          }}
           onOpenHelp={() => setShowHelp(true)}
           canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
           muteAllActive={muteAllActive}
@@ -7388,8 +7456,8 @@ export function VideoConferenceComponent(props: {
           </div>
         )}
 
-        {/* Recording: unified consent dialog — no intermediate page */}
-        {showRecordPopup && (
+        {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
+        {showRecordPopup && (isHost || isCohost) && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordPopup(false)}>
             <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
               <div className="kloud-modal-body">

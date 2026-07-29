@@ -11,6 +11,7 @@ import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
 import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
+export type WebcamLayoutMode = 'tile' | 'spotlight';
 
 type ChatBubbleRect = {
   top: number;
@@ -80,6 +81,9 @@ interface KloudMeetToolbarProps {
   hasScreenShare: boolean;
   isDesktop: boolean;
   canSwitchViews: boolean;
+  /** Webcam 子布局：Tile 宫格 / Spotlight 焦点 */
+  webcamLayoutMode?: WebcamLayoutMode;
+  onWebcamLayoutChange?: (mode: WebcamLayoutMode) => void;
   /** Host / Co-host / Presenter：可切换 LiveDoc Annotation */
   canToggleLiveDocAnnotation?: boolean;
   /**
@@ -100,6 +104,8 @@ interface KloudMeetToolbarProps {
   canEndForAll?: boolean;
   /** Callback to end meeting for all participants (host/co-host only) */
   onEndForAll?: () => void;
+  /** Only host/co-host can start/stop recording */
+  canRecord?: boolean;
   isRecording?: boolean;
   onOpenRecordPopup?: () => void;
   onStopRecording?: () => void;
@@ -143,6 +149,8 @@ export function KloudMeetToolbar({
   hasScreenShare,
   isDesktop,
   canSwitchViews,
+  webcamLayoutMode: webcamLayoutModeProp,
+  onWebcamLayoutChange,
   canToggleLiveDocAnnotation = false,
   canShowOperatorMenus = false,
   chatOpen,
@@ -153,6 +161,7 @@ export function KloudMeetToolbar({
   chatPanelSlot,
   attendeePanelSlot,
   canEndForAll,
+  canRecord = false,
   isRecording,
   onOpenRecordPopup,
   onStopRecording,
@@ -174,6 +183,13 @@ export function KloudMeetToolbar({
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
   const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
+  /** 未受控时本地兜底；父级传入 webcamLayoutMode 时以父级为准 */
+  const [webcamLayoutModeLocal, setWebcamLayoutModeLocal] = useState<WebcamLayoutMode>('tile');
+  const webcamLayoutMode = webcamLayoutModeProp ?? webcamLayoutModeLocal;
+  const setWebcamLayoutMode = (mode: WebcamLayoutMode) => {
+    setWebcamLayoutModeLocal(mode);
+    onWebcamLayoutChange?.(mode);
+  };
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const recordMenuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -685,6 +701,12 @@ export function KloudMeetToolbar({
     setLiveDocActionDialogVisible(false);
   }, [canShowOperatorMenus, liveDocActionDialogVisible]);
 
+  // 失去 host/co-host 时关闭录制菜单
+  useEffect(() => {
+    if (canRecord || activeSheet !== 'recording') return;
+    setActiveSheet(null);
+  }, [canRecord, activeSheet]);
+
   useLayoutEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) {
       setDesktopBubblePos(null);
@@ -918,6 +940,214 @@ export function KloudMeetToolbar({
     onViewChange('liveDoc');
   };
 
+  const handleWebcamLayoutSelect = (layout: 'tile' | 'spotlight') => {
+    if (!canSwitchViews) return;
+    setWebcamLayoutMode(layout);
+    onViewChange('webcam');
+    closeViewModeMenu();
+  };
+
+  const viewModeButtonLabel =
+    screenShareActive
+      ? t('toolbar.shareScreen')
+      : activeView === 'liveDoc'
+        ? t('toolbar.liveDoc')
+        : activeView === 'webcam'
+          ? t('toolbar.webcam')
+          : t('toolbar.shareScreen');
+
+  const viewModeButtonIcon =
+    screenShareActive || activeView === 'shareScreen' ? (
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
+        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+    ) : activeView === 'liveDoc' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ) : activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <rect x="3" y="5" width="12" height="14" rx="1.5" />
+        <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
+        <rect x="17" y="10.25" width="4" height="3.5" rx="0.5" />
+        <rect x="17" y="15.5" width="4" height="3.5" rx="0.5" />
+      </svg>
+    ) : (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <rect x="3" y="3" width="8" height="8" rx="1" />
+        <rect x="13" y="3" width="8" height="8" rx="1" />
+        <rect x="3" y="13" width="8" height="8" rx="1" />
+        <rect x="13" y="13" width="8" height="8" rx="1" />
+      </svg>
+    );
+
+  const renderViewModeMenu = () => (
+    <div className={styles.viewModeMenu} role="menu">
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={activeView === 'liveDoc'}
+        className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        onClick={() => {
+          if (!canSwitchViews) return;
+          handleLiveDocTabClick();
+          closeViewModeMenu();
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDocView')}</span>
+        {activeView === 'liveDoc' && (
+          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={activeView === 'webcam' && webcamLayoutMode === 'tile'}
+        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'tile' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        onClick={() => handleWebcamLayoutSelect('tile')}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <rect x="3" y="3" width="8" height="8" rx="1" />
+          <rect x="13" y="3" width="8" height="8" rx="1" />
+          <rect x="3" y="13" width="8" height="8" rx="1" />
+          <rect x="13" y="13" width="8" height="8" rx="1" />
+        </svg>
+        <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcamTile')}</span>
+        {activeView === 'webcam' && webcamLayoutMode === 'tile' && (
+          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={activeView === 'webcam' && webcamLayoutMode === 'spotlight'}
+        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        onClick={() => handleWebcamLayoutSelect('spotlight')}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <rect x="3" y="5" width="12" height="14" rx="1.5" />
+          <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
+          <rect x="17" y="10.25" width="4" height="3.5" rx="0.5" />
+          <rect x="17" y="15.5" width="4" height="3.5" rx="0.5" />
+        </svg>
+        <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcamSpotlight')}</span>
+        {activeView === 'webcam' && webcamLayoutMode === 'spotlight' && (
+          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      {screenShareActive ? (
+        <div
+          className={`${styles.viewModeMenuItem} ${styles.viewModeShareActiveRow}`}
+          role="menuitem"
+          aria-label={`${t('toolbar.shareScreen')}, ${t('toolbar.sharing')}`}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+            <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span className={styles.viewModeMenuItemText}>
+            <span className={styles.viewModeMenuItemLabel}>{t('toolbar.shareScreen')}</span>
+            <span className={styles.viewModeMenuItemSub}>{t('toolbar.sharing')}</span>
+          </span>
+          <button
+            type="button"
+            className={styles.viewModeShareStopBtn}
+            onClick={() => {
+              handleShareScreenClick();
+              closeViewModeMenu();
+            }}
+          >
+            {t('toolbar.stop')}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          role="menuitemradio"
+          aria-checked={activeView === 'shareScreen'}
+          className={`${styles.viewModeMenuItem} ${activeView === 'shareScreen' ? styles.viewModeMenuItemActive : ''} ${hasScreenShare ? styles.viewModeMenuItemWarnRow : ''}`}
+          onClick={() => {
+            handleShareScreenClick();
+            closeViewModeMenu();
+          }}
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={hasScreenShare ? '#fb923c' : 'currentColor'}
+            strokeWidth="1.5"
+            aria-hidden="true"
+          >
+            <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+          <span
+            className={`${styles.viewModeMenuItemText} ${hasScreenShare ? styles.viewModeMenuItemWarn : ''}`}
+          >
+            <span className={styles.viewModeMenuItemLabel}>{t('toolbar.shareScreen')}</span>
+            <span className={styles.viewModeMenuItemSub}>
+              {hasScreenShare ? t('toolbar.shareConflictTitle') : t('toolbar.startSharing')}
+            </span>
+          </span>
+        </button>
+      )}
+    </div>
+  );
+
+  const renderViewModeControl = (variant: 'mobile' | 'desktop') => {
+    if (!canShowOperatorMenus) return null;
+    const isDesktopVariant = variant === 'desktop';
+    return (
+      <div
+        className={`${styles.viewModeBtnWrap} ${isDesktopVariant ? styles.viewModeBtnWrapDesktop : ''}`}
+        data-view-mode-menu-anchor="true"
+      >
+        <button
+          type="button"
+          className={
+            isDesktopVariant
+              ? `${styles.tabBtn} ${styles.viewModeTabBtn} ${styles.tabBtnActive}`
+              : `${styles.mobileBtn} ${styles.active}`
+          }
+          onClick={() => {
+            closeInviteMenu();
+            setActiveSheet(null);
+            setViewModeMenuOpen((prev) => !prev);
+          }}
+          aria-label={viewModeButtonLabel}
+          aria-expanded={viewModeMenuOpen}
+          aria-haspopup="menu"
+          title={viewModeButtonLabel}
+        >
+          {viewModeButtonIcon}
+          {isDesktopVariant ? viewModeButtonLabel : null}
+          <span className={styles.viewModeMenuBadge} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+          </span>
+        </button>
+        {viewModeMenuOpen && renderViewModeMenu()}
+      </div>
+    );
+  };
+
   /** LiveDoc AI：仅 LiveDoc 模式 + host/co-host/presenter 显示 */
   const renderLiveDocSettingsButton = (variant: 'desktop' | 'mobile') => {
     if (!canShowOperatorMenus || activeView !== 'liveDoc' || !liveDocPluginLoaded) {
@@ -1107,135 +1337,8 @@ export function KloudMeetToolbar({
               )}
             </div>
 
-            {/* 3. 视图模式（活文档 / Webcam / 屏幕共享合并）— 仅 host / co-host / presenter */}
-            {canShowOperatorMenus && (
-              <div className={styles.viewModeBtnWrap} data-view-mode-menu-anchor="true">
-                <button
-                  type="button"
-                  className={`${styles.mobileBtn} ${styles.active}`}
-                  onClick={() => {
-                    closeInviteMenu();
-                    setActiveSheet(null);
-                    setViewModeMenuOpen((prev) => !prev);
-                  }}
-                  aria-label={
-                    activeView === 'liveDoc'
-                      ? t('toolbar.liveDoc')
-                      : activeView === 'webcam'
-                        ? t('toolbar.webcam')
-                        : t('toolbar.shareScreen')
-                  }
-                  aria-expanded={viewModeMenuOpen}
-                  aria-haspopup="menu"
-                  title={
-                    activeView === 'liveDoc'
-                      ? t('toolbar.liveDoc')
-                      : activeView === 'webcam'
-                        ? t('toolbar.webcam')
-                        : t('toolbar.shareScreen')
-                  }
-                >
-                  {activeView === 'liveDoc' ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  ) : activeView === 'webcam' ? (
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                    </svg>
-                  ) : (
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
-                      strokeWidth="1.5"
-                    >
-                      <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                  )}
-                  <span className={styles.viewModeMenuBadge} aria-hidden="true">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
-                      <path d="M18 15l-6-6-6 6" />
-                    </svg>
-                  </span>
-                </button>
-                {viewModeMenuOpen && (
-                  <div className={styles.viewModeMenu} role="menu">
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeView === 'liveDoc'}
-                      className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
-                      onClick={() => {
-                        if (!canSwitchViews) return;
-                        handleLiveDocTabClick();
-                        closeViewModeMenu();
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDoc')}</span>
-                      {activeView === 'liveDoc' && (
-                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeView === 'webcam'}
-                      className={`${styles.viewModeMenuItem} ${activeView === 'webcam' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
-                      onClick={() => {
-                        if (!canSwitchViews) return;
-                        onViewChange('webcam');
-                        closeViewModeMenu();
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcam')}</span>
-                      {activeView === 'webcam' && (
-                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={activeView === 'shareScreen' || screenShareActive}
-                      className={`${styles.viewModeMenuItem} ${activeView === 'shareScreen' || screenShareActive ? styles.viewModeMenuItemActive : ''}`}
-                      onClick={() => {
-                        handleShareScreenClick();
-                        closeViewModeMenu();
-                      }}
-                    >
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
-                        strokeWidth="1.5"
-                      >
-                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                      </svg>
-                      <span
-                        className={`${styles.viewModeMenuItemLabel} ${hasScreenShare && !screenShareActive ? styles.viewModeMenuItemWarn : ''}`}
-                      >
-                        {t('toolbar.shareScreen')}
-                      </span>
-                      {(activeView === 'shareScreen' || screenShareActive) && (
-                        <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            {/* 3. 视图模式（活文档 / Webcam Tile·Spotlight / 屏幕共享合并）— 仅 host / co-host / presenter */}
+            {renderViewModeControl('mobile')}
 
             {/* 4. Screen Share — 非操作者仍单独显示 */}
             {!canShowOperatorMenus && (
@@ -1347,68 +1450,49 @@ export function KloudMeetToolbar({
             <div className={styles.centerTabs}>
               {canSwitchViews && (
                 <>
-                  {canShowOperatorMenus && (
-                    <button
-                      className={`${styles.tabBtn} ${activeView === 'liveDoc' ? styles.tabBtnActive : ''}`}
-                      onClick={handleLiveDocTabClick}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      {t('toolbar.liveDoc')}
-                    </button>
-                  )}
+                  {/* 视图模式合并：LiveDoc / Webcam Tile·Spotlight / Screen Share */}
+                  {renderViewModeControl('desktop')}
 
-                  {canShowOperatorMenus && (
+                  {/* 非操作者仍单独显示屏幕共享 */}
+                  {!canShowOperatorMenus && (
                     <button
-                      className={`${styles.tabBtn} ${activeView === 'webcam' ? styles.tabBtnActive : ''}`}
-                      onClick={() => onViewChange('webcam')}
+                      className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
+                      onClick={handleShareScreenClick}
+                      title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
+                      style={{ position: 'relative' }}
                     >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                      {t('toolbar.webcam')}
-                    </button>
-                  )}
-
-                  <button
-                    className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
-                    onClick={handleShareScreenClick}
-                    title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
-                    style={{ position: 'relative' }}
-                  >
-                    {/* Amber "live" pulse dot: another participant is sharing */}
-                    {hasScreenShare && !screenShareActive && (
-                      <span style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        width: '8px',
-                        height: '8px',
-                        borderRadius: '50%',
-                        background: '#f97316',
-                        boxShadow: '0 0 0 0 rgba(249,115,22,0.5)',
-                        animation: 'shareConflictPing 1.4s ease infinite',
-                        pointerEvents: 'none',
-                      }} />
-                    )}
-                    <style>{`
+                      {hasScreenShare && !screenShareActive && (
+                        <span style={{
+                          position: 'absolute',
+                          top: '4px',
+                          right: '4px',
+                          width: '8px',
+                          height: '8px',
+                          borderRadius: '50%',
+                          background: '#f97316',
+                          boxShadow: '0 0 0 0 rgba(249,115,22,0.5)',
+                          animation: 'shareConflictPing 1.4s ease infinite',
+                          pointerEvents: 'none',
+                        }} />
+                      )}
+                      <style>{`
                       @keyframes shareConflictPing {
                         0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
                         60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
                         100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
                       }
                     `}</style>
-                    <svg viewBox="0 0 24 24" fill="none"
-                      stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
-                      strokeWidth="1.5"
-                    >
-                      <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                    </svg>
-                    <span style={hasScreenShare && !screenShareActive ? { color: '#fb923c' } : undefined}>
-                      {t('toolbar.shareScreen')}
-                    </span>
-                  </button>
+                      <svg viewBox="0 0 24 24" fill="none"
+                        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+                        strokeWidth="1.5"
+                      >
+                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      </svg>
+                      <span style={hasScreenShare && !screenShareActive ? { color: '#fb923c' } : undefined}>
+                        {t('toolbar.shareScreen')}
+                      </span>
+                    </button>
+                  )}
 
                   {/* LiveDoc 设置：仅 LiveDoc 模式，与 iframe 右上角同功能 */}
                   {renderLiveDocSettingsButton('desktop')}
@@ -1520,7 +1604,7 @@ export function KloudMeetToolbar({
                 {t('toolbar.more')}
               </button>
 
-              {isRecording && (
+              {canRecord && isRecording && (
                 <button ref={recordMenuBtnRef} type="button" className={`${styles.tabBtn} ${activeSheet === 'recording' ? styles.tabBtnActive : ''}`} style={{ color: '#ef4444' }} onClick={() => openSheet('recording')}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                     <circle cx="12" cy="12" r="6" fill="#ef4444" stroke="none" />
@@ -1579,6 +1663,7 @@ export function KloudMeetToolbar({
                 onEndForAll={onEndForAll}
                 isDesktop={isDesktop}
                 canEndForAll={canEndForAll}
+                canRecord={canRecord}
                 isRecording={isRecording}
                 onOpenRecordPopup={onOpenRecordPopup}
                 onStopRecording={onStopRecording}
@@ -1628,6 +1713,7 @@ export function KloudMeetToolbar({
               onEndForAll={onEndForAll}
               isDesktop={isDesktop}
               canEndForAll={canEndForAll}
+              canRecord={canRecord}
               isRecording={isRecording}
               onOpenRecordPopup={onOpenRecordPopup}
               onStopRecording={onStopRecording}
@@ -1743,6 +1829,7 @@ export function KloudMeetToolbar({
                       onEndForAll={onEndForAll}
                       isDesktop={isDesktop}
                       canEndForAll={canEndForAll}
+                      canRecord={canRecord}
                       isRecording={isRecording}
                       onOpenRecordPopup={onOpenRecordPopup}
                       onStopRecording={onStopRecording}
@@ -1852,33 +1939,35 @@ export function KloudMeetToolbar({
             </svg>
           </button>
 
-          {/* Recording button */}
-          <button
-            type="button"
-            className={`${styles.mobileTopBtn} ${isRecording ? styles.mobileTopBtnRecording : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (isRecording) {
-                openSheet('recording');
-              } else {
-                onOpenRecordPopup?.();
-              }
-            }}
-            aria-label={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
-            title={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
-          >
-            {isRecording ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="5" fill="#fff" stroke="none" />
-                <circle cx="12" cy="12" r="9" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <circle cx="12" cy="12" r="5" />
-                <circle cx="12" cy="12" r="9" />
-              </svg>
-            )}
-          </button>
+          {/* Recording button — host/co-host only */}
+          {canRecord && (
+            <button
+              type="button"
+              className={`${styles.mobileTopBtn} ${isRecording ? styles.mobileTopBtnRecording : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isRecording) {
+                  openSheet('recording');
+                } else {
+                  onOpenRecordPopup?.();
+                }
+              }}
+              aria-label={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
+              title={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
+            >
+              {isRecording ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="5" fill="#fff" stroke="none" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="5" />
+                  <circle cx="12" cy="12" r="9" />
+                </svg>
+              )}
+            </button>
+          )}
 
           {/* Exit button */}
           <button
@@ -1929,6 +2018,7 @@ function ActiveSheetContent({
   onEndForAll,
   isDesktop,
   canEndForAll,
+  canRecord = false,
   isRecording,
   onOpenRecordPopup,
   onStopRecording,
@@ -2116,7 +2206,7 @@ function ActiveSheetContent({
               {t('toolbar.aiPresent')}
             </button>
           )}
-          {!isRecording && (
+          {canRecord && !isRecording && (
             <button className={`${styles.actionSheetItem} ${isRecording ? styles.active : ''}`} onClick={() => { onOpenRecordPopup?.(); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
               {isRecording ? t('toolbar.stopRecording') : t('toolbar.record')}
@@ -2278,7 +2368,7 @@ function ActiveSheetContent({
         </>
       )}
 
-      {activeSheet === 'recording' && (
+      {canRecord && activeSheet === 'recording' && (
         <>
           <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.pauseRecording')); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
