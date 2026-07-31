@@ -207,6 +207,8 @@
   "toolbar.liveDoc": "ライブドキュメント",
   "toolbar.liveDocView": "LiveDoc ビュー",
   "toolbar.liveDocMenu": "LiveDoc AI",
+  "toolbar.liveDocAiNoPermission": "LiveDoc AI を使用する権限がありません",
+  "toolbar.liveDocAiUnavailable": "LiveDoc の準備ができていません。しばらくしてから再試行してください。",
   "toolbar.liveDocPanelFile": "ドキュメント",
   "toolbar.liveDocPanelSummary": "要約",
   "toolbar.liveDocPanelTranscript": "文字起こし",

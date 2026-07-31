@@ -138,6 +138,9 @@ import {
   FLOATING_WEBCAM_BOTTOM_GAP,
   FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK,
   FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL,
+  FLOATING_WEBCAM_MOBILE_RIGHT_INSET_FALLBACK,
+  FLOATING_WEBCAM_MOBILE_TOP_RIGHT_GAP,
+  FLOATING_WEBCAM_MOBILE_Z_INDEX,
   FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN,
   FLOATING_WEBCAM_RIGHT_INSET,
   FLOATING_WEBCAM_TOP_INSET,
@@ -561,6 +564,14 @@ export function VideoConferenceComponent(props: {
   const unexpectedErrorRetryCountRef = React.useRef(0);
   const MAX_UNEXPECTED_RETRIES = 6;
 
+  const clearActiveKloudRoom = React.useCallback(() => {
+    try {
+      sessionStorage.removeItem('activeKloudRoom');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const refreshConnectionDetails = React.useCallback(async (): Promise<ConnectionDetails> => {
     const participantName =
       connectionDetailsRef.current.participantName || props.userChoices.username || 'Guest';
@@ -630,6 +641,7 @@ export function VideoConferenceComponent(props: {
 
     setMeetingClosedNotice(t('meeting.closedByHostToast'));
     setMeetingEndedByHost(true);
+    clearActiveKloudRoom();
     try {
       localStorage.removeItem('activeMeetingId');
       localStorage.removeItem('activeMeetingStartedAt');
@@ -647,7 +659,7 @@ export function VideoConferenceComponent(props: {
     hostEndedRedirectTimerRef.current = setTimeout(() => {
       router.push('/');
     }, 2200);
-  }, [room, router, t, props.meetingOwnerMemberId]);
+  }, [room, router, t, props.meetingOwnerMemberId, clearActiveKloudRoom]);
 
   /** Host/co-host 将本端移出会议 */
   const handleRemovedFromMeeting = React.useCallback(() => {
@@ -661,6 +673,7 @@ export function VideoConferenceComponent(props: {
     }
     setConnectError(null);
     setRemovedFromMeeting(true);
+    clearActiveKloudRoom();
     try {
       localStorage.removeItem('activeMeetingId');
       localStorage.removeItem('activeMeetingStartedAt');
@@ -675,7 +688,7 @@ export function VideoConferenceComponent(props: {
     setTimeout(() => {
       router.push('/');
     }, 2500);
-  }, [room, router]);
+  }, [room, router, clearActiveKloudRoom]);
 
   // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
   const computeBackoffMs = React.useCallback((attempt: number): number => {
@@ -713,6 +726,7 @@ export function VideoConferenceComponent(props: {
       if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
           reason === DisconnectReason.DUPLICATE_IDENTITY) {
         intentionalDisconnectRef.current = true;
+        clearActiveKloudRoom();
         try {
           localStorage.removeItem('activeMeetingId');
           localStorage.removeItem('activeMeetingStartedAt');
@@ -866,9 +880,13 @@ export function VideoConferenceComponent(props: {
 
                 if (props.userChoices.videoEnabled) {
                   room.localParticipant.setCameraEnabled(true).catch(handleError);
+                } else {
+                  room.localParticipant.setCameraEnabled(false).catch(handleError);
                 }
                 if (props.userChoices.audioEnabled) {
                   room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                } else {
+                  room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
                 }
 
                 // 同步 UA：hook 首帧可能仍为 false，移动端入会后首次 startAudio 不能漏
@@ -931,7 +949,7 @@ export function VideoConferenceComponent(props: {
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError]);
+  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -1374,6 +1392,21 @@ export function VideoConferenceComponent(props: {
     setTimeout(() => toastEl.remove(), 2800);
   }, [t]);
 
+  /** 把会中麦/摄像头开关写回 lk-user-choices，刷新后沿用 */
+  const persistLocalMediaEnabled = React.useCallback(
+    (partial: { audioEnabled?: boolean; videoEnabled?: boolean }) => {
+      try {
+        const key = 'lk-user-choices';
+        const raw = localStorage.getItem(key);
+        const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
+        localStorage.setItem(key, JSON.stringify({ ...base, ...partial }));
+      } catch {
+        /* ignore */
+      }
+    },
+    [],
+  );
+
   const handleToggleMic = React.useCallback(() => {
     if (!canUseRealtimeMediaControls) {
       showMediaUnavailableToast();
@@ -1386,12 +1419,20 @@ export function VideoConferenceComponent(props: {
       return;
     }
     setMicEnabled(next);
+    persistLocalMediaEnabled({ audioEnabled: next });
     try {
       Promise.resolve(room.localParticipant.setMicrophoneEnabled(next)).catch(handleError);
     } catch (error) {
       handleError(error as Error);
     }
-  }, [canUseRealtimeMediaControls, micEnabled, room, handleError, showMediaUnavailableToast]);
+  }, [
+    canUseRealtimeMediaControls,
+    micEnabled,
+    room,
+    handleError,
+    showMediaUnavailableToast,
+    persistLocalMediaEnabled,
+  ]);
 
   const handleToggleCam = React.useCallback(() => {
     if (!canUseRealtimeMediaControls) {
@@ -1405,12 +1446,20 @@ export function VideoConferenceComponent(props: {
       return;
     }
     setCamEnabled(next);
+    persistLocalMediaEnabled({ videoEnabled: next });
     try {
       Promise.resolve(room.localParticipant.setCameraEnabled(next)).catch(handleError);
     } catch (error) {
       handleError(error as Error);
     }
-  }, [canUseRealtimeMediaControls, camEnabled, room, handleError, showMediaUnavailableToast]);
+  }, [
+    canUseRealtimeMediaControls,
+    camEnabled,
+    room,
+    handleError,
+    showMediaUnavailableToast,
+    persistLocalMediaEnabled,
+  ]);
 
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
@@ -1455,9 +1504,10 @@ export function VideoConferenceComponent(props: {
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
     markIntentionalDisconnect();
+    clearActiveKloudRoom();
     room.disconnect();
     router.push('/');
-  }, [markIntentionalDisconnect, room, router]);
+  }, [markIntentionalDisconnect, clearActiveKloudRoom, room, router]);
 
   // ── Recording-aware exit phase ──
   // null = no overlay | 'saving' = spinner | 'saved' = success tick
@@ -1508,10 +1558,11 @@ export function VideoConferenceComponent(props: {
   const handleLeaveWithSave = React.useCallback(() => {
     stopRecordingAndThen(() => {
       markIntentionalDisconnect();
+      clearActiveKloudRoom();
       room.disconnect();
       router.push('/');
     });
-  }, [stopRecordingAndThen, markIntentionalDisconnect, room, router]);
+  }, [stopRecordingAndThen, markIntentionalDisconnect, clearActiveKloudRoom, room, router]);
 
   // ── Mute All / Unmute All ──
   // Track whether mute-all is active so the button can show the right state.
@@ -2011,6 +2062,7 @@ export function VideoConferenceComponent(props: {
 
       hostEndedHandledRef.current = true;
       markIntentionalDisconnect();
+      clearActiveKloudRoom();
       sendMeetingMsg({ type: 'END_MEETING' });
 
       if (isOwner && rn) {
@@ -2030,6 +2082,7 @@ export function VideoConferenceComponent(props: {
     });
   }, [
     markIntentionalDisconnect,
+    clearActiveKloudRoom,
     props.meetingOwnerMemberId,
     room,
     router,
@@ -3220,26 +3273,75 @@ export function VideoConferenceComponent(props: {
   const [floatingPosLayout, setFloatingPosLayout] = React.useState<'right-inset' | 'coordinates'>(
     'right-inset',
   );
-  const [floatingExpanded, setFloatingExpanded] = React.useState(true);
+  const [floatingExpanded, setFloatingExpanded] = React.useState(false);
   const [floatingCollapsedPreviewId, setFloatingCollapsedPreviewId] = React.useState<string | null>(null);
   const [isFloatingDragging, setIsFloatingDragging] = React.useState(false);
+  const [mobileTopRightInset, setMobileTopRightInset] = React.useState(
+    FLOATING_WEBCAM_MOBILE_RIGHT_INSET_FALLBACK,
+  );
   const dragOffset = React.useRef({ x: 0, y: 0 });
   const floatingPosRef = React.useRef(floatingPos);
   const floatingPosLayoutRef = React.useRef(floatingPosLayout);
+  const isToolbarMobileRef = React.useRef(isToolbarMobile);
+  isToolbarMobileRef.current = isToolbarMobile;
   // LiveDoc 文件/菜单面板已是居中弹窗，不再按面板显隐或宽度挪动 floating-webcam-panel
-  const floatingRightInset =
-    activeView === 'liveDoc' && !hasScreenShare
+  const floatingRightInset = isToolbarMobile
+    ? mobileTopRightInset
+    : activeView === 'liveDoc' && !hasScreenShare
       ? FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
       : FLOATING_WEBCAM_RIGHT_INSET;
   const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
   /** 共享方 LiveDoc / 纯 LiveDoc / 非共享方且左侧栏已折叠时显示浮窗 */
-  const shouldShowFloatingWebcamPanel =
+  const floatingWebcamPanelBaseVisible =
     !isRecorderBot &&
     activeView !== 'webcam' &&
     !showWebcamSidebar &&
     (screenShareActive ||
       (activeView === 'liveDoc' && !hasScreenShare) ||
       (hasScreenShare && !screenShareActive && isWebcamSidebarCollapsed));
+  // Web · LiveDoc 屏幕共享中（观看方 activeView 会切到 shareScreen，不能只判断 liveDoc）：
+  // 1) 正在共享的本人（任意身份）不显示浮窗
+  // 2) 非 host/co-host 不显示浮窗
+  // 结束共享后恢复原逻辑（移动端不改）
+  const inLiveDocScreenShareContext =
+    activeView === 'liveDoc' ||
+    (activeView === 'shareScreen' &&
+      (livedocHasBeenActivated || Boolean(livedocInstanceId)));
+  const hideFloatingDuringLiveDocShare =
+    !isToolbarMobile &&
+    hasScreenShare &&
+    inLiveDocScreenShareContext &&
+    (isLocalScreenShare || screenShareActive || (!isHost && !isCohost));
+  const shouldShowFloatingWebcamPanel =
+    floatingWebcamPanelBaseVisible && !hideFloatingDuringLiveDocShare;
+
+  // 移动端：默认贴在 mobileTopRightBtn 左侧，避免与邀请/聊天/退出按钮重合
+  React.useLayoutEffect(() => {
+    if (!isToolbarMobile || !shouldShowFloatingWebcamPanel) return;
+
+    const measure = () => {
+      const el = document.getElementById('mobileTopRightBtn');
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      // CSS right = 视口右缘到按钮组左缘的距离 + 间距 → 浮窗落在按钮左侧
+      const inset = Math.ceil(
+        window.innerWidth - rect.left + FLOATING_WEBCAM_MOBILE_TOP_RIGHT_GAP,
+      );
+      if (inset > FLOATING_WEBCAM_MOBILE_TOP_RIGHT_GAP) {
+        setMobileTopRightInset(inset);
+      }
+    };
+
+    measure();
+    const el = document.getElementById('mobileTopRightBtn');
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (el && ro) ro.observe(el);
+    window.addEventListener('resize', measure);
+    return () => {
+      ro?.disconnect();
+      window.removeEventListener('resize', measure);
+    };
+  }, [isToolbarMobile, shouldShowFloatingWebcamPanel]);
 
   const floatingMediaRestrictions = React.useMemo<KloudTileMediaRestrictionProps>(
     () => ({
@@ -3343,10 +3445,21 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
-  const getFloatingBottomInset = React.useCallback((parent: HTMLElement) => {
+  const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
     if (!toolbar) {
       return FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK + FLOATING_WEBCAM_BOTTOM_GAP;
+    }
+    if (!parent) {
+      const toolbarRect = toolbar.getBoundingClientRect();
+      if (toolbarRect.top >= window.innerHeight - 2) {
+        return FLOATING_WEBCAM_BOTTOM_GAP;
+      }
+      const overlap = window.innerHeight - toolbarRect.top;
+      if (overlap <= 0) {
+        return FLOATING_WEBCAM_BOTTOM_GAP;
+      }
+      return Math.max(FLOATING_WEBCAM_BOTTOM_GAP, overlap + FLOATING_WEBCAM_BOTTOM_GAP);
     }
     const parentRect = parent.getBoundingClientRect();
     const toolbarRect = toolbar.getBoundingClientRect();
@@ -3364,8 +3477,28 @@ export function VideoConferenceComponent(props: {
   const clampFloatingPosition = React.useCallback(
     (x: number, y: number) => {
       const el = floatingRef.current;
-      const parent = el?.offsetParent as HTMLElement | null;
-      if (!el || !parent) return { x, y };
+      if (!el) return { x, y };
+
+      // 移动端 fixed：相对视口钳制
+      if (isToolbarMobile) {
+        const effectiveMinY = FLOATING_WEBCAM_TOP_INSET;
+        const maxX = Math.max(
+          0,
+          window.innerWidth - el.offsetWidth - floatingRightBoundaryInset,
+        );
+        const bottomInset = getFloatingBottomInset(null);
+        const maxY = Math.max(
+          effectiveMinY,
+          window.innerHeight - el.offsetHeight - bottomInset,
+        );
+        return {
+          x: Math.min(Math.max(0, x), maxX),
+          y: Math.min(Math.max(effectiveMinY, y), maxY),
+        };
+      }
+
+      const parent = el.offsetParent as HTMLElement | null;
+      if (!parent) return { x, y };
 
       const minY = activeView === 'liveDoc' && !hasScreenShare ? FLOATING_WEBCAM_TOP_INSET : 0;
       const maxX = Math.max(0, parent.clientWidth - el.offsetWidth - floatingRightBoundaryInset);
@@ -3376,7 +3509,13 @@ export function VideoConferenceComponent(props: {
         y: Math.min(Math.max(minY, y), maxY),
       };
     },
-    [activeView, floatingRightBoundaryInset, getFloatingBottomInset, hasScreenShare],
+    [
+      activeView,
+      floatingRightBoundaryInset,
+      getFloatingBottomInset,
+      hasScreenShare,
+      isToolbarMobile,
+    ],
   );
 
   const clampFloatingPositionRef = React.useRef(clampFloatingPosition);
@@ -3404,7 +3543,7 @@ export function VideoConferenceComponent(props: {
     restoreLiveDocIframePointerEvents();
   }, [restoreLiveDocIframePointerEvents]);
 
-  /** 仅真正控件忽略拖拽；头像允许「按住拖动 / 轻点预览」 */
+  /** 仅真正控件忽略拖拽；头像允许「按住拖动 / 悬停预览」 */
   const shouldIgnoreFloatingDragTarget = (target: Element) =>
     Boolean(
       target.closest('.kloud-custom-mic-indicator') ||
@@ -3414,48 +3553,10 @@ export function VideoConferenceComponent(props: {
         target.closest('button'),
     );
 
-  const handleCollapsedAvatarClick = React.useCallback((participantId: string) => {
-    setFloatingCollapsedPreviewId((prev) => (prev === participantId ? null : participantId));
+  const handleCollapsedAvatarHover = React.useCallback((participantId: string) => {
+    if (isDragging.current) return;
+    setFloatingCollapsedPreviewId(participantId);
   }, []);
-
-  const shouldKeepFloatingCollapsedPreview = React.useCallback((target: EventTarget | null) => {
-    if (!(target instanceof Element)) return false;
-    return Boolean(
-      target.closest('.floating-stacked-avatars') ||
-        target.closest('.floating-collapsed-preview') ||
-        target.closest('.floating-chevron-btn'),
-    );
-  }, []);
-
-  // 收起态预览：点击空白处关闭（pointerdown capture + LiveDoc iframe 点击消息）
-  React.useEffect(() => {
-    if (!floatingCollapsedPreviewId || floatingExpanded) return;
-
-    const close = () => setFloatingCollapsedPreviewId(null);
-
-    const onOutsidePointerDown = (e: PointerEvent) => {
-      if (shouldKeepFloatingCollapsedPreview(e.target)) return;
-      close();
-    };
-
-    const onLiveDocClick = (e: MessageEvent) => {
-      const payload = e.data;
-      const msgType =
-        typeof payload === 'object' && payload !== null && 'type' in payload
-          ? String((payload as { type?: unknown }).type ?? '')
-          : '';
-      if (msgType === 'Kloud-onMouseClick') {
-        close();
-      }
-    };
-
-    document.addEventListener('pointerdown', onOutsidePointerDown, true);
-    window.addEventListener('message', onLiveDocClick);
-    return () => {
-      document.removeEventListener('pointerdown', onOutsidePointerDown, true);
-      window.removeEventListener('message', onLiveDocClick);
-    };
-  }, [floatingCollapsedPreviewId, floatingExpanded, shouldKeepFloatingCollapsedPreview]);
 
   React.useEffect(() => {
     if (!floatingCollapsedPreviewId) return;
@@ -3466,7 +3567,6 @@ export function VideoConferenceComponent(props: {
   }, [room.remoteParticipants, floatingCollapsedPreviewId]);
 
   const FLOATING_DRAG_THRESHOLD_PX = 8;
-  const suppressFloatingAvatarClickRef = React.useRef(false);
   const floatingDragCleanupRef = React.useRef<(() => void) | null>(null);
 
   const clearFloatingDragListeners = React.useCallback(() => {
@@ -3533,6 +3633,12 @@ export function VideoConferenceComponent(props: {
       };
 
       const clientToParentPos = (clientX: number, clientY: number) => {
+        if (isToolbarMobileRef.current) {
+          return {
+            x: clientX - dragOffset.current.x,
+            y: clientY - dragOffset.current.y,
+          };
+        }
         const parent = panelEl.offsetParent as HTMLElement | null;
         if (!parent) {
           return {
@@ -3556,23 +3662,44 @@ export function VideoConferenceComponent(props: {
         // 关键：拖拽期间禁用 LiveDoc iframe 命中，否则手指一进文档区父页就收不到 move/up
         setLiveDocIframePointerEventsEnabled(false);
 
+        const useViewport = isToolbarMobileRef.current;
         const parent = panelEl.offsetParent as HTMLElement | null;
-        if (floatingPosLayoutRef.current === 'right-inset' && parent) {
+        if (floatingPosLayoutRef.current === 'right-inset') {
           const rect = panelEl.getBoundingClientRect();
-          const pRect = parent.getBoundingClientRect();
-          const x = rect.left - pRect.left;
-          const y = rect.top - pRect.top;
-          const clamped = clampFloatingPositionRef.current(x, y);
-          floatingPosRef.current = clamped;
-          setFloatingPosLayout('coordinates');
-          setFloatingPos(clamped);
+          if (useViewport || !parent) {
+            const x = rect.left;
+            const y = rect.top;
+            const clamped = clampFloatingPositionRef.current(x, y);
+            floatingPosRef.current = clamped;
+            setFloatingPosLayout('coordinates');
+            setFloatingPos(clamped);
+            setIsFloatingDragging(true);
+            applyDomPosition(clamped.x, clamped.y);
+            dragOffset.current = {
+              x: clientX - clamped.x,
+              y: clientY - clamped.y,
+            };
+          } else {
+            const pRect = parent.getBoundingClientRect();
+            const x = rect.left - pRect.left;
+            const y = rect.top - pRect.top;
+            const clamped = clampFloatingPositionRef.current(x, y);
+            floatingPosRef.current = clamped;
+            setFloatingPosLayout('coordinates');
+            setFloatingPos(clamped);
+            setIsFloatingDragging(true);
+            applyDomPosition(clamped.x, clamped.y);
+            dragOffset.current = {
+              x: clientX - pRect.left - clamped.x,
+              y: clientY - pRect.top - clamped.y,
+            };
+          }
+        } else if (useViewport || !parent) {
+          const p = floatingPosRef.current;
+          dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
           setIsFloatingDragging(true);
-          applyDomPosition(clamped.x, clamped.y);
-          dragOffset.current = {
-            x: clientX - pRect.left - clamped.x,
-            y: clientY - pRect.top - clamped.y,
-          };
-        } else if (parent) {
+          applyDomPosition(p.x, p.y);
+        } else {
           const p = floatingPosRef.current;
           const pRect = parent.getBoundingClientRect();
           dragOffset.current = {
@@ -3581,10 +3708,6 @@ export function VideoConferenceComponent(props: {
           };
           setIsFloatingDragging(true);
           applyDomPosition(p.x, p.y);
-        } else {
-          const p = floatingPosRef.current;
-          dragOffset.current = { x: clientX - p.x, y: clientY - p.y };
-          setIsFloatingDragging(true);
         }
       };
 
@@ -3644,7 +3767,6 @@ export function VideoConferenceComponent(props: {
         window.removeEventListener('touchcancel', endGesture);
         restoreLiveDocIframePointerEvents();
         if (moved) {
-          suppressFloatingAvatarClickRef.current = true;
           const committed = clampFloatingPositionRef.current(latestPos.x, latestPos.y);
           floatingPosRef.current = committed;
           setFloatingPos(committed);
@@ -4441,6 +4563,7 @@ export function VideoConferenceComponent(props: {
                   onClick={() => {
                     // Go back to dashboard
                     markIntentionalDisconnect();
+                    clearActiveKloudRoom();
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
@@ -4509,9 +4632,13 @@ export function VideoConferenceComponent(props: {
                             } catch (_) { /* proceed with whatever defaults exist */ }
                             if (props.userChoices.videoEnabled) {
                               room.localParticipant.setCameraEnabled(true).catch(handleError);
+                            } else {
+                              room.localParticipant.setCameraEnabled(false).catch(handleError);
                             }
                             if (props.userChoices.audioEnabled) {
                               room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                            } else {
+                              room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
                             }
                             if (isToolbarMobileUserAgent()) {
                               void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
@@ -5303,13 +5430,22 @@ export function VideoConferenceComponent(props: {
                   className={`floating-webcam-panel ${floatingExpanded ? 'expanded' : ''}`}
                   onPointerDown={handleFloatingPointerDown}
                   style={{
-                    position: 'absolute',
-                    top: floatingPos.y,
+                    position: isToolbarMobile ? 'fixed' : 'absolute',
+                    top:
+                      isToolbarMobile && floatingPosLayout === 'right-inset'
+                        ? (`max(${floatingPos.y}px, env(safe-area-inset-top, 0px))` as React.CSSProperties['top'])
+                        : floatingPos.y,
                     ...(floatingPosLayout === 'right-inset'
                       ? { right: floatingRightInset, left: 'auto' as const }
                       : { left: floatingPos.x, right: 'auto' as const }),
-                    // 必须低于底栏(1001)，否则会盖住导航导致点击错位
-                    zIndex: isFloatingDragging ? 900 : 350,
+                    // 桌面须低于底栏(1001)；移动端须高于 mobileTopRightBtn(1002)
+                    zIndex: isToolbarMobile
+                      ? isFloatingDragging
+                        ? FLOATING_WEBCAM_MOBILE_Z_INDEX + 10
+                        : FLOATING_WEBCAM_MOBILE_Z_INDEX
+                      : isFloatingDragging
+                        ? 900
+                        : 350,
                     cursor: isFloatingDragging ? 'grabbing' : 'grab',
                     userSelect: 'none',
                     touchAction: 'none',
@@ -5319,7 +5455,10 @@ export function VideoConferenceComponent(props: {
                   }}
                 >
                   {!floatingExpanded && (
-                    <>
+                    <div
+                      className="floating-collapsed-hover-zone"
+                      onMouseLeave={() => setFloatingCollapsedPreviewId(null)}
+                    >
                     <div className="floating-collapsed-row">
                       <div className="floating-stacked-avatars">
                         {allParticipants.slice(0, maxVisible).map((p, i) => {
@@ -5335,16 +5474,7 @@ export function VideoConferenceComponent(props: {
                                 className={`floating-avatar${isPreviewSelected ? ' selected' : ''}`}
                                 title={p.name}
                                 style={{ zIndex: maxVisible - i }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (suppressFloatingAvatarClickRef.current) {
-                                    suppressFloatingAvatarClickRef.current = false;
-                                    return;
-                                  }
-                                  handleCollapsedAvatarClick(p.id);
-                                }}
-                                role="button"
-                                tabIndex={0}
+                                onMouseEnter={() => handleCollapsedAvatarHover(p.id)}
                               >
                                 {getInitials(p.name || p.id || '?')}
                               </div>
@@ -5357,14 +5487,7 @@ export function VideoConferenceComponent(props: {
                               name={p.name}
                               style={{ zIndex: maxVisible - i }}
                               selected={isPreviewSelected}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (suppressFloatingAvatarClickRef.current) {
-                                  suppressFloatingAvatarClickRef.current = false;
-                                  return;
-                                }
-                                handleCollapsedAvatarClick(p.id);
-                              }}
+                              onMouseEnter={() => handleCollapsedAvatarHover(p.id)}
                             />
                           );
                         })}
@@ -5419,7 +5542,7 @@ export function VideoConferenceComponent(props: {
                         </div>
                       );
                     })()}
-                    </>
+                    </div>
                   )}
                   {floatingExpanded &&
                     (() => {
@@ -5986,6 +6109,10 @@ export function VideoConferenceComponent(props: {
                gap: 0 !important;
                flex-direction: row !important;
             }
+            /* 折叠头像说话边框：白环对比蓝色背景，避免与默认 accent 蓝融在一起 */
+            .floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"])::after {
+               border-color: #ffffff;
+            }
             .floating-avatar-shell .floating-avatar {
                border: none !important;
                width: 100%;
@@ -6233,14 +6360,25 @@ export function VideoConferenceComponent(props: {
                backdrop-filter: none;
             }
             /*
-             * 浮窗列表 mic/cam（左侧图标区）：
-             * - 自己：始终显示
-             * - 他人开麦/开摄像头：始终显示
-             * - 他人关麦/关摄像头：默认隐藏，悬停头像再显示
-             * - 主持禁音 / 全员静音强制态：始终显示（红标）
+             * 浮窗 mic/cam：
+             * - 大画面（hero）：始终显示
+             * - 右侧小头像（compact）：默认隐藏，悬停放大时再显示
              */
-            .floating-webcam-panel .floating-grid-tile .kloud-custom-mic-indicator[data-kloud-muted="true"]:not(.self-interactive):not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]):not(.kloud-custom-mic--force-muted),
-            .floating-webcam-panel .floating-grid-tile .kloud-custom-cam-indicator[data-kloud-video-disabled="true"]:not(.self-interactive):not([data-kloud-host-restricted="true"]):not(.kloud-custom-cam--force-disabled) {
+            .floating-webcam-panel .floating-grid-tile--hero .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-grid-tile--hero .kloud-custom-cam-indicator {
+              opacity: 1 !important;
+              width: 20px !important;
+              min-width: 20px !important;
+              height: 20px !important;
+              min-height: 20px !important;
+              padding: 3px !important;
+              overflow: visible;
+              pointer-events: auto;
+            }
+            .floating-webcam-panel .floating-grid-tile--compact .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-grid-tile--compact .kloud-custom-cam-indicator,
+            .floating-webcam-panel .floating-compact-slot .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-compact-slot .kloud-custom-cam-indicator {
               opacity: 0;
               width: 0 !important;
               min-width: 0 !important;
@@ -6252,10 +6390,10 @@ export function VideoConferenceComponent(props: {
               pointer-events: none;
               transition: opacity 0.18s ease, width 0.18s ease, min-width 0.18s ease, height 0.18s ease;
             }
-            .floating-webcam-panel .floating-grid-tile--hero:hover .kloud-custom-mic-indicator,
-            .floating-webcam-panel .floating-grid-tile--hero:hover .kloud-custom-cam-indicator,
             .floating-webcam-panel .floating-compact-slot:hover .kloud-custom-mic-indicator,
-            .floating-webcam-panel .floating-compact-slot:hover .kloud-custom-cam-indicator {
+            .floating-webcam-panel .floating-compact-slot:hover .kloud-custom-cam-indicator,
+            .floating-webcam-panel .floating-grid-tile--compact:hover .kloud-custom-mic-indicator,
+            .floating-webcam-panel .floating-grid-tile--compact:hover .kloud-custom-cam-indicator {
               opacity: 1;
               width: 20px !important;
               min-width: 20px !important;

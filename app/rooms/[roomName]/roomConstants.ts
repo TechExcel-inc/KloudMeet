@@ -15,6 +15,12 @@ export const FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK = 64;
 /** @deprecated 使用运行时测量底栏；保留别名避免旧引用断裂 */
 export const FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET = FLOATING_WEBCAM_BOTTOM_TOOLBAR_FALLBACK;
 export const FLOATING_WEBCAM_TOP_INSET = 12;
+/** 移动端浮窗与右上角 mobileTopRightBtn 的间距 */
+export const FLOATING_WEBCAM_MOBILE_TOP_RIGHT_GAP = 8;
+/** 移动端未测到按钮时的 right 回退（约 3 个 44px 按钮 + gap + safe） */
+export const FLOATING_WEBCAM_MOBILE_RIGHT_INSET_FALLBACK = 176;
+/** 高于 mobileTopActions(1002)，低于部分全局弹层 */
+export const FLOATING_WEBCAM_MOBILE_Z_INDEX = 1003;
 
 /** 请求屏幕共享时的系统/标签页音频，浏览器才会在选取器中显示对应勾选项（支持情况因浏览器而异）。 */
 export const SCREEN_SHARE_CAPTURE: ScreenShareCaptureOptions = {

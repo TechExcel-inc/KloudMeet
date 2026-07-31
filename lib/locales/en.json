@@ -222,6 +222,8 @@
   "toolbar.liveDoc": "LiveDoc",
   "toolbar.liveDocView": "LiveDoc View",
   "toolbar.liveDocMenu": "LiveDoc AI",
+  "toolbar.liveDocAiNoPermission": "You don't have permission to use LiveDoc AI",
+  "toolbar.liveDocAiUnavailable": "LiveDoc is not ready yet. Please try again.",
   "toolbar.liveDocPanelFile": "Documents",
   "toolbar.liveDocPanelSummary": "Summary",
   "toolbar.liveDocPanelTranscript": "Transcript",

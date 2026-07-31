@@ -120,26 +120,36 @@ export function PageClientImpl(props: {
     try {
       const key = 'lk-user-choices';
       const raw = localStorage.getItem(key);
-      const base: Record<string, any> = raw ? JSON.parse(raw) : {};
+      const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
 
-      let username = base.username || '';
+      let username =
+        typeof base.username === 'string' ? base.username : '';
       const storedKloud = localStorage.getItem('kloudUser');
       if (storedKloud) {
-        const user = JSON.parse(storedKloud);
-        if (user && (user.displayName || user.username)) {
-          username = user.displayName || user.username;
+        const user = JSON.parse(storedKloud) as {
+          displayName?: unknown;
+          username?: unknown;
+        };
+        if (typeof user.displayName === 'string' && user.displayName) {
+          username = user.displayName;
+        } else if (typeof user.username === 'string' && user.username) {
+          username = user.username;
         }
       }
 
-      // Always reset to system defaults: clear deviceIds, ensure audio on
-      localStorage.setItem(key, JSON.stringify({
-        ...base,
-        username,
-        audioEnabled: true,
-        audioDeviceId: '',   // let browser pick system default
-        videoDeviceId: '',   // let browser pick system default
-      }));
-    } catch (_) { /* ignore */ }
+      // 保留上次麦/摄像头开关；仅清空 deviceId，让浏览器选系统默认设备
+      localStorage.setItem(
+        key,
+        JSON.stringify({
+          ...base,
+          username,
+          audioDeviceId: '',
+          videoDeviceId: '',
+        }),
+      );
+    } catch {
+      /* ignore */
+    }
     setPrejoinReady(true);
   }, []); // runs once on mount, before PreJoin reads localStorage
 
@@ -154,28 +164,38 @@ export function PageClientImpl(props: {
 
   const preJoinDefaults = React.useMemo(() => {
     let defaultUsername = '';
+    let videoEnabled = true;
+    let audioEnabled = true;
     if (typeof window !== 'undefined') {
       try {
         const storedKloud = localStorage.getItem('kloudUser');
         if (storedKloud) {
-          const user = JSON.parse(storedKloud);
-          if (user && (user.displayName || user.username)) {
-            defaultUsername = user.displayName || user.username;
-          }
-        } else {
-          const key = 'lk-user-choices';
-          const raw = localStorage.getItem(key);
-          const base: Record<string, any> = raw ? JSON.parse(raw) : {};
-          if (base.username) {
-            defaultUsername = base.username;
+          const user = JSON.parse(storedKloud) as {
+            displayName?: unknown;
+            username?: unknown;
+          };
+          if (typeof user.displayName === 'string' && user.displayName) {
+            defaultUsername = user.displayName;
+          } else if (typeof user.username === 'string' && user.username) {
+            defaultUsername = user.username;
           }
         }
-      } catch (_) { /* ignore */ }
+        const key = 'lk-user-choices';
+        const raw = localStorage.getItem(key);
+        const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
+        if (!defaultUsername && typeof base.username === 'string') {
+          defaultUsername = base.username;
+        }
+        if (typeof base.videoEnabled === 'boolean') videoEnabled = base.videoEnabled;
+        if (typeof base.audioEnabled === 'boolean') audioEnabled = base.audioEnabled;
+      } catch {
+        /* ignore */
+      }
     }
     return {
       username: defaultUsername,
-      videoEnabled: true,
-      audioEnabled: true,
+      videoEnabled,
+      audioEnabled,
       // Do NOT set audioDeviceId / videoDeviceId — let LiveKit pick system default
     };
   }, []);
@@ -350,7 +370,11 @@ export function PageClientImpl(props: {
               kloudUser = JSON.parse(stored);
               if (!cancelled) setCurrentUser(kloudUser as AuthUser);
             }
-            if (sessionStorage.getItem('activeKloudRoom') === routeRoomName) {
+            const activeRoom = sessionStorage.getItem('activeKloudRoom');
+            if (
+              activeRoom &&
+              activeRoom.toLowerCase() === routeRoomName.toLowerCase()
+            ) {
               if (!cancelled) setIsSameTabRefresh(true);
             }
           } catch {
@@ -463,6 +487,8 @@ export function PageClientImpl(props: {
   }, [hostPersonalRoomId, routeRoomName, effectiveRoomName, connectionDetails]);
 
   React.useEffect(() => {
+    // 同 tab 刷新重连：保持当前会场 URL，勿因个人房偏好切走
+    if (isSameTabRefresh) return;
     if (!hostPersonalRoomId || !isHost || connectionDetails) {
       return;
     }
@@ -525,6 +551,7 @@ export function PageClientImpl(props: {
       /* ignore */
     }
   }, [
+    isSameTabRefresh,
     hostPersonalRoomId,
     personalRoomUrlEnabled,
     isHost,
@@ -575,12 +602,22 @@ export function PageClientImpl(props: {
         /* ignore */
       }
 
-      const roomToJoin =
+      let roomToJoin =
         isMeetingCreator && personalRoomUrlEnabled && hostPersonalRoomId
           ? hostPersonalRoomId
           : !isMeetingCreator && resolvedLiveRoom
             ? resolvedLiveRoom
             : effectiveRoomName;
+
+      // 刷新重连：始终回到本 tab 上次已加入的会场
+      if (isSameTabRefresh && typeof window !== 'undefined') {
+        try {
+          const activeRoom = sessionStorage.getItem('activeKloudRoom');
+          if (activeRoom) roomToJoin = activeRoom;
+        } catch {
+          /* ignore */
+        }
+      }
 
       try {
         setPreJoinChoices(values);
@@ -632,12 +669,23 @@ export function PageClientImpl(props: {
           replaceBrowserRoomUrl(joinedRoomName);
           setEffectiveRoomName(joinedRoomName);
         }
-      } catch (error: any) {
-        console.error('Failed to get connection details:', error);
-        alert(`${t('prejoin.connectError', { error: error.message })}`);
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error('[PageClientImpl] Failed to get connection details:', error);
+        if (isSameTabRefresh) {
+          setIsSameTabRefresh(false);
+          setPreJoinChoices(undefined);
+          try {
+            sessionStorage.removeItem('activeKloudRoom');
+          } catch {
+            /* ignore */
+          }
+        }
+        alert(`${t('prejoin.connectError', { error: message })}`);
       }
     },
     [
+      isSameTabRefresh,
       isMeetingCreator,
       personalRoomUrlEnabled,
       hostPersonalRoomId,
@@ -681,12 +729,91 @@ export function PageClientImpl(props: {
     }
   }, [isBot, connectionDetails, preJoinChoices, handlePreJoinSubmit]);
 
+  const autoRejoinStartedRef = React.useRef(false);
+
+  // 同 tab 刷新：跳过准备页，用上次设备偏好直接入会
+  React.useEffect(() => {
+    if (!isSameTabRefresh || isBot) return;
+    if (!prejoinReady || !resolveReady || entryLoadError) return;
+    if (connectionDetails || preJoinChoices !== undefined) return;
+    if (personalRoomSwitching) return;
+    if (
+      (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
+      !meetingInfo?.isPersonalRoom
+    ) {
+      return;
+    }
+    if (autoRejoinStartedRef.current) return;
+    autoRejoinStartedRef.current = true;
+
+    let username = '';
+    let videoEnabled = true;
+    let audioEnabled = true;
+    try {
+      const raw = localStorage.getItem('lk-user-choices');
+      if (raw) {
+        const base = JSON.parse(raw) as {
+          username?: unknown;
+          videoEnabled?: unknown;
+          audioEnabled?: unknown;
+        };
+        if (typeof base.username === 'string') username = base.username;
+        if (typeof base.videoEnabled === 'boolean') videoEnabled = base.videoEnabled;
+        if (typeof base.audioEnabled === 'boolean') audioEnabled = base.audioEnabled;
+      }
+      const storedKloud = localStorage.getItem('kloudUser');
+      if (storedKloud) {
+        const user = JSON.parse(storedKloud) as {
+          displayName?: unknown;
+          username?: unknown;
+        };
+        if (typeof user.displayName === 'string' && user.displayName) {
+          username = user.displayName;
+        } else if (typeof user.username === 'string' && user.username) {
+          username = user.username;
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    void handlePreJoinSubmit({
+      username: username || 'Guest',
+      videoEnabled,
+      audioEnabled,
+      videoDeviceId: '',
+      audioDeviceId: '',
+    });
+  }, [
+    isSameTabRefresh,
+    isBot,
+    prejoinReady,
+    resolveReady,
+    entryLoadError,
+    connectionDetails,
+    preJoinChoices,
+    personalRoomSwitching,
+    meetingInfo?.status,
+    meetingInfo?.isPersonalRoom,
+    handlePreJoinSubmit,
+  ]);
+
   const canShowPreJoin = prejoinReady && resolveReady && !entryLoadError;
 
-  if (
+  const meetingTerminal =
     (meetingInfo?.status === 'ENDED' || meetingInfo?.status === 'CANCELED') &&
-    !meetingInfo?.isPersonalRoom
-  ) {
+    !meetingInfo?.isPersonalRoom;
+
+  React.useEffect(() => {
+    if (!meetingTerminal) return;
+    try {
+      sessionStorage.removeItem('activeKloudRoom');
+    } catch {
+      /* ignore */
+    }
+  }, [meetingTerminal]);
+
+  if (meetingTerminal) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>
         <div style={{ background: '#fff', padding: '3rem 2.5rem', borderRadius: '16px', boxShadow: '0 8px 35px rgba(17,24,39,0.05)', textAlign: 'center', maxWidth: '440px', width: '90%', border: '1px solid #e5e7eb' }}>
@@ -716,7 +843,7 @@ export function PageClientImpl(props: {
   return (
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
-        canShowPreJoin ? (
+        canShowPreJoin && !isSameTabRefresh ? (
         <div
           className={`kloud-prejoin-wrapper${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
           style={{

@@ -213,6 +213,8 @@
   "toolbar.liveDoc": "协作文档",
   "toolbar.liveDocView": "协作文档视图",
   "toolbar.liveDocMenu": "文档AI",
+  "toolbar.liveDocAiNoPermission": "你没有权限使用文档 AI",
+  "toolbar.liveDocAiUnavailable": "文档尚未就绪，请稍后再试",
   "toolbar.liveDocPanelFile": "文档",
   "toolbar.liveDocPanelSummary": "摘要",
   "toolbar.liveDocPanelTranscript": "转写",

@@ -889,13 +889,19 @@ export function KloudMeetToolbar({
   };
 
   const handleLiveDocSettingsClick = () => {
-    if (!canShowOperatorMenus) return;
-    const show = liveDocActionDialogVisible ? 0 : 1;
+    if (!canShowOperatorMenus) {
+      showInviteToast(t('toolbar.liveDocAiNoPermission'));
+      return;
+    }
+
     const iframe =
       (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-
-    if (!iframe?.contentWindow) return;
+    if (!iframe?.contentWindow) {
+      showInviteToast(t('toolbar.liveDocAiUnavailable'));
+      return;
+    }
+    const show = liveDocActionDialogVisible ? 0 : 1;
     // 打开 iframe 内 righttab-popup（MainStage showDocPanelPopup），不再用 actiondialog
     iframe.contentWindow.postMessage(
       { type: 'Kloud-ToggleDocPopup', show },
@@ -1148,11 +1154,8 @@ export function KloudMeetToolbar({
     );
   };
 
-  /** LiveDoc AI：仅 LiveDoc 模式 + host/co-host/presenter 显示 */
+  /** LiveDoc AI：底栏始终显示；无权限点击仅提示 */
   const renderLiveDocSettingsButton = (variant: 'desktop' | 'mobile') => {
-    if (!canShowOperatorMenus || activeView !== 'liveDoc' || !liveDocPluginLoaded) {
-      return null;
-    }
     const className =
       variant === 'mobile'
         ? `${styles.mobileBtn} ${styles.liveDocAiBtn} ${liveDocActionDialogVisible ? styles.active : ''}`
@@ -1357,7 +1360,7 @@ export function KloudMeetToolbar({
               </button>
             )}
 
-            {/* 5. LiveDoc 设置：仅 LiveDoc 模式，与 iframe 右上角同功能 */}
+            {/* 5. LiveDoc AI：始终显示 */}
             {renderLiveDocSettingsButton('mobile')}
 
             {/* 6. More */}
@@ -1494,7 +1497,7 @@ export function KloudMeetToolbar({
                     </button>
                   )}
 
-                  {/* LiveDoc 设置：仅 LiveDoc 模式，与 iframe 右上角同功能 */}
+                  {/* LiveDoc AI：始终显示 */}
                   {renderLiveDocSettingsButton('desktop')}
 
                   {hasScreenShare && (

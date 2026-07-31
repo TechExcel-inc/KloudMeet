@@ -207,6 +207,8 @@
   "toolbar.liveDoc": "라이브 문서",
   "toolbar.liveDocView": "LiveDoc 보기",
   "toolbar.liveDocMenu": "LiveDoc AI",
+  "toolbar.liveDocAiNoPermission": "LiveDoc AI를 사용할 권한이 없습니다",
+  "toolbar.liveDocAiUnavailable": "LiveDoc이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.",
   "toolbar.liveDocPanelFile": "문서",
   "toolbar.liveDocPanelSummary": "요약",
   "toolbar.liveDocPanelTranscript": "트랜스크립트",

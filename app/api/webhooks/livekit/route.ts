@@ -3,8 +3,10 @@ import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
 import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
 import {
+  expireStaleIdleMeetings,
   markMeetingIdleFromEmptyRoom,
   MEETING_STATUS,
+  resumeIdleMeeting,
 } from '@/lib/meetingRejoin';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -25,12 +27,17 @@ export async function POST(request: NextRequest) {
     try {
       // livekit-server-sdk receiver verifies the signature and parses the event payload
       event = await receiver.receive(body, authHeader, true);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[webhooks livekit] signature validation failed', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     console.log(`[webhooks livekit] Received event: ${event.event}`);
+
+    // 顺带扫过期空会，避免无人访问时长期停在 IDLE
+    void expireStaleIdleMeetings().catch((err: unknown) => {
+      console.error('[webhooks livekit] expire stale idle failed', err);
+    });
 
     if (event.event === 'egress_ended' && event.egressInfo) {
       const egressId = event.egressInfo.egressId;
@@ -72,23 +79,18 @@ export async function POST(request: NextRequest) {
     if (event.event === 'room_started' && event.room) {
       const roomName = event.room.name;
       const actualStartedAt = new Date(Number(event.room.creationTime) * 1000);
-      
+
       const meeting = await prisma.meeting.findUnique({ where: { roomName } });
       if (meeting && meeting.status !== MEETING_STATUS.ENDED) {
+        if (meeting.status === MEETING_STATUS.IDLE) {
+          await resumeIdleMeeting(meeting.id);
+        }
         const data: {
           actualStartedAt?: Date;
           status: string;
-          roomEmptyAt?: null;
-          endedReason?: null;
-          rejoinableUntil?: null;
         } = { status: MEETING_STATUS.ACTIVE };
         if (!meeting.actualStartedAt) {
           data.actualStartedAt = actualStartedAt;
-        }
-        if (meeting.status === MEETING_STATUS.IDLE) {
-          data.roomEmptyAt = null;
-          data.endedReason = null;
-          data.rejoinableUntil = null;
         }
         await prisma.meeting.update({
           where: { roomName },
@@ -97,7 +99,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Room empty → IDLE (not ENDED); lazy transition to ENDED after grace on next read
+    // Room empty → IDLE；宽限期（默认 30 分钟）后自动 ENDED
     if (event.event === 'room_finished' && event.room) {
       const roomName = event.room.name;
 
@@ -112,8 +114,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('[webhooks livekit POST]', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
