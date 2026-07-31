@@ -13,6 +13,7 @@ import {
   AudioTrack,
   ConnectionStateToast,
   ParticipantTile,
+  useIsMuted,
   useIsSpeaking,
   useRoomContext,
   useTracks,
@@ -64,7 +65,11 @@ function KloudFloatingMicIndicator({
   mediaRestrictions: KloudTileMediaRestrictionProps;
 }) {
   const micPub = participant.getTrackPublication(Track.Source.Microphone);
-  const isMuted = !micPub?.track || micPub.isMuted;
+  const isMuted = useIsMuted({
+    participant,
+    source: Track.Source.Microphone,
+    publication: micPub,
+  });
   const identity = participant.identity;
   const operator = isKloudTargetOperator(identity, mediaRestrictions);
   const isHostMicRestricted =
@@ -122,7 +127,11 @@ function KloudFloatingCamIndicator({
   mediaRestrictions: KloudTileMediaRestrictionProps;
 }) {
   const camPub = participant.getTrackPublication(Track.Source.Camera);
-  const isVideoDisabled = !camPub?.track || camPub.isMuted;
+  const isVideoDisabled = useIsMuted({
+    participant,
+    source: Track.Source.Camera,
+    publication: camPub,
+  });
   const identity = participant.identity;
   const operator = isKloudTargetOperator(identity, mediaRestrictions);
   const isHostVideoRestricted =

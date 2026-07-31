@@ -264,9 +264,27 @@ export function AttendeePanel({
   hostDisabledVideoIdentities = [],
 }: AttendeePanelProps) {
   const { t } = useI18n();
+  const room = useRoomContext();
   const participants = useParticipants();
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
+  const [, setMediaRevision] = useState(0);
+
+  useEffect(() => {
+    const bump = () => setMediaRevision((n) => n + 1);
+    const evs = [
+      RoomEvent.TrackMuted,
+      RoomEvent.TrackUnmuted,
+      RoomEvent.TrackPublished,
+      RoomEvent.TrackUnpublished,
+      RoomEvent.LocalTrackPublished,
+      RoomEvent.LocalTrackUnpublished,
+    ] as const;
+    for (const e of evs) room.on(e, bump);
+    return () => {
+      for (const e of evs) room.off(e, bump);
+    };
+  }, [room]);
 
   useEffect(() => {
     if (!openMenuIdentity) return;

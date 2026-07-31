@@ -117,6 +117,10 @@ import {
 } from './roomVideoLayouts';
 import { isDbMeetingOwner } from '@/lib/meetingOwner';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
+import {
+  normalizeCaptureDeviceId,
+  patchStoredUserMediaChoices,
+} from '@/lib/userMediaChoices';
 import { appendKloudDeviceId } from '@/lib/kloudDeviceId';
 import { authHeaders, connectionDetailsFetchInit } from '@/lib/kloudSession';
 import {
@@ -336,13 +340,13 @@ export function VideoConferenceComponent(props: {
     // 手机忽略 hq，避免 4K 采集把低端机打挂
     const useHq = Boolean(props.options.hq) && !isMobileClient;
     const videoCaptureDefaults: VideoCaptureOptions = {
-      deviceId: props.userChoices.videoDeviceId ?? undefined,
+      deviceId: normalizeCaptureDeviceId(props.userChoices.videoDeviceId),
       resolution: useHq
         ? VideoPresets.h2160
         : isMobileClient
           ? VideoPresets.h360
           : VideoPresets.h720,
-      ...(isMobileClient && !props.userChoices.videoDeviceId
+      ...(isMobileClient && !normalizeCaptureDeviceId(props.userChoices.videoDeviceId)
         ? { facingMode: 'user' as const }
         : {}),
     };
@@ -361,7 +365,7 @@ export function VideoConferenceComponent(props: {
       videoCaptureDefaults: videoCaptureDefaults,
       publishDefaults: publishDefaults,
       audioCaptureDefaults: {
-        deviceId: props.userChoices.audioDeviceId ?? undefined,
+        deviceId: normalizeCaptureDeviceId(props.userChoices.audioDeviceId),
       },
       adaptiveStream: true,
       dynacast: true,
@@ -881,12 +885,12 @@ export function VideoConferenceComponent(props: {
                 if (props.userChoices.videoEnabled) {
                   room.localParticipant.setCameraEnabled(true).catch(handleError);
                 } else {
-                  room.localParticipant.setCameraEnabled(false).catch(handleError);
+                  room.localParticipant.setCameraEnabled(false).catch(() => undefined);
                 }
                 if (props.userChoices.audioEnabled) {
                   room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
                 } else {
-                  room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
+                  room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
                 }
 
                 // 同步 UA：hook 首帧可能仍为 false，移动端入会后首次 startAudio 不能漏
@@ -1392,21 +1396,6 @@ export function VideoConferenceComponent(props: {
     setTimeout(() => toastEl.remove(), 2800);
   }, [t]);
 
-  /** 把会中麦/摄像头开关写回 lk-user-choices，刷新后沿用 */
-  const persistLocalMediaEnabled = React.useCallback(
-    (partial: { audioEnabled?: boolean; videoEnabled?: boolean }) => {
-      try {
-        const key = 'lk-user-choices';
-        const raw = localStorage.getItem(key);
-        const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
-        localStorage.setItem(key, JSON.stringify({ ...base, ...partial }));
-      } catch {
-        /* ignore */
-      }
-    },
-    [],
-  );
-
   const handleToggleMic = React.useCallback(() => {
     if (!canUseRealtimeMediaControls) {
       showMediaUnavailableToast();
@@ -1419,20 +1408,16 @@ export function VideoConferenceComponent(props: {
       return;
     }
     setMicEnabled(next);
-    persistLocalMediaEnabled({ audioEnabled: next });
-    try {
-      Promise.resolve(room.localParticipant.setMicrophoneEnabled(next)).catch(handleError);
-    } catch (error) {
-      handleError(error as Error);
-    }
-  }, [
-    canUseRealtimeMediaControls,
-    micEnabled,
-    room,
-    handleError,
-    showMediaUnavailableToast,
-    persistLocalMediaEnabled,
-  ]);
+    void room.localParticipant
+      .setMicrophoneEnabled(next)
+      .then(() => {
+        patchStoredUserMediaChoices({ audioEnabled: next });
+      })
+      .catch((error: Error) => {
+        setMicEnabled(!next);
+        handleError(error);
+      });
+  }, [canUseRealtimeMediaControls, micEnabled, room, handleError, showMediaUnavailableToast]);
 
   const handleToggleCam = React.useCallback(() => {
     if (!canUseRealtimeMediaControls) {
@@ -1446,20 +1431,37 @@ export function VideoConferenceComponent(props: {
       return;
     }
     setCamEnabled(next);
-    persistLocalMediaEnabled({ videoEnabled: next });
-    try {
-      Promise.resolve(room.localParticipant.setCameraEnabled(next)).catch(handleError);
-    } catch (error) {
-      handleError(error as Error);
-    }
-  }, [
-    canUseRealtimeMediaControls,
-    camEnabled,
-    room,
-    handleError,
-    showMediaUnavailableToast,
-    persistLocalMediaEnabled,
-  ]);
+    void room.localParticipant
+      .setCameraEnabled(next)
+      .then(() => {
+        patchStoredUserMediaChoices({ videoEnabled: next });
+      })
+      .catch((error: Error) => {
+        setCamEnabled(!next);
+        handleError(error);
+      });
+  }, [canUseRealtimeMediaControls, camEnabled, room, handleError, showMediaUnavailableToast]);
+
+  // LiveKit 轨道才是会中开关状态的事实来源，避免工具栏与用户列表各自维护后失步。
+  React.useEffect(() => {
+    const syncLocalMediaState = () => {
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      setMicEnabled(Boolean(micPub?.track && !micPub.isMuted));
+      setCamEnabled(Boolean(camPub?.track && !camPub.isMuted));
+    };
+
+    room.on(RoomEvent.LocalTrackPublished, syncLocalMediaState);
+    room.on(RoomEvent.LocalTrackUnpublished, syncLocalMediaState);
+    room.on(RoomEvent.TrackMuted, syncLocalMediaState);
+    room.on(RoomEvent.TrackUnmuted, syncLocalMediaState);
+    return () => {
+      room.off(RoomEvent.LocalTrackPublished, syncLocalMediaState);
+      room.off(RoomEvent.LocalTrackUnpublished, syncLocalMediaState);
+      room.off(RoomEvent.TrackMuted, syncLocalMediaState);
+      room.off(RoomEvent.TrackUnmuted, syncLocalMediaState);
+    };
+  }, [room]);
 
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
@@ -3119,6 +3121,8 @@ export function VideoConferenceComponent(props: {
     room.on(RoomEvent.TrackMuted, updateCustomMics);
     room.on(RoomEvent.TrackPublished, updateCustomMics);
     room.on(RoomEvent.TrackUnpublished, updateCustomMics);
+    room.on(RoomEvent.LocalTrackPublished, updateCustomMics);
+    room.on(RoomEvent.LocalTrackUnpublished, updateCustomMics);
     room.on(RoomEvent.ParticipantConnected, updateCustomMics);
     room.on(RoomEvent.ParticipantDisconnected, updateCustomMics);
 
@@ -3137,6 +3141,8 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.TrackUnmuted, handleTrackUnmuted);
       room.off(RoomEvent.TrackPublished, updateCustomMics);
       room.off(RoomEvent.TrackUnpublished, updateCustomMics);
+      room.off(RoomEvent.LocalTrackPublished, updateCustomMics);
+      room.off(RoomEvent.LocalTrackUnpublished, updateCustomMics);
       room.off(RoomEvent.ParticipantConnected, updateCustomMics);
       room.off(RoomEvent.ParticipantDisconnected, updateCustomMics);
       clearInterval(intervalId);
@@ -4633,12 +4639,12 @@ export function VideoConferenceComponent(props: {
                             if (props.userChoices.videoEnabled) {
                               room.localParticipant.setCameraEnabled(true).catch(handleError);
                             } else {
-                              room.localParticipant.setCameraEnabled(false).catch(handleError);
+                              room.localParticipant.setCameraEnabled(false).catch(() => undefined);
                             }
                             if (props.userChoices.audioEnabled) {
                               room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
                             } else {
-                              room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
+                              room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
                             }
                             if (isToolbarMobileUserAgent()) {
                               void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));

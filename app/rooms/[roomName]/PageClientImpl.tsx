@@ -84,6 +84,12 @@ import {
 import { SCREEN_SHARE_CAPTURE } from './roomConstants';
 import { replaceBrowserRoomUrl } from '@/lib/roomUrl';
 import { appendKloudDeviceId } from '@/lib/kloudDeviceId';
+import {
+  LK_USER_CHOICES_KEY,
+  normalizeCaptureDeviceId,
+  patchStoredUserMediaChoices,
+  readStoredUserMediaChoices,
+} from '@/lib/userMediaChoices';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -118,12 +124,9 @@ export function PageClientImpl(props: {
 
   React.useEffect(() => {
     try {
-      const key = 'lk-user-choices';
-      const raw = localStorage.getItem(key);
-      const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
+      const base = readStoredUserMediaChoices();
 
-      let username =
-        typeof base.username === 'string' ? base.username : '';
+      let username = typeof base.username === 'string' ? base.username : '';
       const storedKloud = localStorage.getItem('kloudUser');
       if (storedKloud) {
         const user = JSON.parse(storedKloud) as {
@@ -137,16 +140,12 @@ export function PageClientImpl(props: {
         }
       }
 
-      // 保留上次麦/摄像头开关；仅清空 deviceId，让浏览器选系统默认设备
-      localStorage.setItem(
-        key,
-        JSON.stringify({
-          ...base,
-          username,
-          audioDeviceId: '',
-          videoDeviceId: '',
-        }),
-      );
+      // 同步用户名；保留上次 audio/videoEnabled，并使用 LiveKit 的系统默认设备标识。
+      patchStoredUserMediaChoices({
+        username,
+        audioDeviceId: 'default',
+        videoDeviceId: 'default',
+      });
     } catch {
       /* ignore */
     }
@@ -168,6 +167,17 @@ export function PageClientImpl(props: {
     let audioEnabled = true;
     if (typeof window !== 'undefined') {
       try {
+        const storedChoices = readStoredUserMediaChoices();
+        if (typeof storedChoices.username === 'string') {
+          defaultUsername = storedChoices.username;
+        }
+        if (typeof storedChoices.videoEnabled === 'boolean') {
+          videoEnabled = storedChoices.videoEnabled;
+        }
+        if (typeof storedChoices.audioEnabled === 'boolean') {
+          audioEnabled = storedChoices.audioEnabled;
+        }
+
         const storedKloud = localStorage.getItem('kloudUser');
         if (storedKloud) {
           const user = JSON.parse(storedKloud) as {
@@ -180,14 +190,6 @@ export function PageClientImpl(props: {
             defaultUsername = user.username;
           }
         }
-        const key = 'lk-user-choices';
-        const raw = localStorage.getItem(key);
-        const base: Record<string, unknown> = raw ? JSON.parse(raw) : {};
-        if (!defaultUsername && typeof base.username === 'string') {
-          defaultUsername = base.username;
-        }
-        if (typeof base.videoEnabled === 'boolean') videoEnabled = base.videoEnabled;
-        if (typeof base.audioEnabled === 'boolean') audioEnabled = base.audioEnabled;
       } catch {
         /* ignore */
       }
@@ -589,13 +591,15 @@ export function PageClientImpl(props: {
   const handlePreJoinSubmit = React.useCallback(
     async (values: LocalUserChoices) => {
       if (personalRoomSwitching) return;
+      const audioDeviceId = normalizeCaptureDeviceId(values.audioDeviceId) ?? 'default';
+      const videoDeviceId = normalizeCaptureDeviceId(values.videoDeviceId) ?? 'default';
       try {
         localStorage.setItem(
-          'lk-user-choices',
+          LK_USER_CHOICES_KEY,
           JSON.stringify({
             ...values,
-            audioDeviceId: values.audioDeviceId ?? '',
-            videoDeviceId: values.videoDeviceId ?? '',
+            audioDeviceId,
+            videoDeviceId,
           }),
         );
       } catch {
@@ -749,18 +753,15 @@ export function PageClientImpl(props: {
     let username = '';
     let videoEnabled = true;
     let audioEnabled = true;
+    let videoDeviceId = 'default';
+    let audioDeviceId = 'default';
     try {
-      const raw = localStorage.getItem('lk-user-choices');
-      if (raw) {
-        const base = JSON.parse(raw) as {
-          username?: unknown;
-          videoEnabled?: unknown;
-          audioEnabled?: unknown;
-        };
-        if (typeof base.username === 'string') username = base.username;
-        if (typeof base.videoEnabled === 'boolean') videoEnabled = base.videoEnabled;
-        if (typeof base.audioEnabled === 'boolean') audioEnabled = base.audioEnabled;
-      }
+      const base = readStoredUserMediaChoices();
+      if (typeof base.username === 'string') username = base.username;
+      if (typeof base.videoEnabled === 'boolean') videoEnabled = base.videoEnabled;
+      if (typeof base.audioEnabled === 'boolean') audioEnabled = base.audioEnabled;
+      videoDeviceId = normalizeCaptureDeviceId(base.videoDeviceId) ?? 'default';
+      audioDeviceId = normalizeCaptureDeviceId(base.audioDeviceId) ?? 'default';
       const storedKloud = localStorage.getItem('kloudUser');
       if (storedKloud) {
         const user = JSON.parse(storedKloud) as {
@@ -781,8 +782,8 @@ export function PageClientImpl(props: {
       username: username || 'Guest',
       videoEnabled,
       audioEnabled,
-      videoDeviceId: '',
-      audioDeviceId: '',
+      videoDeviceId,
+      audioDeviceId,
     });
   }, [
     isSameTabRefresh,
