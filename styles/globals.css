@@ -21,6 +21,56 @@ body {
   flex-direction: column;
 }
 
+/* 全站 checkbox：避免 dark color-scheme 下的黑色原生样式 */
+input[type='checkbox'] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex-shrink: 0;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  position: relative;
+  vertical-align: middle;
+  accent-color: #5856d6;
+  color-scheme: light;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type='checkbox']:hover:not(:disabled) {
+  border-color: #94a3b8;
+}
+
+input[type='checkbox']:checked {
+  background: #5856d6;
+  border-color: #5856d6;
+}
+
+input[type='checkbox']:checked::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type='checkbox']:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(88, 86, 214, 0.25);
+}
+
+input[type='checkbox']:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .header {
   max-width: 500px;
   padding-inline: 2rem;

@@ -7509,6 +7509,7 @@ export function VideoConferenceComponent(props: {
           onWebcamLayoutChange={setWebcamLayoutMode}
           canToggleLiveDocAnnotation={canBroadcastViewChange}
           canShowOperatorMenus={canBroadcastViewChange}
+          onPrepareLiveDoc={() => setLivedocHasBeenActivated(true)}
           canEndForAll={isHost || isCohost}
           canRecord={isHost || isCohost}
           isRecording={isRecording}

@@ -46,6 +46,8 @@ export function LiveDocView({
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const livedocRoleRef = React.useRef(livedocRole);
   livedocRoleRef.current = livedocRole;
+  /** iframe 首次加载用的 languageid；之后切语言只走 postMessage，避免重载 */
+  const srcLanguageIdRef = React.useRef<0 | 1 | null>(null);
 
   React.useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
@@ -108,7 +110,8 @@ export function LiveDocView({
 
   React.useEffect(() => {
     setPluginLoaded(false);
-  }, [livedocInstanceId]);
+    srcLanguageIdRef.current = null;
+  }, [livedocInstanceId, runtimeSettings?.debugEnabled, runtimeSettings?.debugUrl]);
 
   React.useLayoutEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -137,6 +140,15 @@ export function LiveDocView({
     }
     postLivedocRoleToIframe(livedocRole);
   }, [livedocRole, pluginLoaded]);
+
+  // 切语言：通知 iframe，不改 src（App.vue ReceiveLanguageChange：1=en，其它=cn）
+  React.useEffect(() => {
+    if (!pluginLoaded) return;
+    const cw = iframeRef.current?.contentWindow;
+    if (!cw) return;
+    const languageid = locale === 'zh' ? 0 : 1;
+    cw.postMessage({ type: 'changeLang', languageid }, '*');
+  }, [locale, pluginLoaded]);
 
   if (isHost && hostInitError) {
     return (
@@ -188,8 +200,16 @@ export function LiveDocView({
   }
 
   const languageId = locale === 'zh' ? 0 : 1;
-  // src 不含 role：身份只走 postMessage(onRoleChanged)，避免身份变更触发 iframe 重载
-  const src = buildLiveDocIframeSrc(livedocInstanceId, userToken, languageId, runtimeSettings);
+  // src 的 languageid / role 都固定在首次加载：后续只走 postMessage，避免 iframe 重载
+  if (srcLanguageIdRef.current === null) {
+    srcLanguageIdRef.current = languageId;
+  }
+  const src = buildLiveDocIframeSrc(
+    livedocInstanceId,
+    userToken,
+    srcLanguageIdRef.current,
+    runtimeSettings,
+  );
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 
   return (

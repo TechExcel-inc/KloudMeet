@@ -9,6 +9,8 @@ import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
 import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
+import { LiveDocAiPanel } from './LiveDocAiPanel';
+import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen';
 export type WebcamLayoutMode = 'tile' | 'spotlight';
@@ -91,6 +93,8 @@ interface KloudMeetToolbarProps {
    * 协作文档菜单、摄像头视图入口、More→AI演讲 可见；随实时身份变化更新
    */
   canShowOperatorMenus?: boolean;
+  /** 在不切换当前视图的前提下，后台挂载并初始化 LiveDoc iframe */
+  onPrepareLiveDoc?: () => void;
   chatOpen: boolean;
   onToggleChat: () => void;
   attendeeOpen: boolean;
@@ -153,6 +157,7 @@ export function KloudMeetToolbar({
   onWebcamLayoutChange,
   canToggleLiveDocAnnotation = false,
   canShowOperatorMenus = false,
+  onPrepareLiveDoc,
   chatOpen,
   onToggleChat,
   attendeeOpen,
@@ -196,6 +201,7 @@ export function KloudMeetToolbar({
   const exitMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const chatMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const attendeeMenuBtnRef = useRef<HTMLButtonElement | null>(null);
+  const liveDocAiBtnRef = useRef<HTMLButtonElement | null>(null);
   const desktopBubbleRef = useRef<HTMLDivElement | null>(null);
 
   type BubblePos = {
@@ -236,7 +242,17 @@ export function KloudMeetToolbar({
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
+  const [liveDocMenuVisible, setLiveDocMenuVisible] = useState(false);
   const [liveDocAnnotationEnabled, setLiveDocAnnotationEnabled] = useState(true);
+  const [liveDocBubblePos, setLiveDocBubblePos] = useState<{
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    arrowLeft: number;
+  } | null>(null);
+  const liveDocAiBridge = useLiveDocAiBridge(liveDocMenuVisible);
+  const closeLiveDocAiMenu = React.useCallback(() => setLiveDocMenuVisible(false), []);
 
   const clampChatBubbleRect = React.useCallback((rect: ChatBubbleRect): ChatBubbleRect => {
     if (typeof window === 'undefined') return rect;
@@ -411,6 +427,7 @@ export function KloudMeetToolbar({
   const openSheet = (sheet: ActionSheetType) => {
     closeInviteMenu();
     closeViewModeMenu();
+    setLiveDocMenuVisible(false);
     if (sheet !== null) {
       onOpenSheet?.(); // closes Chat & Attendee in parent synchronously
     }
@@ -420,6 +437,7 @@ export function KloudMeetToolbar({
   const handleToggleChat = () => {
     closeInviteMenu();
     closeViewModeMenu();
+    setLiveDocMenuVisible(false);
     setActiveSheet(null); // close any open sheet
     onToggleChat();
   };
@@ -427,6 +445,7 @@ export function KloudMeetToolbar({
   const handleToggleAttendee = () => {
     closeInviteMenu();
     closeViewModeMenu();
+    setLiveDocMenuVisible(false);
     setActiveSheet(null); // close any open sheet
     onToggleAttendee();
   };
@@ -693,13 +712,45 @@ export function KloudMeetToolbar({
 
   // 失去 host/co-host/presenter 时关闭协作文档 righttab-popup
   useEffect(() => {
-    if (canShowOperatorMenus || !liveDocActionDialogVisible) return;
+    if (canShowOperatorMenus) return;
+    setLiveDocMenuVisible(false);
+    if (!liveDocActionDialogVisible) return;
     const iframe =
       (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
     iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
     setLiveDocActionDialogVisible(false);
   }, [canShowOperatorMenus, liveDocActionDialogVisible]);
+
+  useLayoutEffect(() => {
+    if (!liveDocMenuVisible) {
+      setLiveDocBubblePos(null);
+      return;
+    }
+    const anchorEl = liveDocAiBtnRef.current;
+    if (!anchorEl) {
+      setLiveDocBubblePos(null);
+      return;
+    }
+
+    const layout = () => {
+      const r = anchorEl.getBoundingClientRect();
+      const width = Math.min(560, Math.max(320, window.innerWidth - 24));
+      const availableHeight = Math.max(280, r.top - 16);
+      const height = Math.min(520, Math.floor(availableHeight));
+      const cx = r.left + r.width / 2;
+      let left = cx - width / 2;
+      left = Math.max(12, Math.min(left, window.innerWidth - width - 12));
+      const arrowLeft = Math.round(Math.min(width - 18, Math.max(18, cx - left)));
+      let top = r.top - height - 12;
+      if (top < 10) top = 10;
+      setLiveDocBubblePos({ top, left, width, height, arrowLeft });
+    };
+
+    layout();
+    window.addEventListener('resize', layout);
+    return () => window.removeEventListener('resize', layout);
+  }, [liveDocMenuVisible, visible, isMobile]);
 
   // 失去 host/co-host 时关闭录制菜单
   useEffect(() => {
@@ -893,30 +944,25 @@ export function KloudMeetToolbar({
       showInviteToast(t('toolbar.liveDocAiNoPermission'));
       return;
     }
+    onPrepareLiveDoc?.();
+    const nextVisible = !liveDocMenuVisible;
+    setLiveDocMenuVisible(nextVisible);
+    if (!nextVisible) return;
 
+    setActiveSheet(null);
+    setInviteMenuOpen(false);
+    // 原生气泡打开时收起 iframe 内旧弹框，避免切回 LiveDoc 后出现双层菜单。
     const iframe =
       (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-    if (!iframe?.contentWindow) {
-      showInviteToast(t('toolbar.liveDocAiUnavailable'));
-      return;
-    }
-    const show = liveDocActionDialogVisible ? 0 : 1;
-    // 打开 iframe 内 righttab-popup（MainStage showDocPanelPopup），不再用 actiondialog
-    iframe.contentWindow.postMessage(
-      { type: 'Kloud-ToggleDocPopup', show },
-      '*',
-    );
-    setLiveDocActionDialogVisible(show === 1);
+    iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
+    setLiveDocActionDialogVisible(false);
   };
 
-  /** Align with Dev MainStage: handleShowLiveDocPanel + clickTab + close action dialog */
-  const postLiveDocPanelTab = (tab: 'file' | 'summary' | 'transcript') => {
-    const iframe =
-      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
-      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-    if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage({ type: 'Kloud-LiveDocPanelTab', tab }, '*');
+  const handleLiveDocDocumentOpen = (itemId: number) => {
+    void liveDocAiBridge.sendAction('document.switch', { itemId }).catch(() => undefined);
+    setLiveDocMenuVisible(false);
+    onViewChange('liveDoc');
   };
 
   const postSetLiveDocAnnotation = (enabled: boolean) => {
@@ -993,30 +1039,8 @@ export function KloudMeetToolbar({
       </svg>
     );
 
-  const renderViewModeMenu = () => (
-    <div className={styles.viewModeMenu} role="menu">
-      <button
-        type="button"
-        role="menuitemradio"
-        aria-checked={activeView === 'liveDoc'}
-        className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
-        onClick={() => {
-          if (!canSwitchViews) return;
-          handleLiveDocTabClick();
-          closeViewModeMenu();
-        }}
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
-        <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDocView')}</span>
-        {activeView === 'liveDoc' && (
-          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        )}
-      </button>
-
+  const renderWebcamLayoutMenuItems = () => (
+    <>
       <button
         type="button"
         role="menuitemradio"
@@ -1058,6 +1082,35 @@ export function KloudMeetToolbar({
           </svg>
         )}
       </button>
+    </>
+  );
+
+  /** 手机端：协作文档 / 摄像头宫格·焦点 / 共享屏幕 合并上拉菜单 */
+  const renderViewModeMenu = () => (
+    <div className={styles.viewModeMenu} role="menu">
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={activeView === 'liveDoc'}
+        className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        onClick={() => {
+          if (!canSwitchViews) return;
+          handleLiveDocTabClick();
+          closeViewModeMenu();
+        }}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+        <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDocView')}</span>
+        {activeView === 'liveDoc' && (
+          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </button>
+
+      {renderWebcamLayoutMenuItems()}
 
       {screenShareActive ? (
         <div
@@ -1116,21 +1169,17 @@ export function KloudMeetToolbar({
     </div>
   );
 
-  const renderViewModeControl = (variant: 'mobile' | 'desktop') => {
+  /** 手机端合并视图按钮（Web 已拆分，勿用于 desktop） */
+  const renderViewModeControl = () => {
     if (!canShowOperatorMenus) return null;
-    const isDesktopVariant = variant === 'desktop';
     return (
       <div
-        className={`${styles.viewModeBtnWrap} ${isDesktopVariant ? styles.viewModeBtnWrapDesktop : ''}`}
+        className={styles.viewModeBtnWrap}
         data-view-mode-menu-anchor="true"
       >
         <button
           type="button"
-          className={
-            isDesktopVariant
-              ? `${styles.tabBtn} ${styles.viewModeTabBtn} ${styles.tabBtnActive}`
-              : `${styles.mobileBtn} ${styles.active}`
-          }
+          className={`${styles.mobileBtn} ${styles.active}`}
           onClick={() => {
             closeInviteMenu();
             setActiveSheet(null);
@@ -1142,7 +1191,6 @@ export function KloudMeetToolbar({
           title={viewModeButtonLabel}
         >
           {viewModeButtonIcon}
-          {isDesktopVariant ? viewModeButtonLabel : null}
           <span className={styles.viewModeMenuBadge} aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
               <path d="M18 15l-6-6-6 6" />
@@ -1154,20 +1202,121 @@ export function KloudMeetToolbar({
     );
   };
 
+  const webcamButtonIcon =
+    activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <rect x="3" y="5" width="12" height="14" rx="1.5" />
+        <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
+        <rect x="17" y="10.25" width="4" height="3.5" rx="0.5" />
+        <rect x="17" y="15.5" width="4" height="3.5" rx="0.5" />
+      </svg>
+    ) : (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <rect x="3" y="3" width="8" height="8" rx="1" />
+        <rect x="13" y="3" width="8" height="8" rx="1" />
+        <rect x="3" y="13" width="8" height="8" rx="1" />
+        <rect x="13" y="13" width="8" height="8" rx="1" />
+      </svg>
+    );
+
+  /** Web：摄像头按钮 + 宫格/焦点上拉菜单 */
+  const renderDesktopWebcamControl = () => {
+    if (!canShowOperatorMenus) return null;
+    return (
+      <div
+        className={`${styles.viewModeBtnWrap} ${styles.viewModeBtnWrapDesktop}`}
+        data-view-mode-menu-anchor="true"
+      >
+        <button
+          type="button"
+          className={`${styles.tabBtn} ${activeView === 'webcam' ? styles.tabBtnActive : ''} ${viewModeMenuOpen ? styles.viewModeTabBtn : ''}`}
+          onClick={() => {
+            closeInviteMenu();
+            setActiveSheet(null);
+            setViewModeMenuOpen((prev) => !prev);
+          }}
+          aria-label={t('toolbar.webcam')}
+          aria-expanded={viewModeMenuOpen}
+          aria-haspopup="menu"
+          title={t('toolbar.webcam')}
+        >
+          {webcamButtonIcon}
+          {t('toolbar.webcam')}
+          <span className={styles.viewModeMenuBadge} aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
+              <path d="M18 15l-6-6-6 6" />
+            </svg>
+          </span>
+        </button>
+        {viewModeMenuOpen && (
+          <div className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`} role="menu">
+            {renderWebcamLayoutMenuItems()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderDesktopShareScreenButton = () => (
+    <button
+      type="button"
+      className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
+      onClick={() => {
+        closeViewModeMenu();
+        handleShareScreenClick();
+      }}
+      title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
+      style={{ position: 'relative' }}
+    >
+      {hasScreenShare && !screenShareActive && (
+        <span style={{
+          position: 'absolute',
+          top: '4px',
+          right: '4px',
+          width: '8px',
+          height: '8px',
+          borderRadius: '50%',
+          background: '#f97316',
+          boxShadow: '0 0 0 0 rgba(249,115,22,0.5)',
+          animation: 'shareConflictPing 1.4s ease infinite',
+          pointerEvents: 'none',
+        }} />
+      )}
+      <style>{`
+        @keyframes shareConflictPing {
+          0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
+          60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
+          100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
+        }
+      `}</style>
+      <svg viewBox="0 0 24 24" fill="none"
+        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
+        strokeWidth="1.5"
+      >
+        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+      </svg>
+      <span style={hasScreenShare && !screenShareActive ? { color: '#fb923c' } : undefined}>
+        {t('toolbar.shareScreen')}
+      </span>
+    </button>
+  );
+
   /** LiveDoc AI：底栏始终显示；无权限点击仅提示 */
   const renderLiveDocSettingsButton = (variant: 'desktop' | 'mobile') => {
+    const isActive = liveDocMenuVisible || liveDocActionDialogVisible;
     const className =
       variant === 'mobile'
-        ? `${styles.mobileBtn} ${styles.liveDocAiBtn} ${liveDocActionDialogVisible ? styles.active : ''}`
-        : `${styles.tabBtn} ${styles.liveDocAiBtn} ${liveDocActionDialogVisible ? styles.tabBtnActive : ''}`;
+        ? `${styles.mobileBtn} ${styles.liveDocAiBtn} ${isActive ? styles.active : ''}`
+        : `${styles.tabBtn} ${styles.liveDocAiBtn} ${isActive ? styles.tabBtnActive : ''}`;
     return (
       <button
+        ref={liveDocAiBtnRef}
         type="button"
         className={className}
         onClick={handleLiveDocSettingsClick}
         title={t('toolbar.liveDocMenu')}
         aria-label={t('toolbar.liveDocMenu')}
-        aria-pressed={liveDocActionDialogVisible}
+        aria-pressed={isActive}
       >
         <span className={styles.liveDocAiIconWrap}>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -1235,6 +1384,19 @@ export function KloudMeetToolbar({
     <>
       {/* Toast */}
       {toastMsg && <div className={styles.toast}>{toastMsg}</div>}
+
+      <LiveDocAiPanel
+        open={liveDocMenuVisible}
+        state={liveDocAiBridge.state}
+        connected={liveDocAiBridge.connected}
+        error={liveDocAiBridge.error}
+        busy={liveDocAiBridge.pendingActions.size > 0}
+        bubblePos={liveDocBubblePos}
+        onClose={closeLiveDocAiMenu}
+        onClearError={liveDocAiBridge.clearError}
+        onAction={liveDocAiBridge.sendAction}
+        onOpenDocument={handleLiveDocDocumentOpen}
+      />
 
       {!visible && (
         <>
@@ -1341,7 +1503,7 @@ export function KloudMeetToolbar({
             </div>
 
             {/* 3. 视图模式（活文档 / Webcam Tile·Spotlight / 屏幕共享合并）— 仅 host / co-host / presenter */}
-            {renderViewModeControl('mobile')}
+            {renderViewModeControl()}
 
             {/* 4. Screen Share — 非操作者仍单独显示 */}
             {!canShowOperatorMenus && (
@@ -1449,53 +1611,31 @@ export function KloudMeetToolbar({
               </div>
             </div>
 
-            {/* Center: view tabs (only for host/co-host/presenter) */}
+            {/* Center: view tabs — Web 拆分：协作文档 / 摄像头(上拉宫格·焦点) / 共享屏幕 */}
             <div className={styles.centerTabs}>
               {canSwitchViews && (
                 <>
-                  {/* 视图模式合并：LiveDoc / Webcam Tile·Spotlight / Screen Share */}
-                  {renderViewModeControl('desktop')}
-
-                  {/* 非操作者仍单独显示屏幕共享 */}
-                  {!canShowOperatorMenus && (
+                  {canShowOperatorMenus && (
                     <button
-                      className={`${styles.tabBtn} ${activeView === 'shareScreen' ? styles.tabBtnActive : ''} ${screenShareActive ? styles.tabBtnCheck : ''}`}
-                      onClick={handleShareScreenClick}
-                      title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
-                      style={{ position: 'relative' }}
+                      type="button"
+                      className={`${styles.tabBtn} ${activeView === 'liveDoc' ? styles.tabBtnActive : ''}`}
+                      onClick={() => {
+                        closeViewModeMenu();
+                        handleLiveDocTabClick();
+                      }}
+                      title={t('toolbar.liveDocView')}
+                      aria-label={t('toolbar.liveDocView')}
                     >
-                      {hasScreenShare && !screenShareActive && (
-                        <span style={{
-                          position: 'absolute',
-                          top: '4px',
-                          right: '4px',
-                          width: '8px',
-                          height: '8px',
-                          borderRadius: '50%',
-                          background: '#f97316',
-                          boxShadow: '0 0 0 0 rgba(249,115,22,0.5)',
-                          animation: 'shareConflictPing 1.4s ease infinite',
-                          pointerEvents: 'none',
-                        }} />
-                      )}
-                      <style>{`
-                      @keyframes shareConflictPing {
-                        0%   { box-shadow: 0 0 0 0 rgba(249,115,22,0.55); }
-                        60%  { box-shadow: 0 0 0 6px rgba(249,115,22,0); }
-                        100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
-                      }
-                    `}</style>
-                      <svg viewBox="0 0 24 24" fill="none"
-                        stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
-                        strokeWidth="1.5"
-                      >
-                        <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+                        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                       </svg>
-                      <span style={hasScreenShare && !screenShareActive ? { color: '#fb923c' } : undefined}>
-                        {t('toolbar.shareScreen')}
-                      </span>
+                      {t('toolbar.liveDoc')}
                     </button>
                   )}
+
+                  {renderDesktopWebcamControl()}
+
+                  {renderDesktopShareScreenButton()}
 
                   {/* LiveDoc AI：始终显示 */}
                   {renderLiveDocSettingsButton('desktop')}

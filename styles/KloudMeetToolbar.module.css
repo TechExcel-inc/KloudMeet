@@ -550,6 +550,11 @@
   min-width: auto;
 }
 
+/* Web：摄像头宫格/焦点上拉菜单（比合并菜单更窄） */
+.webcamLayoutMenu {
+  min-width: 200px;
+}
+
 .viewModeBtnWrap .mobileBtn {
   flex: 1 1 auto;
   width: 100%;
