@@ -28,4 +28,11 @@ export type ConnectionDetails = {
   /** SkyMeet meeting.id for this session; used to scope LiveDoc per personal-room session */
   meetingId: number;
   isPersonalRoom: boolean;
+  /**
+   * Authoritative in-meeting stage view from LiveKit room metadata.
+   * Absent / undefined for first host open → client defaults to webcam.
+   */
+  currentView?: 'liveDoc' | 'webcam' | 'shareScreen';
+  /** PeerTime lesson id already bound to this meeting (if any). */
+  livedocInstanceId?: string | null;
 };

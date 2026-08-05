@@ -999,6 +999,19 @@ export function KloudMeetToolbar({
     closeViewModeMenu();
   };
 
+  /** Web 桌面：摄像头按钮点击切换宫格/焦点，不弹菜单 */
+  const handleDesktopWebcamClick = () => {
+    closeInviteMenu();
+    setActiveSheet(null);
+    closeViewModeMenu();
+    if (!canSwitchViews) return;
+    if (activeView !== 'webcam') {
+      onViewChange('webcam');
+      return;
+    }
+    setWebcamLayoutMode(webcamLayoutMode === 'tile' ? 'spotlight' : 'tile');
+  };
+
   const viewModeButtonLabel =
     screenShareActive
       ? t('toolbar.shareScreen')
@@ -1203,7 +1216,7 @@ export function KloudMeetToolbar({
   };
 
   const webcamButtonIcon =
-    activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? (
+    webcamLayoutMode === 'spotlight' ? (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
         <rect x="3" y="5" width="12" height="14" rx="1.5" />
         <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
@@ -1219,41 +1232,22 @@ export function KloudMeetToolbar({
       </svg>
     );
 
-  /** Web：摄像头按钮 + 宫格/焦点上拉菜单 */
+  /** Web：摄像头按钮点击切换宫格/焦点，无向上气泡 */
   const renderDesktopWebcamControl = () => {
     if (!canShowOperatorMenus) return null;
+    const webcamLabel =
+      webcamLayoutMode === 'spotlight' ? t('toolbar.webcamSpotlight') : t('toolbar.webcamTile');
     return (
-      <div
-        className={`${styles.viewModeBtnWrap} ${styles.viewModeBtnWrapDesktop}`}
-        data-view-mode-menu-anchor="true"
+      <button
+        type="button"
+        className={`${styles.tabBtn} ${activeView === 'webcam' ? styles.tabBtnActive : ''}`}
+        onClick={handleDesktopWebcamClick}
+        aria-label={webcamLabel}
+        title={webcamLabel}
       >
-        <button
-          type="button"
-          className={`${styles.tabBtn} ${activeView === 'webcam' ? styles.tabBtnActive : ''} ${viewModeMenuOpen ? styles.viewModeTabBtn : ''}`}
-          onClick={() => {
-            closeInviteMenu();
-            setActiveSheet(null);
-            setViewModeMenuOpen((prev) => !prev);
-          }}
-          aria-label={t('toolbar.webcam')}
-          aria-expanded={viewModeMenuOpen}
-          aria-haspopup="menu"
-          title={t('toolbar.webcam')}
-        >
-          {webcamButtonIcon}
-          {t('toolbar.webcam')}
-          <span className={styles.viewModeMenuBadge} aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3">
-              <path d="M18 15l-6-6-6 6" />
-            </svg>
-          </span>
-        </button>
-        {viewModeMenuOpen && (
-          <div className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`} role="menu">
-            {renderWebcamLayoutMenuItems()}
-          </div>
-        )}
-      </div>
+        {webcamButtonIcon}
+        {t('toolbar.webcam')}
+      </button>
     );
   };
 

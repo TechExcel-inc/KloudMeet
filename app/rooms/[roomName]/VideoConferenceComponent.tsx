@@ -35,6 +35,8 @@ import {
   unlockMobileRoomAudioOnGesture,
 } from '@/lib/mobileAudioUnlock';
 import { ConnectionDetails } from '@/lib/types';
+import { parseMeetingRoomView } from '@/lib/meetingRoomViewShared';
+import { persistMeetingRoomView } from '@/lib/meetingRoomViewClient';
 import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
   formatChatMessageLinks,
@@ -216,7 +218,11 @@ export function VideoConferenceComponent(props: {
   const isRecorderBot = searchParams?.get('isBot') === 'true';
 
   const [e2eeSetupComplete, setE2eeSetupComplete] = React.useState(false);
-  const [activeView, setActiveView] = React.useState<ViewMode>('webcam');
+  // Late joiners: connectionDetails.currentView from LiveKit room metadata.
+  // Host first open: no metadata → webcam (product default unchanged).
+  const [activeView, setActiveView] = React.useState<ViewMode>(
+    () => parseMeetingRoomView(props.connectionDetails.currentView) ?? 'webcam',
+  );
   const [webcamLayoutMode, setWebcamLayoutMode] = React.useState<WebcamLayoutMode>('tile');
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
   // Stores the mic state BEFORE a MUTE_ALL command arrived, so UNMUTE_ALL can restore it.
@@ -1806,7 +1812,9 @@ export function VideoConferenceComponent(props: {
     meetingId: props.connectionDetails.meetingId,
     isPersonalRoom: props.connectionDetails.isPersonalRoom,
   });
-  const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(null);
+  const [livedocInstanceId, setLivedocInstanceId] = React.useState<string | null>(
+    () => props.connectionDetails.livedocInstanceId ?? null,
+  );
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
@@ -2285,6 +2293,19 @@ export function VideoConferenceComponent(props: {
         });
       }
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
+      // Persist for late joiners via connection-details (only privileged broadcasters)
+      if (!canBroadcastViewChangeRef.current) return;
+      const token = connectionDetailsRef.current.participantToken;
+      const rn = connectionDetailsRef.current.roomName;
+      if (token && rn) {
+        void persistMeetingRoomView({
+          roomName: rn,
+          view,
+          livekitToken: token,
+        }).catch((err) => {
+          console.error('[meetingRoomView] persist failed', err);
+        });
+      }
     },
     [sendMeetingMsg, isHost],
   );

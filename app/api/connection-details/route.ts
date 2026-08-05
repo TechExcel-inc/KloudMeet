@@ -16,6 +16,8 @@ import {
   sanitizeKloudDeviceId,
 } from '@/lib/meetingOwner';
 import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
+import { getMeetingRoomCurrentView } from '@/lib/meetingRoomView';
+import { prisma } from '@/lib/db';
 import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -121,6 +123,18 @@ export async function GET(request: NextRequest) {
       livekitRoomName,
     );
 
+    // Late joiners: adopt room's current stage without flashing default webcam.
+    // First host open: room has no metadata → currentView omitted → client keeps webcam.
+    const currentView = await getMeetingRoomCurrentView(livekitRoomName);
+    const livedocBind = await prisma.meeting.findUnique({
+      where: { id: meeting.id },
+      select: { kloudMeetingId: true },
+    });
+    const livedocInstanceId =
+      livedocBind?.kloudMeetingId != null && livedocBind.kloudMeetingId > 0
+        ? String(livedocBind.kloudMeetingId)
+        : null;
+
     const data: ConnectionDetails = {
       serverUrl: livekitServerUrl,
       roomName: livekitRoomName,
@@ -128,6 +142,8 @@ export async function GET(request: NextRequest) {
       participantName: participantName,
       meetingId: meeting.id,
       isPersonalRoom,
+      ...(currentView ? { currentView } : {}),
+      livedocInstanceId,
     };
     return new NextResponse(JSON.stringify(data), {
       headers,
