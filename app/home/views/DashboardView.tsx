@@ -197,6 +197,66 @@ export function DashboardView({
     return () => clearInterval(intervalId);
   }, [userToken, dbMeetings, page, pageSize]);
 
+  // 有 Live 会议时每 30s 静默拉状态，只合并有变化的条目
+  const hasLiveMeeting = dbMeetings.some((m) => m.isActive);
+  useEffect(() => {
+    if (!userToken || !hasLiveMeeting) return;
+
+    const mergeLiveStatus = (prev: any[], freshList: any[]) => {
+      const byId = new Map(freshList.map((m) => [m.id, m]));
+      let anyChanged = false;
+      const next = prev.map((old) => {
+        const fresh = byId.get(old.id);
+        if (!fresh) return old;
+        const same =
+          old.status === fresh.status &&
+          old.isActive === fresh.isActive &&
+          old.isIdle === fresh.isIdle &&
+          String(old.endedAt ?? '') === String(fresh.endedAt ?? '') &&
+          String(old.actualStartedAt ?? '') === String(fresh.actualStartedAt ?? '') &&
+          String(old.rejoinableUntil ?? '') === String(fresh.rejoinableUntil ?? '') &&
+          old.roomName === fresh.roomName &&
+          old.actualDurationMinutes === fresh.actualDurationMinutes &&
+          old.endedReason === fresh.endedReason;
+        if (same) return old;
+        anyChanged = true;
+        return {
+          ...old,
+          status: fresh.status,
+          isActive: fresh.isActive,
+          isIdle: fresh.isIdle,
+          endedAt: fresh.endedAt,
+          endedReason: fresh.endedReason,
+          actualStartedAt: fresh.actualStartedAt,
+          actualDurationMinutes: fresh.actualDurationMinutes,
+          roomName: fresh.roomName,
+          rejoinableUntil: fresh.rejoinableUntil,
+        };
+      });
+      return anyChanged ? next : prev;
+    };
+
+    const intervalId = setInterval(() => {
+      const term = searchQueryRef.current;
+      const qs = new URLSearchParams({
+        page: String(page),
+        pageSize: String(pageSize),
+        ...(term.trim() ? { search: term.trim() } : {}),
+      });
+      fetch(`/api/account/meetings?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      })
+        .then((res) => res.json())
+        .then((d) => {
+          if (!d.meetings) return;
+          setDbMeetings((prev) => mergeLiveStatus(prev, d.meetings));
+        })
+        .catch(console.error);
+    }, 30000);
+
+    return () => clearInterval(intervalId);
+  }, [userToken, hasLiveMeeting, page, pageSize]);
+
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;
     const tick = () => {

@@ -8,7 +8,6 @@ import { useToolbarIsMobile } from './useToolbarIsMobile';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
-import { CCSettingsDialog } from './RtasrHelper/CCSettingsDialog';
 import { LiveDocAiPanel } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 
@@ -238,7 +237,7 @@ export function KloudMeetToolbar({
   inviteMenuOpenRef.current = inviteMenuOpen;
   const isMobile = useToolbarIsMobile();
   const [showSTTSettings, setShowSTTSettings] = useState(false);
-  const [showCCSettings, setShowCCSettings] = useState(false);
+  const [sttSettingsTab, setSttSettingsTab] = useState<'my' | 'defaults'>('defaults');
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
@@ -1815,8 +1814,14 @@ export function KloudMeetToolbar({
                 mobileAudioState={mobileAudioState}
                 setMobileAudioState={setMobileAudioState}
                 handleToggleChat={handleToggleChat}
-                onOpenSTTSettings={() => setShowSTTSettings(true)}
-                onOpenCCSettings={() => setShowCCSettings(true)}
+                onOpenSTTSettings={() => {
+                  setSttSettingsTab('defaults');
+                  setShowSTTSettings(true);
+                }}
+                onOpenCCSettings={() => {
+                  setSttSettingsTab('my');
+                  setShowSTTSettings(true);
+                }}
                 localSubtitleVisible={localSubtitleVisible}
                 onOpenDesktopApp={onOpenDesktopApp}
                 isMobile={isMobile}
@@ -1981,8 +1986,14 @@ export function KloudMeetToolbar({
                       mobileAudioState={mobileAudioState}
                       setMobileAudioState={setMobileAudioState}
                       handleToggleChat={handleToggleChat}
-                      onOpenSTTSettings={() => setShowSTTSettings(true)}
-                      onOpenCCSettings={() => setShowCCSettings(true)}
+                      onOpenSTTSettings={() => {
+                        setSttSettingsTab('defaults');
+                        setShowSTTSettings(true);
+                      }}
+                      onOpenCCSettings={() => {
+                        setSttSettingsTab('my');
+                        setShowSTTSettings(true);
+                      }}
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
                       isMobile={false}
@@ -2127,11 +2138,8 @@ export function KloudMeetToolbar({
         captionsEnabled={captionsEnabled}
         onToggleCaptions={onToggleCaptions}
         canToggleCaptions={canToggleCaptions}
-      />
-      
-      <CCSettingsDialog
-        isOpen={showCCSettings}
-        onClose={() => setShowCCSettings(false)}
+        canManageDefaults={!!canToggleCaptions}
+        initialTab={sttSettingsTab}
         subtitleVisible={localSubtitleVisible}
       />
     </>

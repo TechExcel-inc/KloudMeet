@@ -300,7 +300,10 @@ export function LiveDocAiPanel({
         )}
 
         {!connected || !state ? (
-          <div className={styles.loading}>{t('toolbar.liveDocAiUnavailable')}</div>
+          <div className={styles.loading} role="status" aria-live="polite">
+            {!error && <span className={styles.loadingSpinner} aria-hidden />}
+            <span>{t('liveDocAi.connecting')}</span>
+          </div>
         ) : (
           <main className={styles.body}>
             {activeTab === 'file' && (

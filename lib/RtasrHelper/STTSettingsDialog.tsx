@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useI18n } from '../i18n';
+import { CCSettingsDialog } from './CCSettingsDialog';
+
+export type SttSettingsTab = 'my' | 'defaults';
 
 interface STTSettingsDialogProps {
   isOpen: boolean;
@@ -9,11 +12,27 @@ interface STTSettingsDialogProps {
   captionsEnabled?: boolean;
   onToggleCaptions?: () => void;
   canToggleCaptions?: boolean;
+  /** Host / Co-host：显示 Default Settings；其他人仅 My Settings */
+  canManageDefaults?: boolean;
+  /** 打开时默认 Tab */
+  initialTab?: SttSettingsTab;
+  subtitleVisible?: boolean;
 }
 
-export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, onToggleCaptions, canToggleCaptions = false }: STTSettingsDialogProps) {
+export function STTSettingsDialog({
+  isOpen,
+  onClose,
+  captionsEnabled = false,
+  onToggleCaptions,
+  canToggleCaptions = false,
+  canManageDefaults = false,
+  initialTab,
+  subtitleVisible = true,
+}: STTSettingsDialogProps) {
   const [mounted, setMounted] = useState(false);
   const [localEnabled, setLocalEnabled] = useState(captionsEnabled);
+  const [activeTab, setActiveTab] = useState<SttSettingsTab>('my');
+  const mySettingsSaveRef = useRef<(() => void) | null>(null);
   const { t } = useI18n();
 
   useEffect(() => {
@@ -23,6 +42,15 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
   useEffect(() => {
     setLocalEnabled(captionsEnabled);
   }, [captionsEnabled, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    if (canManageDefaults) {
+      setActiveTab(initialTab === 'my' ? 'my' : 'defaults');
+    } else {
+      setActiveTab('my');
+    }
+  }, [isOpen, canManageDefaults, initialTab]);
 
   useEffect(() => {
     if (isOpen) {
@@ -38,11 +66,29 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
   if (!mounted || !isOpen) return null;
 
   const handleSave = () => {
-    if (localEnabled !== captionsEnabled && onToggleCaptions) {
+    mySettingsSaveRef.current?.();
+    if (canManageDefaults && localEnabled !== captionsEnabled && onToggleCaptions) {
       onToggleCaptions();
     }
     onClose();
   };
+
+  const showDefaultsTab = canManageDefaults;
+  const showMyPanel = !showDefaultsTab || activeTab === 'my';
+  const showDefaultsPanel = showDefaultsTab && activeTab === 'defaults';
+
+  const tabBtnStyle = (selected: boolean): React.CSSProperties => ({
+    flex: 1,
+    background: 'transparent',
+    border: 'none',
+    borderBottom: selected ? '2px solid #5c94ff' : '2px solid transparent',
+    color: selected ? '#ffffff' : 'rgba(255, 255, 255, 0.55)',
+    fontSize: '13px',
+    fontWeight: 600,
+    cursor: 'pointer',
+    padding: '10px 8px',
+    fontFamily: 'inherit',
+  });
 
   return (
     <div
@@ -85,11 +131,12 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 16px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 24px 12px' }}>
           <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 600 }}>
             {t('stt.settingsTitle') || 'Speech to Text Settings'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             style={{
               background: 'transparent',
@@ -102,8 +149,8 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
               padding: '4px',
               opacity: 0.8,
             }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}
+            onMouseEnter={(e) => { e.currentTarget.style.opacity = '1'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.8'; }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -111,108 +158,158 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
           </button>
         </div>
 
+        {/* Tabs：Host/Co-host 两个；其他人仅 My Settings。My Settings 在前 */}
+        <div
+          style={{
+            display: 'flex',
+            padding: '0 24px',
+            borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+            gap: '4px',
+          }}
+          role="tablist"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'my'}
+            style={tabBtnStyle(activeTab === 'my')}
+            onClick={() => setActiveTab('my')}
+          >
+            {t('stt.tabMySettings') || 'My Settings'}
+          </button>
+          {showDefaultsTab && (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'defaults'}
+              style={tabBtnStyle(activeTab === 'defaults')}
+              onClick={() => setActiveTab('defaults')}
+            >
+              {t('stt.tabDefaultSettings') || 'Default Settings for all attendees'}
+            </button>
+          )}
+        </div>
+
         {/* Content */}
-        <div style={{ padding: '0 24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          
-          {/* Toggle Row */}
-          {canToggleCaptions && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
-              <div 
-                style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer' }}
-                onClick={() => setLocalEnabled(!localEnabled)}
-              >
-                <div
-                  style={{
-                    position: 'absolute',
-                    inset: 0,
-                    background: localEnabled ? '#3b82f6' : '#666666',
-                    borderRadius: '12px',
-                    transition: 'background 0.2s',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: '2px',
-                    left: '2px',
-                    width: '20px',
-                    height: '20px',
-                    background: '#ffffff',
-                    borderRadius: '50%',
-                    transition: 'transform 0.2s',
-                    transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
-                  }}
-                />
+        <div style={{ padding: '20px 24px 0', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          {/* 始终挂载 My Settings，避免切 Tab 丢状态；非当前 Tab 时隐藏 */}
+          <div style={{ display: showMyPanel ? 'flex' : 'none', flexDirection: 'column', gap: '20px' }}>
+            <CCSettingsDialog
+              isOpen={isOpen}
+              onClose={onClose}
+              subtitleVisible={subtitleVisible}
+              embedded
+              saveRef={mySettingsSaveRef}
+            />
+          </div>
+
+          {showDefaultsTab && (
+            <div style={{ display: showDefaultsPanel ? 'flex' : 'none', flexDirection: 'column', gap: '20px' }}>
+              {/* Toggle Row */}
+              {canToggleCaptions && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
+                  <div
+                    style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer' }}
+                    onClick={() => setLocalEnabled(!localEnabled)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setLocalEnabled(!localEnabled);
+                      }
+                    }}
+                    role="switch"
+                    aria-checked={localEnabled}
+                    tabIndex={0}
+                  >
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: localEnabled ? '#3b82f6' : '#666666',
+                        borderRadius: '12px',
+                        transition: 'background 0.2s',
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: '2px',
+                        left: '2px',
+                        width: '20px',
+                        height: '20px',
+                        background: '#ffffff',
+                        borderRadius: '50%',
+                        transition: 'transform 0.2s',
+                        transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Form Fields */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.applicableLanguage') || 'Applicable language supported'}</label>
+                  <div style={{
+                    background: '#444444',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#dddddd',
+                  }}>
+                    {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostSpeakLanguage') || 'Default language attendee can speak'}</label>
+                  <div style={{
+                    background: '#444444',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#dddddd',
+                  }}>
+                    {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostReadLanguage') || 'Default language attendee can read'}</label>
+                  <div style={{
+                    background: '#444444',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#dddddd',
+                  }}>
+                    {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostTargetLanguage') || 'Default closed caption language (target language for translation)'}</label>
+                  <div style={{
+                    background: '#444444',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    fontSize: '14px',
+                    color: '#dddddd',
+                  }}>
+                    {t('stt.lang.en')}
+                  </div>
+                </div>
               </div>
             </div>
           )}
-
-          {/* Form Fields */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            
-            {/* Field 1 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.applicableLanguage') || 'Applicable language supported'}</label>
-              <div style={{
-                background: '#444444',
-                padding: '12px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#dddddd'
-              }}>
-                {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
-              </div>
-            </div>
-
-            {/* Field 2 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostSpeakLanguage') || 'Default language attendee can speak'}</label>
-              <div style={{
-                background: '#444444',
-                padding: '12px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#dddddd'
-              }}>
-                {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
-              </div>
-            </div>
-
-            {/* Field 3 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostReadLanguage') || 'Default language attendee can read'}</label>
-              <div style={{
-                background: '#444444',
-                padding: '12px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#dddddd'
-              }}>
-                {t('stt.lang.zh')}, {t('stt.lang.en')}, {t('stt.lang.ja')}, {t('stt.lang.ko')}
-              </div>
-            </div>
-
-            {/* Field 4 */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <label style={{ fontSize: '14px', color: '#eeeeee' }}>{t('stt.hostTargetLanguage') || 'Default closed caption language (target language for translation)'}</label>
-              <div style={{
-                background: '#444444',
-                padding: '12px',
-                borderRadius: '6px',
-                fontSize: '14px',
-                color: '#dddddd'
-              }}>
-                {t('stt.lang.en')}
-              </div>
-            </div>
-
-          </div>
         </div>
 
         {/* Footer */}
         <div style={{ padding: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '4px' }}>
           <button
+            type="button"
             onClick={onClose}
             style={{
               background: 'transparent',
@@ -227,6 +324,7 @@ export function STTSettingsDialog({ isOpen, onClose, captionsEnabled = false, on
             {t('stt.cancel') || '取消'}
           </button>
           <button
+            type="button"
             onClick={handleSave}
             style={{
               background: '#5c94ff',

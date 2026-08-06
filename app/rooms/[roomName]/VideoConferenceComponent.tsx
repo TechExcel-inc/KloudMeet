@@ -1469,6 +1469,55 @@ export function VideoConferenceComponent(props: {
     };
   }, [room]);
 
+  // 仅一人且 10 分钟无人加入 → 自动关麦/摄像头（不写入用户偏好）
+  React.useEffect(() => {
+    const ALONE_AUTO_MUTE_MS = 10 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const clearAloneTimer = () => {
+      if (!timer) return;
+      clearTimeout(timer);
+      timer = null;
+    };
+
+    const muteLocalMediaIfAlone = () => {
+      timer = null;
+      if (room.remoteParticipants.size > 0) return;
+
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
+      const camPub = room.localParticipant.getTrackPublication(Track.Source.Camera);
+      const micLive = Boolean(micPub?.track && !micPub.isMuted);
+      const camLive = Boolean(camPub?.track && !camPub.isMuted);
+
+      if (micLive) {
+        setMicEnabled(false);
+        room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
+      }
+      if (camLive) {
+        setCamEnabled(false);
+        room.localParticipant.setCameraEnabled(false).catch(handleError);
+      }
+    };
+
+    const scheduleAloneAutoMute = () => {
+      clearAloneTimer();
+      if (room.remoteParticipants.size > 0) return;
+      timer = setTimeout(muteLocalMediaIfAlone, ALONE_AUTO_MUTE_MS);
+    };
+
+    scheduleAloneAutoMute();
+    room.on(RoomEvent.Connected, scheduleAloneAutoMute);
+    room.on(RoomEvent.ParticipantConnected, scheduleAloneAutoMute);
+    room.on(RoomEvent.ParticipantDisconnected, scheduleAloneAutoMute);
+
+    return () => {
+      clearAloneTimer();
+      room.off(RoomEvent.Connected, scheduleAloneAutoMute);
+      room.off(RoomEvent.ParticipantConnected, scheduleAloneAutoMute);
+      room.off(RoomEvent.ParticipantDisconnected, scheduleAloneAutoMute);
+    };
+  }, [room, handleError]);
+
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
     if (isToolbarMobile) {
@@ -1845,6 +1894,53 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, onDisconnected);
     };
   }, [room]);
+
+  // 入会后后台预热 LiveDoc：隐藏挂载 iframe + 提前建 instance，避免点 AI 才冷启动
+  React.useEffect(() => {
+    if (!livekitConnected || meetingEndedByHost || isRecorderBot) return;
+    if (livedocHasBeenActivated) return;
+
+    const WARMUP_DELAY_MS = 1200;
+    let delayTimer: number | undefined;
+    let idleHandle: number | undefined;
+
+    const warm = () => {
+      setLivedocHasBeenActivated(true);
+    };
+
+    delayTimer = window.setTimeout(() => {
+      const ric = (
+        window as Window & {
+          requestIdleCallback?: (
+            cb: IdleRequestCallback,
+            opts?: IdleRequestOptions,
+          ) => number;
+        }
+      ).requestIdleCallback;
+      if (typeof ric === 'function') {
+        idleHandle = ric(() => warm(), { timeout: 2500 });
+      } else {
+        warm();
+      }
+    }, WARMUP_DELAY_MS);
+
+    return () => {
+      if (delayTimer !== undefined) window.clearTimeout(delayTimer);
+      const cic = (
+        window as Window & {
+          cancelIdleCallback?: (id: number) => void;
+        }
+      ).cancelIdleCallback;
+      if (idleHandle !== undefined && typeof cic === 'function') {
+        cic(idleHandle);
+      }
+    };
+  }, [
+    livekitConnected,
+    meetingEndedByHost,
+    isRecorderBot,
+    livedocHasBeenActivated,
+  ]);
 
   // ═══ Meeting Control Sync via DataChannel ═══
   const TOPIC = 'meeting-control';
