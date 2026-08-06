@@ -158,7 +158,7 @@ function LanguageDropdown({
           onClick={onToggleOpen}
           style={{
             ...TRIGGER_STYLE,
-            borderColor: open ? 'rgba(92, 148, 255, 0.7)' : TRIGGER_STYLE.border,
+            borderColor: open ? 'rgba(92, 148, 255, 0.7)' : 'rgba(255, 255, 255, 0.14)',
           }}
         >
           <span style={{ display: 'block', lineHeight: 1.4, paddingRight: '4px' }}>
