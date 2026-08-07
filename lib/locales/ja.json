@@ -192,6 +192,9 @@
   "meeting.duplicateSessionDesc": "別のデバイスまたはブラウザでこのミーティングに参加したため、このセッションは切断されました。",
   "meeting.removedFromMeetingTitle": "ミーティングから削除されました",
   "meeting.removedFromMeetingDesc": "ホストがあなたをこのミーティングから削除しました。ホームに戻ります…",
+  "meeting.speakWhileMutedMessage": "話しているようです。マイクをオンにしますか？",
+  "meeting.speakWhileMutedUnmute": "マイクをオン",
+  "meeting.speakWhileMutedDismiss": "閉じる",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",
   "prejoin.entryLoadError": "会議情報の読み込みに失敗しました。ネットワークを確認して再試行してください。",
   "prejoin.entryRetry": "再試行",
@@ -228,6 +231,9 @@
   "liveDocAi.remove": "削除",
   "liveDocAi.removeTitle": "ドキュメントを削除しますか？",
   "liveDocAi.removeConfirm": "このドキュメントは会議から削除されます。",
+  "liveDocAi.switchToLiveDocTitle": "ドキュメントを開いて表示しますか？",
+  "liveDocAi.switchToLiveDocConfirm": "LiveDoc ビューに切り替わり、会議でこのドキュメントが表示されます。",
+  "liveDocAi.switchToLiveDocAction": "切り替えて表示",
   "liveDocAi.summaryGenerating": "AI サマリー生成中 {percent}%",
   "liveDocAi.summaryError": "サマリーを生成できません",
   "liveDocAi.noSummary": "AI サマリーがありません",
@@ -649,5 +655,7 @@
   "livedoc.fetchingToken": "アクセストークンを取得中…",
   "livedoc.loadFailed": "LiveDoc を読み込めません",
   "livedoc.missingToken": "アクセストークンがありません",
-  "livedoc.loading": "ドキュメントを読み込んでいます…"
+  "livedoc.loading": "ドキュメントを読み込んでいます…",
+  "livedoc.loadTimeout": "ドキュメントの読み込みがタイムアウトしました。ネットワークを確認して再試行してください。",
+  "livedoc.retry": "再読み込み"
 }

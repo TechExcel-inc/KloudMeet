@@ -21,6 +21,8 @@ export interface KloudPreJoinProps {
   camLabel: string;
   mediaUnavailableLabel?: string;
   joinButtonDisabled?: boolean;
+  /** 发起人准备页：始终默认打开麦克风（可随后再手动关闭） */
+  forceAudioEnabled?: boolean;
   children?: React.ReactNode;
 }
 
@@ -34,6 +36,7 @@ export function KloudPreJoin({
   camLabel,
   mediaUnavailableLabel,
   joinButtonDisabled = false,
+  forceAudioEnabled = false,
   children,
 }: KloudPreJoinProps) {
   const canUseMediaDevices =
@@ -52,11 +55,23 @@ export function KloudPreJoin({
     saveUsername,
   } = usePersistentUserChoices({ defaults });
 
-  const [audioEnabled, setAudioEnabled] = React.useState<boolean>(initialUserChoices.audioEnabled);
+  const [audioEnabled, setAudioEnabled] = React.useState<boolean>(
+    forceAudioEnabled ? true : initialUserChoices.audioEnabled,
+  );
   const [videoEnabled, setVideoEnabled] = React.useState<boolean>(initialUserChoices.videoEnabled);
   const [audioDeviceId, setAudioDeviceId] = React.useState<string>(initialUserChoices.audioDeviceId);
   const [videoDeviceId, setVideoDeviceId] = React.useState<string>(initialUserChoices.videoDeviceId);
   const [username, setUsername] = React.useState(initialUserChoices.username);
+  const [micToggleEpoch, setMicToggleEpoch] = React.useState(0);
+  const hostMicForcedRef = React.useRef(forceAudioEnabled);
+
+  // 发起人身份晚于首屏就绪时补开麦克风，并同步 TrackToggle 初始态
+  React.useEffect(() => {
+    if (!forceAudioEnabled || hostMicForcedRef.current) return;
+    hostMicForcedRef.current = true;
+    setAudioEnabled(true);
+    setMicToggleEpoch((n) => n + 1);
+  }, [forceAudioEnabled]);
 
   React.useEffect(() => { saveAudioInputEnabled(audioEnabled); }, [audioEnabled, saveAudioInputEnabled]);
   React.useEffect(() => { saveVideoInputEnabled(videoEnabled); }, [videoEnabled, saveVideoInputEnabled]);
@@ -138,6 +153,7 @@ export function KloudPreJoin({
           <>
             <div className="kloud-prejoin-device-group lk-button-group">
               <TrackToggle
+                key={`mic-${micToggleEpoch}`}
                 initialState={audioEnabled}
                 source={Track.Source.Microphone}
                 onChange={(enabled) => setAudioEnabled(enabled)}

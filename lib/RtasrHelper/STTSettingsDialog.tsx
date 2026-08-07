@@ -45,8 +45,8 @@ export function STTSettingsDialog({
 
   useEffect(() => {
     if (!isOpen) return;
-    if (canManageDefaults) {
-      setActiveTab(initialTab === 'my' ? 'my' : 'defaults');
+    if (canManageDefaults && initialTab === 'defaults') {
+      setActiveTab('defaults');
     } else {
       setActiveTab('my');
     }
@@ -88,6 +88,7 @@ export function STTSettingsDialog({
     cursor: 'pointer',
     padding: '10px 8px',
     fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
   });
 
   return (
@@ -120,7 +121,7 @@ export function STTSettingsDialog({
         style={{
           position: 'relative',
           width: '100%',
-          maxWidth: '440px',
+          maxWidth: '560px',
           background: '#1a1a1a',
           borderRadius: '8px',
           boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
@@ -158,7 +159,57 @@ export function STTSettingsDialog({
           </button>
         </div>
 
-        {/* Tabs：Host/Co-host 两个；其他人仅 My Settings。My Settings 在前 */}
+        {/* 启用语音转文字：放在两个 Tab 上方（仅 Host/Co-host） */}
+        {canToggleCaptions && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 24px 16px',
+            }}
+          >
+            <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
+            <div
+              style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer' }}
+              onClick={() => setLocalEnabled(!localEnabled)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  setLocalEnabled(!localEnabled);
+                }
+              }}
+              role="switch"
+              aria-checked={localEnabled}
+              tabIndex={0}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: localEnabled ? '#3b82f6' : '#666666',
+                  borderRadius: '12px',
+                  transition: 'background 0.2s',
+                }}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: '2px',
+                  left: '2px',
+                  width: '20px',
+                  height: '20px',
+                  background: '#ffffff',
+                  borderRadius: '50%',
+                  transition: 'transform 0.2s',
+                  transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Tabs：Host/Co-host 两个；其他人仅 My Settings。默认选中 My Settings */}
         <div
           style={{
             display: 'flex',
@@ -205,49 +256,6 @@ export function STTSettingsDialog({
 
           {showDefaultsTab && (
             <div style={{ display: showDefaultsPanel ? 'flex' : 'none', flexDirection: 'column', gap: '20px' }}>
-              {/* Toggle Row */}
-              {canToggleCaptions && (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
-                  <div
-                    style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer' }}
-                    onClick={() => setLocalEnabled(!localEnabled)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setLocalEnabled(!localEnabled);
-                      }
-                    }}
-                    role="switch"
-                    aria-checked={localEnabled}
-                    tabIndex={0}
-                  >
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: localEnabled ? '#3b82f6' : '#666666',
-                        borderRadius: '12px',
-                        transition: 'background 0.2s',
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '2px',
-                        left: '2px',
-                        width: '20px',
-                        height: '20px',
-                        background: '#ffffff',
-                        borderRadius: '50%',
-                        transition: 'transform 0.2s',
-                        transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-
               {/* Form Fields */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>

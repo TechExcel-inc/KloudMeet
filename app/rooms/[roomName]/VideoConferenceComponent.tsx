@@ -23,6 +23,8 @@ import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
+import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
+import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
@@ -1894,6 +1896,22 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, onDisconnected);
     };
   }, [room]);
+
+  const speakWhileMutedMonitoring =
+    livekitConnected &&
+    !isRecorderBot &&
+    !meetingEndedByHost &&
+    !isLocalMicRestricted &&
+    canUseRealtimeMediaControls;
+
+  const {
+    visible: speakWhileMutedVisible,
+    dismiss: dismissSpeakWhileMuted,
+    accept: acceptSpeakWhileMuted,
+  } = useSpeakWhileMutedPrompt({
+    micEnabled,
+    monitoringEnabled: speakWhileMutedMonitoring,
+  });
 
   // 入会后后台预热 LiveDoc：隐藏挂载 iframe + 提前建 instance，避免点 AI 才冷启动
   React.useEffect(() => {
@@ -7493,6 +7511,14 @@ export function VideoConferenceComponent(props: {
         </div>
 
         {/* Captions overlay — visible to all participants when host enables captions */}
+        <SpeakWhileMutedPrompt
+          visible={speakWhileMutedVisible}
+          onDismiss={dismissSpeakWhileMuted}
+          onUnmute={() => {
+            acceptSpeakWhileMuted();
+            handleToggleMic();
+          }}
+        />
         {/* 移动端：浏览器拦截远程音频时提示点击开启（Web 端无此层） */}
         {isToolbarMobile && !canPlaybackAudio && room.state === ConnectionState.Connected && (
           <div

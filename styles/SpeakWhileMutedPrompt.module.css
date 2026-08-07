@@ -1,0 +1,119 @@
+.root {
+  position: fixed;
+  left: 16px;
+  bottom: 108px;
+  transform: none;
+  z-index: 11800;
+  width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+  animation: speakMutedIn 0.22s ease-out;
+}
+
+.card {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 14px;
+  border-radius: 12px;
+  background: rgba(28, 28, 30, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  color: #fff;
+}
+
+.iconWrap {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.message {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.unmuteBtn {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: #3b82f6;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.unmuteBtn:hover {
+  background: #2563eb;
+}
+
+.dismissBtn {
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  font-family: inherit;
+}
+
+.dismissBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes speakMutedIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 640px) {
+  .root {
+    bottom: 118px;
+  }
+
+  .card {
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}

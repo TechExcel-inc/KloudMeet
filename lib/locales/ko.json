@@ -192,6 +192,9 @@
   "meeting.duplicateSessionDesc": "다른 기기 또는 브라우저에서 이 회의에 참여하여 현재 세션이 종료되었습니다.",
   "meeting.removedFromMeetingTitle": "회의에서 제거됨",
   "meeting.removedFromMeetingDesc": "호스트가 당신을 이 회의에서 제거했습니다. 홈으로 돌아갑니다…",
+  "meeting.speakWhileMutedMessage": "말하는 중인 것 같습니다. 마이크를 켤까요?",
+  "meeting.speakWhileMutedUnmute": "마이크 켜기",
+  "meeting.speakWhileMutedDismiss": "닫기",
   "prejoin.loadingMeeting": "회의 로딩 중…",
   "prejoin.entryLoadError": "회의 정보를 불러오지 못했습니다. 네트워크를 확인한 후 다시 시도하세요.",
   "prejoin.entryRetry": "다시 시도",
@@ -228,6 +231,9 @@
   "liveDocAi.remove": "제거",
   "liveDocAi.removeTitle": "문서를 제거할까요?",
   "liveDocAi.removeConfirm": "이 문서가 회의에서 제거됩니다.",
+  "liveDocAi.switchToLiveDocTitle": "문서를 열고 표시할까요?",
+  "liveDocAi.switchToLiveDocConfirm": "LiveDoc 보기로 전환되며, 회의에서 선택한 문서가 표시됩니다.",
+  "liveDocAi.switchToLiveDocAction": "전환 후 표시",
   "liveDocAi.summaryGenerating": "AI 요약 생성 중 {percent}%",
   "liveDocAi.summaryError": "요약을 생성할 수 없습니다",
   "liveDocAi.noSummary": "AI 요약 없음",
@@ -649,5 +655,7 @@
   "livedoc.fetchingToken": "액세스 토큰 가져오는 중…",
   "livedoc.loadFailed": "LiveDoc 을 불러올 수 없습니다",
   "livedoc.missingToken": "액세스 토큰이 없습니다",
-  "livedoc.loading": "문서를 불러오는 중…"
+  "livedoc.loading": "문서를 불러오는 중…",
+  "livedoc.loadTimeout": "문서 로딩이 시간 초과되었습니다. 네트워크를 확인한 후 다시 시도하세요.",
+  "livedoc.retry": "다시 로드"
 }

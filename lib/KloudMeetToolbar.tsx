@@ -237,7 +237,7 @@ export function KloudMeetToolbar({
   inviteMenuOpenRef.current = inviteMenuOpen;
   const isMobile = useToolbarIsMobile();
   const [showSTTSettings, setShowSTTSettings] = useState(false);
-  const [sttSettingsTab, setSttSettingsTab] = useState<'my' | 'defaults'>('defaults');
+  const [sttSettingsTab, setSttSettingsTab] = useState<'my' | 'defaults'>('my');
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
@@ -1385,6 +1385,7 @@ export function KloudMeetToolbar({
         error={liveDocAiBridge.error}
         busy={liveDocAiBridge.pendingActions.size > 0}
         bubblePos={liveDocBubblePos}
+        isLiveDocView={activeView === 'liveDoc'}
         onClose={closeLiveDocAiMenu}
         onClearError={liveDocAiBridge.clearError}
         onAction={liveDocAiBridge.sendAction}
@@ -1633,7 +1634,8 @@ export function KloudMeetToolbar({
                   {/* LiveDoc AI：始终显示 */}
                   {renderLiveDocSettingsButton('desktop')}
 
-                  {hasScreenShare && (
+                  {/* 标注 / 远程控制：仅 Electron 桌面端 + 有屏幕共享时显示（依赖 electronAPI） */}
+                  {isDesktop && hasScreenShare && (
                     <>
                       <button
                         className={`${styles.tabBtn} ${isDrawingMode ? styles.tabBtnCheck : ''}`}
@@ -1815,7 +1817,7 @@ export function KloudMeetToolbar({
                 setMobileAudioState={setMobileAudioState}
                 handleToggleChat={handleToggleChat}
                 onOpenSTTSettings={() => {
-                  setSttSettingsTab('defaults');
+                  setSttSettingsTab('my');
                   setShowSTTSettings(true);
                 }}
                 onOpenCCSettings={() => {
@@ -1987,7 +1989,7 @@ export function KloudMeetToolbar({
                       setMobileAudioState={setMobileAudioState}
                       handleToggleChat={handleToggleChat}
                       onOpenSTTSettings={() => {
-                        setSttSettingsTab('defaults');
+                        setSttSettingsTab('my');
                         setShowSTTSettings(true);
                       }}
                       onOpenCCSettings={() => {

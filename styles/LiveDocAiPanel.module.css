@@ -597,9 +597,106 @@
   cursor: pointer;
 }
 
+.confirmDialog .primaryButton {
+  color: #fff;
+  background: #5856d6;
+}
+
 .confirmDialog .dangerButton {
   color: #fff;
   background: #dc2626;
+}
+
+.switchConfirmDialog {
+  width: min(320px, 100%);
+  padding: 22px 20px 18px;
+  box-sizing: border-box;
+  text-align: center;
+  color: #f8fafc;
+  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.switchConfirmIcon {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #93c5fd;
+  background: rgba(59, 130, 246, 0.14);
+  border: 1px solid rgba(147, 197, 253, 0.22);
+  border-radius: 12px;
+}
+
+.switchConfirmIcon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.switchConfirmDialog h3 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #f8fafc;
+}
+
+.switchConfirmDocName {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.switchConfirmBody {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: rgba(226, 232, 240, 0.72);
+}
+
+.switchConfirmActions {
+  display: flex;
+  gap: 8px;
+}
+
+.switchConfirmActions button {
+  flex: 1;
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.switchConfirmActions button:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.switchConfirmPrimary {
+  color: #0f172a !important;
+  background: #93c5fd !important;
+  border-color: transparent !important;
+}
+
+.switchConfirmPrimary:hover {
+  background: #bfdbfe !important;
 }
 
 .optionDialog {
@@ -1037,7 +1134,8 @@
   }
 
   .confirmDialog,
-  .optionDialog {
+  .optionDialog,
+  .switchConfirmDialog {
     width: 100%;
     max-height: 88%;
     border-radius: 14px 14px 0 0;

@@ -206,6 +206,9 @@
   "meeting.duplicateSessionDesc": "You joined this meeting from another device or browser. This session has been disconnected.",
   "meeting.removedFromMeetingTitle": "Removed from Meeting",
   "meeting.removedFromMeetingDesc": "The host has removed you from this meeting. Returning to home…",
+  "meeting.speakWhileMutedMessage": "You seem to be speaking. Unmute your microphone?",
+  "meeting.speakWhileMutedUnmute": "Unmute",
+  "meeting.speakWhileMutedDismiss": "Dismiss",
   "prejoin.loadingMeeting": "Loading meeting…",
   "prejoin.entryLoadError": "Could not load meeting info. Check your network and try again.",
   "prejoin.entryRetry": "Retry",
@@ -243,6 +246,9 @@
   "liveDocAi.remove": "Remove",
   "liveDocAi.removeTitle": "Remove document?",
   "liveDocAi.removeConfirm": "This document will be removed from the meeting.",
+  "liveDocAi.switchToLiveDocTitle": "Open and present this document?",
+  "liveDocAi.switchToLiveDocConfirm": "You'll switch to LiveDoc view and show this document in the meeting.",
+  "liveDocAi.switchToLiveDocAction": "Switch & show",
   "liveDocAi.summaryGenerating": "AI Summary is generating {percent}%",
   "liveDocAi.summaryError": "Unable to generate summary",
   "liveDocAi.noSummary": "No AI generated summary",
@@ -670,5 +676,7 @@
   "livedoc.fetchingToken": "Fetching access token…",
   "livedoc.loadFailed": "Failed to load LiveDoc",
   "livedoc.missingToken": "Missing access token",
-  "livedoc.loading": "Loading document…"
+  "livedoc.loading": "Loading document…",
+  "livedoc.loadTimeout": "Document loading timed out. Check your network and try again.",
+  "livedoc.retry": "Reload"
 }

@@ -161,46 +161,6 @@ export function PageClientImpl(props: {
     }
   }, [effectiveRoomName, isBot]);
 
-  const preJoinDefaults = React.useMemo(() => {
-    let defaultUsername = '';
-    let videoEnabled = true;
-    let audioEnabled = true;
-    if (typeof window !== 'undefined') {
-      try {
-        const storedChoices = readStoredUserMediaChoices();
-        if (typeof storedChoices.username === 'string') {
-          defaultUsername = storedChoices.username;
-        }
-        if (typeof storedChoices.videoEnabled === 'boolean') {
-          videoEnabled = storedChoices.videoEnabled;
-        }
-        if (typeof storedChoices.audioEnabled === 'boolean') {
-          audioEnabled = storedChoices.audioEnabled;
-        }
-
-        const storedKloud = localStorage.getItem('kloudUser');
-        if (storedKloud) {
-          const user = JSON.parse(storedKloud) as {
-            displayName?: unknown;
-            username?: unknown;
-          };
-          if (typeof user.displayName === 'string' && user.displayName) {
-            defaultUsername = user.displayName;
-          } else if (typeof user.username === 'string' && user.username) {
-            defaultUsername = user.username;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    return {
-      username: defaultUsername,
-      videoEnabled,
-      audioEnabled,
-      // Do NOT set audioDeviceId / videoDeviceId — let LiveKit pick system default
-    };
-  }, []);
   const [connectionDetails, setConnectionDetails] = React.useState<ConnectionDetails | undefined>(
     undefined,
   );
@@ -450,6 +410,54 @@ export function PageClientImpl(props: {
   );
 
   const isHost = isMeetingCreator;
+
+  const preJoinDefaults = React.useMemo(() => {
+    let defaultUsername = '';
+    let videoEnabled = true;
+    // 发起人准备页始终默认开麦；参会者仍沿用本地上次偏好
+    let audioEnabled = true;
+    if (typeof window !== 'undefined') {
+      try {
+        const storedChoices = readStoredUserMediaChoices();
+        if (typeof storedChoices.username === 'string') {
+          defaultUsername = storedChoices.username;
+        }
+        if (typeof storedChoices.videoEnabled === 'boolean') {
+          videoEnabled = storedChoices.videoEnabled;
+        }
+        if (!isHost && typeof storedChoices.audioEnabled === 'boolean') {
+          audioEnabled = storedChoices.audioEnabled;
+        }
+
+        const storedKloud = localStorage.getItem('kloudUser');
+        if (storedKloud) {
+          const user = JSON.parse(storedKloud) as {
+            displayName?: unknown;
+            username?: unknown;
+          };
+          if (typeof user.displayName === 'string' && user.displayName) {
+            defaultUsername = user.displayName;
+          } else if (typeof user.username === 'string' && user.username) {
+            defaultUsername = user.username;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return {
+      username: defaultUsername,
+      videoEnabled,
+      audioEnabled: isHost ? true : audioEnabled,
+      // Do NOT set audioDeviceId / videoDeviceId — let LiveKit pick system default
+    };
+  }, [isHost]);
+
+  // 发起人进入准备页时，把开麦写回持久化偏好，避免 LiveKit 读到上次关麦
+  React.useEffect(() => {
+    if (!isHost || !prejoinReady) return;
+    patchStoredUserMediaChoices({ audioEnabled: true });
+  }, [isHost, prejoinReady]);
 
   const handlePrejoinSignOut = React.useCallback(() => {
     try {
@@ -1407,6 +1415,7 @@ export function PageClientImpl(props: {
           {!isBot && prejoinReady && (
             <KloudPreJoin
               defaults={preJoinDefaults}
+              forceAudioEnabled={isHost}
               onSubmit={handlePreJoinSubmit}
               onError={handlePreJoinError}
               joinLabel={preJoinButtonText}

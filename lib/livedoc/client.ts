@@ -96,6 +96,9 @@ type CreateMeetingInstanceResponse = {
   data: number;
 };
 
+/** 并发调用合并为一次 HTTP，避免 LiveDocView + Host bootstrap 同时打两次 instant-account */
+const instantAccountInFlight = new Map<string, Promise<string>>();
+
 /**
  * Anonymous PeerTime account — calls same-origin API route to avoid third-party CORS.
  */
@@ -110,26 +113,40 @@ export async function createOrUpdateInstantAccount(userName: string): Promise<st
     return cached;
   }
 
-  const response = await fetch('/api/livedoc/instant-account', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ Guid: guid, UserName: userName }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`instant-account: ${response.status} ${text}`);
+  const existing = instantAccountInFlight.get(guid);
+  if (existing) {
+    return existing;
   }
 
-  const result = (await response.json()) as {
-    RetData?: { Account?: { UserToken?: string } };
-  };
-  const token = result?.RetData?.Account?.UserToken;
-  if (typeof token !== 'string' || !token) {
-    throw new Error('instant-account: missing UserToken in response');
+  const request = (async () => {
+    const response = await fetch('/api/livedoc/instant-account', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ Guid: guid, UserName: userName }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`instant-account: ${response.status} ${text}`);
+    }
+
+    const result = (await response.json()) as {
+      RetData?: { Account?: { UserToken?: string } };
+    };
+    const token = result?.RetData?.Account?.UserToken;
+    if (typeof token !== 'string' || !token) {
+      throw new Error('instant-account: missing UserToken in response');
+    }
+    localStorage.setItem(cacheKey, token);
+    return token;
+  })();
+
+  instantAccountInFlight.set(guid, request);
+  try {
+    return await request;
+  } finally {
+    instantAccountInFlight.delete(guid);
   }
-  localStorage.setItem(cacheKey, token);
-  return token;
 }
 
 /**

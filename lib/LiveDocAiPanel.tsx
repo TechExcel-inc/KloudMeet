@@ -28,6 +28,8 @@ interface LiveDocAiPanelProps {
   error: string;
   busy: boolean;
   bubblePos: LiveDocAiBubblePos | null;
+  /** 当前是否已在 LiveDoc 主视图；否时切换文档需确认 */
+  isLiveDocView: boolean;
   onClose: () => void;
   onClearError: () => void;
   onAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
@@ -124,6 +126,7 @@ export function LiveDocAiPanel({
   error,
   busy,
   bubblePos,
+  isLiveDocView,
   onClose,
   onClearError,
   onAction,
@@ -136,6 +139,7 @@ export function LiveDocAiPanel({
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [removeItemId, setRemoveItemId] = React.useState<number | null>(null);
+  const [pendingOpenItemId, setPendingOpenItemId] = React.useState<number | null>(null);
   const [summaryMenuOpen, setSummaryMenuOpen] = React.useState(false);
   const [summaryOptionsOpen, setSummaryOptionsOpen] = React.useState(false);
   const [summaryDetailLevel, setSummaryDetailLevel] = React.useState<0 | 2>(2);
@@ -171,10 +175,19 @@ export function LiveDocAiPanel({
       setFileMenuItemId(null);
       setUploadMenuOpen(false);
       setRemoveItemId(null);
+      setPendingOpenItemId(null);
       setSummaryMenuOpen(false);
       setSummaryOptionsOpen(false);
     }
   }, [open]);
+
+  const requestOpenDocument = (itemId: number) => {
+    if (isLiveDocView) {
+      onOpenDocument(itemId);
+      return;
+    }
+    setPendingOpenItemId(itemId);
+  };
 
   if (!open || typeof document === 'undefined') return null;
 
@@ -326,9 +339,11 @@ export function LiveDocAiPanel({
                       className={`${styles.documentRow} ${item.isCurrent ? styles.documentRowActive : ''}`}
                       role="button"
                       tabIndex={0}
-                      onClick={() => onOpenDocument(item.itemId)}
+                      onClick={() => requestOpenDocument(item.itemId)}
                       onKeyDown={(event) => {
-                        if (event.key === 'Enter' || event.key === ' ') onOpenDocument(item.itemId);
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          requestOpenDocument(item.itemId);
+                        }
                       }}
                     >
                       <span className={styles.thumbnail}>
@@ -572,6 +587,50 @@ export function LiveDocAiPanel({
                   }}
                 >
                   {t('liveDocAi.remove')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {pendingOpenItemId !== null && (
+          <div className={styles.nestedOverlay}>
+            <div
+              className={styles.switchConfirmDialog}
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="live-doc-switch-title"
+              aria-describedby="live-doc-switch-desc"
+            >
+              <div className={styles.switchConfirmIcon} aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6">
+                  <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <h3 id="live-doc-switch-title">{t('liveDocAi.switchToLiveDocTitle')}</h3>
+              {(() => {
+                const pendingDoc = documents.find((item) => item.itemId === pendingOpenItemId);
+                return pendingDoc ? (
+                  <p className={styles.switchConfirmDocName}>{pendingDoc.title}</p>
+                ) : null;
+              })()}
+              <p id="live-doc-switch-desc" className={styles.switchConfirmBody}>
+                {t('liveDocAi.switchToLiveDocConfirm')}
+              </p>
+              <div className={styles.switchConfirmActions}>
+                <button type="button" onClick={() => setPendingOpenItemId(null)}>
+                  {t('common.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className={styles.switchConfirmPrimary}
+                  onClick={() => {
+                    const itemId = pendingOpenItemId;
+                    setPendingOpenItemId(null);
+                    onOpenDocument(itemId);
+                  }}
+                >
+                  {t('liveDocAi.switchToLiveDocAction')}
                 </button>
               </div>
             </div>
