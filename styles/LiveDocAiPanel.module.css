@@ -273,6 +273,20 @@
 
 .viewAction {
   color: #aaa8ff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.documentRow:hover .viewAction,
+.documentRow:focus-within .viewAction {
+  opacity: 1;
+}
+
+/* 触摸设备无悬停：始终显示，避免无法点开 */
+@media (hover: none) {
+  .viewAction {
+    opacity: 1;
+  }
 }
 
 .menuAnchor {

@@ -243,6 +243,10 @@ export function KloudMeetToolbar({
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
   const [liveDocMenuVisible, setLiveDocMenuVisible] = useState(false);
   const [liveDocAnnotationEnabled, setLiveDocAnnotationEnabled] = useState(true);
+  /** LiveDoc SyncPlayer / AI Present 播放中：禁用底栏 catch 层，避免挡住 #syncplayer */
+  const [syncPlayerActive, setSyncPlayerActive] = useState(false);
+  const syncPlayerActiveRef = useRef(false);
+  syncPlayerActiveRef.current = syncPlayerActive;
   const [liveDocBubblePos, setLiveDocBubblePos] = useState<{
     top: number;
     left: number;
@@ -274,6 +278,8 @@ export function KloudMeetToolbar({
 
   useEffect(() => {
     parentOnlyHiddenRef.current = false;
+    setSyncPlayerActive(false);
+    syncPlayerActiveRef.current = false;
     setVisible(true);
   }, [activeView]);
 
@@ -321,6 +327,8 @@ export function KloudMeetToolbar({
   }, [isMobile, clearDesktopToolbarAutoHide]);
 
   const revealToolbar = () => {
+    // Sync/AI Present：底栏盖住 #syncplayer，禁止唤出
+    if (syncPlayerActiveRef.current) return;
     clearDesktopToolbarAutoHide();
     parentOnlyHiddenRef.current = false;
     setVisible(true);
@@ -640,12 +648,35 @@ export function KloudMeetToolbar({
           ? String((payload as { type?: unknown }).type ?? '')
           : '';
 
+      if (msgType === 'Kloud-SyncPlayerActive') {
+        const data =
+          typeof payload === 'object' && payload !== null && 'data' in payload
+            ? (payload as { data?: { active?: unknown } }).data
+            : null;
+        const active = data?.active === 1 || data?.active === true;
+        setSyncPlayerActive(active);
+        syncPlayerActiveRef.current = active;
+        if (active) {
+          parentOnlyHiddenRef.current = false;
+          clearDesktopToolbarAutoHide();
+          setVisible(false);
+        }
+        return;
+      }
+
       if (msgType === 'Kloud-onMouseClick') {
         const data =
           typeof payload === 'object' && payload !== null && 'data' in payload
             ? (payload as { data?: { show?: unknown } }).data
             : null;
         let show = data?.show === 1 || data?.show === true;
+
+        // SyncPlayer 播放中：始终压住底栏，且不要被 parentOnlyHidden 改判为显示
+        if (syncPlayerActiveRef.current) {
+          parentOnlyHiddenRef.current = false;
+          setVisible(false);
+          return;
+        }
 
         // 父页曾单独隐藏底栏（离开 3s）时，插件仍认为可见，空白点击会先发 show:0。
         // 改判为显示，保留点击空白显隐（不改插件）。
@@ -664,6 +695,7 @@ export function KloudMeetToolbar({
       // LiveDoc iframe：仅中间向上图标附近才唤出底栏
       if (msgType === 'mousemove') {
         if (isMobile) return;
+        if (syncPlayerActiveRef.current) return;
         const data =
           typeof payload === 'object' && payload !== null && 'data' in payload
             ? (payload as { data?: { showBottomToolbar?: unknown } }).data
@@ -1392,7 +1424,7 @@ export function KloudMeetToolbar({
         onOpenDocument={handleLiveDocDocumentOpen}
       />
 
-      {!visible && (
+      {!visible && !syncPlayerActive && (
         <>
           {/* 底部导航栏占位：吞掉点击，避免误点唤出；桌面仅中间图标附近悬停唤出 */}
           <div className={styles.bottomNavCatchZone} aria-hidden />

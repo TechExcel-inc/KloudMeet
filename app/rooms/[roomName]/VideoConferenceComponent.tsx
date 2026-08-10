@@ -2055,18 +2055,38 @@ export function VideoConferenceComponent(props: {
   // Helper: send a meeting control message
   const sendMeetingMsg = React.useCallback(
     (msg: object, destinationIdentities?: string[]) => {
+      // 断连 / PC 已关时 publishData 会抛 UnexpectedConnectionState: PC manager is closed
+      if (room.state !== ConnectionState.Connected) {
+        return;
+      }
       const data = encoder.encode(JSON.stringify(msg));
-      const opts: any = { reliable: true, topic: TOPIC };
+      const opts: { reliable: boolean; topic: string; destinationIdentities?: string[] } = {
+        reliable: true,
+        topic: TOPIC,
+      };
       if (destinationIdentities) {
         opts.destinationIdentities = destinationIdentities;
       }
       room.localParticipant.publishData(data, opts).catch(() => {
+        if (room.state !== ConnectionState.Connected) {
+          return;
+        }
         room.localParticipant
           .publishData(data, {
             topic: TOPIC,
             ...(destinationIdentities ? { destinationIdentities } : {}),
           })
-          .catch(console.error);
+          .catch((err: unknown) => {
+            // 重连/离开竞态：忽略 PC 已关闭类错误，避免刷控制台
+            if (room.state !== ConnectionState.Connected) {
+              return;
+            }
+            const message = err instanceof Error ? err.message : String(err);
+            if (/PC manager is closed|UnexpectedConnectionState/i.test(message)) {
+              return;
+            }
+            console.error(err);
+          });
       });
     },
     [room, encoder],
