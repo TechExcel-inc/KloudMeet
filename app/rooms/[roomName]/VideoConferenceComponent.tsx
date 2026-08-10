@@ -131,6 +131,11 @@ import {
   isMeetingEnded,
   setMeetingClosedNotice,
 } from '@/lib/meetingClosedNotice';
+import {
+  isLiveKitAuthError,
+  LIVEKIT_TOKEN_RENEW_MIN_DELAY_MS,
+  msUntilLiveKitTokenRenew,
+} from '@/lib/livekitToken';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -575,6 +580,8 @@ export function VideoConferenceComponent(props: {
   // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
   const unexpectedErrorRetryCountRef = React.useRef(0);
   const MAX_UNEXPECTED_RETRIES = 6;
+  /** Silent JWT renew in progress — disconnect must not look like an unexpected drop. */
+  const tokenRenewInProgressRef = React.useRef(false);
 
   const clearActiveKloudRoom = React.useCallback(() => {
     try {
@@ -732,8 +739,8 @@ export function VideoConferenceComponent(props: {
     // Always register event listeners (so cleanup always has something to remove)
     const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
       console.log('[KloudMeet] Disconnected event received. reason=', reason, 'intentional=', intentionalDisconnectRef.current, 'duplicateHandled=', duplicateSessionHandledRef.current);
-      // During reconnection or voluntary disconnect, ignore all disconnect events
-      if (intentionalDisconnectRef.current) return;
+      // During reconnection, voluntary disconnect, or silent token renew
+      if (intentionalDisconnectRef.current || tokenRenewInProgressRef.current) return;
       // Server forced remove (host kick or duplicate-session eviction)
       if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
           reason === DisconnectReason.DUPLICATE_IDENTITY) {
@@ -800,14 +807,18 @@ export function VideoConferenceComponent(props: {
         // ─── doConnect: self-contained recursive retry with exponential backoff ───────
         // All retry rounds go through this single function so the backoff counters
         // are always correct regardless of which attempt fails.
-        const doConnect = () => {
-          const cd = connectionDetailsRef.current;
-          room
-            .connect(
-              cd.serverUrl,
-              cd.participantToken,
-              connectOptions,
-            )
+        // `fresh: true` re-issues JWT via /api/connection-details before connect
+        // (used after LiveKit auth 401 so we never retry with an expired token).
+        const doConnect = (opts?: { fresh?: boolean }) => {
+          const runConnect = async () => {
+            if (opts?.fresh) {
+              await refreshConnectionDetails();
+            }
+            const cd = connectionDetailsRef.current;
+            await room.connect(cd.serverUrl, cd.participantToken, connectOptions);
+          };
+
+          runConnect()
             .then(() => {
               hasConnectedOnceRef.current = true;
               intentionalDisconnectRef.current = false;
@@ -908,15 +919,16 @@ export function VideoConferenceComponent(props: {
               };
               enableDevices();
             })
-            .catch((error) => {
+            .catch((error: Error) => {
               connectAttemptedRef.current = false;
 
-              if (isRetryableConnectError(error)) {
+              const authFail = isLiveKitAuthError(error);
+              if (authFail || isRetryableConnectError(error)) {
                 const attempt = connectRetryCountRef.current + 1;
                 if (attempt <= MAX_CONNECT_RETRIES) {
                   const delay = computeBackoffMs(attempt);
                   console.warn(
-                    `[KloudMeet] Signal connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
+                    `[KloudMeet] ${authFail ? 'Auth' : 'Signal'} connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
                     error.message,
                   );
                   connectRetryCountRef.current = attempt;
@@ -925,7 +937,10 @@ export function VideoConferenceComponent(props: {
                     connectRetryTimerRef.current = null;
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      doConnect(); // ← same function, carries full retry logic
+                      // Auth 401: always mint a new JWT.
+                      // Later network retries also refresh — covers 401s whose
+                      // body text didn't match isLiveKitAuthError on attempt 1.
+                      doConnect(authFail || attempt > 1 ? { fresh: true } : undefined);
                     }
                   }, delay);
                   return;
@@ -961,7 +976,7 @@ export function VideoConferenceComponent(props: {
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom]);
+  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, refreshConnectionDetails]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -988,14 +1003,14 @@ export function VideoConferenceComponent(props: {
       console.warn('[KloudMeet] Media device unavailable, user may switch in settings:', error.message);
       return;
     }
-    // Signal/network errors & "client initiated disconnect" — auto-retry then inline UI
-    if (isRetryableConnectError(error)) {
+    // Signal/network errors, LiveKit JWT auth failures, & "client initiated disconnect"
+    if (isLiveKitAuthError(error) || isRetryableConnectError(error)) {
       const attempt = unexpectedErrorRetryCountRef.current + 1;
       if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
         unexpectedErrorRetryCountRef.current = attempt;
         const delay = computeBackoffMs(attempt);
         console.warn(
-          `[KloudMeet] Unexpected disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
+          `[KloudMeet] ${isLiveKitAuthError(error) ? 'Auth' : 'Unexpected'} disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
           error.message,
         );
         connectRetryTimerRef.current = setTimeout(() => {
@@ -1035,6 +1050,99 @@ export function VideoConferenceComponent(props: {
     setConnectError(`加密错误: ${error.message}`);
   }, []);
 
+  // ── Proactive LiveKit JWT renew (before exp) ──
+  // Healthy connections are untouched until ~5min before expiry. Then we
+  // intentionally disconnect → mint a new token → reconnect, restoring mic/cam.
+  // Must disconnect BEFORE refreshConnectionDetails so member eviction does not
+  // surface as "session moved" while still in-room.
+  React.useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+
+    const clearTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+
+    const schedule = () => {
+      clearTimer();
+      if (cancelled) return;
+      if (tokenRenewInProgressRef.current) return;
+      if (room.state !== ConnectionState.Connected) return;
+      const waitMs = msUntilLiveKitTokenRenew(connectionDetailsRef.current.participantToken);
+      if (waitMs == null) return;
+      const delay = Math.max(waitMs, LIVEKIT_TOKEN_RENEW_MIN_DELAY_MS);
+      timer = setTimeout(() => {
+        void renew();
+      }, delay);
+    };
+
+    const renew = async () => {
+      if (cancelled || tokenRenewInProgressRef.current) return;
+      if (duplicateSessionHandledRef.current) return;
+      if (removedFromMeetingHandledRef.current) return;
+      if (hostEndedHandledRef.current) return;
+      if (room.state !== ConnectionState.Connected) return;
+
+      tokenRenewInProgressRef.current = true;
+      intentionalDisconnectRef.current = true;
+      const wasMic = room.localParticipant.isMicrophoneEnabled;
+      const wasCam = room.localParticipant.isCameraEnabled;
+
+      try {
+        console.warn('[KloudMeet] Renewing LiveKit token before expiry');
+        await room.disconnect();
+        const cd = await refreshConnectionDetails();
+        if (cancelled) {
+          // Effect torn down mid-renew — don't leave intentionalDisconnect stuck,
+          // or online/visibility recovery would never run.
+          intentionalDisconnectRef.current = false;
+          return;
+        }
+        await room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
+        hasConnectedOnceRef.current = true;
+        intentionalDisconnectRef.current = false;
+        setConnectError(null);
+        if (wasMic) {
+          await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+        }
+        if (wasCam) {
+          await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
+        }
+        schedule();
+      } catch (e: unknown) {
+        intentionalDisconnectRef.current = false;
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.warn('[KloudMeet] Token renew failed:', err.message);
+        if (!cancelled) {
+          handleError(err);
+        }
+      } finally {
+        tokenRenewInProgressRef.current = false;
+      }
+    };
+
+    const onConnected = () => schedule();
+    const onDisconnected = () => {
+      if (!tokenRenewInProgressRef.current) clearTimer();
+    };
+
+    room.on(RoomEvent.Connected, onConnected);
+    room.on(RoomEvent.Disconnected, onDisconnected);
+    if (room.state === ConnectionState.Connected) {
+      schedule();
+    }
+
+    return () => {
+      cancelled = true;
+      clearTimer();
+      room.off(RoomEvent.Connected, onConnected);
+      room.off(RoomEvent.Disconnected, onDisconnected);
+    };
+  }, [room, refreshConnectionDetails, handleError]);
+
   // ── Network/visibility-driven recovery ──
   // When the device regains connectivity or the tab becomes visible again
   // (e.g. after laptop sleep / phone backgrounding), proactively recover the
@@ -1045,6 +1153,7 @@ export function VideoConferenceComponent(props: {
     const recover = (reason: string) => {
       if (duplicateSessionHandledRef.current) return;
       if (intentionalDisconnectRef.current) return;
+      if (tokenRenewInProgressRef.current) return;
       if (!hasConnectedOnceRef.current) return;
       if (
         room.state === ConnectionState.Connected ||
