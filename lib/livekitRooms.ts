@@ -63,15 +63,17 @@ export async function findKloudMemberHostInLiveRoom(
 }
 
 /**
- * Remove existing participants in the room that share the same kloudMemberId.
- * Called when a user requests a new token so the old session is evicted
- * BEFORE the new one connects — the old client receives DisconnectReason
- * and shows the "Session Moved" popup instead of reconnecting.
+ * Remove other sessions for the same kloudMemberId before issuing a new token.
+ *
+ * @param sameIdentity - Identity about to (re)join. Skipped: LiveKit replaces
+ *   that connection on join; removeParticipant would set a Cloud revoke cutoff.
+ *   Other identities for the same member get SESSION_EVICTED then removed
+ *   (cross-tab / cross-device takeover).
  */
 export async function evictParticipantsByMemberId(
   roomName: string,
   memberId: number,
-  excludeIdentity?: string,
+  sameIdentity?: string,
 ): Promise<number> {
   const client = getRoomServiceClient();
   if (!client) {
@@ -85,38 +87,44 @@ export async function evictParticipantsByMemberId(
       participants.map(p => ({ identity: p.identity, sid: p.sid })));
     let evicted = 0;
     for (const p of participants) {
-      if (excludeIdentity && p.identity === excludeIdentity) {
-        console.log(`[evict] Skipping excludeIdentity match: ${p.identity}`);
-        continue;
-      }
       const pid = parseKloudMemberIdFromIdentity(p.identity);
       console.log(`[evict] Checking participant identity="${p.identity}" → memberId=${pid}, looking for ${memberId}`);
-      if (pid != null && pid === memberId) {
-        try {
-          // Send a pre-eviction notification via the data channel so the
-          // client can show the popup BEFORE the disconnect fires. This
-          // prevents the SDK's auto-retry from kicking in.
-          const notice = new TextEncoder().encode(
-            JSON.stringify({ type: 'SESSION_EVICTED' }),
-          );
-          try {
-            await client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
-              destinationIdentities: [p.identity],
-              topic: 'kloud-session',
-            });
-            console.log(`[evict] Sent SESSION_EVICTED to ${p.identity}, waiting 150ms…`);
-            await new Promise((r) => setTimeout(r, 150));
-          } catch (sendErr) {
-            console.warn(`[evict] sendData failed (non-fatal) for ${p.identity}`, sendErr);
-          }
+      if (pid == null || pid !== memberId) continue;
 
-          console.log(`[evict] Removing participant: ${p.identity} (memberId=${pid})`);
-          await client.removeParticipant(roomName, p.identity);
-          console.log(`[evict] Successfully removed: ${p.identity}`);
-          evicted++;
-        } catch (e) {
-          console.error('[evict] removeParticipant failed', p.identity, e);
+      // Same identity (refresh / token renew): do NOT removeParticipant.
+      // LiveKit replaces the old connection on join. Calling removeParticipant
+      // sets a Cloud revoke cutoff; with legacy nbf:0 JWTs that made every
+      // subsequent ticket look permanently revoked.
+      if (sameIdentity && p.identity === sameIdentity) {
+        console.log(
+          `[evict] Skip same identity (will be replaced on join): ${p.identity}`,
+        );
+        continue;
+      }
+
+      try {
+        // Cross-tab / other device: notify so the old client shows Session Moved
+        // instead of auto-reconnecting.
+        const notice = new TextEncoder().encode(
+          JSON.stringify({ type: 'SESSION_EVICTED' }),
+        );
+        try {
+          await client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
+            destinationIdentities: [p.identity],
+            topic: 'kloud-session',
+          });
+          console.log(`[evict] Sent SESSION_EVICTED to ${p.identity}, waiting 150ms…`);
+          await new Promise((r) => setTimeout(r, 150));
+        } catch (sendErr) {
+          console.warn(`[evict] sendData failed (non-fatal) for ${p.identity}`, sendErr);
         }
+
+        console.log(`[evict] Removing participant: ${p.identity} (memberId=${pid})`);
+        await client.removeParticipant(roomName, p.identity);
+        console.log(`[evict] Successfully removed: ${p.identity}`);
+        evicted++;
+      } catch (e) {
+        console.error('[evict] removeParticipant failed', p.identity, e);
       }
     }
     console.log(`[evict] Done. Evicted ${evicted} participant(s).`);

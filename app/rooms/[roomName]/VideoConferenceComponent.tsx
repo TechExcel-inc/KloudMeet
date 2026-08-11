@@ -138,6 +138,7 @@ import {
   msUntilLiveKitTokenRenew,
 } from '@/lib/livekitToken';
 import {
+  classifyLiveKitFailure,
   isKloudSessionExpiredError,
   logSeriousLiveKitFailure,
 } from '@/lib/livekitConnectionFailure';
@@ -580,13 +581,20 @@ export function VideoConferenceComponent(props: {
   const removedFromMeetingHandledRef = React.useRef(false);
   const hostEndedHandledRef = React.useRef(false);
   const hostEndedRedirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Keeps the retry count visible in the error UI (NOT reset until user dismisses)
-  const connectRetryDisplayRef = React.useRef(0);
-  // Retry counter for unexpected in-room errors (e.g. "Client initiated disconnect")
+  // Retry counter for unexpected in-room errors (silent auto-recover only — not UX theater)
   const unexpectedErrorRetryCountRef = React.useRef(0);
   const MAX_UNEXPECTED_RETRIES = 6;
   /** Silent JWT renew in progress — disconnect must not look like an unexpected drop. */
   const tokenRenewInProgressRef = React.useRef(false);
+  /** Last LiveKit DisconnectReason name for serious-failure RCA logs. */
+  const lastDisconnectReasonRef = React.useRef<string | undefined>(undefined);
+  /** One-shot pragmatic rejoin after auto-recover exhaustion (avoids retry loops). */
+  const pragmaticRejoinInFlightRef = React.useRef(false);
+  /**
+   * Local screen share was active — restore after token renew / reconnect.
+   * Set on publish; cleared on intentional stop or after restore attempt.
+   */
+  const screenShareRestorePendingRef = React.useRef(false);
   /** Coalesce concurrent /api/connection-details calls (avoids self-revoking JWTs). */
   const refreshConnectionDetailsInFlightRef = React.useRef<Promise<ConnectionDetails> | null>(null);
 
@@ -652,6 +660,10 @@ export function VideoConferenceComponent(props: {
       ) {
         return current;
       }
+      // Auth/revoked paths must never reconnect with the rejected JWT.
+      if (opts?.forceRefresh && current) {
+        connectionDetailsRef.current = { ...current, participantToken: '' };
+      }
       return refreshConnectionDetails();
     },
     [refreshConnectionDetails],
@@ -663,6 +675,170 @@ export function VideoConferenceComponent(props: {
       return room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
     },
     [ensureConnectionDetails, room],
+  );
+
+  const showScreenShareRestoreFailedToast = React.useCallback(() => {
+    if (typeof document === 'undefined') return;
+    const toastEl = document.createElement('div');
+    toastEl.textContent = t('meeting.screenShareRestoreFailed');
+    toastEl.style.cssText =
+      'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
+    document.body.appendChild(toastEl);
+    setTimeout(() => toastEl.remove(), 4000);
+  }, [t]);
+
+  /** Re-request getDisplayMedia after renew/reconnect when we were sharing. */
+  const restoreScreenShareAfterReconnect = React.useCallback(async () => {
+    if (!screenShareRestorePendingRef.current) return;
+    if (isToolbarMobileUserAgent()) {
+      screenShareRestorePendingRef.current = false;
+      return;
+    }
+    try {
+      await room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE);
+      setScreenShareActive(true);
+      setActiveView('liveDoc');
+      broadcastViewChangeRef.current?.('shareScreen');
+      console.warn('[KloudMeet] Screen share restored after reconnect');
+    } catch (e: unknown) {
+      screenShareRestorePendingRef.current = false;
+      setScreenShareActive(false);
+      console.warn(
+        '[KloudMeet] Screen share restore failed (browser may require a user gesture):',
+        e instanceof Error ? e.message : e,
+      );
+      showScreenShareRestoreFailedToast();
+    }
+  }, [room, showScreenShareRestoreFailedToast]);
+
+  const restoreLocalMediaAfterReconnect = React.useCallback(async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoIds = new Set(devices.filter((d) => d.kind === 'videoinput').map((d) => d.deviceId));
+      const audioIds = new Set(devices.filter((d) => d.kind === 'audioinput').map((d) => d.deviceId));
+      const wantedVideo = props.userChoices.videoDeviceId;
+      if (wantedVideo && !videoIds.has(wantedVideo)) {
+        room.options.videoCaptureDefaults = {
+          ...room.options.videoCaptureDefaults,
+          deviceId: undefined,
+        };
+      }
+      const wantedAudio = props.userChoices.audioDeviceId;
+      if (wantedAudio && !audioIds.has(wantedAudio)) {
+        room.options.audioCaptureDefaults = {
+          ...room.options.audioCaptureDefaults,
+          deviceId: undefined,
+        };
+      }
+    } catch {
+      /* proceed with defaults */
+    }
+    if (props.userChoices.videoEnabled) {
+      await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
+    } else {
+      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
+    }
+    if (props.userChoices.audioEnabled) {
+      await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+    } else {
+      await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
+    }
+    if (isToolbarMobileUserAgent()) {
+      void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+    }
+    await restoreScreenShareAfterReconnect();
+  }, [props.userChoices, room, restoreScreenShareAfterReconnect]);
+
+  /**
+   * Auto-recover exhausted → bug path: heavy log, then one pragmatic forceRefresh rejoin.
+   * Do not present "failed N times" as the product experience; only surface UI if rejoin fails.
+   */
+  const enterSeriousFailureAndPragmaticRejoin = React.useCallback(
+    (opts: {
+      phase: 'retries-exhausted' | 'unexpected-disconnect';
+      attempt: number;
+      maxAttempts: number;
+      error: Error;
+      path: string;
+    }) => {
+      const authFail = isLiveKitAuthError(opts.error);
+      const failureKind = classifyLiveKitFailure(opts.error);
+      logSeriousLiveKitFailure({
+        phase: opts.phase,
+        attempt: opts.attempt,
+        maxAttempts: opts.maxAttempts,
+        roomName: connectionDetailsRef.current?.roomName,
+        roomState: room.state,
+        disconnectReason: lastDisconnectReasonRef.current,
+        authFail,
+        failureKind,
+        participantToken: connectionDetailsRef.current?.participantToken,
+        error: opts.error,
+        extra: { path: opts.path },
+      });
+
+      if (pragmaticRejoinInFlightRef.current) {
+        setConnectError(opts.error.message);
+        return;
+      }
+      if (duplicateSessionHandledRef.current || removedFromMeetingHandledRef.current) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        // Stay quiet until online recovery; still logged above as serious.
+        setConnectError(opts.error.message);
+        return;
+      }
+
+      pragmaticRejoinInFlightRef.current = true;
+      connectAttemptedRef.current = true;
+      connectRetryCountRef.current = 0;
+      unexpectedErrorRetryCountRef.current = 0;
+      intentionalDisconnectRef.current = false;
+      console.warn(
+        '[KloudMeet] Pragmatic rejoin after auto-recover failure — not retry theater; continuing meeting',
+      );
+
+      connectRoom({ forceRefresh: true })
+        .then(async () => {
+          hasConnectedOnceRef.current = true;
+          intentionalDisconnectRef.current = false;
+          setConnectError(null);
+          try {
+            const rn = connectionDetailsRef.current.roomName;
+            if (rn) sessionStorage.setItem('activeKloudRoom', rn);
+          } catch {
+            /* ignore */
+          }
+          await restoreLocalMediaAfterReconnect();
+          console.warn('[KloudMeet] Pragmatic rejoin succeeded');
+        })
+        .catch((err: unknown) => {
+          const error = err instanceof Error ? err : new Error(String(err));
+          if (isKloudSessionExpiredError(error)) {
+            return;
+          }
+          logSeriousLiveKitFailure({
+            phase: 'pragmatic-rejoin-failed',
+            attempt: 1,
+            maxAttempts: 1,
+            roomName: connectionDetailsRef.current?.roomName,
+            roomState: room.state,
+            disconnectReason: lastDisconnectReasonRef.current,
+            authFail: isLiveKitAuthError(error),
+            failureKind: classifyLiveKitFailure(error),
+            participantToken: connectionDetailsRef.current?.participantToken,
+            error,
+            extra: { path: opts.path, priorError: opts.error.message },
+          });
+          setConnectError(error.message);
+        })
+        .finally(() => {
+          pragmaticRejoinInFlightRef.current = false;
+          connectAttemptedRef.current = false;
+        });
+    },
+    [connectRoom, restoreLocalMediaAfterReconnect, room],
   );
 
   const markIntentionalDisconnect = React.useCallback(() => {
@@ -699,7 +875,6 @@ export function VideoConferenceComponent(props: {
     }
     setConnectError(null);
     connectRetryCountRef.current = 0;
-    connectRetryDisplayRef.current = 0;
     unexpectedErrorRetryCountRef.current = 0;
 
     setMeetingClosedNotice(t('meeting.closedByHostToast'));
@@ -782,6 +957,10 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     // Always register event listeners (so cleanup always has something to remove)
     const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
+      if (reason !== undefined && reason !== null) {
+        lastDisconnectReasonRef.current =
+          DisconnectReason[reason] ?? String(reason);
+      }
       console.log('[KloudMeet] Disconnected event received. reason=', reason, 'intentional=', intentionalDisconnectRef.current, 'duplicateHandled=', duplicateSessionHandledRef.current);
       // During reconnection, voluntary disconnect, or silent token renew
       if (intentionalDisconnectRef.current || tokenRenewInProgressRef.current) return;
@@ -799,10 +978,10 @@ export function VideoConferenceComponent(props: {
           setTimeout(() => router.push('/'), 2500);
           return;
         }
-        // Duplicate-session eviction or unknown PARTICIPANT_REMOVED → session moved UI
+        // Duplicate-session eviction or unknown PARTICIPANT_REMOVED → session moved UI.
+        // Stay on the room page so the user can rejoin from this tab (takes over again).
         duplicateSessionHandledRef.current = true;
         setEvictedByDuplicateSession(true);
-        setTimeout(() => router.push('/'), 2500);
         return;
       }
       if (intentionalDisconnectRef.current) return;
@@ -909,7 +1088,6 @@ export function VideoConferenceComponent(props: {
 
               // Reset retry counters on success
               connectRetryCountRef.current = 0;
-              connectRetryDisplayRef.current = 0;
               setConnectError(null);
 
               // Enable camera/mic AFTER connection is established.
@@ -968,6 +1146,11 @@ export function VideoConferenceComponent(props: {
 
               const authFail = isLiveKitAuthError(error);
               if (authFail || isRetryableConnectError(error)) {
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+                  console.warn('[KloudMeet] Offline during connect — defer auto-recover until online');
+                  connectAttemptedRef.current = false;
+                  return;
+                }
                 const attempt = connectRetryCountRef.current + 1;
                 if (attempt <= MAX_CONNECT_RETRIES) {
                   const delay = computeBackoffMs(attempt);
@@ -979,8 +1162,6 @@ export function VideoConferenceComponent(props: {
                     error.message,
                   );
                   connectRetryCountRef.current = attempt;
-                  // Keep UI silent during auto-recover; only show rejoin after exhaustion.
-                  connectRetryDisplayRef.current = 0;
                   connectRetryTimerRef.current = setTimeout(() => {
                     connectRetryTimerRef.current = null;
                     if (room.state === ConnectionState.Disconnected) {
@@ -990,19 +1171,14 @@ export function VideoConferenceComponent(props: {
                   }, delay);
                   return;
                 }
-                logSeriousLiveKitFailure({
+                connectRetryCountRef.current = 0;
+                enterSeriousFailureAndPragmaticRejoin({
                   phase: 'retries-exhausted',
                   attempt: MAX_CONNECT_RETRIES,
                   maxAttempts: MAX_CONNECT_RETRIES,
-                  roomName: connectionDetailsRef.current?.roomName,
-                  roomState: room.state,
-                  authFail,
                   error,
-                  extra: { path: 'initial-connect' },
+                  path: 'initial-connect',
                 });
-                connectRetryDisplayRef.current = MAX_CONNECT_RETRIES;
-                connectRetryCountRef.current = 0;
-                setConnectError(error.message);
               } else {
                 handleError(error);
               }
@@ -1029,7 +1205,7 @@ export function VideoConferenceComponent(props: {
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, ensureConnectionDetails]);
+  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, ensureConnectionDetails, enterSeriousFailureAndPragmaticRejoin]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -1060,15 +1236,21 @@ export function VideoConferenceComponent(props: {
       console.warn('[KloudMeet] Media device unavailable, user may switch in settings:', error.message);
       return;
     }
-    // Signal/network errors, LiveKit JWT auth failures, & "client initiated disconnect"
-    // Product rule: must silent auto-recover. Exhaustion = serious failure (log hard + rejoin UI).
+    // Signal/network / JWT auth: silent auto-recover is the rule.
+    // Exhaustion is a bug path → heavy log + pragmatic rejoin (not "failed 6 times" UX).
     if (isLiveKitAuthError(error) || isRetryableConnectError(error)) {
+      if (pragmaticRejoinInFlightRef.current) {
+        return;
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        console.warn('[KloudMeet] Offline during disconnect — defer auto-recover until online');
+        return;
+      }
       const attempt = unexpectedErrorRetryCountRef.current + 1;
       const authFail = isLiveKitAuthError(error);
       if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
         unexpectedErrorRetryCountRef.current = attempt;
         const delay = computeBackoffMs(attempt);
-        // Later attempts always mint a fresh LiveKit ticket — recovery must succeed.
         const forceRefresh = authFail || attempt >= Math.ceil(MAX_UNEXPECTED_RETRIES / 2);
         console.warn(
           `[KloudMeet] LiveKit disconnect — silent auto-recover ${attempt}/${MAX_UNEXPECTED_RETRIES}` +
@@ -1085,49 +1267,96 @@ export function VideoConferenceComponent(props: {
                 hasConnectedOnceRef.current = true;
                 intentionalDisconnectRef.current = false;
                 setConnectError(null);
+                void restoreLocalMediaAfterReconnect();
               })
               .catch((retryErr) => {
-                handleError(retryErr); // recurse — counts up until MAX then falls to UI
+                handleError(retryErr instanceof Error ? retryErr : new Error(String(retryErr)));
               });
           }
         }, delay);
         return;
       }
-      // Auto-recover failed → something is seriously wrong. Log, then simple rejoin UI.
-      logSeriousLiveKitFailure({
+      unexpectedErrorRetryCountRef.current = 0;
+      enterSeriousFailureAndPragmaticRejoin({
         phase: 'retries-exhausted',
         attempt: Math.max(attempt - 1, MAX_UNEXPECTED_RETRIES),
         maxAttempts: MAX_UNEXPECTED_RETRIES,
-        roomName: connectionDetailsRef.current?.roomName,
-        roomState: room.state,
-        authFail,
         error,
-        extra: { path: 'unexpected-disconnect' },
+        path: 'unexpected-disconnect',
       });
-      connectRetryDisplayRef.current = MAX_UNEXPECTED_RETRIES;
-      unexpectedErrorRetryCountRef.current = 0;
-      setConnectError(error.message);
       return;
     }
-    // Any other error: surface via inline UI instead of alert()
-    logSeriousLiveKitFailure({
+    // Any other error: bug path (log hard) + pragmatic rejoin escape hatch
+    enterSeriousFailureAndPragmaticRejoin({
       phase: 'unexpected-disconnect',
       attempt: 0,
       maxAttempts: MAX_UNEXPECTED_RETRIES,
-      roomName: connectionDetailsRef.current?.roomName,
-      roomState: room.state,
       error,
-      extra: { path: 'unhandled' },
+      path: 'unhandled',
     });
-    setConnectError(error.message);
-  // room is stable (useMemo []), connectionDetails/connectOptions accessed via refs
-  }, [computeBackoffMs, connectRoom, isRetryableConnectError, room]);
+  }, [
+    computeBackoffMs,
+    connectRoom,
+    enterSeriousFailureAndPragmaticRejoin,
+    isRetryableConnectError,
+    restoreLocalMediaAfterReconnect,
+    room,
+  ]);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
     // Route encryption errors through the same inline UI — no alert()
     console.error('[KloudMeet] Encryption error:', error);
     setConnectError(`加密错误: ${error.message}`);
   }, []);
+
+  /** Old tab was kicked — mint a new ticket and take the meeting back on this tab. */
+  const rejoinAfterDuplicateSession = React.useCallback(() => {
+    if (room.state !== ConnectionState.Disconnected) {
+      room.disconnect().catch(() => undefined);
+    }
+
+    duplicateSessionHandledRef.current = false;
+    setEvictedByDuplicateSession(false);
+    intentionalDisconnectRef.current = false;
+    connectAttemptedRef.current = true;
+    connectRetryCountRef.current = 0;
+    unexpectedErrorRetryCountRef.current = 0;
+    setConnectError(null);
+
+    console.warn('[KloudMeet] Rejoin after session moved — taking over from this tab');
+    connectRoom({ forceRefresh: true })
+      .then(() => {
+        hasConnectedOnceRef.current = true;
+        intentionalDisconnectRef.current = false;
+        duplicateSessionHandledRef.current = false;
+        setEvictedByDuplicateSession(false);
+        setConnectError(null);
+        try {
+          const rn = connectionDetailsRef.current.roomName;
+          if (rn) sessionStorage.setItem('activeKloudRoom', rn);
+        } catch {
+          /* ignore */
+        }
+        const enableDevices = async () => {
+          if (props.userChoices.videoEnabled) {
+            await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
+          }
+          if (props.userChoices.audioEnabled) {
+            await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+          }
+          if (isToolbarMobileUserAgent()) {
+            void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+          }
+        };
+        void enableDevices();
+      })
+      .catch((err: Error) => {
+        connectAttemptedRef.current = false;
+        intentionalDisconnectRef.current = false;
+        console.warn('[KloudMeet] Rejoin after session moved failed:', err.message);
+        setConnectError(err.message);
+      });
+  }, [connectRoom, room, props.userChoices.audioEnabled, props.userChoices.videoEnabled]);
 
   // ── Proactive LiveKit JWT renew (before exp) ──
   // Healthy connections are untouched until ~5min before expiry. Then we
@@ -1169,6 +1398,10 @@ export function VideoConferenceComponent(props: {
       intentionalDisconnectRef.current = true;
       const wasMic = room.localParticipant.isMicrophoneEnabled;
       const wasCam = room.localParticipant.isCameraEnabled;
+      const wasScreenShare = room.localParticipant.isScreenShareEnabled;
+      if (wasScreenShare) {
+        screenShareRestorePendingRef.current = true;
+      }
 
       try {
         console.warn('[KloudMeet] Renewing LiveKit token before expiry');
@@ -1190,6 +1423,7 @@ export function VideoConferenceComponent(props: {
         if (wasCam) {
           await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
         }
+        await restoreScreenShareAfterReconnect();
         schedule();
       } catch (e: unknown) {
         intentionalDisconnectRef.current = false;
@@ -1220,19 +1454,50 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Connected, onConnected);
       room.off(RoomEvent.Disconnected, onDisconnected);
     };
-  }, [room, refreshConnectionDetails, handleError]);
+  }, [room, refreshConnectionDetails, handleError, restoreScreenShareAfterReconnect]);
+
+  // Track local screen share so unexpected drops / auto-recover can restore it.
+  React.useEffect(() => {
+    const onLocalPub = (pub: { source?: Track.Source }) => {
+      if (pub.source === Track.Source.ScreenShare) {
+        screenShareRestorePendingRef.current = true;
+      }
+    };
+    const onLocalUnpub = (pub: { source?: Track.Source }) => {
+      if (pub.source !== Track.Source.ScreenShare) return;
+      // Disconnect/renew unpublish must keep the pending flag; only clear on user stop
+      // (handled in toggle) or when not in a recovery path and share truly ended mid-session.
+      if (
+        tokenRenewInProgressRef.current ||
+        pragmaticRejoinInFlightRef.current ||
+        intentionalDisconnectRef.current
+      ) {
+        return;
+      }
+      if (room.state === ConnectionState.Disconnected) {
+        return;
+      }
+      screenShareRestorePendingRef.current = false;
+    };
+    room.on(RoomEvent.LocalTrackPublished, onLocalPub);
+    room.on(RoomEvent.LocalTrackUnpublished, onLocalUnpub);
+    if (room.localParticipant.isScreenShareEnabled) {
+      screenShareRestorePendingRef.current = true;
+    }
+    return () => {
+      room.off(RoomEvent.LocalTrackPublished, onLocalPub);
+      room.off(RoomEvent.LocalTrackUnpublished, onLocalUnpub);
+    };
+  }, [room]);
 
   // ── Network/visibility-driven recovery ──
-  // When the device regains connectivity or the tab becomes visible again
-  // (e.g. after laptop sleep / phone backgrounding), proactively recover the
-  // LiveKit session instead of waiting for the next exponential-backoff tick.
-  // This also rescues the user from the "All retries exhausted" error UI when
-  // the network comes back later.
+  // Online / tab-visible again → silent auto-recover (rule). Not a "retry theater" UI.
   React.useEffect(() => {
     const recover = (reason: string) => {
       if (duplicateSessionHandledRef.current) return;
       if (intentionalDisconnectRef.current) return;
       if (tokenRenewInProgressRef.current) return;
+      if (pragmaticRejoinInFlightRef.current) return;
       if (!hasConnectedOnceRef.current) return;
       if (
         room.state === ConnectionState.Connected ||
@@ -1249,22 +1514,22 @@ export function VideoConferenceComponent(props: {
         clearTimeout(connectRetryTimerRef.current);
         connectRetryTimerRef.current = null;
       }
-      // Fresh retry budget — user/network came back; recover hard (prefer fresh ticket).
       connectRetryCountRef.current = 0;
       unexpectedErrorRetryCountRef.current = 0;
       connectAttemptedRef.current = true;
+      setConnectError(null);
 
       connectRoom({ forceRefresh: true })
-        .then(() => {
+        .then(async () => {
           hasConnectedOnceRef.current = true;
           intentionalDisconnectRef.current = false;
-          connectRetryDisplayRef.current = 0;
           setConnectError(null);
+          await restoreLocalMediaAfterReconnect();
         })
         .catch((err) => {
           connectAttemptedRef.current = false;
-          console.warn('[KloudMeet] Recovery reconnect failed, falling back to backoff:', err?.message);
-          handleError(err as Error);
+          console.warn('[KloudMeet] Visibility/online auto-recover failed:', err?.message);
+          handleError(err instanceof Error ? err : new Error(String(err)));
         });
     };
 
@@ -1280,7 +1545,7 @@ export function VideoConferenceComponent(props: {
       window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [room, connectRoom, handleError]);
+  }, [room, connectRoom, handleError, restoreLocalMediaAfterReconnect]);
 
   React.useEffect(() => {
     if (lowPowerMode) {
@@ -1726,6 +1991,9 @@ export function VideoConferenceComponent(props: {
 
     const next = !screenShareActive;
     setScreenShareActive(next);
+    if (!next) {
+      screenShareRestorePendingRef.current = false;
+    }
 
     if (next) {
       // Immediately switch presenter to liveDoc and broadcast shareScreen to others
@@ -1737,6 +2005,7 @@ export function VideoConferenceComponent(props: {
       .setScreenShareEnabled(next, next ? SCREEN_SHARE_CAPTURE : undefined)
       .catch((e) => {
       setScreenShareActive(false);
+      screenShareRestorePendingRef.current = false;
       // Revert view to liveDoc if screen share was cancelled/failed
       if (next) {
         setActiveView('liveDoc');
@@ -1749,6 +2018,7 @@ export function VideoConferenceComponent(props: {
 
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
+    screenShareRestorePendingRef.current = false;
     markIntentionalDisconnect();
     clearActiveKloudRoom();
     room.disconnect();
@@ -2643,6 +2913,10 @@ export function VideoConferenceComponent(props: {
         const msg = JSON.parse(decoder.decode(payload));
         // 服务端踢人通知（可能来自 meeting-control 或 kloud-session）
         if (msg.type === 'SESSION_EVICTED') {
+          // Self token renew / voluntary leave must not show "Session Moved"
+          if (tokenRenewInProgressRef.current || intentionalDisconnectRef.current) {
+            return;
+          }
           duplicateSessionHandledRef.current = true;
           intentionalDisconnectRef.current = true;
           setEvictedByDuplicateSession(true);
@@ -4729,22 +5003,40 @@ export function VideoConferenceComponent(props: {
               <p style={{ margin: '0 0 1.5rem', color: '#4b5563', lineHeight: 1.6, fontSize: '0.9375rem' }}>
                 {t('meeting.duplicateSessionDesc')}
               </p>
-              <button
-                type="button"
-                onClick={() => router.push('/')}
-                style={{
-                  padding: '0.625rem 1.5rem',
-                  background: '#3b82f6',
-                  color: '#fff',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  cursor: 'pointer',
-                }}
-              >
-                {t('meeting.returnHomeNow')}
-              </button>
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => router.push('/')}
+                  style={{
+                    padding: '0.625rem 1.25rem',
+                    background: '#fff',
+                    color: '#374151',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('meeting.returnHomeNow')}
+                </button>
+                <button
+                  type="button"
+                  onClick={rejoinAfterDuplicateSession}
+                  style={{
+                    padding: '0.625rem 1.25rem',
+                    background: '#3b82f6',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontWeight: 600,
+                    fontSize: '0.875rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('meeting.rejoinMeeting')}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -4914,7 +5206,6 @@ export function VideoConferenceComponent(props: {
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
-                    connectRetryDisplayRef.current = 0;
                     unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
@@ -4942,11 +5233,10 @@ export function VideoConferenceComponent(props: {
                 </button>
                 <button
                   onClick={() => {
-                    // Rejoin — mint a fresh LiveKit ticket and reconnect (pragmatic recovery).
+                    // Manual pragmatic rejoin after bug-path failure (escape hatch, not retry theater).
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
-                    connectRetryDisplayRef.current = 0;
                     unexpectedErrorRetryCountRef.current = 0;
                     if (connectRetryTimerRef.current) {
                       clearTimeout(connectRetryTimerRef.current);
@@ -4954,44 +5244,14 @@ export function VideoConferenceComponent(props: {
                     }
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      console.warn('[KloudMeet] Manual rejoin meeting after serious LiveKit failure');
+                      console.warn('[KloudMeet] Manual rejoin after serious LiveKit failure');
                       connectRoom({ forceRefresh: true })
-                        .then(() => {
+                        .then(async () => {
                           hasConnectedOnceRef.current = true;
                           intentionalDisconnectRef.current = false;
                           connectRetryCountRef.current = 0;
-                          connectRetryDisplayRef.current = 0;
                           setConnectError(null);
-                          // Validate device IDs before enabling (same as primary connect path)
-                          const enableRetryDevices = async () => {
-                            try {
-                              const devices = await navigator.mediaDevices.enumerateDevices();
-                              const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
-                              const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
-                              const wantedVideo = props.userChoices.videoDeviceId;
-                              if (wantedVideo && !videoIds.has(wantedVideo)) {
-                                room.options.videoCaptureDefaults = { ...room.options.videoCaptureDefaults, deviceId: undefined };
-                              }
-                              const wantedAudio = props.userChoices.audioDeviceId;
-                              if (wantedAudio && !audioIds.has(wantedAudio)) {
-                                room.options.audioCaptureDefaults = { ...room.options.audioCaptureDefaults, deviceId: undefined };
-                              }
-                            } catch (_) { /* proceed with whatever defaults exist */ }
-                            if (props.userChoices.videoEnabled) {
-                              room.localParticipant.setCameraEnabled(true).catch(handleError);
-                            } else {
-                              room.localParticipant.setCameraEnabled(false).catch(() => undefined);
-                            }
-                            if (props.userChoices.audioEnabled) {
-                              room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
-                            } else {
-                              room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-                            }
-                            if (isToolbarMobileUserAgent()) {
-                              void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
-                            }
-                          };
-                          enableRetryDevices();
+                          await restoreLocalMediaAfterReconnect();
                         })
                         .catch((err: Error) => {
                           connectAttemptedRef.current = false;
@@ -5004,7 +5264,10 @@ export function VideoConferenceComponent(props: {
                             maxAttempts: 1,
                             roomName: connectionDetailsRef.current?.roomName,
                             roomState: room.state,
+                            disconnectReason: lastDisconnectReasonRef.current,
                             authFail: isLiveKitAuthError(err),
+                            failureKind: classifyLiveKitFailure(err),
+                            participantToken: connectionDetailsRef.current?.participantToken,
                             error: err instanceof Error ? err : new Error(String(err)),
                           });
                           setConnectError(err.message);

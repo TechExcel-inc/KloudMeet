@@ -18,7 +18,7 @@ import {
 import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
 import { getMeetingRoomCurrentView } from '@/lib/meetingRoomView';
 import { prisma } from '@/lib/db';
-import { AccessToken, AccessTokenOptions, VideoGrant } from 'livekit-server-sdk';
+import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -105,23 +105,31 @@ export async function GET(request: NextRequest) {
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
     }
 
-    // Evict any existing session for the same member BEFORE issuing the new
-    // token. The old client receives PARTICIPANT_REMOVED and shows the
-    // "Session Moved" popup instead of silently reconnecting.
+    // Kick other devices/tabs for this member before minting. Same identity
+    // (page refresh / renew) is skipped — LiveKit replaces on join; removing
+    // it would set a Cloud revoke cutoff that breaks subsequent tickets.
     if (member) {
       console.log(`[connection-details] Evicting for room="${livekitRoomName}" memberId=${member.id} newIdentity="${identity}"`);
-      const evictedCount = await evictParticipantsByMemberId(livekitRoomName, member.id);
+      const evictedCount = await evictParticipantsByMemberId(
+        livekitRoomName,
+        member.id,
+        identity,
+      );
       console.log(`[connection-details] Evicted ${evictedCount} old session(s)`);
     }
 
-    const participantToken = await createParticipantToken(
-      {
-        identity,
-        name: participantName,
-        metadata: tokenMetadata,
-      },
-      livekitRoomName,
-    );
+    if (!API_KEY || !API_SECRET) {
+      throw new Error('LiveKit API key/secret is not configured');
+    }
+    const participantToken = await createLiveKitParticipantToken({
+      apiKey: API_KEY,
+      apiSecret: API_SECRET,
+      identity,
+      name: participantName,
+      metadata: tokenMetadata,
+      roomName: livekitRoomName,
+      ttl: '2h',
+    });
 
     // Late joiners: adopt room's current stage without flashing default webcam.
     // First host open: room has no metadata → currentView omitted → client keeps webcam.
@@ -153,20 +161,6 @@ export async function GET(request: NextRequest) {
       return new NextResponse(error.message, { status: 500 });
     }
   }
-}
-
-function createParticipantToken(userInfo: AccessTokenOptions, roomName: string) {
-  const at = new AccessToken(API_KEY, API_SECRET, userInfo);
-  at.ttl = '2h';
-  const grant: VideoGrant = {
-    room: roomName,
-    roomJoin: true,
-    canPublish: true,
-    canPublishData: true,
-    canSubscribe: true,
-  };
-  at.addGrant(grant);
-  return at.toJwt();
 }
 
 function getCookieExpirationTime(): string {
