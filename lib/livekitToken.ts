@@ -31,6 +31,19 @@ export function msUntilLiveKitTokenRenew(token: string, nowMs = Date.now()): num
   return Math.max(0, expMs - LIVEKIT_TOKEN_RENEW_MARGIN_MS - nowMs);
 }
 
+/**
+ * True when the participant JWT still has life left before the renew window.
+ * Reuse these on network reconnects so we do not mint (and revoke) a new ticket.
+ * Returns false for malformed tokens or when renew-before-expiry is due.
+ */
+export function isLiveKitParticipantTokenReusable(
+  token: string,
+  nowMs = Date.now(),
+): boolean {
+  const waitMs = msUntilLiveKitTokenRenew(token, nowMs);
+  return waitMs != null && waitMs > 0;
+}
+
 type LiveKitConnectionErrorLike = {
   name?: unknown;
   message?: unknown;
@@ -52,6 +65,8 @@ export function isLiveKitAuthError(err: unknown): boolean {
     msg.includes('unauthorized') ||
     msg.includes('not allowed') ||
     msg.includes('invalid token') ||
+    msg.includes('token revoked') ||
+    msg.includes('token: revoked') ||
     msg.includes('invalid authorization') ||
     msg.includes('invalid api key') ||
     msg.includes('token expired') ||

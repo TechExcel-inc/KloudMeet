@@ -1,6 +1,7 @@
 export const LIVEDOC_ANONYMOUS_GUID_KEY = 'KloudAnonymousSyncroomID';
 const TOKEN_CACHE_PREFIX = 'KloudMeet_instant_token_';
 const DEFAULT_LIVEDOC_BASE_URL = 'https://kloud.cn';
+/** Default local Kloud-Web plugin origin (config/dev port). Override in System Settings if occupied. */
 const DEFAULT_LIVEDOC_DEBUG_URL = 'http://localhost:8081';
 
 export type LiveDocRuntimeSettings = {

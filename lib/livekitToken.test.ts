@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isLiveKitAuthError,
+  isLiveKitParticipantTokenReusable,
   msUntilLiveKitTokenRenew,
   parseJwtExpiryMs,
   LIVEKIT_TOKEN_RENEW_MARGIN_MS,
@@ -29,6 +30,15 @@ describe('livekitToken', () => {
     const expSec = Math.floor((now + 10 * 60 * 1000) / 1000);
     const wait = msUntilLiveKitTokenRenew(makeUnsignedJwt(expSec), now);
     expect(wait).toBe(10 * 60 * 1000 - LIVEKIT_TOKEN_RENEW_MARGIN_MS);
+  });
+
+  it('isLiveKitParticipantTokenReusable is true before renew window', () => {
+    const now = 1_700_000_000_000;
+    const farExp = Math.floor((now + 60 * 60 * 1000) / 1000);
+    expect(isLiveKitParticipantTokenReusable(makeUnsignedJwt(farExp), now)).toBe(true);
+    const nearExp = Math.floor((now + 2 * 60 * 1000) / 1000);
+    expect(isLiveKitParticipantTokenReusable(makeUnsignedJwt(nearExp), now)).toBe(false);
+    expect(isLiveKitParticipantTokenReusable('not-a-jwt', now)).toBe(false);
   });
 
   it('isLiveKitAuthError matches LiveKit 401 messages', () => {

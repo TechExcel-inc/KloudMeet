@@ -133,9 +133,14 @@ import {
 } from '@/lib/meetingClosedNotice';
 import {
   isLiveKitAuthError,
+  isLiveKitParticipantTokenReusable,
   LIVEKIT_TOKEN_RENEW_MIN_DELAY_MS,
   msUntilLiveKitTokenRenew,
 } from '@/lib/livekitToken';
+import {
+  isKloudSessionExpiredError,
+  logSeriousLiveKitFailure,
+} from '@/lib/livekitConnectionFailure';
 
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
@@ -582,6 +587,8 @@ export function VideoConferenceComponent(props: {
   const MAX_UNEXPECTED_RETRIES = 6;
   /** Silent JWT renew in progress — disconnect must not look like an unexpected drop. */
   const tokenRenewInProgressRef = React.useRef(false);
+  /** Coalesce concurrent /api/connection-details calls (avoids self-revoking JWTs). */
+  const refreshConnectionDetailsInFlightRef = React.useRef<Promise<ConnectionDetails> | null>(null);
 
   const clearActiveKloudRoom = React.useCallback(() => {
     try {
@@ -592,34 +599,71 @@ export function VideoConferenceComponent(props: {
   }, []);
 
   const refreshConnectionDetails = React.useCallback(async (): Promise<ConnectionDetails> => {
-    const participantName =
-      connectionDetailsRef.current.participantName || props.userChoices.username || 'Guest';
-    const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
-    url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
-    url.searchParams.append('participantName', participantName);
-    appendKloudDeviceId(url);
-    if (props.region) {
-      url.searchParams.append('region', props.region);
+    if (refreshConnectionDetailsInFlightRef.current) {
+      return refreshConnectionDetailsInFlightRef.current;
     }
 
-    const response = await fetch(url.toString(), connectionDetailsFetchInit({ cache: 'no-store' }));
-    if (response.status === 401) {
-      handleKloudSessionExpired();
-      throw new Error('Session expired');
-    }
-    if (!response.ok) {
-      throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
-    }
+    const run = (async (): Promise<ConnectionDetails> => {
+      const participantName =
+        connectionDetailsRef.current.participantName || props.userChoices.username || 'Guest';
+      const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
+      url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
+      url.searchParams.append('participantName', participantName);
+      appendKloudDeviceId(url);
+      if (props.region) {
+        url.searchParams.append('region', props.region);
+      }
 
-    const fresh = (await response.json()) as ConnectionDetails;
-    connectionDetailsRef.current = fresh;
-    return fresh;
+      const response = await fetch(url.toString(), connectionDetailsFetchInit({ cache: 'no-store' }));
+      if (response.status === 401) {
+        handleKloudSessionExpired();
+        throw new Error('Session expired');
+      }
+      if (!response.ok) {
+        throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
+      }
+
+      const fresh = (await response.json()) as ConnectionDetails;
+      connectionDetailsRef.current = fresh;
+      return fresh;
+    })();
+
+    refreshConnectionDetailsInFlightRef.current = run;
+    try {
+      return await run;
+    } finally {
+      if (refreshConnectionDetailsInFlightRef.current === run) {
+        refreshConnectionDetailsInFlightRef.current = null;
+      }
+    }
   }, [props.region, props.userChoices.username]);
 
-  const connectWithFreshDetails = React.useCallback(async () => {
-    const cd = await refreshConnectionDetails();
-    return room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
-  }, [refreshConnectionDetails, room]);
+  /**
+   * Prefer the current LiveKit JWT when it is still reusable.
+   * Mint a new ticket only when forced (auth/revoked/renew) or when expiry is near.
+   */
+  const ensureConnectionDetails = React.useCallback(
+    async (opts?: { forceRefresh?: boolean }): Promise<ConnectionDetails> => {
+      const current = connectionDetailsRef.current;
+      if (
+        !opts?.forceRefresh &&
+        current?.participantToken &&
+        isLiveKitParticipantTokenReusable(current.participantToken)
+      ) {
+        return current;
+      }
+      return refreshConnectionDetails();
+    },
+    [refreshConnectionDetails],
+  );
+
+  const connectRoom = React.useCallback(
+    async (opts?: { forceRefresh?: boolean }) => {
+      const cd = await ensureConnectionDetails(opts);
+      return room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
+    },
+    [ensureConnectionDetails, room],
+  );
 
   const markIntentionalDisconnect = React.useCallback(() => {
     intentionalDisconnectRef.current = true;
@@ -808,13 +852,10 @@ export function VideoConferenceComponent(props: {
         // All retry rounds go through this single function so the backoff counters
         // are always correct regardless of which attempt fails.
         // `fresh: true` re-issues JWT via /api/connection-details before connect
-        // (used after LiveKit auth 401 so we never retry with an expired token).
+        // (auth/revoked only). Network retries reuse a still-valid JWT.
         const doConnect = (opts?: { fresh?: boolean }) => {
           const runConnect = async () => {
-            if (opts?.fresh) {
-              await refreshConnectionDetails();
-            }
-            const cd = connectionDetailsRef.current;
+            const cd = await ensureConnectionDetails({ forceRefresh: !!opts?.fresh });
             await room.connect(cd.serverUrl, cd.participantToken, connectOptions);
           };
 
@@ -921,32 +962,44 @@ export function VideoConferenceComponent(props: {
             })
             .catch((error: Error) => {
               connectAttemptedRef.current = false;
+              if (isKloudSessionExpiredError(error)) {
+                return;
+              }
 
               const authFail = isLiveKitAuthError(error);
               if (authFail || isRetryableConnectError(error)) {
                 const attempt = connectRetryCountRef.current + 1;
                 if (attempt <= MAX_CONNECT_RETRIES) {
                   const delay = computeBackoffMs(attempt);
+                  const fresh =
+                    authFail || attempt >= Math.ceil(MAX_CONNECT_RETRIES / 2);
                   console.warn(
-                    `[KloudMeet] ${authFail ? 'Auth' : 'Signal'} connection failed, attempt ${attempt}/${MAX_CONNECT_RETRIES}, retrying in ${delay}ms…`,
+                    `[KloudMeet] LiveKit connect — silent auto-recover ${attempt}/${MAX_CONNECT_RETRIES}` +
+                      ` (fresh=${fresh}) in ${delay}ms…`,
                     error.message,
                   );
                   connectRetryCountRef.current = attempt;
-                  connectRetryDisplayRef.current = attempt;
+                  // Keep UI silent during auto-recover; only show rejoin after exhaustion.
+                  connectRetryDisplayRef.current = 0;
                   connectRetryTimerRef.current = setTimeout(() => {
                     connectRetryTimerRef.current = null;
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      // Auth 401: always mint a new JWT.
-                      // Later network retries also refresh — covers 401s whose
-                      // body text didn't match isLiveKitAuthError on attempt 1.
-                      doConnect(authFail || attempt > 1 ? { fresh: true } : undefined);
+                      doConnect(fresh ? { fresh: true } : undefined);
                     }
                   }, delay);
                   return;
                 }
-                // All retries exhausted — show inline error UI
-                console.error('[KloudMeet] All connection retries exhausted:', error);
+                logSeriousLiveKitFailure({
+                  phase: 'retries-exhausted',
+                  attempt: MAX_CONNECT_RETRIES,
+                  maxAttempts: MAX_CONNECT_RETRIES,
+                  roomName: connectionDetailsRef.current?.roomName,
+                  roomState: room.state,
+                  authFail,
+                  error,
+                  extra: { path: 'initial-connect' },
+                });
                 connectRetryDisplayRef.current = MAX_CONNECT_RETRIES;
                 connectRetryCountRef.current = 0;
                 setConnectError(error.message);
@@ -976,11 +1029,15 @@ export function VideoConferenceComponent(props: {
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, refreshConnectionDetails]);
+  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, ensureConnectionDetails]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
   const handleError = React.useCallback((error: Error) => {
+    // Kloud login expired — session helper already prompts re-login.
+    if (isKloudSessionExpiredError(error)) {
+      return;
+    }
     // Ignore user cancellation errors (like declining screen share)
     if (
       error.name === 'NotAllowedError' ||
@@ -1004,21 +1061,26 @@ export function VideoConferenceComponent(props: {
       return;
     }
     // Signal/network errors, LiveKit JWT auth failures, & "client initiated disconnect"
+    // Product rule: must silent auto-recover. Exhaustion = serious failure (log hard + rejoin UI).
     if (isLiveKitAuthError(error) || isRetryableConnectError(error)) {
       const attempt = unexpectedErrorRetryCountRef.current + 1;
+      const authFail = isLiveKitAuthError(error);
       if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
         unexpectedErrorRetryCountRef.current = attempt;
         const delay = computeBackoffMs(attempt);
+        // Later attempts always mint a fresh LiveKit ticket — recovery must succeed.
+        const forceRefresh = authFail || attempt >= Math.ceil(MAX_UNEXPECTED_RETRIES / 2);
         console.warn(
-          `[KloudMeet] ${isLiveKitAuthError(error) ? 'Auth' : 'Unexpected'} disconnect, auto-retry ${attempt}/${MAX_UNEXPECTED_RETRIES} in ${delay}ms:`,
+          `[KloudMeet] LiveKit disconnect — silent auto-recover ${attempt}/${MAX_UNEXPECTED_RETRIES}` +
+            ` (forceRefresh=${forceRefresh}) in ${delay}ms:`,
           error.message,
         );
         connectRetryTimerRef.current = setTimeout(() => {
           connectRetryTimerRef.current = null;
           if (room.state === ConnectionState.Disconnected) {
-            connectWithFreshDetails()
+            connectRoom({ forceRefresh })
               .then(() => {
-                console.log('[KloudMeet] Auto-reconnect succeeded');
+                console.log('[KloudMeet] Auto-recover succeeded');
                 unexpectedErrorRetryCountRef.current = 0;
                 hasConnectedOnceRef.current = true;
                 intentionalDisconnectRef.current = false;
@@ -1031,18 +1093,35 @@ export function VideoConferenceComponent(props: {
         }, delay);
         return;
       }
-      // All retries exhausted — show inline UI, never alert()
-      console.error('[KloudMeet] All unexpected-error retries exhausted:', error);
+      // Auto-recover failed → something is seriously wrong. Log, then simple rejoin UI.
+      logSeriousLiveKitFailure({
+        phase: 'retries-exhausted',
+        attempt: Math.max(attempt - 1, MAX_UNEXPECTED_RETRIES),
+        maxAttempts: MAX_UNEXPECTED_RETRIES,
+        roomName: connectionDetailsRef.current?.roomName,
+        roomState: room.state,
+        authFail,
+        error,
+        extra: { path: 'unexpected-disconnect' },
+      });
       connectRetryDisplayRef.current = MAX_UNEXPECTED_RETRIES;
       unexpectedErrorRetryCountRef.current = 0;
       setConnectError(error.message);
       return;
     }
     // Any other error: surface via inline UI instead of alert()
-    console.error('[KloudMeet] Unhandled error:', error);
+    logSeriousLiveKitFailure({
+      phase: 'unexpected-disconnect',
+      attempt: 0,
+      maxAttempts: MAX_UNEXPECTED_RETRIES,
+      roomName: connectionDetailsRef.current?.roomName,
+      roomState: room.state,
+      error,
+      extra: { path: 'unhandled' },
+    });
     setConnectError(error.message);
   // room is stable (useMemo []), connectionDetails/connectOptions accessed via refs
-  }, [computeBackoffMs, connectWithFreshDetails, isRetryableConnectError, room]);
+  }, [computeBackoffMs, connectRoom, isRetryableConnectError, room]);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
     // Route encryption errors through the same inline UI — no alert()
@@ -1170,13 +1249,12 @@ export function VideoConferenceComponent(props: {
         clearTimeout(connectRetryTimerRef.current);
         connectRetryTimerRef.current = null;
       }
-      // Give the user a fresh retry budget — they actively did something
-      // (network came back, tab became visible) so we should try hard again.
+      // Fresh retry budget — user/network came back; recover hard (prefer fresh ticket).
       connectRetryCountRef.current = 0;
       unexpectedErrorRetryCountRef.current = 0;
       connectAttemptedRef.current = true;
 
-      connectWithFreshDetails()
+      connectRoom({ forceRefresh: true })
         .then(() => {
           hasConnectedOnceRef.current = true;
           intentionalDisconnectRef.current = false;
@@ -1202,7 +1280,7 @@ export function VideoConferenceComponent(props: {
       window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [room, connectWithFreshDetails, handleError]);
+  }, [room, connectRoom, handleError]);
 
   React.useEffect(() => {
     if (lowPowerMode) {
@@ -4796,15 +4874,14 @@ export function VideoConferenceComponent(props: {
               </div>
 
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px' }}>
-                {connectError?.startsWith('加密错误') ? '加密错误' :
-                  connectError?.toLowerCase().includes('disconnect') ? '连接已中断' : '连接失败'}
+                {connectError?.startsWith('加密错误')
+                  ? '加密错误'
+                  : t('meeting.connectionInvalidTitle')}
               </div>
               <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px', lineHeight: 1.6 }}>
-                {connectRetryDisplayRef.current > 0
-                  ? `已自动重试 ${connectRetryDisplayRef.current} 次，仍无法恢复连接。请检查网络后手动重试，或退出会议。`
-                  : connectError?.toLowerCase().includes('disconnect')
-                    ? '网络波动导致连接中断，可以尝试手动重新连接。'
-                    : '无法建立信令连接，请检查您的网络后重试。'}
+                {connectError?.startsWith('加密错误')
+                  ? connectError
+                  : t('meeting.connectionInvalidDesc')}
               </div>
 
               {/* Error detail (collapsible) */}
@@ -4865,7 +4942,7 @@ export function VideoConferenceComponent(props: {
                 </button>
                 <button
                   onClick={() => {
-                    // Manual retry — fully reset and re-attempt with fresh retry budget
+                    // Rejoin — mint a fresh LiveKit ticket and reconnect (pragmatic recovery).
                     setConnectError(null);
                     connectAttemptedRef.current = false;
                     connectRetryCountRef.current = 0;
@@ -4875,10 +4952,10 @@ export function VideoConferenceComponent(props: {
                       clearTimeout(connectRetryTimerRef.current);
                       connectRetryTimerRef.current = null;
                     }
-                    // Re-connect and give a fresh retry budget via doConnect-equivalent inline
                     if (room.state === ConnectionState.Disconnected) {
                       connectAttemptedRef.current = true;
-                      connectWithFreshDetails()
+                      console.warn('[KloudMeet] Manual rejoin meeting after serious LiveKit failure');
+                      connectRoom({ forceRefresh: true })
                         .then(() => {
                           hasConnectedOnceRef.current = true;
                           intentionalDisconnectRef.current = false;
@@ -4916,9 +4993,20 @@ export function VideoConferenceComponent(props: {
                           };
                           enableRetryDevices();
                         })
-                        .catch((err) => {
+                        .catch((err: Error) => {
                           connectAttemptedRef.current = false;
-                          connectRetryDisplayRef.current = 1;
+                          if (isKloudSessionExpiredError(err)) {
+                            return;
+                          }
+                          logSeriousLiveKitFailure({
+                            phase: 'manual-rejoin',
+                            attempt: 1,
+                            maxAttempts: 1,
+                            roomName: connectionDetailsRef.current?.roomName,
+                            roomState: room.state,
+                            authFail: isLiveKitAuthError(err),
+                            error: err instanceof Error ? err : new Error(String(err)),
+                          });
                           setConnectError(err.message);
                         });
                     }
@@ -4939,7 +5027,7 @@ export function VideoConferenceComponent(props: {
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb, #1d4ed8)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)'; }}
                 >
-                  重新连接
+                  {t('meeting.rejoinMeeting')}
                 </button>
               </div>
             </div>
