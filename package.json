@@ -6,7 +6,7 @@
   "author": "Kloud",
   "main": "main.js",
   "scripts": {
-    "electron:dev": "concurrently \"pnpm dev\" \"wait-on http://127.0.0.1:3201 && electron .\"",
+    "electron:dev": "concurrently -k \"pnpm dev\" \"wait-on http://127.0.0.1:3201 && electron .\"",
     "dev": "next dev -p 3201 --turbopack",
     "build": "next build",
     "build:deploy": "npm run build && npm run electron:prepare-standalone",
@@ -17,7 +17,10 @@
     "deps:npm": "npm ci --legacy-peer-deps",
     "electron:dist": "npm run electron:ensure && npm run electron:pack && node scripts/run-electron-builder.js --project .electron-app --win",
     "electron:dist:reuse": "npm run electron:ensure && npm run electron:prepare-standalone && npm run electron:prepare-app && node scripts/run-electron-builder.js --project .electron-app --win",
-    "electron:dist:skip-rcedit": "npm run electron:ensure && npm run electron:pack && node scripts/run-electron-builder.js --project .electron-app --win --config.win.signAndEditExecutable=false",
+    "electron:prepare-app:mac": "KLOUD_ELECTRON_PLATFORM=mac node scripts/prepare-electron-app.js",
+    "electron:pack:mac": "npm run build && npm run electron:prepare-standalone && npm run electron:prepare-app:mac",
+    "electron:dist:mac": "npm run electron:ensure && npm run electron:pack:mac && node scripts/run-electron-builder.js --project .electron-app --mac",
+    "electron:dist:mac:reuse": "npm run electron:ensure && npm run electron:prepare-standalone && npm run electron:prepare-app:mac && node scripts/run-electron-builder.js --project .electron-app --mac",
     "start": "next start -p 3201 -H 0.0.0.0",
     "lint": "next lint",
     "lint:fix": "next lint --fix",
@@ -86,9 +89,12 @@
       "output": "dist"
     },
     "mac": {
+      "icon": "build/icon.png",
       "target": [
-        "dmg"
-      ]
+        "dmg",
+        "zip"
+      ],
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "files": [
       "main.js",
@@ -118,6 +124,7 @@
       "url": "https://kloud.cn/kloudmeet-exe"
     },
     "win": {
+      "icon": "build/icon.ico",
       "executableName": "KloudMeet",
       "signAndEditExecutable": false,
       "target": [

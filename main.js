@@ -13,6 +13,8 @@ const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 const REMOTE_ORIGIN = 'https://meet.kloud.cn';
 
 let nextServerProcess;
+/** 用户正在退出应用时置 true，避免误弹「内置服务已退出」 */
+let isAppQuitting = false;
 
 /** Lazy-load native stack so a failure does not kill the app before any window (packaged builds). */
 let nutApi;
@@ -77,6 +79,38 @@ let lastUpdaterProgressRounded = -1;
 /** 同一次下载只弹一次安装确认（electron-updater 偶发重复事件） */
 let updateDownloadedDialogShown = false;
 
+/**
+ * 全屏 annotation overlay 会盖住更新进度条 / 弹窗。
+ * 用 reason 集合做引用计数：任一更新 UI 需要时 hide，全部结束后再 show。
+ * @type {Set<string>}
+ */
+const overlayHideReasons = new Set();
+
+function acquireOverlayHide(reason) {
+  if (!reason) return;
+  overlayHideReasons.add(reason);
+  try {
+    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+      overlayWindow.hide();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function releaseOverlayHide(reason) {
+  if (!reason) return;
+  overlayHideReasons.delete(reason);
+  if (overlayHideReasons.size > 0) return;
+  try {
+    if (overlayWindow && !overlayWindow.isDestroyed() && !overlayWindow.isVisible()) {
+      overlayWindow.show();
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function pctFromUpdaterProgress(p) {
   if (p && typeof p.percent === 'number' && !Number.isNaN(p.percent)) {
     return Math.min(100, Math.max(0, p.percent));
@@ -107,6 +141,30 @@ function destroyUpdateProgressWindow() {
   updateProgressWindow = null;
   pendingUpdateProgressPayload = null;
   lastUpdaterProgressRounded = -1;
+  releaseOverlayHide('update-progress');
+}
+
+function raiseUpdateProgressWindow() {
+  const w = updateProgressWindow;
+  if (!w || w.isDestroyed()) return;
+  try {
+    w.setAlwaysOnTop(true, 'screen-saver', 1);
+  } catch {
+    try {
+      w.setAlwaysOnTop(true, 'pop-up-menu', 2);
+    } catch {
+      try {
+        w.setAlwaysOnTop(true);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  try {
+    w.moveTop();
+  } catch {
+    /* ignore */
+  }
 }
 
 function broadcastUpdateDownloadProgress(payload) {
@@ -125,12 +183,8 @@ function broadcastUpdateDownloadProgress(payload) {
  * 全屏 alwaysOnTop 的 overlay 会把挂在主窗口上的原生对话框挡在下面；先隐藏 overlay，并用无宿主窗口调用保证提示在最前。
  */
 async function showUpdaterMessageBox(options) {
-  let overlayWasVisible = false;
+  acquireOverlayHide('update-msgbox');
   try {
-    if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
-      overlayWasVisible = true;
-      overlayWindow.hide();
-    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -142,9 +196,7 @@ async function showUpdaterMessageBox(options) {
     }
     return await dialog.showMessageBox(null, options);
   } finally {
-    if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
-      overlayWindow.show();
-    }
+    releaseOverlayHide('update-msgbox');
   }
 }
 
@@ -159,19 +211,13 @@ function showUpdateReadyPrompt(version) {
 
     if (!mainWindow || mainWindow.isDestroyed()) {
       log('skip: no mainWindow');
+      // 调用方可能已提前 acquire（避免进度条关闭时闪一下）
+      releaseOverlayHide('update-ready');
       resolve(false);
       return;
     }
 
-    let overlayWasVisible = false;
-    try {
-      if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
-        overlayWasVisible = true;
-        overlayWindow.hide();
-      }
-    } catch (e) {
-      log(`overlay hide: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    acquireOverlayHide('update-ready');
 
     let settled = false;
     /** @type {import('electron').BrowserWindow | null} */
@@ -181,13 +227,7 @@ function showUpdateReadyPrompt(version) {
       if (settled) return;
       settled = true;
       ipcMain.removeListener('update-ready-response', onResponse);
-      if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
-        try {
-          overlayWindow.show();
-        } catch {
-          /* ignore */
-        }
-      }
+      releaseOverlayHide('update-ready');
       const w = promptWinRef;
       promptWinRef = null;
       updateReadyPromptWindow = null;
@@ -247,13 +287,7 @@ function showUpdateReadyPrompt(version) {
       updateReadyPromptWindow = null;
       if (!settled) {
         ipcMain.removeListener('update-ready-response', onResponse);
-        if (overlayWasVisible && overlayWindow && !overlayWindow.isDestroyed()) {
-          try {
-            overlayWindow.show();
-          } catch {
-            /* ignore */
-          }
-        }
+        releaseOverlayHide('update-ready');
         settled = true;
         resolve(false);
       }
@@ -279,11 +313,18 @@ function showUpdateReadyPrompt(version) {
 }
 
 function ensureUpdateProgressWindow() {
+  acquireOverlayHide('update-progress');
+
   if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
     layoutUpdateProgressWindow();
+    raiseUpdateProgressWindow();
     return updateProgressWindow;
   }
-  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    // 已 acquire，失败时必须释放，否则 overlay 会一直藏着
+    releaseOverlayHide('update-progress');
+    return null;
+  }
 
   updateProgressWindow = new BrowserWindow({
     width: UPDATE_PROGRESS_W,
@@ -298,7 +339,7 @@ function ensureUpdateProgressWindow() {
     skipTaskbar: true,
     show: false,
     hasShadow: false,
-    focusable: true,
+    focusable: false,
     alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, 'update-progress-preload.js'),
@@ -307,19 +348,21 @@ function ensureUpdateProgressWindow() {
     },
   });
 
-  try {
-    updateProgressWindow.setAlwaysOnTop(true, 'pop-up-menu', 2);
-  } catch {
-    try {
-      updateProgressWindow.setAlwaysOnTop(true);
-    } catch {
-      /* ignore */
-    }
-  }
+  raiseUpdateProgressWindow();
 
   updateProgressWindow.webContents.once('did-finish-load', () => {
+    if (!updateProgressWindow || updateProgressWindow.isDestroyed()) return;
     layoutUpdateProgressWindow();
-    updateProgressWindow.show();
+    try {
+      updateProgressWindow.showInactive();
+    } catch {
+      try {
+        updateProgressWindow.show();
+      } catch {
+        /* ignore */
+      }
+    }
+    raiseUpdateProgressWindow();
     if (pendingUpdateProgressPayload) {
       updateProgressWindow.webContents.send('update-download-progress', pendingUpdateProgressPayload);
     }
@@ -327,9 +370,21 @@ function ensureUpdateProgressWindow() {
 
   updateProgressWindow.on('closed', () => {
     updateProgressWindow = null;
+    releaseOverlayHide('update-progress');
   });
 
-  updateProgressWindow.loadFile(path.join(__dirname, 'update-progress.html'));
+  updateProgressWindow.loadFile(path.join(__dirname, 'update-progress.html')).catch((e) => {
+    appendStartupLog(`[updater] progress loadFile failed: ${e.message}`);
+    try {
+      if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
+        updateProgressWindow.destroy();
+      }
+    } catch {
+      /* ignore */
+    }
+    updateProgressWindow = null;
+    releaseOverlayHide('update-progress');
+  });
   layoutUpdateProgressWindow();
   return updateProgressWindow;
 }
@@ -404,6 +459,112 @@ function registerKloudMeetProtocol() {
 
 let sessionAndIpcHandlersInstalled = false;
 
+/**
+ * Active screen/window share target for overlay + remote-control mapping.
+ * @type {{ sourceId: string, displayId?: number, x: number, y: number, width: number, height: number, scaleFactor: number, kind: 'screen' | 'window' } | null}
+ */
+let currentShareTarget = null;
+
+function primaryDisplayBoundsFallback() {
+  const { screen } = require('electron');
+  const b = screen.getPrimaryDisplay().bounds;
+  return {
+    sourceId: 'primary',
+    displayId: screen.getPrimaryDisplay().id,
+    x: b.x,
+    y: b.y,
+    width: b.width,
+    height: b.height,
+    scaleFactor: screen.getPrimaryDisplay().scaleFactor || 1,
+    kind: 'screen',
+  };
+}
+
+/**
+ * Resolve desktopCapturer source → physical bounds on the virtual desktop.
+ * Screen sources: match display_id. Window sources: fall back to primary (v1).
+ */
+function resolveShareTargetFromSource(source) {
+  const { screen } = require('electron');
+  const primary = primaryDisplayBoundsFallback();
+  if (!source) return primary;
+
+  const sourceId = String(source.id || '');
+  const isScreen = sourceId.startsWith('screen:');
+  const displayIdRaw = source.display_id;
+  const displayId =
+    displayIdRaw !== undefined && displayIdRaw !== null && displayIdRaw !== ''
+      ? Number(displayIdRaw)
+      : undefined;
+
+  if (isScreen) {
+    const displays = screen.getAllDisplays();
+    let matched =
+      displayId !== undefined && !Number.isNaN(displayId)
+        ? displays.find((d) => d.id === displayId)
+        : null;
+    // Some Electron builds encode display index in screen:N:0
+    if (!matched) {
+      const m = /^screen:(\d+)/.exec(sourceId);
+      if (m) {
+        const idx = Number(m[1]);
+        if (!Number.isNaN(idx) && displays[idx]) matched = displays[idx];
+      }
+    }
+    if (!matched && displays.length === 1) matched = displays[0];
+    if (matched) {
+      return {
+        sourceId,
+        displayId: matched.id,
+        x: matched.bounds.x,
+        y: matched.bounds.y,
+        width: matched.bounds.width,
+        height: matched.bounds.height,
+        scaleFactor: matched.scaleFactor || 1,
+        kind: 'screen',
+      };
+    }
+  }
+
+  // Window share: v1 falls back to primary (RC precision limited)
+  return {
+    sourceId,
+    displayId: primary.displayId,
+    x: primary.x,
+    y: primary.y,
+    width: primary.width,
+    height: primary.height,
+    scaleFactor: primary.scaleFactor,
+    kind: isScreen ? 'screen' : 'window',
+  };
+}
+
+function applyOverlayToShareTarget(target) {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const t = target || primaryDisplayBoundsFallback();
+  try {
+    overlayWindow.setBounds({
+      x: t.x,
+      y: t.y,
+      width: t.width,
+      height: t.height,
+    });
+  } catch (e) {
+    console.warn('overlay setBounds failed:', e);
+  }
+}
+
+function setCurrentShareTarget(source) {
+  currentShareTarget = resolveShareTargetFromSource(source);
+  applyOverlayToShareTarget(currentShareTarget);
+  return currentShareTarget;
+}
+
+function clearCurrentShareTarget() {
+  currentShareTarget = null;
+  applyOverlayToShareTarget(primaryDisplayBoundsFallback());
+}
+
 function installSessionAndIpcOnce() {
   if (sessionAndIpcHandlersInstalled) return;
   sessionAndIpcHandlersInstalled = true;
@@ -411,10 +572,11 @@ function installSessionAndIpcOnce() {
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
       let handled = false;
-      const template = sources.map(source => ({
+      const template = sources.map((source) => ({
         label: source.name,
         click: () => {
           handled = true;
+          setCurrentShareTarget(source);
           callback({ video: source, audio: 'loopback' });
         },
       }));
@@ -424,6 +586,7 @@ function installSessionAndIpcOnce() {
         label: 'Cancel',
         click: () => {
           handled = true;
+          clearCurrentShareTarget();
           callback();
         },
       });
@@ -436,14 +599,25 @@ function installSessionAndIpcOnce() {
         setTimeout(() => {
           if (!handled) {
             handled = true;
+            clearCurrentShareTarget();
             callback();
           }
         }, 100);
       });
     }).catch((err) => {
       console.error(err);
+      clearCurrentShareTarget();
       callback();
     });
+  });
+
+  ipcMain.handle('get-share-target-bounds', () => {
+    return currentShareTarget || primaryDisplayBoundsFallback();
+  });
+
+  ipcMain.handle('clear-share-target', () => {
+    clearCurrentShareTarget();
+    return true;
   });
 
   ipcMain.on('draw-message', (event, data) => {
@@ -458,19 +632,20 @@ function installSessionAndIpcOnce() {
 
       let targetX, targetY;
 
-      // Controller sends content-normalized (0-1) coordinates corrected for
-      // object-fit:contain letterboxing. Map to physical screen pixels using
-      // our own display bounds (avoids DPI scaling issues across machines).
-      const { width: w, height: h } = require('electron').screen.getPrimaryDisplay().bounds;
+      // Map content-normalized 0-1 coords onto the active share target bounds
+      // (secondary monitor when sharing that screen; primary fallback otherwise).
+      const bounds = currentShareTarget || primaryDisplayBoundsFallback();
+      const w = bounds.width;
+      const h = bounds.height;
+      const originX = bounds.x;
+      const originY = bounds.y;
 
       if (data.absX !== undefined && data.absY !== undefined) {
-        // Legacy: controller sent pre-computed absolute coords
         targetX = Math.round(data.absX);
         targetY = Math.round(data.absY);
       } else {
-        // Standard: normalized 0-1 mapped to primary display physical pixels
-        targetX = Math.round(data.x * w);
-        targetY = Math.round(data.y * h);
+        targetX = Math.round(originX + (data.x || 0) * w);
+        targetY = Math.round(originY + (data.y || 0) * h);
       }
 
       if (data.type === 'mousemove') {
@@ -540,18 +715,18 @@ function createWindows() {
   mainWindow.on('resize', syncUpdateProgressLayout);
 
   mainWindow.on('close', () => {
-    destroyUpdateProgressWindow();
-    if (updateReadyPromptWindow && !updateReadyPromptWindow.isDestroyed()) {
-      try {
-        updateReadyPromptWindow.destroy();
-      } catch {
-        /* ignore */
-      }
-    }
-    updateReadyPromptWindow = null;
-    if (overlayWindow && !overlayWindow.isDestroyed()) {
-      overlayWindow.destroy();
-      overlayWindow = null;
+    // 关主窗口 = 退出应用：清掉所有附属窗 + 本地 Next，避免 KloudMeet.exe 残留占 3201
+    isAppQuitting = true;
+    destroyAllAuxiliaryWindows();
+    killNextServerProcess();
+    if (process.platform !== 'darwin') {
+      setImmediate(() => {
+        try {
+          app.quit();
+        } catch {
+          /* ignore */
+        }
+      });
     }
   });
 
@@ -569,6 +744,68 @@ function createWindows() {
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
     showFatal('页面加载失败', `${code} ${desc}\n${url}`);
   });
+}
+
+/**
+ * 关掉进度条 / 更新提示 / 标注 overlay，避免关主窗口后仍有 BrowserWindow 拖住进程。
+ */
+function destroyAllAuxiliaryWindows() {
+  destroyUpdateProgressWindow();
+  if (updateReadyPromptWindow && !updateReadyPromptWindow.isDestroyed()) {
+    try {
+      updateReadyPromptWindow.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  updateReadyPromptWindow = null;
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    try {
+      overlayWindow.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  overlayWindow = null;
+}
+
+/**
+ * 结束内置 Next（ELECTRON_RUN_AS_NODE 子进程在任务管理器里也叫 KloudMeet）。
+ * Windows 用 taskkill /T /F 清进程树，避免只杀父进程后 3201 仍被占。
+ */
+function killNextServerProcess() {
+  const child = nextServerProcess;
+  nextServerProcess = null;
+  if (!child) return;
+
+  const pid = child.pid;
+  appendStartupLog(`killNextServerProcess pid=${pid}`);
+
+  try {
+    if (process.platform === 'win32' && pid) {
+      spawn('taskkill', ['/pid', String(pid), '/T', '/F'], {
+        stdio: 'ignore',
+        windowsHide: true,
+        detached: true,
+      });
+      return;
+    }
+  } catch (e) {
+    appendStartupLog(`taskkill: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  try {
+    if (!child.killed) child.kill('SIGTERM');
+  } catch {
+    /* ignore */
+  }
+  setTimeout(() => {
+    try {
+      if (!child.killed) child.kill('SIGKILL');
+    } catch {
+      /* ignore */
+    }
+  }, 1500);
 }
 
 function waitForHttpReady(port, timeoutMs = 90000) {
@@ -652,6 +889,7 @@ async function startPackagedNextServer() {
 
   nextServerProcess.on('exit', (code) => {
     appendStartupLog(`Next process exit code=${code}`);
+    if (isAppQuitting) return;
     if (code != null && code !== 0) {
       showFatal('内置网页服务已退出', `退出码 ${code}\n${stderrBuf.slice(-2000)}`);
     }
@@ -723,6 +961,10 @@ if (!gotLock) {
 
       autoUpdater.on('update-available', (info) => {
         updateDownloadedDialogShown = false;
+        // 立刻占住 overlay hide + 弹出进度条，避免点「好的」后全屏 overlay 盖住进度
+        ensureUpdateProgressWindow();
+        broadcastUpdateDownloadProgress({ percent: 0 });
+        appendStartupLog(`[updater] update-available ${info.version}, showing progress chip`);
         showUpdaterMessageBox({
           type: 'info',
           title: '发现新版本',
@@ -739,6 +981,8 @@ if (!gotLock) {
       autoUpdater.on('update-downloaded', (info) => {
         if (updateDownloadedDialogShown) return;
         updateDownloadedDialogShown = true;
+        // 先占住 update-ready，再关进度条，避免 overlay 中间闪一下
+        acquireOverlayHide('update-ready');
         destroyUpdateProgressWindow();
         appendStartupLog(`[updater] update-downloaded ${info.version}, opening install prompt`);
         showUpdateReadyPrompt(info.version)
@@ -776,12 +1020,21 @@ process.on('uncaughtException', (err) => {
 });
 
 app.on('before-quit', () => {
-  if (nextServerProcess && !nextServerProcess.killed) {
-    nextServerProcess.kill();
-    nextServerProcess = null;
-  }
+  isAppQuitting = true;
+  destroyAllAuxiliaryWindows();
+  killNextServerProcess();
+});
+
+app.on('will-quit', () => {
+  isAppQuitting = true;
+  killNextServerProcess();
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
+  isAppQuitting = true;
+  killNextServerProcess();
+  // Windows / Linux：无窗口即退出；macOS 保持常驻（菜单栏）
+  if (process.platform !== 'darwin') {
+    app.quit();
+  }
 });

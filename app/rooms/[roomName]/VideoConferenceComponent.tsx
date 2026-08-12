@@ -251,6 +251,8 @@ export function VideoConferenceComponent(props: {
   const [remoteControlPending, setRemoteControlPending] = React.useState(false);
   const [remoteControlRequest, setRemoteControlRequest] = React.useState<RemoteControlRequest | null>(null);
   const [approvedControllerIdentity, setApprovedControllerIdentity] = React.useState<string | null>(null);
+  const approvedControllerIdentityRef = React.useRef<string | null>(null);
+  approvedControllerIdentityRef.current = approvedControllerIdentity;
   const [screenShareSurface, setScreenShareSurface] = React.useState<
     'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown'
   >('unknown');
@@ -3135,7 +3137,12 @@ export function VideoConferenceComponent(props: {
           if (screenShareActive) {
             if (approvedControllerIdentity) {
               // Already have a controller — auto-deny
-              sendMeetingMsg({ type: 'RC_DENIED', requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
+              sendMeetingMsg({
+                type: 'RC_DENIED',
+                requesterIdentity: msg.requesterIdentity,
+                requesterName: msg.requesterName,
+                reason: 'busy',
+              });
             } else {
               setRemoteControlRequest({ requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
             }
@@ -3155,6 +3162,25 @@ export function VideoConferenceComponent(props: {
             setIsRemoteControlMode(false);
             setRemoteControlPending(false);
           }
+        } else if (msg.type === 'RC_STOP') {
+          // Controller voluntarily ended control — presenter clears approval
+          if (screenShareActive && msg.requesterIdentity) {
+            const wasApproved = approvedControllerIdentity === msg.requesterIdentity;
+            if (wasApproved) {
+              setApprovedControllerIdentity(null);
+            }
+            if (remoteControlRequest?.requesterIdentity === msg.requesterIdentity) {
+              setRemoteControlRequest(null);
+            }
+            // Only echo revoke for the active controller (avoid spurious clears)
+            if (wasApproved) {
+              sendMeetingMsg({
+                type: 'RC_REVOKED',
+                requesterIdentity: msg.requesterIdentity,
+                requesterName: msg.requesterName || '',
+              });
+            }
+          }
         } else if (msg.type === 'RC_CANCELLED') {
           if (remoteControlRequest?.requesterIdentity === msg.requesterIdentity) {
             setRemoteControlRequest(null);
@@ -3162,6 +3188,14 @@ export function VideoConferenceComponent(props: {
         } else if (msg.type === 'FORCE_STOP_SHARE') {
           // Someone is taking over screen share — stop our share and remove presenter role
           if (screenShareActive) {
+            if (approvedControllerIdentity) {
+              sendMeetingMsg({
+                type: 'RC_REVOKED',
+                requesterIdentity: approvedControllerIdentity,
+                requesterName: '',
+              });
+              setApprovedControllerIdentity(null);
+            }
             setScreenShareActive(false);
             room.localParticipant.setScreenShareEnabled(false).catch(console.error);
             // Revert our own view to liveDoc
@@ -3784,14 +3818,30 @@ export function VideoConferenceComponent(props: {
     updateCustomMicsRef.current?.();
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare, activeView]);
 
-  // Clear all remote control permission state when screen share ends
+  // Clear remote-control + Electron share-target only when a share session ends
+  const prevHasScreenShareRef = React.useRef(false);
   React.useEffect(() => {
-    if (!hasScreenShare) {
-      setRemoteControlPending(false);
-      setRemoteControlRequest(null);
-      setApprovedControllerIdentity(null);
+    const hadShare = prevHasScreenShareRef.current;
+    prevHasScreenShareRef.current = hasScreenShare;
+    if (!hadShare || hasScreenShare) return;
+
+    const activeController = approvedControllerIdentityRef.current;
+    if (activeController) {
+      sendMeetingMsg({
+        type: 'RC_REVOKED',
+        requesterIdentity: activeController,
+        requesterName: '',
+      });
     }
-  }, [hasScreenShare]);
+    setRemoteControlPending(false);
+    setRemoteControlRequest(null);
+    setApprovedControllerIdentity(null);
+    setIsRemoteControlMode(false);
+    setIsDrawingMode(false);
+    if (typeof window !== 'undefined' && window.electronAPI?.clearShareTarget) {
+      void window.electronAPI.clearShareTarget();
+    }
+  }, [hasScreenShare, sendMeetingMsg]);
 
   // Presenter approves a remote control request
   const handleApproveRcRequest = React.useCallback(
@@ -3812,6 +3862,21 @@ export function VideoConferenceComponent(props: {
       sendMeetingMsg(
         { type: 'RC_DENIED', requesterIdentity: identity, requesterName: '' },
       );
+    },
+    [sendMeetingMsg],
+  );
+
+  /** Presenter revokes an active remote-control session */
+  const handleRevokeRc = React.useCallback(
+    (identity: string | null) => {
+      if (!identity) return;
+      setApprovedControllerIdentity(null);
+      setRemoteControlRequest(null);
+      sendMeetingMsg({
+        type: 'RC_REVOKED',
+        requesterIdentity: identity,
+        requesterName: '',
+      });
     },
     [sendMeetingMsg],
   );
@@ -5937,11 +6002,21 @@ export function VideoConferenceComponent(props: {
               </div>
             )}
 
-            {hasScreenShare && activeView === 'shareScreen' && (
+            {/*
+              Desktop: keep annotation/RC bridges mounted whenever a share exists so the
+              presenter (forced onto LiveDoc) still forwards DataChannel → Electron IPC.
+              Interactive UI only when viewing shareScreen.
+              Web: same mount is harmless (no electronAPI); interactive only on shareScreen.
+            */}
+            {hasScreenShare && (
               <>
-                <AnnotationCanvas isDrawingMode={isDrawingMode} />
+                <AnnotationCanvas
+                  isDrawingMode={isDrawingMode && activeView === 'shareScreen'}
+                  bridgeOnly={activeView !== 'shareScreen'}
+                  forwardToOverlay={screenShareActive}
+                />
                 <RemoteControlOverlay
-                  isActive={isRemoteControlMode}
+                  isActive={isRemoteControlMode && activeView === 'shareScreen'}
                   isPresenter={screenShareActive}
                 />
               </>
@@ -8082,47 +8157,54 @@ export function VideoConferenceComponent(props: {
           onToggleRemoteControlMode={() => {
             if (!hasScreenShare) return;
 
-            // If I am the presenter (A), no permission needed — toggle directly
+            // Presenter: toggle local mode; turning off also revokes active controller
             if (screenShareActive) {
-              setIsRemoteControlMode((prev) => {
-                const next = !prev;
-                if (next) setIsDrawingMode(false);
-                return next;
-              });
-              return;
-            }
-
-            // I am a viewer (B) — need to request permission from presenter (A)
-            if (remoteControlPending) {
-              // Cancel the pending request
-              setRemoteControlPending(false);
-              // Find the presenter's identity to send cancellation
-              const presenterTrack = screenShareTracks[0];
-              const presenterIdentity = presenterTrack?.participant?.identity;
-              if (presenterIdentity) {
-                sendMeetingMsg(
-                  { type: 'RC_CANCELLED', requesterIdentity: room.localParticipant.identity, requesterName: room.localParticipant.name || room.localParticipant.identity },
-                );
+              const next = !isRemoteControlMode;
+              if (next) {
+                setIsDrawingMode(false);
+                setIsRemoteControlMode(true);
+              } else {
+                setIsRemoteControlMode(false);
+                if (approvedControllerIdentity) {
+                  handleRevokeRc(approvedControllerIdentity);
+                }
               }
               return;
             }
 
-            if (isRemoteControlMode) {
-              // Stop controlling
-              setIsRemoteControlMode(false);
-              setApprovedControllerIdentity(null);
+            // Viewer: cancel pending request
+            if (remoteControlPending) {
+              setRemoteControlPending(false);
+              sendMeetingMsg({
+                type: 'RC_CANCELLED',
+                requesterIdentity: room.localParticipant.identity,
+                requesterName: room.localParticipant.name || room.localParticipant.identity,
+              });
               return;
             }
 
-            // Send permission request to the presenter
+            // Viewer: stop active control — notify presenter (RC_STOP)
+            if (isRemoteControlMode) {
+              setIsRemoteControlMode(false);
+              sendMeetingMsg({
+                type: 'RC_STOP',
+                requesterIdentity: room.localParticipant.identity,
+                requesterName: room.localParticipant.name || room.localParticipant.identity,
+              });
+              return;
+            }
+
+            // Viewer: request permission
             const presenterTrack = screenShareTracks[0];
             const presenterIdentity = presenterTrack?.participant?.identity;
             if (presenterIdentity) {
               setRemoteControlPending(true);
               setIsDrawingMode(false);
-              sendMeetingMsg(
-                { type: 'RC_REQUEST', requesterIdentity: room.localParticipant.identity, requesterName: room.localParticipant.name || room.localParticipant.identity },
-              );
+              sendMeetingMsg({
+                type: 'RC_REQUEST',
+                requesterIdentity: room.localParticipant.identity,
+                requesterName: room.localParticipant.name || room.localParticipant.identity,
+              });
             }
           }}
           hasScreenShare={hasScreenShare}

@@ -14,10 +14,15 @@ const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 
 const ENTRY_DEPS = ['electron-updater', '@nut-tree-fork/nut-js'];
 
+/** win（默认）精简掉 darwin 原生包；mac 打包需保留 libnut-darwin / node-mac-permissions */
+const electronPlatform = String(process.env.KLOUD_ELECTRON_PLATFORM || 'win').toLowerCase();
+const isMacBuild = electronPlatform === 'mac' || electronPlatform === 'darwin';
+
 const SKIP_PACKAGE_NAMES = new Set([
-  '@nut-tree-fork/libnut-darwin',
   '@nut-tree-fork/libnut-linux',
-  '@nut-tree-fork/node-mac-permissions',
+  ...(isMacBuild
+    ? []
+    : ['@nut-tree-fork/libnut-darwin', '@nut-tree-fork/node-mac-permissions']),
 ]);
 
 const SHELL_FILES = [
@@ -138,7 +143,9 @@ function electronVersion() {
 
 console.log('prepare-electron-app: 收集主进程依赖…');
 const deps = collectDeps(ENTRY_DEPS);
-console.log(`prepare-electron-app: ${deps.size} 个包`);
+console.log(
+  `prepare-electron-app: platform=${isMacBuild ? 'mac' : 'win'}，${deps.size} 个包`,
+);
 
 rmDir(outDir);
 fs.mkdirSync(outDir, { recursive: true });
@@ -150,6 +157,21 @@ for (const file of SHELL_FILES) {
     process.exit(1);
   }
   fs.copyFileSync(src, path.join(outDir, file));
+}
+
+// Windows / electron-builder 桌面图标
+const iconIcoSrc = path.join(root, 'build', 'icon.ico');
+const iconPngSrc = path.join(root, 'build', 'icon.png');
+const iconDestDir = path.join(outDir, 'build');
+fs.mkdirSync(iconDestDir, { recursive: true });
+if (fs.existsSync(iconIcoSrc)) {
+  fs.copyFileSync(iconIcoSrc, path.join(iconDestDir, 'icon.ico'));
+}
+if (fs.existsSync(iconPngSrc)) {
+  fs.copyFileSync(iconPngSrc, path.join(iconDestDir, 'icon.png'));
+}
+if (!fs.existsSync(iconIcoSrc) && !fs.existsSync(iconPngSrc)) {
+  console.warn('prepare-electron-app: 未找到 build/icon.ico 或 build/icon.png，安装包将使用默认图标');
 }
 
 const slimDeps = {};
@@ -188,9 +210,14 @@ const slimPkg = {
       'update-ready.html',
       'update-ready-preload.js',
       'package.json',
-      '!node_modules/@nut-tree-fork/libnut-darwin/**',
-      '!node_modules/@nut-tree-fork/libnut-linux/**',
-      '!node_modules/@nut-tree-fork/node-mac-permissions/**',
+      // Windows 精简包排除 darwin；Mac 包需带上原生模块
+      ...(isMacBuild
+        ? ['!node_modules/@nut-tree-fork/libnut-linux/**']
+        : [
+            '!node_modules/@nut-tree-fork/libnut-darwin/**',
+            '!node_modules/@nut-tree-fork/libnut-linux/**',
+            '!node_modules/@nut-tree-fork/node-mac-permissions/**',
+          ]),
     ],
     asarUnpack: rootBuild.asarUnpack || [
       '**/*.node',

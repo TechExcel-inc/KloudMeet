@@ -9,9 +9,22 @@ declare global {
       sendDrawMessage: (data: any) => void;
       onDrawMessage: (callback: (data: any) => void) => void;
       sendRemoteControlMessage?: (data: any) => void;
+      getShareTargetBounds?: () => Promise<ShareTargetBounds | null>;
+      clearShareTarget?: () => Promise<void>;
     };
   }
 }
+
+export type ShareTargetBounds = {
+  sourceId: string;
+  displayId?: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  scaleFactor: number;
+  kind: 'screen' | 'window';
+};
 
 export type DrawMessage = {
   type: 'start' | 'draw' | 'end' | 'clear';
@@ -26,18 +39,25 @@ const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#ffffff'
 
 interface AnnotationCanvasProps {
   isDrawingMode: boolean;
+  /** When true: only bridge DataChannel → Electron overlay (no interactive UI). */
+  bridgeOnly?: boolean;
+  /** Only the screen-share presenter should paint the system overlay. */
+  forwardToOverlay?: boolean;
   participantName?: string;
   className?: string;
 }
 
-export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasProps) {
+export function AnnotationCanvas({
+  isDrawingMode,
+  bridgeOnly = false,
+  forwardToOverlay = false,
+  className,
+}: AnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const room = useRoomContext();
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#ef4444');
   const [lineWidthIdx, setLineWidthIdx] = useState(0);
-  // Track whether we are in the middle of rendering a remote message to avoid re-sending IPC
-  const isRemoteRenderRef = useRef(false);
 
   /** Draw on local canvas from a DrawMessage (normalized coords). */
   const renderOnCanvas = useCallback((data: DrawMessage) => {
@@ -70,28 +90,43 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
   }, []);
 
   // Handle incoming drawing data from DataChannel
-  const onDataReceived = useCallback((msg: any) => {
-    try {
-      const decoder = new TextDecoder();
-      const str = decoder.decode(msg.payload);
-      const data = JSON.parse(str) as DrawMessage;
+  const onDataReceived = useCallback(
+    (msg: any) => {
+      try {
+        const decoder = new TextDecoder();
+        const str = decoder.decode(msg.payload);
+        const data = JSON.parse(str) as DrawMessage;
+        const fromLocal =
+          !!msg.participant?.identity &&
+          msg.participant.identity === room?.localParticipant?.identity;
 
-      // Render on local canvas
-      renderOnCanvas(data);
+        // Interactive view: paint on in-meeting canvas
+        if (!bridgeOnly) {
+          renderOnCanvas(data);
+        }
 
-      // Forward to Electron overlay window (only for remote messages — we already sent IPC for local strokes)
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        window.electronAPI.sendDrawMessage(data);
+        // Forward only REMOTE strokes to the presenter's Electron overlay
+        if (
+          !fromLocal &&
+          forwardToOverlay &&
+          typeof window !== 'undefined' &&
+          window.electronAPI?.sendDrawMessage
+        ) {
+          window.electronAPI.sendDrawMessage(data);
+        }
+      } catch (e) {
+        console.error('Failed to parse annotation data', e);
       }
-    } catch (e) {
-      console.error('Failed to parse annotation data', e);
-    }
-  }, [renderOnCanvas]);
+    },
+    [bridgeOnly, forwardToOverlay, renderOnCanvas, room],
+  );
 
   useDataChannel('annotations', onDataReceived);
 
   // Resize canvas to match its container exactly, preserving the drawing
   useEffect(() => {
+    if (bridgeOnly) return;
+
     const handleResize = () => {
       const canvas = canvasRef.current;
       if (!canvas || !canvas.parentElement) return;
@@ -121,17 +156,14 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
       window.removeEventListener('resize', handleResize);
       timeoutIds.forEach(clearTimeout);
     };
-  }, []);
+  }, [bridgeOnly]);
 
   /**
    * Publish a draw event to the DataChannel AND render locally.
-   * We render locally by calling onDataReceived with the raw encoded bytes so
-   * the same rendering path is used for both local and remote strokes.
-   * IPC forwarding is handled inside onDataReceived for REMOTE messages only.
-   * For LOCAL strokes we send IPC directly here to avoid double-sending.
+   * Local strokes: render + IPC once here; remote peers get DataChannel only.
    */
   const sendDrawData = (type: DrawMessage['type'], e?: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!room) return;
+    if (!room || bridgeOnly) return;
 
     let x = 0;
     let y = 0;
@@ -144,15 +176,12 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
 
     const msg: DrawMessage = { type, x, y, color, lineWidth: LINE_WIDTHS[lineWidthIdx] };
 
-    // Render locally immediately (without going through DataChannel roundtrip)
     renderOnCanvas(msg);
 
-    // Forward to Electron overlay for local strokes as well
-    if (typeof window !== 'undefined' && window.electronAPI) {
+    if (typeof window !== 'undefined' && forwardToOverlay && window.electronAPI?.sendDrawMessage) {
       window.electronAPI.sendDrawMessage(msg);
     }
 
-    // Broadcast to other participants via DataChannel
     const encoder = new TextEncoder();
     const data = encoder.encode(JSON.stringify(msg));
     room.localParticipant.publishData(data, { reliable: true, topic: 'annotations' }).catch(() => {
@@ -163,7 +192,7 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
   const clearCanvas = () => sendDrawData('clear');
 
   const handlePointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingMode) return;
+    if (!isDrawingMode || bridgeOnly) return;
     e.preventDefault();
     (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
     setIsDrawing(true);
@@ -171,17 +200,21 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingMode || !isDrawing) return;
+    if (!isDrawingMode || !isDrawing || bridgeOnly) return;
     e.preventDefault();
     sendDrawData('draw', e);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawingMode || !isDrawing) return;
+    if (!isDrawingMode || !isDrawing || bridgeOnly) return;
     e.preventDefault();
     setIsDrawing(false);
     sendDrawData('end', e);
   };
+
+  if (bridgeOnly) {
+    return null;
+  }
 
   return (
     <>
@@ -204,7 +237,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
         }}
       />
 
-      {/* Floating Tool Palette */}
       {isDrawingMode && (
         <div
           style={{
@@ -227,7 +259,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             pointerEvents: 'auto',
           }}
         >
-          {/* Color swatches */}
           {COLORS.map((c) => (
             <div
               key={c}
@@ -251,7 +282,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             />
           ))}
 
-          {/* Divider */}
           <div
             style={{
               width: 1,
@@ -262,7 +292,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             }}
           />
 
-          {/* Line width selector */}
           {LINE_WIDTHS.map((w, i) => (
             <div
               key={w}
@@ -276,8 +305,7 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                background:
-                  lineWidthIdx === i ? 'rgba(255,255,255,0.18)' : 'transparent',
+                background: lineWidthIdx === i ? 'rgba(255,255,255,0.18)' : 'transparent',
                 border:
                   lineWidthIdx === i
                     ? '1.5px solid rgba(255,255,255,0.4)'
@@ -298,7 +326,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             </div>
           ))}
 
-          {/* Divider */}
           <div
             style={{
               width: 1,
@@ -309,7 +336,6 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             }}
           />
 
-          {/* Clear button */}
           <button
             onClick={clearCanvas}
             title="Clear all annotations"
@@ -328,12 +354,10 @@ export function AnnotationCanvas({ isDrawingMode, className }: AnnotationCanvasP
             }}
             onMouseOver={(e) => {
               (e.currentTarget as HTMLButtonElement).style.color = '#f87171';
-              (e.currentTarget as HTMLButtonElement).style.background =
-                'rgba(248,113,113,0.12)';
+              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(248,113,113,0.12)';
             }}
             onMouseOut={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color =
-                'rgba(248, 113, 113, 0.8)';
+              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(248, 113, 113, 0.8)';
               (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
             }}
           >

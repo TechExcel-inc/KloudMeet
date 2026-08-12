@@ -6,17 +6,18 @@ import { useRoomContext, useDataChannel } from '@livekit/components-react';
 export type RemoteControlMessage = {
   type: 'mousemove' | 'mousedown' | 'mouseup' | 'dblclick' | 'screen-info';
   // For mouse events:
-  x?: number;       // normalized 0-1 relative to video CONTENT (not container, letterbox-corrected)
+  x?: number; // normalized 0-1 relative to video CONTENT (not container, letterbox-corrected)
   y?: number;
-  button?: number;  // 0 = left, 2 = right
-  // Absolute pixels on presenter's screen (computed client-side using screen info)
+  button?: number; // 0 = left, 2 = right
+  // Absolute pixels on presenter's screen (legacy)
   absX?: number;
   absY?: number;
   // For screen-info broadcast (from presenter to controllers):
   screenW?: number;
   screenH?: number;
-  videoW?: number;  // actual video content resolution
+  videoW?: number;
   videoH?: number;
+  shareKind?: 'screen' | 'window';
 };
 
 // Pending request info for the presenter's approval dialog
@@ -46,9 +47,7 @@ function throttle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
 /**
  * Given raw cursor position and the video element's CSS bounding box, compute
  * content-normalized (0-1) coordinates that account for object-fit: contain
- * letterboxing. The actual video content may be smaller than the CSS box.
- *
- * Returns x/y in 0-1 range relative to the actual video CONTENT, not the CSS box.
+ * letterboxing.
  */
 function toContentNormalized(
   clientX: number,
@@ -57,26 +56,22 @@ function toContentNormalized(
   videoW: number,
   videoH: number,
 ): { x: number; y: number } {
-  // Compute how object-fit: contain positions the content within the CSS box
   const videoAspect = videoW / videoH;
   const boxAspect = rect.width / rect.height;
 
   let contentW: number, contentH: number, offsetX: number, offsetY: number;
   if (videoAspect > boxAspect) {
-    // Video is wider than box → content fills width, bars on top/bottom
     contentW = rect.width;
     contentH = rect.width / videoAspect;
     offsetX = 0;
     offsetY = (rect.height - contentH) / 2;
   } else {
-    // Video is taller than box → content fills height, bars on left/right
     contentH = rect.height;
     contentW = rect.height * videoAspect;
     offsetY = 0;
     offsetX = (rect.width - contentW) / 2;
   }
 
-  // Map from CSS box space to content space (0-1)
   const x = (clientX - rect.left - offsetX) / contentW;
   const y = (clientY - rect.top - offsetY) / contentH;
 
@@ -95,7 +90,6 @@ export function RemoteControlOverlay({
   const room = useRoomContext();
   const [isControlling, setIsControlling] = useState(false);
 
-  // Presenter's screen/video resolution (received from presenter's screen-info broadcast)
   const presenterInfoRef = useRef<{
     screenW: number;
     screenH: number;
@@ -103,14 +97,32 @@ export function RemoteControlOverlay({
     videoH: number;
   } | null>(null);
 
-  // ─── Presenter: broadcast own screen info so controllers can map coordinates ─
+  // ─── Presenter: broadcast share-target size so controllers can letterbox-correct ─
   useEffect(() => {
     if (!isPresenter || !room) return;
 
-    const broadcast = () => {
-      const sw = window.screen.width;
-      const sh = window.screen.height;
-      // Try to get actual video resolution from the screenshare video element
+    let cancelled = false;
+
+    const broadcast = async () => {
+      let sw = window.screen.width;
+      let sh = window.screen.height;
+      let shareKind: 'screen' | 'window' | undefined;
+
+      try {
+        const bounds =
+          typeof window !== 'undefined' && window.electronAPI?.getShareTargetBounds
+            ? await window.electronAPI.getShareTargetBounds()
+            : null;
+        if (cancelled) return;
+        if (bounds && bounds.width > 0 && bounds.height > 0) {
+          sw = bounds.width;
+          sh = bounds.height;
+          shareKind = bounds.kind;
+        }
+      } catch {
+        /* fall back to window.screen */
+      }
+
       const video = document.querySelector<HTMLVideoElement>(
         '.lk-focus-layout video, [data-lk-source="screen_share"] video',
       );
@@ -123,6 +135,7 @@ export function RemoteControlOverlay({
         screenH: sh,
         videoW: vw,
         videoH: vh,
+        shareKind,
       };
       const data = new TextEncoder().encode(JSON.stringify(msg));
       room.localParticipant
@@ -130,10 +143,14 @@ export function RemoteControlOverlay({
         .catch(console.error);
     };
 
-    // Broadcast immediately and every 5 s (video resolution may change)
-    broadcast();
-    const interval = setInterval(broadcast, 5000);
-    return () => clearInterval(interval);
+    void broadcast();
+    const interval = setInterval(() => {
+      void broadcast();
+    }, 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [isPresenter, room]);
 
   // ─── Presenter: receive mouse events from controller and execute via IPC ──
@@ -144,7 +161,6 @@ export function RemoteControlOverlay({
         const data = JSON.parse(decoder.decode(msg.payload)) as RemoteControlMessage;
 
         if (data.type === 'screen-info') {
-          // Controller stores presenter's screen info for coordinate mapping
           if (!isPresenter && data.screenW && data.screenH) {
             presenterInfoRef.current = {
               screenW: data.screenW,
@@ -156,12 +172,10 @@ export function RemoteControlOverlay({
           return;
         }
 
-        // Only the presenter executes the mouse actions
         if (!isPresenter) return;
         if (
           typeof window !== 'undefined' &&
-          window.electronAPI &&
-          window.electronAPI.sendRemoteControlMessage
+          window.electronAPI?.sendRemoteControlMessage
         ) {
           window.electronAPI.sendRemoteControlMessage(data);
         }
@@ -174,7 +188,6 @@ export function RemoteControlOverlay({
 
   useDataChannel('remote-control', onDataReceived);
 
-  // ─── Controller: publish pointer events with corrected coordinates ─────────
   const publishMsg = useCallback(
     (msg: RemoteControlMessage) => {
       if (!room) return;
@@ -196,7 +209,6 @@ export function RemoteControlOverlay({
       e: React.PointerEvent<HTMLDivElement> | React.MouseEvent<HTMLDivElement>,
       button = 0,
     ): RemoteControlMessage => {
-      // Find the actual screen share video element for accurate coordinate mapping
       const video =
         document.querySelector<HTMLVideoElement>('[data-lk-source="screen_share"] video') ||
         document.querySelector<HTMLVideoElement>('[data-lk-source="screen_share_audio"] video') ||
@@ -208,30 +220,20 @@ export function RemoteControlOverlay({
         : containerRef.current?.getBoundingClientRect();
       if (!rect) return { type, x: 0, y: 0, button };
 
-      // Get actual video content dimensions for letterbox correction
       const videoW = video?.videoWidth || rect.width;
       const videoH = video?.videoHeight || rect.height;
-
-      // Compute content-normalized 0-1 coordinates (corrected for object-fit: contain)
       const { x, y } = toContentNormalized(e.clientX, e.clientY, rect, videoW, videoH);
 
-      // Only send normalized 0-1 coords — the presenter's Electron main process
-      // will map these to physical screen pixels using its own screen dimensions.
-      // This avoids DPI scaling mismatches between controller and presenter.
       return { type, x, y, button };
     },
     [],
   );
 
-  // Throttled mousemove ~60fps
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const sendMove = useCallback(
-    throttle(
-      (msg: RemoteControlMessage) => {
-        publishMsg(msg);
-      },
-      16,
-    ),
+    throttle((msg: RemoteControlMessage) => {
+      publishMsg(msg);
+    }, 16),
     [publishMsg],
   );
 
@@ -270,7 +272,6 @@ export function RemoteControlOverlay({
     e.preventDefault();
   };
 
-  // Auto-hide badge after 3 seconds
   const [showBadge, setShowBadge] = useState(true);
   useEffect(() => {
     if (isActive && !isPresenter) {
@@ -279,6 +280,11 @@ export function RemoteControlOverlay({
       return () => clearTimeout(timer);
     }
   }, [isActive, isPresenter]);
+
+  // Presenter bridge-only: keep DataChannel/IPC alive with no visible layer
+  if (isPresenter && !isActive) {
+    return null;
+  }
 
   if (!isActive && !isPresenter) return null;
 
@@ -308,7 +314,6 @@ export function RemoteControlOverlay({
         transition: 'box-shadow 0.2s ease',
       }}
     >
-      {/* Controller badge — bottom-right, auto-fades after 3s */}
       {isController && showBadge && (
         <div
           style={{
