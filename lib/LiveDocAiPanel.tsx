@@ -84,6 +84,38 @@ const FILE_ACCEPT = [
   '.json',
 ].join(',');
 
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
+function formatKloudPasteImageName(mimeType: string, originalName?: string): string {
+  const now = new Date();
+  const stamp = `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`;
+  let ext = '.png';
+  if (originalName && originalName.includes('.')) {
+    ext = originalName.slice(originalName.lastIndexOf('.'));
+  } else if (mimeType === 'image/jpeg') {
+    ext = '.jpg';
+  } else if (mimeType === 'image/png') {
+    ext = '.png';
+  } else if (mimeType === 'image/gif') {
+    ext = '.gif';
+  } else if (mimeType === 'image/webp') {
+    ext = '.webp';
+  }
+  return `Kloud-${stamp}${ext}`;
+}
+
+function isKloudPasteDocumentUrl(text: string): boolean {
+  const lower = text.trim().toLowerCase();
+  return (
+    lower.includes('/document/') ||
+    lower.includes('/docview/') ||
+    lower.includes('/livedoc/') ||
+    lower.includes('/attachment/')
+  );
+}
+
 function toTimestamp(value: number | string): number {
   if (typeof value === 'number') return value;
   const numeric = Number(value);
@@ -158,6 +190,21 @@ export function LiveDocAiPanel({
     [onAction],
   );
 
+  const uploadPasteImageBlob = React.useCallback(
+    async (blob: Blob, originalName?: string) => {
+      if (!blob.size) return;
+      const fileName = formatKloudPasteImageName(blob.type || 'image/png', originalName);
+      const fileBuffer = await blob.arrayBuffer();
+      await onAction('document.uploadLocal', {
+        fileName,
+        fileType: blob.type || '',
+        fileSize: blob.size,
+        fileBuffer,
+      });
+    },
+    [onAction],
+  );
+
   React.useEffect(() => {
     if (!open) return;
     setActiveTab('file');
@@ -167,6 +214,34 @@ export function LiveDocAiPanel({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
+
+  React.useEffect(() => {
+    if (!open || busy) return;
+    const handlePaste = (event: ClipboardEvent) => {
+      const clipboard = event.clipboardData;
+      if (!clipboard) return;
+
+      let uploadedImage = false;
+      for (let i = 0; i < clipboard.items.length; i += 1) {
+        const item = clipboard.items[i];
+        if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+        const blob = item.getAsFile();
+        if (!blob || blob.size === 0) continue;
+        event.preventDefault();
+        uploadedImage = true;
+        void uploadPasteImageBlob(blob, blob.name).catch(() => undefined);
+        break;
+      }
+
+      const text = clipboard.getData('text') || clipboard.getData('Text') || '';
+      if (!uploadedImage && isKloudPasteDocumentUrl(text)) {
+        event.preventDefault();
+        void onAction('document.uploadFromPasteUrl', { url: text.trim() }).catch(() => undefined);
+      }
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [open, busy, uploadPasteImageBlob, onAction]);
 
   activeFileMenuBtnRef.current =
     fileMenuItemId === null ? null : fileMenuBtnRefs.current.get(fileMenuItemId) || null;

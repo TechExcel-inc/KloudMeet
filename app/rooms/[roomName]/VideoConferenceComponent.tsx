@@ -236,6 +236,20 @@ export function VideoConferenceComponent(props: {
   const [activeView, setActiveView] = React.useState<ViewMode>(
     () => parseMeetingRoomView(props.connectionDetails.currentView) ?? 'webcam',
   );
+  const activeViewRef = React.useRef<ViewMode>(activeView);
+  activeViewRef.current = activeView;
+  /** Last non-share room mode (webcam | liveDoc). Used when leaving shareScreen / takeover. */
+  const lastStableRoomViewRef = React.useRef<ViewMode>(
+    activeView === 'shareScreen' ? 'webcam' : activeView,
+  );
+  if (activeView === 'webcam' || activeView === 'liveDoc') {
+    lastStableRoomViewRef.current = activeView;
+  }
+  /**
+   * Local sharer session only: remembers view before THIS client started sharing.
+   * Non-null ⇒ we own restore+broadcast when share ends.
+   */
+  const localShareViewSessionRef = React.useRef<{ previousView: ViewMode } | null>(null);
   const [webcamLayoutMode, setWebcamLayoutMode] = React.useState<WebcamLayoutMode>('tile');
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
   // Stores the mic state BEFORE a MUTE_ALL command arrived, so UNMUTE_ALL can restore it.
@@ -445,11 +459,45 @@ export function VideoConferenceComponent(props: {
     return () => clearTimeout(timer);
   }, [isToolbarMobile, hasScreenShare, screenShareActive]);
 
-  // React to screen share status logic automatically
+  // Ref for broadcast function (defined later in DataChannel sync block)
+  const broadcastViewChangeRef = React.useRef<((view: ViewMode) => void) | null>(null);
+  // Only host / co-host / presenter roles may broadcast view changes to the room
+  const canBroadcastViewChangeRef = React.useRef(false);
+  /** Skip repeat POST /api/meetings/.../view when mode unchanged */
+  const lastPersistedRoomViewRef = React.useRef<ViewMode | null>(null);
+
+  /**
+   * Sharer starts sharing:
+   * - remember previous room mode (never capture shareScreen — use lastStable)
+   * - show liveDoc locally
+   * - broadcast shareScreen for everyone else
+   */
+  const beginLocalScreenShareView = React.useCallback(() => {
+    if (!localShareViewSessionRef.current) {
+      const current = activeViewRef.current;
+      const previousView =
+        current === 'webcam' || current === 'liveDoc'
+          ? current
+          : lastStableRoomViewRef.current;
+      localShareViewSessionRef.current = { previousView };
+      broadcastViewChangeRef.current?.('shareScreen');
+    }
+    setActiveView('liveDoc');
+  }, []);
+
+  /** Sharer stops: restore + broadcast. null if we were not the sharer. */
+  const endLocalScreenShareView = React.useCallback((): ViewMode | null => {
+    const session = localShareViewSessionRef.current;
+    if (!session) return null;
+    localShareViewSessionRef.current = null;
+    broadcastViewChangeRef.current?.(session.previousView);
+    return session.previousView;
+  }, []);
+
+  // Screen-share ↔ view-mode sync
   React.useEffect(() => {
     if (hasScreenShare) {
       if (isLocalScreenShare) {
-        // Reset detection flag — mirror-block won't activate until detection completes
         setSurfaceDetected(false);
         setTimeout(() => {
           const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
@@ -473,46 +521,57 @@ export function VideoConferenceComponent(props: {
             setSurfaceDetected(true);
           }
         }, 500);
-        // Presenter: switch to liveDoc so they don't see their own screen share
-        setActiveView('liveDoc');
-        broadcastViewChangeRef.current?.('shareScreen');
+        beginLocalScreenShareView();
       } else {
         setScreenShareSurface('unknown');
         setSurfaceDetected(false);
-        // Other participants: switch to shareScreen to view the shared desktop
         setActiveView('shareScreen');
       }
-    } else {
-      setScreenShareActive(false);
-      setIsDrawingMode(false);
-      setIsRemoteControlMode(false);
-      setScreenShareSurface('unknown');
-      setSurfaceDetected(false);
-      setActiveView((prev) => {
-        if (prev === 'shareScreen' || prev === 'liveDoc') {
-          // Screen share ended: everyone goes back to liveDoc
-          broadcastViewChangeRef.current?.('liveDoc');
-          return 'liveDoc';
-        }
-        return prev;
-      });
+      return;
     }
-  }, [hasScreenShare, isLocalScreenShare, room.localParticipant]);
 
-  // Ref for broadcast function (defined later in DataChannel sync block)
-  const broadcastViewChangeRef = React.useRef<((view: ViewMode) => void) | null>(null);
-  // Only host / co-host / presenter roles may broadcast view changes to the room
-  const canBroadcastViewChangeRef = React.useRef(false);
+    setScreenShareActive(false);
+    setIsDrawingMode(false);
+    setIsRemoteControlMode(false);
+    setScreenShareSurface('unknown');
+    setSurfaceDetected(false);
+    setActiveView((prev) => {
+      // Only skip end during token renew / rejoin (not browser "Stop sharing")
+      if (
+        localShareViewSessionRef.current &&
+        (tokenRenewInProgressRef.current || pragmaticRejoinInFlightRef.current)
+      ) {
+        return prev;
+      }
+
+      // We were the sharer → restore + broadcast
+      const restored = endLocalScreenShareView();
+      if (restored) return restored;
+
+      // Viewer: leave shareScreen locally. Only the sharer broadcasts restore
+      // (avoids late-joining privileged clients overwriting the sharer's VIEW_CHANGE).
+      if (prev === 'shareScreen') {
+        return lastStableRoomViewRef.current;
+      }
+      return prev;
+    });
+  }, [
+    hasScreenShare,
+    isLocalScreenShare,
+    room.localParticipant,
+    beginLocalScreenShareView,
+    endLocalScreenShareView,
+  ]);
 
   const handleViewChange = React.useCallback(
     (view: ViewMode) => {
       if (view !== 'shareScreen') {
         setIsDrawingMode(false);
         setIsRemoteControlMode(false);
-        // Stop screen share only if switching to a non-sharing view that's not liveDoc
-        // (Presenter stays in liveDoc while sharing — don't stop share for that case)
         if (screenShareActive && view !== 'liveDoc') {
           setScreenShareActive(false);
+          // User chose a new mode — do not restore the pre-share mode on track end
+          localShareViewSessionRef.current = null;
           room.localParticipant.setScreenShareEnabled(false).catch(console.error);
         }
       }
@@ -694,24 +753,33 @@ export function VideoConferenceComponent(props: {
     if (!screenShareRestorePendingRef.current) return;
     if (isToolbarMobileUserAgent()) {
       screenShareRestorePendingRef.current = false;
+      const restored = endLocalScreenShareView();
+      if (restored) setActiveView(restored);
       return;
     }
     try {
       await room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE);
       setScreenShareActive(true);
-      setActiveView('liveDoc');
-      broadcastViewChangeRef.current?.('shareScreen');
+      beginLocalScreenShareView();
       console.warn('[KloudMeet] Screen share restored after reconnect');
     } catch (e: unknown) {
       screenShareRestorePendingRef.current = false;
       setScreenShareActive(false);
+      // Share will not come back — restore room view now
+      const restored = endLocalScreenShareView();
+      if (restored) setActiveView(restored);
       console.warn(
         '[KloudMeet] Screen share restore failed (browser may require a user gesture):',
         e instanceof Error ? e.message : e,
       );
       showScreenShareRestoreFailedToast();
     }
-  }, [room, showScreenShareRestoreFailedToast]);
+  }, [
+    room,
+    showScreenShareRestoreFailedToast,
+    beginLocalScreenShareView,
+    endLocalScreenShareView,
+  ]);
 
   const restoreLocalMediaAfterReconnect = React.useCallback(async () => {
     try {
@@ -1998,9 +2066,7 @@ export function VideoConferenceComponent(props: {
     }
 
     if (next) {
-      // Immediately switch presenter to liveDoc and broadcast shareScreen to others
-      setActiveView('liveDoc');
-      broadcastViewChangeRef.current?.('shareScreen');
+      beginLocalScreenShareView();
     }
 
     room.localParticipant
@@ -2008,14 +2074,20 @@ export function VideoConferenceComponent(props: {
       .catch((e) => {
       setScreenShareActive(false);
       screenShareRestorePendingRef.current = false;
-      // Revert view to liveDoc if screen share was cancelled/failed
       if (next) {
-        setActiveView('liveDoc');
-        broadcastViewChangeRef.current?.('liveDoc');
+        const restored = endLocalScreenShareView();
+        if (restored) setActiveView(restored);
       }
       console.error(e);
     });
-  }, [screenShareActive, room, hasScreenShare, isToolbarMobile]);
+  }, [
+    screenShareActive,
+    room,
+    hasScreenShare,
+    isToolbarMobile,
+    beginLocalScreenShareView,
+    endLocalScreenShareView,
+  ]);
 
 
   // Leave: just disconnect without ending the meeting for everyone
@@ -2262,10 +2334,9 @@ export function VideoConferenceComponent(props: {
       (muteAllActive && !exemptFromMuteAllIdentities.includes(localIdentity)));
   const isLocalCamRestricted =
     !isLocalControlOperator && hostDisabledVideoIdentities.includes(localIdentity);
-  // Interactive meetings: everyone can switch views locally; only privileged roles sync to the room
-  const canSwitchViews = true;
-  const canBroadcastViewChange =
-    isHost || isCohost || isCopresenter || isAutoPresenter;
+  // Only host / co-host / presenter may switch views; they sync the room for everyone else
+  const canSwitchViews = isHost || isCohost || isCopresenter || isAutoPresenter;
+  const canBroadcastViewChange = canSwitchViews;
   canBroadcastViewChangeRef.current = canBroadcastViewChange;
 
   React.useEffect(() => {
@@ -2643,16 +2714,15 @@ export function VideoConferenceComponent(props: {
     // Start sharing ourselves after a brief delay so the previous share can tear down
     setTimeout(() => {
       setScreenShareActive(true);
-      setActiveView('liveDoc');
-      broadcastViewChangeRef.current?.('shareScreen');
+      beginLocalScreenShareView();
       room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e) => {
         setScreenShareActive(false);
-        setActiveView('liveDoc');
-        broadcastViewChangeRef.current?.('liveDoc');
+        const restored = endLocalScreenShareView();
+        if (restored) setActiveView(restored);
         console.error(e);
       });
     }, 600);
-  }, [room, screenShareTracks, sendMeetingMsg]);
+  }, [room, screenShareTracks, sendMeetingMsg, beginLocalScreenShareView, endLocalScreenShareView]);
 
   // End for All (host/co-host only): notify room, delete LiveKit room + ENDED in DB, then leave UI
   const handleEndForAll = React.useCallback(async () => {
@@ -2886,16 +2956,22 @@ export function VideoConferenceComponent(props: {
         });
       }
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
-      // Persist for late joiners via connection-details (only privileged broadcasters)
+      // Persist for late joiners (privileged only; skip duplicate mode)
       if (!canBroadcastViewChangeRef.current) return;
+      if (lastPersistedRoomViewRef.current === view) return;
       const token = connectionDetailsRef.current.participantToken;
       const rn = connectionDetailsRef.current.roomName;
       if (token && rn) {
+        lastPersistedRoomViewRef.current = view;
         void persistMeetingRoomView({
           roomName: rn,
           view,
           livekitToken: token,
         }).catch((err) => {
+          // Allow retry on next broadcast of the same view after a failure
+          if (lastPersistedRoomViewRef.current === view) {
+            lastPersistedRoomViewRef.current = null;
+          }
           console.error('[meetingRoomView] persist failed', err);
         });
       }
@@ -3198,8 +3274,7 @@ export function VideoConferenceComponent(props: {
             }
             setScreenShareActive(false);
             room.localParticipant.setScreenShareEnabled(false).catch(console.error);
-            // Revert our own view to liveDoc
-            setActiveView('liveDoc');
+            // View restore happens in hasScreenShare effect when the track ends
           }
           // If we were a co-presenter, remove ourselves
           setCopresenterIdentities((prev) => prev.filter((id) => id !== room.localParticipant.identity));
