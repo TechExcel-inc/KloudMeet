@@ -108,14 +108,21 @@ export function DashboardView({
 
   const searchQueryRef = useRef(searchQuery);
   searchQueryRef.current = searchQuery;
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const pageSizeRef = useRef(pageSize);
+  pageSizeRef.current = pageSize;
+  const meetingsFetchGenRef = useRef(0);
 
-  const fetchMeetings = useCallback((searchTerm?: string) => {
+  const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
     const term = searchTerm ?? searchQueryRef.current;
     if (!userToken && !userId) return;
+    const currentPage = pageOverride ?? pageRef.current;
+    const gen = ++meetingsFetchGenRef.current;
     setLoadingMeetings(true);
     const qs = new URLSearchParams({
-      page: String(page),
-      pageSize: String(pageSize),
+      page: String(currentPage),
+      pageSize: String(pageSizeRef.current),
       ...(term.trim() ? { search: term.trim() } : {}),
     });
     fetch(`/api/account/meetings?${qs.toString()}`, {
@@ -123,6 +130,7 @@ export function DashboardView({
     })
       .then(res => res.json())
       .then(data => {
+        if (gen !== meetingsFetchGenRef.current) return;
         if (data.meetings) {
           const sorted = data.meetings.sort((a: any, b: any) => {
             const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
@@ -134,23 +142,25 @@ export function DashboardView({
         }
       })
       .catch(console.error)
-      .finally(() => setLoadingMeetings(false));
-  }, [userId, userToken, page, pageSize]);
+      .finally(() => {
+        if (gen === meetingsFetchGenRef.current) setLoadingMeetings(false);
+      });
+  }, [userId, userToken]);
 
   useEffect(() => {
     fetchMeetings();
-  }, [fetchMeetings]);
+  }, [fetchMeetings, page, pageSize]);
 
-  // Debounced search: reset to page 1 and re-fetch when searchQuery changes
-  const isFirstSearchRender = React.useRef(true);
+  const prevSearchQueryRef = useRef(searchQuery);
   useEffect(() => {
-    if (isFirstSearchRender.current) {
-      isFirstSearchRender.current = false;
-      return;
-    }
+    if (prevSearchQueryRef.current === searchQuery) return;
+    prevSearchQueryRef.current = searchQuery;
     const timer = setTimeout(() => {
-      setPage(1);
-      fetchMeetings(searchQuery);
+      if (pageRef.current !== 1) {
+        setPage(1);
+      } else {
+        fetchMeetings(searchQuery, 1);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [searchQuery, fetchMeetings]);
