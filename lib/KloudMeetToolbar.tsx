@@ -1660,9 +1660,14 @@ export function KloudMeetToolbar({
                   )}
 
                   {renderDesktopWebcamControl()}
+                </>
+              )}
 
-                  {renderDesktopShareScreenButton()}
+              {/* 共享屏幕：所有人可见（对齐手机端「非操作者仍单独显示」） */}
+              {renderDesktopShareScreenButton()}
 
+              {canSwitchViews && (
+                <>
                   {/* LiveDoc AI：始终显示 */}
                   {renderLiveDocSettingsButton('desktop')}
 
