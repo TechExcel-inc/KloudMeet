@@ -2166,9 +2166,8 @@ export function VideoConferenceComponent(props: {
 
   // Determine host: override (from transfer) takes precedence over join-time computation
   const [hostIdentityOverride, setHostIdentityOverride] = React.useState<string | null>(null);
-  const [hostIdentityFromJoin, setHostIdentityFromJoin] = React.useState<string>(
-    room.localParticipant.identity,
-  );
+  // 勿默认成本人：否则参会者首帧 isHost=true，操作者按钮闪一下再消失
+  const [hostIdentityFromJoin, setHostIdentityFromJoin] = React.useState<string>('');
 
   // Recompute host: DB meeting owner (logged-in metadata) > earliest joiner
   React.useEffect(() => {
@@ -2188,6 +2187,11 @@ export function VideoConferenceComponent(props: {
             return;
           }
         }
+      }
+
+      // 未连上时 remote 列表可能仍空，不能用「房间里只有我」把晚进的人判成 host
+      if (room.state !== ConnectionState.Connected) {
+        return;
       }
 
       // Only one person in the meeting? They're the host, period.
@@ -2224,7 +2228,7 @@ export function VideoConferenceComponent(props: {
   }, [room, props.meetingOwnerMemberId]);
 
   const hostIdentity = hostIdentityOverride || hostIdentityFromJoin;
-  const isHost = hostIdentity === room.localParticipant.identity;
+  const isHost = Boolean(hostIdentity) && hostIdentity === room.localParticipant.identity;
   const [copresenterIdentities, setCopresenterIdentities] = React.useState<string[]>([]);
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
