@@ -7,7 +7,7 @@ import type {
   WidgetState,
 } from '@livekit/components-core';
 import { isEqualTrackRef, isTrackReference, isWeb } from '@livekit/components-core';
-import { RoomEvent, Track } from 'livekit-client';
+import { Track } from 'livekit-client';
 import * as React from 'react';
 import {
   CarouselLayout,
@@ -47,8 +47,8 @@ function trackKey(track: TrackReferenceOrPlaceholder): string {
 
 /**
  * LiveKit VideoConference 的 SkyMeet 变体：
- * - 屏幕共享：自动 pin → FocusLayout
- * - Webcam Spotlight：渲染期直接选焦点轨（不依赖 effect 时序）
+ * - 屏幕共享：渲染期直接 FocusLayout（不依赖 pin effect 时序）
+ * - Webcam Spotlight：渲染期直接选焦点轨
  * - Webcam Tile：GridLayout
  */
 export function KloudVideoConference({
@@ -67,12 +67,15 @@ export function KloudVideoConference({
   });
   const lastAutoFocusedScreenShareTrack = React.useRef<TrackReferenceOrPlaceholder | null>(null);
 
+  // 勿限制为仅 ActiveSpeakersChanged：否则屏幕共享 publish/subscribe 后 tracks 可能不刷新，
+  // 表现为 Tab 已是 shareScreen，主画面仍停在摄像头宫格。
+  // 不传 updateOnlyOn 时走默认 allParticipantRoomEvents（含 ActiveSpeakers + Track*）。
   const tracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
-    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+    { onlySubscribed: false },
   );
 
   const layoutContext = useCreateLayoutContext();
@@ -85,7 +88,15 @@ export function KloudVideoConference({
     [tracks],
   );
 
-  const hasSubscribedScreenShare = screenShareTracks.some((track) => track.publication.isSubscribed);
+  /** 已订阅或已有 MediaStreamTrack 的屏幕共享（与父层 hasScreenShare 对齐） */
+  const activeScreenShareTrack = React.useMemo(
+    () =>
+      screenShareTracks.find(
+        (track) => track.publication.isSubscribed || Boolean(track.publication.track),
+      ),
+    [screenShareTracks],
+  );
+  const hasActiveScreenShare = Boolean(activeScreenShareTrack);
   const pinnedTracks = usePinnedTracks(layoutContext);
   const pinnedTrack = pinnedTracks[0];
 
@@ -111,12 +122,21 @@ export function KloudVideoConference({
     return remote ?? pool[0];
   }, [room.activeSpeakers, room.localParticipant.identity, tracks]);
 
-  // 渲染期决定焦点：Spotlight 不依赖 pin effect，避免时序/空 publication 导致不切换
-  const focusTrack: TrackReferenceOrPlaceholder | undefined = hasSubscribedScreenShare
-    ? pinnedTrack
-    : webcamLayoutMode === 'spotlight'
-      ? spotlightTrack
-      : undefined;
+  // 渲染期决定焦点：屏幕共享 / Spotlight 都不依赖 pin effect 时序
+  const focusTrack: TrackReferenceOrPlaceholder | undefined = (() => {
+    if (activeScreenShareTrack) {
+      if (
+        pinnedTrack &&
+        isTrackReference(pinnedTrack) &&
+        pinnedTrack.publication.source === Track.Source.ScreenShare
+      ) {
+        return pinnedTrack;
+      }
+      return activeScreenShareTrack;
+    }
+    if (webcamLayoutMode === 'spotlight') return spotlightTrack;
+    return undefined;
+  })();
 
   const carouselTracks = React.useMemo(
     () => tracks.filter((track) => !isEqualTrackRef(track, focusTrack)),
@@ -131,13 +151,9 @@ export function KloudVideoConference({
 
   // 仅维护屏幕共享自动 pin（与上游 VideoConference 一致）
   React.useEffect(() => {
-    if (
-      hasSubscribedScreenShare &&
-      lastAutoFocusedScreenShareTrack.current === null &&
-      screenShareTracks[0]
-    ) {
-      pinDispatch?.({ msg: 'set_pin', trackReference: screenShareTracks[0] });
-      lastAutoFocusedScreenShareTrack.current = screenShareTracks[0];
+    if (activeScreenShareTrack && lastAutoFocusedScreenShareTrack.current === null) {
+      pinDispatch?.({ msg: 'set_pin', trackReference: activeScreenShareTrack });
+      lastAutoFocusedScreenShareTrack.current = activeScreenShareTrack;
       return;
     }
 
@@ -153,7 +169,7 @@ export function KloudVideoConference({
       lastAutoFocusedScreenShareTrack.current = null;
     }
 
-    if (pinnedTrack && !isTrackReference(pinnedTrack) && hasSubscribedScreenShare) {
+    if (pinnedTrack && !isTrackReference(pinnedTrack) && hasActiveScreenShare) {
       const updatedFocusTrack = tracks.find(
         (tr) =>
           tr.participant.identity === pinnedTrack.participant.identity &&
@@ -164,7 +180,8 @@ export function KloudVideoConference({
       }
     }
   }, [
-    hasSubscribedScreenShare,
+    activeScreenShareTrack,
+    hasActiveScreenShare,
     pinDispatch,
     pinnedTrack,
     screenShareKey,
@@ -174,7 +191,7 @@ export function KloudVideoConference({
 
   // Spotlight 时同步 pin；Tile 仅在确有 pin 时清理（避免 clear_pin 每次返回新 [] 导致死循环）
   React.useEffect(() => {
-    if (hasSubscribedScreenShare) return;
+    if (hasActiveScreenShare) return;
 
     if (webcamLayoutMode === 'tile') {
       if (pinState && pinState.length > 0) {
@@ -187,7 +204,7 @@ export function KloudVideoConference({
     if (isEqualTrackRef(pinnedTrack, spotlightTrack)) return;
     pinDispatch?.({ msg: 'set_pin', trackReference: spotlightTrack });
   }, [
-    hasSubscribedScreenShare,
+    hasActiveScreenShare,
     pinDispatch,
     pinState,
     pinnedTrack,
@@ -200,12 +217,12 @@ export function KloudVideoConference({
   return (
     <div
       className="lk-video-conference"
-      data-kloud-webcam-layout={hasSubscribedScreenShare ? 'screenshare' : webcamLayoutMode}
+      data-kloud-webcam-layout={hasActiveScreenShare ? 'screenshare' : webcamLayoutMode}
       data-kloud-focus-track={focusTrack ? trackKey(focusTrack) : ''}
       {...props}
     >
       {/* Spotlight 自带布局样式，不依赖父级注入是否生效 */}
-      {webcamLayoutMode === 'spotlight' && !hasSubscribedScreenShare && (
+      {webcamLayoutMode === 'spotlight' && !hasActiveScreenShare && (
         <style>{`
           .lk-video-conference[data-kloud-webcam-layout="spotlight"] {
             width: 100%;
