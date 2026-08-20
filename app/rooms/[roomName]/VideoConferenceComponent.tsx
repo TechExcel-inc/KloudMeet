@@ -421,7 +421,9 @@ export function VideoConferenceComponent(props: {
     (t) => t.participant?.identity === room.localParticipant.identity,
   );
 
-  // 屏幕共享时默认收起左侧参会者列表，优先展示共享画面
+  const isLocalSharing = screenShareActive || isLocalScreenShare;
+
+  // 屏幕共享时默认收起左侧参会者列表（共享方 / 观看方相同）
   React.useEffect(() => {
     if (hasScreenShare) {
       setIsWebcamSidebarCollapsed(true);
@@ -2403,6 +2405,9 @@ export function VideoConferenceComponent(props: {
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  /** LiveDoc 共享方：主区仍是文档，左侧露出与 shareScreen 相同的用户列表（默认折叠） */
+  const showLiveDocLeftUserList =
+    shouldDisplayLiveDoc && hasScreenShare && isLocalSharing && !isRecorderBot;
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
@@ -4057,14 +4062,13 @@ export function VideoConferenceComponent(props: {
       ? FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL
       : FLOATING_WEBCAM_RIGHT_INSET;
   const floatingRightBoundaryInset = FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN;
-  /** 共享方 LiveDoc / 纯 LiveDoc / 非共享方且左侧栏已折叠时显示浮窗 */
+  /** 纯 LiveDoc / 屏幕共享且左侧栏已折叠时显示浮窗（共享方展开左侧列表时不走浮窗） */
   const floatingWebcamPanelBaseVisible =
     !isRecorderBot &&
     activeView !== 'webcam' &&
     !showWebcamSidebar &&
-    (screenShareActive ||
-      (activeView === 'liveDoc' && !hasScreenShare) ||
-      (hasScreenShare && !screenShareActive && isWebcamSidebarCollapsed));
+    ((activeView === 'liveDoc' && !hasScreenShare) ||
+      (hasScreenShare && isWebcamSidebarCollapsed));
   // Web · LiveDoc 屏幕共享中（观看方 activeView 会切到 shareScreen，不能只判断 liveDoc）：
   // 1) 正在共享的本人（任意身份）不显示浮窗
   // 2) 非 host/co-host 不显示浮窗
@@ -5846,6 +5850,7 @@ export function VideoConferenceComponent(props: {
               flex: 1,
               minWidth: 0,
               overflow: 'hidden',
+              order: showLiveDocLeftUserList ? 1 : 0,
             }}
           >
             <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
@@ -5953,15 +5958,17 @@ export function VideoConferenceComponent(props: {
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
-            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
+            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked && !showLiveDocLeftUserList ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${showLiveDocLeftUserList ? 'livedoc-share-aside' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
             style={{
-              flex: 1,
+              flex: showLiveDocLeftUserList ? '0 0 auto' : 1,
               position: 'relative',
-              display: shouldDisplayLiveDoc ? 'none' : 'flex',
+              display: shouldDisplayLiveDoc && !showLiveDocLeftUserList ? 'none' : 'flex',
               flexDirection: 'column',
               minHeight: 0,
               height: '100%',
-              overflow: 'hidden',
+              overflow: showLiveDocLeftUserList ? 'visible' : 'hidden',
+              order: 0,
+              zIndex: showLiveDocLeftUserList ? 4 : undefined,
             }}
           >
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare && webcamLayoutMode === 'tile' ? (
@@ -6102,7 +6109,7 @@ export function VideoConferenceComponent(props: {
             )}
 
             {/* Attendee sidebar collapse button (hidden during remote control for unobstructed view) */}
-            {hasScreenShare && !screenShareActive && !isRemoteControlMode && !isRecorderBot && (
+            {hasScreenShare && !isRemoteControlMode && !isRecorderBot && (
               <button
                 className="webcam-collapse-toggle"
                 onClick={(e) => {
@@ -6652,12 +6659,42 @@ export function VideoConferenceComponent(props: {
                 }
               }
 
-              /* 6. Presenter Sharing: hide webcam sidebar, show floating panel */
-              .sky-meet-video-wrapper.presenter-sharing .lk-carousel {
-                 display: none !important;
+              /* LiveDoc 共享方：只留左侧用户列表，藏掉共享画面避免镜像 */
+              .sky-meet-video-wrapper.livedoc-share-aside {
+                --screenshare-aside-tile: 132px;
+                width: calc(var(--screenshare-aside-tile) + 16px);
+                min-width: calc(var(--screenshare-aside-tile) + 16px);
+                max-width: calc(var(--screenshare-aside-tile) + 16px);
+                height: 100%;
               }
+              .sky-meet-video-wrapper.livedoc-share-aside.sidebar-collapsed {
+                width: 0 !important;
+                min-width: 0 !important;
+                max-width: 0 !important;
+              }
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-video-conference,
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-room-container,
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-video-conference-inner,
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-focus-layout-wrapper,
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-focus-layout {
+                height: 100% !important;
+                width: 100% !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+              }
+              /* carousel 在 .lk-focus-layout 内，只藏共享画面 tile，不能藏整个 focus 容器 */
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-focus-layout > .lk-participant-tile,
+              .sky-meet-video-wrapper.livedoc-share-aside .lk-control-bar,
+              .sky-meet-video-wrapper.livedoc-share-aside .screenshare-overlay-container,
+              .sky-meet-video-wrapper.livedoc-share-aside .mirror-livedoc-overlay {
+                display: none !important;
+                flex: 0 0 0 !important;
+                width: 0 !important;
+                min-width: 0 !important;
+              }
+
               /* Mirror-block: NUCLEAR — hide ALL video wrapper content, only show LiveDoc overlay */
-              .sky-meet-video-wrapper.mirror-blocked {
+              .sky-meet-video-wrapper.mirror-blocked:not(.livedoc-share-aside) {
                  visibility: hidden !important;
               }
               .sky-meet-video-wrapper.mirror-blocked .mirror-livedoc-overlay,

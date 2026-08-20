@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParticipants } from '@livekit/components-react';
 import { getInitials } from '@/lib/getInitials';
 
@@ -452,17 +452,32 @@ function ParticipantRoleDropdownPortal({
   identity: string;
   anchorRect: DOMRect;
 }) {
-  // 右对齐锚点，宽度由菜单文字决定（不换行）
+  const portalRef = useRef<HTMLDivElement>(null);
+  const [shiftX, setShiftX] = useState(0);
+  const gap = 4;
+  const margin = 8;
+  const centerX = anchorRect.left + anchorRect.width / 2;
+
+  useLayoutEffect(() => {
+    const el = portalRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let next = 0;
+    if (rect.left < margin) next = margin - rect.left;
+    else if (rect.right > window.innerWidth - margin) next = window.innerWidth - margin - rect.right;
+    setShiftX(next);
+  }, [anchorRect]);
+
   const style: React.CSSProperties = {
     position: 'fixed',
-    top: anchorRect.bottom + 4,
-    right: Math.max(8, window.innerWidth - anchorRect.right),
-    left: 'auto',
+    top: anchorRect.bottom + gap,
+    left: centerX,
+    transform: shiftX === 0 ? 'translateX(-50%)' : `translateX(calc(-50% + ${shiftX}px))`,
     zIndex: 100000,
   };
 
   return (
-    <div className="kloud-more-menu-portal" style={style} onMouseDown={(e) => e.stopPropagation()}>
+    <div ref={portalRef} className="kloud-more-menu-portal" style={style} onMouseDown={(e) => e.stopPropagation()}>
       <ParticipantRoleDropdownContent identity={identity} />
     </div>
   );
