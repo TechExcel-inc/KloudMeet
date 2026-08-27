@@ -199,6 +199,8 @@
   "meeting.speakWhileMutedMessage": "話しているようです。マイクをオンにしますか？",
   "meeting.speakWhileMutedUnmute": "マイクをオン",
   "meeting.speakWhileMutedDismiss": "閉じる",
+  "meeting.documentPipTitle": "会議中",
+  "meeting.documentPipBackToTab": "会議に戻る",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",
   "prejoin.entryLoadError": "会議情報の読み込みに失敗しました。ネットワークを確認して再試行してください。",
   "prejoin.entryRetry": "再試行",

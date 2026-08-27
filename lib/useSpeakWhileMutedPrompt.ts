@@ -5,23 +5,24 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 /**
  * 关麦时本地「想说话」意图监测。
  *
- * 设计要点（降低咳嗽/键盘误触，同时对持续说话够灵敏）：
+ * 设计要点：
  * 1. 独立 getUserMedia 监听流（关麦后 LiveKit 轨通常无采样，不能复用）
- * 2. 自适应噪声底噪：安静时缓慢抬升噪声估计
- * 3. 相对阈值：RMS 需明显高于噪声底（并设绝对下限）
- * 4. 持续性：约 1s 窗口内多数帧为「语音帧」，且至少有一段连续语音 ≥ ~450ms
- * 5. 整场会议只触发一次提示
+ * 2. 自适应噪声底噪 + 相对阈值，尽量在开口后尽快弹出
+ * 3. 弹出后立即进入 2 分钟冷却；开麦后清除冷却，下次关麦可立即再监测
+ * 4. 无麦克风权限或 AudioContext 未解锁时，在用户首次点击页面后重试
  */
 
-const FRAME_MS = 50;
-const WINDOW_FRAMES = 20; // ~1s
-const MIN_VOICE_RATIO = 0.55;
-const MIN_STREAK_FRAMES = 9; // ~450ms 连续
-const ABS_RMS_FLOOR = 0.018;
-const NOISE_EMA_QUIET = 0.04;
-const NOISE_EMA_VOICE = 0.01;
-const VOICE_OVER_NOISE = 3.2;
+const FRAME_MS = 40;
+const WINDOW_FRAMES = 3;
+const MIN_VOICE_RATIO = 0.67;
+const MIN_STREAK_FRAMES = 2;
+const ABS_RMS_FLOOR = 0.015;
+const NOISE_EMA_QUIET = 0.05;
+const NOISE_EMA_VOICE = 0.012;
+const VOICE_OVER_NOISE = 2.8;
 const PROMPT_AUTO_HIDE_MS = 10_000;
+/** 弹出提示后的冷却（每场不限次数） */
+const COOLDOWN_AFTER_SHOW_MS = 2 * 60_000;
 
 export interface UseSpeakWhileMutedPromptOptions {
   /** 本地麦克风是否已开（开麦时不监测） */
@@ -33,7 +34,7 @@ export interface UseSpeakWhileMutedPromptOptions {
 export interface UseSpeakWhileMutedPromptResult {
   visible: boolean;
   dismiss: () => void;
-  /** 用户点「打开麦克风」：关闭提示并标记已提示过 */
+  /** 用户点「打开麦克风」：关闭提示（开麦后清除冷却，允许下一轮） */
   accept: () => void;
 }
 
@@ -42,8 +43,17 @@ export function useSpeakWhileMutedPrompt({
   monitoringEnabled,
 }: UseSpeakWhileMutedPromptOptions): UseSpeakWhileMutedPromptResult {
   const [visible, setVisible] = useState(false);
-  const promptedOnceRef = useRef(false);
+  const [monitorEpoch, setMonitorEpoch] = useState(0);
+  const cooldownUntilRef = useRef(0);
+  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCooldownTimer = useCallback(() => {
+    if (cooldownTimerRef.current) {
+      clearTimeout(cooldownTimerRef.current);
+      cooldownTimerRef.current = null;
+    }
+  }, []);
 
   const clearHideTimer = useCallback(() => {
     if (hideTimerRef.current) {
@@ -52,42 +62,74 @@ export function useSpeakWhileMutedPrompt({
     }
   }, []);
 
+  const isInCooldown = useCallback(() => Date.now() < cooldownUntilRef.current, []);
+
+  const scheduleCooldownEnd = useCallback(() => {
+    clearCooldownTimer();
+    const remaining = cooldownUntilRef.current - Date.now();
+    if (remaining <= 0) {
+      setMonitorEpoch((epoch) => epoch + 1);
+      return;
+    }
+    cooldownTimerRef.current = setTimeout(() => {
+      cooldownTimerRef.current = null;
+      if (Date.now() >= cooldownUntilRef.current) {
+        setMonitorEpoch((epoch) => epoch + 1);
+      }
+    }, remaining + 50);
+  }, [clearCooldownTimer]);
+
+  const startShowCooldown = useCallback(() => {
+    cooldownUntilRef.current = Date.now() + COOLDOWN_AFTER_SHOW_MS;
+    scheduleCooldownEnd();
+  }, [scheduleCooldownEnd]);
+
   const dismiss = useCallback(() => {
     clearHideTimer();
     setVisible(false);
-    promptedOnceRef.current = true;
   }, [clearHideTimer]);
 
   const accept = useCallback(() => {
     clearHideTimer();
     setVisible(false);
-    promptedOnceRef.current = true;
   }, [clearHideTimer]);
 
   const showPrompt = useCallback(() => {
-    if (promptedOnceRef.current) return;
-    promptedOnceRef.current = true;
+    if (isInCooldown()) return;
     setVisible(true);
+    startShowCooldown();
     clearHideTimer();
     hideTimerRef.current = setTimeout(() => {
       setVisible(false);
       hideTimerRef.current = null;
     }, PROMPT_AUTO_HIDE_MS);
-  }, [clearHideTimer]);
+  }, [clearHideTimer, isInCooldown, startShowCooldown]);
 
-  // 麦打开或不可监测时收起提示（不重置 once，整场只提示一次）
+  // 开麦：收起提示并清除冷却，下次关麦可立即再监测
   useEffect(() => {
-    if (micEnabled || !monitoringEnabled) {
+    if (micEnabled) {
+      cooldownUntilRef.current = 0;
+      clearCooldownTimer();
+      clearHideTimer();
+      setVisible(false);
+      setMonitorEpoch((epoch) => epoch + 1);
+    }
+  }, [micEnabled, clearCooldownTimer, clearHideTimer]);
+
+  // 不可监测时收起提示（保留冷却状态）
+  useEffect(() => {
+    if (!monitoringEnabled) {
       clearHideTimer();
       setVisible(false);
     }
-  }, [micEnabled, monitoringEnabled, clearHideTimer]);
+  }, [monitoringEnabled, clearHideTimer]);
 
   useEffect(() => {
     const shouldMonitor =
       monitoringEnabled &&
       !micEnabled &&
-      !promptedOnceRef.current &&
+      !visible &&
+      !isInCooldown() &&
       typeof window !== 'undefined' &&
       !!navigator.mediaDevices?.getUserMedia;
 
@@ -102,8 +144,10 @@ export function useSpeakWhileMutedPrompt({
     let source: MediaStreamAudioSourceNode | null = null;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let timeData: Uint8Array<ArrayBuffer> | null = null;
+    let capturePending = false;
+    let captureFailed = false;
 
-    let noiseFloor = 0.008;
+    let noiseFloor = 0.006;
     let noiseBootstrapped = false;
     const recentVoice: boolean[] = [];
     let streak = 0;
@@ -130,9 +174,16 @@ export function useSpeakWhileMutedPrompt({
       }
     };
 
+    const resumeAudio = () => {
+      if (!audioContext || audioContext.state !== 'suspended') return;
+      void audioContext.resume().catch(() => undefined);
+    };
+
     const tick = () => {
-      if (cancelled || promptedOnceRef.current || !analyser || !timeData) return;
+      if (cancelled || isInCooldown() || !analyser || !timeData) return;
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+
+      resumeAudio();
 
       analyser.getByteTimeDomainData(timeData);
       let sumSq = 0;
@@ -143,7 +194,7 @@ export function useSpeakWhileMutedPrompt({
       const rms = Math.sqrt(sumSq / timeData.length);
 
       if (!noiseBootstrapped) {
-        noiseFloor = Math.max(rms, 0.004);
+        noiseFloor = Math.max(rms, 0.003);
         noiseBootstrapped = true;
       } else {
         const ema = rms > noiseFloor * VOICE_OVER_NOISE ? NOISE_EMA_VOICE : NOISE_EMA_QUIET;
@@ -174,9 +225,14 @@ export function useSpeakWhileMutedPrompt({
       }
     };
 
-    const start = async () => {
+    const startCapture = async () => {
+      if (cancelled || capturePending || isInCooldown()) return;
+      if (stream) return;
+      capturePending = true;
+      captureFailed = false;
+
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const nextStream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
@@ -184,23 +240,22 @@ export function useSpeakWhileMutedPrompt({
           },
           video: false,
         });
-        if (cancelled || promptedOnceRef.current) {
-          stream.getTracks().forEach((track) => track.stop());
-          stream = null;
+        if (cancelled || isInCooldown()) {
+          nextStream.getTracks().forEach((track) => track.stop());
           return;
         }
 
-        const Ctx = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const Ctx =
+          window.AudioContext ||
+          (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctx) {
-          stream.getTracks().forEach((track) => track.stop());
-          stream = null;
+          nextStream.getTracks().forEach((track) => track.stop());
           return;
         }
 
+        stream = nextStream;
         audioContext = new Ctx();
-        if (audioContext.state === 'suspended') {
-          await audioContext.resume().catch(() => undefined);
-        }
+        await audioContext.resume().catch(() => undefined);
         if (cancelled) {
           stop();
           return;
@@ -208,27 +263,52 @@ export function useSpeakWhileMutedPrompt({
 
         analyser = audioContext.createAnalyser();
         analyser.fftSize = 1024;
-        analyser.smoothingTimeConstant = 0.35;
+        analyser.smoothingTimeConstant = 0.2;
         source = audioContext.createMediaStreamSource(stream);
         source.connect(analyser);
         timeData = new Uint8Array(new ArrayBuffer(analyser.fftSize));
 
+        noiseBootstrapped = false;
+        recentVoice.length = 0;
+        streak = 0;
+
         intervalId = setInterval(tick, FRAME_MS);
       } catch {
-        // 无麦克风权限或设备不可用：静默跳过
+        captureFailed = true;
         stop();
+      } finally {
+        capturePending = false;
       }
     };
 
-    void start();
+    const onUserGesture = () => {
+      if (cancelled || isInCooldown()) return;
+      resumeAudio();
+      if (!stream && captureFailed) {
+        void startCapture();
+      }
+    };
+
+    document.addEventListener('pointerdown', onUserGesture, true);
+    document.addEventListener('keydown', onUserGesture, true);
+
+    void startCapture();
 
     return () => {
       cancelled = true;
+      document.removeEventListener('pointerdown', onUserGesture, true);
+      document.removeEventListener('keydown', onUserGesture, true);
       stop();
     };
-  }, [micEnabled, monitoringEnabled, showPrompt]);
+  }, [micEnabled, monitoringEnabled, showPrompt, monitorEpoch, visible, isInCooldown]);
 
-  useEffect(() => () => clearHideTimer(), [clearHideTimer]);
+  useEffect(
+    () => () => {
+      clearHideTimer();
+      clearCooldownTimer();
+    },
+    [clearHideTimer, clearCooldownTimer],
+  );
 
   return { visible, dismiss, accept };
 }

@@ -687,19 +687,27 @@ function chunkRestIntoColumns<T>(items: T[]): T[][] {
   return cols;
 }
 
-/** 浮窗展开：左 3 大格按麦/镜头优先级（不含说话）取前 3，右侧按列 6/7 排布，>13 人底部横向翻 */
+/**
+ * LiveDocFloatingExpandedParticipantLayout — 浮窗展开参会者网格
+ *
+ * horizontal：左 3 大格 + 右侧列 6/7 排布（>13 人横向翻）
+ * vertical：上 3 大格 + 下两列小格（共享方左侧条复用）
+ */
 export function LiveDocFloatingExpandedParticipantLayout({
   room,
   hostIdentity,
   cohostIdentities,
   sortedEntries,
   mediaRestrictions,
+  orientation = 'horizontal',
 }: {
   room: Room;
   hostIdentity: string;
   cohostIdentities: string[];
   sortedEntries: FloatingParticipantEntry[];
   mediaRestrictions: KloudTileMediaRestrictionProps;
+  /** horizontal=浮窗；vertical=共享方左侧竖直条 */
+  orientation?: 'horizontal' | 'vertical';
 }) {
   const heroColumnRef = React.useRef<HTMLDivElement>(null);
   const restHScrollRef = React.useRef<HTMLDivElement>(null);
@@ -861,10 +869,11 @@ export function LiveDocFloatingExpandedParticipantLayout({
   );
 
   const restVisibleCols = heroesOnly ? 0 : Math.min(restColumns.length, 3);
+  const isVertical = orientation === 'vertical';
 
   return (
     <div
-      className={`floating-expanded-grid${heroesOnly ? ' floating-expanded-grid--heroes-only' : ''}`}
+      className={`floating-expanded-grid${heroesOnly ? ' floating-expanded-grid--heroes-only' : ''}${isVertical ? ' floating-expanded-grid--vertical' : ''}`}
       style={{ ['--floating-rest-visible-cols' as string]: String(restVisibleCols) }}
     >
       <div ref={heroColumnRef} className="floating-expanded-hero-column">
@@ -878,7 +887,23 @@ export function LiveDocFloatingExpandedParticipantLayout({
           />
         ))}
       </div>
-      {!heroesOnly && (
+      {!heroesOnly && isVertical && (
+        <div className="floating-expanded-rest-wrap floating-expanded-rest-wrap--vertical">
+          <div className="floating-expanded-rest-grid-2">
+            {restEntries.map((e) => (
+              <div key={e.id} className="floating-compact-slot">
+                <LiveDocFloatingGridTile
+                  participant={e.participant}
+                  name={e.name}
+                  size="compact"
+                  mediaRestrictions={mediaRestrictions}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {!heroesOnly && !isVertical && (
         <div
           className="floating-expanded-rest-wrap"
           style={restMaxHeight !== undefined ? { maxHeight: restMaxHeight } : undefined}

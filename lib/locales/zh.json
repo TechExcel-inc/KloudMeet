@@ -205,6 +205,8 @@
   "meeting.speakWhileMutedMessage": "检测到你可能在说话，要打开麦克风吗？",
   "meeting.speakWhileMutedUnmute": "打开麦克风",
   "meeting.speakWhileMutedDismiss": "关闭",
+  "meeting.documentPipTitle": "会议中",
+  "meeting.documentPipBackToTab": "回到会议",
   "prejoin.loadingMeeting": "正在加载会议…",
   "prejoin.entryLoadError": "加载会议信息失败，请检查网络后重试。",
   "prejoin.entryRetry": "重试",

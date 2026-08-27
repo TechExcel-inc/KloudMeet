@@ -199,6 +199,8 @@
   "meeting.speakWhileMutedMessage": "말하는 중인 것 같습니다. 마이크를 켤까요?",
   "meeting.speakWhileMutedUnmute": "마이크 켜기",
   "meeting.speakWhileMutedDismiss": "닫기",
+  "meeting.documentPipTitle": "회의 중",
+  "meeting.documentPipBackToTab": "회의로 돌아가기",
   "prejoin.loadingMeeting": "회의 로딩 중…",
   "prejoin.entryLoadError": "회의 정보를 불러오지 못했습니다. 네트워크를 확인한 후 다시 시도하세요.",
   "prejoin.entryRetry": "다시 시도",

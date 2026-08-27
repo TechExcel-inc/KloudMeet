@@ -213,6 +213,8 @@
   "meeting.speakWhileMutedMessage": "You seem to be speaking. Unmute your microphone?",
   "meeting.speakWhileMutedUnmute": "Unmute",
   "meeting.speakWhileMutedDismiss": "Dismiss",
+  "meeting.documentPipTitle": "In meeting",
+  "meeting.documentPipBackToTab": "Back to meeting",
   "prejoin.loadingMeeting": "Loading meeting…",
   "prejoin.entryLoadError": "Could not load meeting info. Check your network and try again.",
   "prejoin.entryRetry": "Retry",

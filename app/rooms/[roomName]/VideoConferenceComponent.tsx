@@ -25,6 +25,7 @@ import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
+import { useMeetingDocumentPip } from '@/lib/useMeetingDocumentPip';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
@@ -257,6 +258,8 @@ export function VideoConferenceComponent(props: {
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
+  /** 共享方左侧竖直用户条（仅本人共享时） */
+  const [presenterLeftRailOpen, setPresenterLeftRailOpen] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
   const localMicRestrictedRef = React.useRef(false);
   const localCamRestrictedRef = React.useRef(false);
@@ -533,6 +536,7 @@ export function VideoConferenceComponent(props: {
     setScreenShareActive(false);
     setIsDrawingMode(false);
     setIsRemoteControlMode(false);
+    setPresenterLeftRailOpen(false);
     setScreenShareSurface('unknown');
     setSurfaceDetected(false);
     setActiveView((prev) => {
@@ -2447,6 +2451,35 @@ export function VideoConferenceComponent(props: {
     monitoringEnabled: speakWhileMutedMonitoring,
   });
 
+  const meetingDocumentPipLabels = React.useMemo(
+    () => ({
+      backToTab: t('meeting.documentPipBackToTab'),
+      muteMic: t('toolbar.muteMic'),
+      unmuteMic: t('toolbar.unmuteMic'),
+      turnOffCam: t('toolbar.turnOffCam'),
+      turnOnCam: t('toolbar.turnOnCam'),
+      leave: t('toolbar.leaveTheMeeting'),
+      meeting: t('meeting.documentPipTitle'),
+    }),
+    [t],
+  );
+
+  useMeetingDocumentPip({
+    enabled:
+      livekitConnected &&
+      !isDesktop &&
+      !isToolbarMobile &&
+      !isRecorderBot &&
+      !meetingEndedByHost,
+    room,
+    micEnabled,
+    camEnabled,
+    labels: meetingDocumentPipLabels,
+    onToggleMic: handleToggleMic,
+    onToggleCam: handleToggleCam,
+    onLeave: handleLeaveWithSave,
+  });
+
   // 入会后后台预热 LiveDoc：隐藏挂载 iframe + 提前建 instance，避免点 AI 才冷启动
   React.useEffect(() => {
     if (!livekitConnected || meetingEndedByHost || isRecorderBot) return;
@@ -4081,7 +4114,9 @@ export function VideoConferenceComponent(props: {
     !isHost &&
     !isCohost;
   const shouldShowFloatingWebcamPanel =
-    floatingWebcamPanelBaseVisible && !hideFloatingDuringLiveDocShare;
+    floatingWebcamPanelBaseVisible &&
+    !hideFloatingDuringLiveDocShare &&
+    !screenShareActive;
 
   // 移动端：默认贴在 mobileTopRightBtn 左侧，避免与邀请/聊天/退出按钮重合
   React.useLayoutEffect(() => {
@@ -6177,6 +6212,54 @@ export function VideoConferenceComponent(props: {
           </div>
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
+          {/* 共享方：左侧折叠箭头 + 竖直用户条（复用浮窗展开逻辑，观看方不渲染） */}
+          {screenShareActive && !isRecorderBot && !isToolbarMobile && (() => {
+            const allParticipants = [
+              { id: 'local', name: props.userChoices.username || t('toolbar.you') },
+              ...Array.from(room.remoteParticipants.values()).map((p) => ({
+                id: p.identity,
+                name: p.name || p.identity || '??',
+              })),
+            ];
+            allParticipants.sort((a, b) => {
+              const pA = a.id === 'local' ? room.localParticipant : room.remoteParticipants.get(a.id);
+              const pB = b.id === 'local' ? room.localParticipant : room.remoteParticipants.get(b.id);
+              return (pA?.joinedAt?.getTime() || 0) - (pB?.joinedAt?.getTime() || 0);
+            });
+            return (
+              <>
+                <button
+                  type="button"
+                  className={`presenter-left-rail-toggle${presenterLeftRailOpen ? ' open' : ''}`}
+                  onClick={() => setPresenterLeftRailOpen((v) => !v)}
+                  title={presenterLeftRailOpen ? t('toolbar.collapseWebcams') : t('toolbar.expandWebcams')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
+                    {presenterLeftRailOpen ? (
+                      <polyline points="15 18 9 12 15 6" />
+                    ) : (
+                      <polyline points="9 18 15 12 9 6" />
+                    )}
+                  </svg>
+                </button>
+                {presenterLeftRailOpen && (
+                  <div className="presenter-left-rail" aria-label={t('toolbar.nParticipants', { n: allParticipants.length })}>
+                    <div className="presenter-left-rail-inner floating-webcam-panel expanded">
+                      <LiveDocFloatingExpandedParticipantLayout
+                        room={room}
+                        hostIdentity={hostIdentity}
+                        cohostIdentities={cohostIdentities}
+                        sortedEntries={allParticipants}
+                        mediaRestrictions={floatingMediaRestrictions}
+                        orientation="vertical"
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
           {shouldShowFloatingWebcamPanel &&
             (() => {
               const allParticipants = [
@@ -6799,6 +6882,99 @@ export function VideoConferenceComponent(props: {
             @media (max-width: 768px) {
                .screenshare-overlay-container { bottom: auto; top: 72px; left: 10px; }
                .sky-meet-video-wrapper.hide-mirror-video { width: 100% !important; min-width: 0 !important; flex: 0 0 120px !important; }
+            }
+
+            /* 共享方左侧竖直用户条（盖在 LiveDoc iframe 上方） */
+            .presenter-left-rail-toggle {
+               position: absolute;
+               top: 50%;
+               left: 0;
+               transform: translateY(-50%);
+               z-index: 420;
+               width: 28px;
+               height: 64px;
+               display: flex;
+               align-items: center;
+               justify-content: center;
+               background: rgba(30, 41, 59, 0.95);
+               color: rgba(255,255,255,0.85);
+               border: 1px solid rgba(255,255,255,0.12);
+               border-left: none;
+               border-radius: 0 8px 8px 0;
+               cursor: pointer;
+               box-shadow: 4px 0 12px rgba(0,0,0,0.45);
+               transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease;
+            }
+            .presenter-left-rail-toggle:hover {
+               background: rgba(51, 65, 85, 0.98);
+            }
+            .presenter-left-rail-toggle.open {
+               left: 156px;
+            }
+            .presenter-left-rail {
+               position: absolute;
+               top: 12px;
+               bottom: 12px;
+               left: 0;
+               z-index: 410;
+               width: 156px;
+               display: flex;
+               flex-direction: column;
+               pointer-events: auto;
+            }
+            .presenter-left-rail-inner {
+               flex: 1;
+               min-height: 0;
+               overflow-y: auto;
+               overflow-x: hidden;
+               border-left: none;
+               border-radius: 0 14px 14px 0;
+               padding: 8px;
+               box-shadow: 4px 0 24px rgba(0,0,0,0.4);
+               box-sizing: border-box;
+               width: 100%;
+               max-width: 100%;
+               min-width: 0;
+            }
+            .presenter-left-rail .floating-expanded-grid--vertical {
+               flex-direction: column;
+               align-items: stretch;
+               width: 100%;
+               max-width: 100%;
+               gap: 10px;
+               background: transparent;
+               border: none;
+               border-radius: 0;
+               padding: 0;
+               --floating-hero-col-w: 100%;
+               --floating-rest-tile: calc((100% - 8px) / 2);
+            }
+            .presenter-left-rail .floating-expanded-hero-column {
+               width: 100%;
+               align-self: stretch;
+            }
+            .presenter-left-rail .floating-expanded-rest-wrap--vertical {
+               width: 100%;
+               max-width: 100%;
+               min-width: 0;
+               max-height: none;
+               align-self: stretch;
+            }
+            .presenter-left-rail .floating-expanded-rest-grid-2 {
+               display: grid;
+               grid-template-columns: repeat(2, minmax(0, 1fr));
+               gap: 6px;
+               width: 100%;
+            }
+            .presenter-left-rail .floating-expanded-rest-grid-2 .floating-compact-slot {
+               width: 100%;
+               min-width: 0;
+            }
+            .presenter-left-rail .floating-grid-tile--hero .floating-grid-video {
+               aspect-ratio: 1 / 1;
+            }
+            .presenter-left-rail .floating-grid-tile--compact .floating-grid-video {
+               aspect-ratio: 1 / 1;
             }
 
             .floating-webcam-panel {

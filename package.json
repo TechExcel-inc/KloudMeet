@@ -8,6 +8,7 @@
   "scripts": {
     "electron:dev": "concurrently -k \"pnpm dev\" \"wait-on http://127.0.0.1:3201 && electron .\"",
     "dev": "next dev -p 3201 --turbopack",
+    "dev:https": "next dev -p 3201 --turbopack --experimental-https --experimental-https-key ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem",
     "build": "next build",
     "build:deploy": "npm run build && npm run electron:prepare-standalone",
     "electron:ensure": "node scripts/ensure-electron.js",
