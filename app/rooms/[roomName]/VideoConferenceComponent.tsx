@@ -660,6 +660,7 @@ export function VideoConferenceComponent(props: {
    * Set on publish; cleared on intentional stop or after restore attempt.
    */
   const screenShareRestorePendingRef = React.useRef(false);
+  const takeoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Coalesce concurrent /api/connection-details calls (avoids self-revoking JWTs). */
   const refreshConnectionDetailsInFlightRef = React.useRef<Promise<ConnectionDetails> | null>(null);
 
@@ -2453,32 +2454,18 @@ export function VideoConferenceComponent(props: {
 
   const meetingDocumentPipLabels = React.useMemo(
     () => ({
-      backToTab: t('meeting.documentPipBackToTab'),
       muteMic: t('toolbar.muteMic'),
       unmuteMic: t('toolbar.unmuteMic'),
       turnOffCam: t('toolbar.turnOffCam'),
       turnOnCam: t('toolbar.turnOnCam'),
       leave: t('toolbar.leaveTheMeeting'),
       meeting: t('meeting.documentPipTitle'),
+      you: t('toolbar.you'),
+      minimize: t('meeting.documentPipMinimize'),
+      restore: t('meeting.documentPipRestore'),
     }),
     [t],
   );
-
-  useMeetingDocumentPip({
-    enabled:
-      livekitConnected &&
-      !isDesktop &&
-      !isToolbarMobile &&
-      !isRecorderBot &&
-      !meetingEndedByHost,
-    room,
-    micEnabled,
-    camEnabled,
-    labels: meetingDocumentPipLabels,
-    onToggleMic: handleToggleMic,
-    onToggleCam: handleToggleCam,
-    onLeave: handleLeaveWithSave,
-  });
 
   // 入会后后台预热 LiveDoc：隐藏挂载 iframe + 提前建 instance，避免点 AI 才冷启动
   React.useEffect(() => {
@@ -2737,19 +2724,30 @@ export function VideoConferenceComponent(props: {
     [sendMeetingMsg],
   );
 
-  // Takeover: force the current presenter to stop their screen share, then start ours
+  // Takeover: 通知所有远端共享人停止，等旧轨下线后再开本地共享
   const handleConfirmShareTakeover = React.useCallback(() => {
     setShowShareTakeoverDialog(false);
-    // Tell the current presenter to stop — identify them via screenShareTracks
-    const presenterIdentity = screenShareTracks[0]?.participant?.identity;
-    if (presenterIdentity && presenterIdentity !== room.localParticipant.identity) {
-      sendMeetingMsg(
-        { type: 'FORCE_STOP_SHARE', requesterIdentity: room.localParticipant.identity },
-        [presenterIdentity],
-      );
+
+    if (takeoverTimerRef.current) {
+      clearTimeout(takeoverTimerRef.current);
+      takeoverTimerRef.current = null;
     }
-    // Start sharing ourselves after a brief delay so the previous share can tear down
-    setTimeout(() => {
+
+    const localId = room.localParticipant.identity;
+    const remotes = new Set<string>();
+    for (const ref of screenShareTracks) {
+      const id = ref.participant?.identity;
+      if (id && id !== localId) remotes.add(id);
+    }
+    remotes.forEach((id) => {
+      sendMeetingMsg(
+        { type: 'FORCE_STOP_SHARE', requesterIdentity: localId },
+        [id],
+      );
+    });
+
+    const startLocalShare = () => {
+      takeoverTimerRef.current = null;
       setScreenShareActive(true);
       beginLocalScreenShareView();
       room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e) => {
@@ -2758,8 +2756,34 @@ export function VideoConferenceComponent(props: {
         if (restored) setActiveView(restored);
         console.error(e);
       });
-    }, 600);
+    };
+
+    const remoteStillSharing = () =>
+      Array.from(room.remoteParticipants.values()).some((p) => {
+        const pub = p.getTrackPublication(Track.Source.ScreenShare);
+        return Boolean(pub?.track);
+      });
+
+    const deadline = Date.now() + 4000;
+    const poll = () => {
+      if (!remoteStillSharing() || Date.now() >= deadline) {
+        startLocalShare();
+        return;
+      }
+      takeoverTimerRef.current = setTimeout(poll, 150);
+    };
+    takeoverTimerRef.current = setTimeout(poll, 150);
   }, [room, screenShareTracks, sendMeetingMsg, beginLocalScreenShareView, endLocalScreenShareView]);
+
+  React.useEffect(
+    () => () => {
+      if (takeoverTimerRef.current) {
+        clearTimeout(takeoverTimerRef.current);
+        takeoverTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   // End for All (host/co-host only): notify room, delete LiveKit room + ENDED in DB, then leave UI
   const handleEndForAll = React.useCallback(async () => {
@@ -4247,6 +4271,26 @@ export function VideoConferenceComponent(props: {
       sendMeetingMsg,
     ],
   );
+
+  useMeetingDocumentPip({
+    enabled:
+      livekitConnected &&
+      !isDesktop &&
+      !isToolbarMobile &&
+      !isRecorderBot &&
+      !meetingEndedByHost,
+    room,
+    micEnabled,
+    camEnabled,
+    labels: meetingDocumentPipLabels,
+    localName: props.userChoices.username || t('toolbar.you'),
+    mediaRestrictions: floatingMediaRestrictions,
+    onToggleMic: handleToggleMic,
+    onToggleCam: handleToggleCam,
+    onLeave: handleLeaveWithSave,
+    onMuteParticipant: handleMuteParticipant,
+    onDisableParticipantVideo: handleDisableParticipantVideo,
+  });
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');

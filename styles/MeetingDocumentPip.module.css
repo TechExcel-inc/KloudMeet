@@ -2,7 +2,8 @@
   box-sizing: border-box;
   width: 100%;
   height: 100%;
-  min-height: 100vh;
+  max-height: 100%;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #1a1b1e;
@@ -11,14 +12,134 @@
   overflow: hidden;
 }
 
+.rootMinimized {
+  min-height: 0;
+  background: transparent;
+  justify-content: center;
+}
+
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 6px 8px;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+}
+
+.stack {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.stack :global(.floating-avatar-shell),
+.stack .avatar {
+  margin-left: -8px;
+}
+
+.stack :global(.floating-avatar-shell:first-child),
+.stack .avatar:first-child {
+  margin-left: 0;
+}
+
+.stack :global(.floating-avatar-shell.lk-participant-tile) {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  position: relative;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0 !important;
+  flex-direction: row !important;
+  overflow: visible;
+  --lk-border-radius: 50%;
+}
+
+.stack :global(.floating-avatar-shell .floating-avatar) {
+  border: none !important;
+  width: 100%;
+  height: 100%;
+}
+
+.avatar,
+.stack :global(.floating-avatar) {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(15, 23, 42, 0.9);
+  flex-shrink: 0;
+  position: relative;
+  box-sizing: border-box;
+}
+
+.overflow {
+  background: rgba(255, 255, 255, 0.15);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+  z-index: 0;
+}
+
+.stack :global(.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]))::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.chevron {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.chevron:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.25);
+}
+
 .header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 6px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .title {
@@ -32,8 +153,8 @@
 
 .iconBtn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: none;
   border-radius: 8px;
   display: inline-flex;
@@ -52,56 +173,125 @@
 .stage {
   flex: 1;
   min-height: 0;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px;
   background: #0f1012;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
 
-.video {
+.heroGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--pip-hero-cols, 3), minmax(0, 1fr));
+  gap: var(--pip-hero-gap, 6px);
+  width: 100%;
+}
+
+.heroCell,
+.compactCell {
+  min-width: 0;
+  position: relative;
+}
+
+.heroCell :global(.floating-grid-tile),
+.compactCell :global(.floating-grid-tile) {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: transparent !important;
+  overflow: visible;
+}
+
+.heroCell :global(.floating-grid-video),
+.compactCell :global(.floating-grid-video) {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1e293b;
+  position: relative;
+  display: block;
+}
+
+.heroCell :global(.floating-grid-video) {
+  border-radius: 12px;
+}
+
+.heroCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video),
+.compactCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video) {
+  box-shadow: 0 0 0 2.5px #1f8cf9;
+}
+
+.heroCell :global(.floating-grid-video video),
+.compactCell :global(.floating-grid-video video) {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  background: #000;
 }
 
-.videoHidden {
-  display: none;
+.compactGrid {
+  display: grid;
+  grid-template-columns: repeat(var(--pip-compact-cols, 4), minmax(0, 1fr));
+  gap: var(--pip-compact-gap, 6px);
+  width: 100%;
+  margin-top: 8px;
 }
 
-.avatarWrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-}
-
-.avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  display: flex;
+.stage :global(.kloud-custom-mic-indicator),
+.stage :global(.kloud-custom-cam-indicator) {
+  background: rgba(0, 0, 0, 0.58) !important;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: #fff;
-  background: linear-gradient(145deg, #3b82f6, #1d4ed8);
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 3px !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
 }
 
-.name {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  text-align: center;
-  max-width: 220px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.stage :global(.kloud-custom-mic-indicator svg),
+.stage :global(.kloud-custom-cam-indicator svg) {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  pointer-events: none;
+}
+
+.stage :global(.floating-grid-name-row) {
+  gap: 4px !important;
+}
+
+.stage :global(.webcam-floating-participant-metadata) {
+  position: absolute !important;
+  left: 4px !important;
+  bottom: 4px !important;
+  right: auto !important;
+  top: auto !important;
+  width: auto !important;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.stage :global(.kloud-custom-mic-indicator.operator-interactive),
+.stage :global(.kloud-custom-cam-indicator.operator-interactive),
+.stage :global(.kloud-custom-mic-indicator.self-interactive),
+.stage :global(.kloud-custom-cam-indicator.self-interactive) {
+  cursor: pointer;
 }
 
 .controls {
@@ -110,7 +300,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  padding: 14px 12px 16px;
+  padding: 12px 10px 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
 }

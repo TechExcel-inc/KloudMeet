@@ -88,14 +88,16 @@ export function KloudVideoConference({
     [tracks],
   );
 
-  /** 已订阅或已有 MediaStreamTrack 的屏幕共享（与父层 hasScreenShare 对齐） */
-  const activeScreenShareTrack = React.useMemo(
-    () =>
-      screenShareTracks.find(
-        (track) => track.publication.isSubscribed || Boolean(track.publication.track),
-      ),
-    [screenShareTracks],
-  );
+  /** 已订阅或已有 MediaStreamTrack 的屏幕共享：本地优先，否则取列表末路（通常为最新接管） */
+  const activeScreenShareTrack = React.useMemo(() => {
+    const live = screenShareTracks.filter(
+      (track) => track.publication.isSubscribed || Boolean(track.publication.track),
+    );
+    if (live.length === 0) return undefined;
+    const localId = room.localParticipant.identity;
+    const localShare = live.find((track) => track.participant.identity === localId);
+    return localShare ?? live[live.length - 1];
+  }, [room.localParticipant.identity, screenShareTracks]);
   const hasActiveScreenShare = Boolean(activeScreenShareTrack);
   const pinnedTracks = usePinnedTracks(layoutContext);
   const pinnedTrack = pinnedTracks[0];
@@ -122,18 +124,9 @@ export function KloudVideoConference({
     return remote ?? pool[0];
   }, [room.activeSpeakers, room.localParticipant.identity, tracks]);
 
-  // 渲染期决定焦点：屏幕共享 / Spotlight 都不依赖 pin effect 时序
+  // 渲染期决定焦点：屏幕共享以当前活动轨为准（勿沿用旧 pin，否则接管后仍停在上一人）
   const focusTrack: TrackReferenceOrPlaceholder | undefined = (() => {
-    if (activeScreenShareTrack) {
-      if (
-        pinnedTrack &&
-        isTrackReference(pinnedTrack) &&
-        pinnedTrack.publication.source === Track.Source.ScreenShare
-      ) {
-        return pinnedTrack;
-      }
-      return activeScreenShareTrack;
-    }
+    if (activeScreenShareTrack) return activeScreenShareTrack;
     if (webcamLayoutMode === 'spotlight') return spotlightTrack;
     return undefined;
   })();
@@ -149,45 +142,23 @@ export function KloudVideoConference({
     .map((ref) => `${ref.publication.trackSid}_${ref.publication.isSubscribed}`)
     .join();
 
-  // 仅维护屏幕共享自动 pin（与上游 VideoConference 一致）
+  // 仅维护屏幕共享自动 pin：活动轨 SID 变化时重钉（接管）
   React.useEffect(() => {
-    if (activeScreenShareTrack && lastAutoFocusedScreenShareTrack.current === null) {
-      pinDispatch?.({ msg: 'set_pin', trackReference: activeScreenShareTrack });
-      lastAutoFocusedScreenShareTrack.current = activeScreenShareTrack;
+    if (activeScreenShareTrack) {
+      const lastSid = lastAutoFocusedScreenShareTrack.current?.publication?.trackSid;
+      const nextSid = activeScreenShareTrack.publication.trackSid;
+      if (lastSid !== nextSid) {
+        pinDispatch?.({ msg: 'set_pin', trackReference: activeScreenShareTrack });
+        lastAutoFocusedScreenShareTrack.current = activeScreenShareTrack;
+      }
       return;
     }
 
-    if (
-      lastAutoFocusedScreenShareTrack.current &&
-      !screenShareTracks.some(
-        (track) =>
-          track.publication.trackSid ===
-          lastAutoFocusedScreenShareTrack.current?.publication?.trackSid,
-      )
-    ) {
+    if (lastAutoFocusedScreenShareTrack.current) {
       pinDispatch?.({ msg: 'clear_pin' });
       lastAutoFocusedScreenShareTrack.current = null;
     }
-
-    if (pinnedTrack && !isTrackReference(pinnedTrack) && hasActiveScreenShare) {
-      const updatedFocusTrack = tracks.find(
-        (tr) =>
-          tr.participant.identity === pinnedTrack.participant.identity &&
-          tr.source === pinnedTrack.source,
-      );
-      if (updatedFocusTrack !== pinnedTrack && isTrackReference(updatedFocusTrack)) {
-        pinDispatch?.({ msg: 'set_pin', trackReference: updatedFocusTrack });
-      }
-    }
-  }, [
-    activeScreenShareTrack,
-    hasActiveScreenShare,
-    pinDispatch,
-    pinnedTrack,
-    screenShareKey,
-    screenShareTracks,
-    tracks,
-  ]);
+  }, [activeScreenShareTrack, pinDispatch, screenShareKey]);
 
   // Spotlight 时同步 pin；Tile 仅在确有 pin 时清理（避免 clear_pin 每次返回新 [] 导致死循环）
   React.useEffect(() => {
