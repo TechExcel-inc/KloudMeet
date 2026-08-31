@@ -30,10 +30,12 @@ export interface MeetingDocumentPipPanelProps {
   onToggleMic: () => void;
   onToggleCam: () => void;
   onLeave: () => void;
+  initialMinimized?: boolean;
+  onMinimizedChange?: (minimized: boolean) => void;
 }
 
-const PIP_RESTORE_W = 360;
-const PIP_RESTORE_H = 560;
+export const PIP_EXPANDED_W = 240;
+export const PIP_EXPANDED_H = 420;
 const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 108;
@@ -46,6 +48,9 @@ const PILL_PAD_X = 8;
 const PILL_PAD_Y = 6;
 const PILL_GAP = 6;
 const CHEVRON_SIZE = 24;
+const PREVIEW_W = 200;
+const PREVIEW_GAP = 8;
+const PREVIEW_PAD = 6;
 
 type RosterRow = {
   id: string;
@@ -53,10 +58,15 @@ type RosterRow = {
   participant: Participant;
 };
 
-function resizePip(win: Window, innerW: number, innerH: number): void {
+function resizePip(win: Window, innerW: number, innerH: number): boolean {
   const chromeW = Math.max(0, win.outerWidth - win.innerWidth);
   const chromeH = Math.max(0, win.outerHeight - win.innerHeight);
-  win.resizeTo(Math.ceil(innerW + chromeW), Math.ceil(innerH + chromeH));
+  try {
+    win.resizeTo(Math.ceil(innerW + chromeW), Math.ceil(innerH + chromeH));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function pillInnerSize(count: number): { w: number; h: number } {
@@ -68,6 +78,24 @@ function pillInnerSize(count: number): { w: number; h: number } {
     w: PILL_PAD_X * 2 + stack + PILL_GAP + CHEVRON_SIZE,
     h: PILL_PAD_Y * 2 + AVATAR_SIZE,
   };
+}
+
+function miniWindowSize(count: number, innerW = 0): { w: number; h: number } {
+  const pill = pillInnerSize(count);
+  const w = Math.max(pill.w, PREVIEW_W + PREVIEW_PAD * 2, innerW);
+  const media = Math.max(180, w - PREVIEW_PAD * 2);
+  return {
+    w,
+    h: pill.h + PREVIEW_GAP + media + PREVIEW_PAD,
+  };
+}
+
+export function pipPillWindowSize(count: number): { w: number; h: number } {
+  return pillInnerSize(count);
+}
+
+export function pipMiniWindowSize(count: number): { w: number; h: number } {
+  return miniWindowSize(count);
 }
 
 function fitCols(width: number, gap: number, min: number, max?: number): number {
@@ -163,8 +191,11 @@ export function MeetingDocumentPipPanel({
   onToggleMic,
   onToggleCam,
   onLeave,
+  initialMinimized = false,
+  onMinimizedChange,
 }: MeetingDocumentPipPanelProps) {
-  const [minimized, setMinimized] = React.useState(false);
+  const [minimized, setMinimized] = React.useState(initialMinimized);
+  const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
@@ -234,62 +265,114 @@ export function MeetingDocumentPipPanel({
   );
 
   const handleMinimize = () => {
+    setPreviewId(null);
     if (minimized) {
-      pipWindow.resizeTo(PIP_RESTORE_W, PIP_RESTORE_H);
+      resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
       setMinimized(false);
+      onMinimizedChange?.(false);
       return;
     }
+    const pill = pillInnerSize(sortedEntries.length);
+    resizePip(pipWindow, pill.w, pill.h);
     setMinimized(true);
+    onMinimizedChange?.(true);
   };
 
-  React.useEffect(() => {
-    if (!minimized) return;
-    const size = pillInnerSize(sortedEntries.length);
-    resizePip(pipWindow, size.w, size.h);
-  }, [minimized, sortedEntries.length, pipWindow]);
+  const hidePreview = () => {
+    if (!previewId) return;
+    const pill = pillInnerSize(sortedEntries.length);
+    resizePip(pipWindow, pill.w, pill.h);
+    setPreviewId(null);
+  };
+
+  const togglePreview = (id: string) => {
+    if (previewId === id) {
+      hidePreview();
+      return;
+    }
+    const mini = miniWindowSize(sortedEntries.length, pipWindow.innerWidth);
+    resizePip(pipWindow, mini.w, mini.h);
+    setPreviewId(id);
+  };
+
+  const previewRow = previewId ? sortedEntries.find((e) => e.id === previewId) : undefined;
+  const previewParticipant = previewRow
+    ? previewRow.id === 'local'
+      ? room.localParticipant
+      : room.remoteParticipants.get(previewRow.id)
+    : undefined;
+  const previewOpen = Boolean(previewRow && previewParticipant);
 
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
       {minimized ? (
-        <div className={styles.pill}>
-          <div className={styles.stack}>
-            {sortedEntries.slice(0, COLLAPSED_MAX).map((e, i) => {
-              const participant =
-                e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
-              const z = { zIndex: COLLAPSED_MAX - i };
-              if (!participant) {
+        <div className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}>
+          <div className={styles.pill}>
+            <div className={styles.stack}>
+              {sortedEntries.slice(0, COLLAPSED_MAX).map((e, i) => {
+                const participant =
+                  e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
+                const z = { zIndex: COLLAPSED_MAX - i };
+                if (!participant) {
+                  return (
+                    <div
+                      key={e.id}
+                      className={styles.avatar}
+                      title={e.name}
+                      style={z}
+                      onClick={() => togglePreview(e.id)}
+                    >
+                      {getInitials(e.name || e.id || '?')}
+                    </div>
+                  );
+                }
                 return (
-                  <div key={e.id} className={styles.avatar} title={e.name} style={z}>
-                    {getInitials(e.name || e.id || '?')}
-                  </div>
+                  <LiveDocFloatingCollapsedAvatar
+                    key={e.id}
+                    participant={participant}
+                    name={e.name}
+                    style={z}
+                    selected={previewId === e.id}
+                    onClick={() => togglePreview(e.id)}
+                  />
                 );
-              }
-              return (
-                <LiveDocFloatingCollapsedAvatar
-                  key={e.id}
-                  participant={participant}
-                  name={e.name}
-                  style={z}
-                />
-              );
-            })}
-            {sortedEntries.length > COLLAPSED_MAX && (
-              <div className={`${styles.avatar} ${styles.overflow}`}>
-                +{sortedEntries.length - COLLAPSED_MAX}
-              </div>
-            )}
+              })}
+              {sortedEntries.length > COLLAPSED_MAX && (
+                <div className={`${styles.avatar} ${styles.overflow}`}>
+                  +{sortedEntries.length - COLLAPSED_MAX}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              className={styles.chevron}
+              onClick={handleMinimize}
+              aria-label={labels.restore}
+              title={labels.restore}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {previewOpen ? (
+              <button
+                type="button"
+                className={styles.pillDismiss}
+                onClick={hidePreview}
+                aria-label={labels.minimize}
+              />
+            ) : null}
           </div>
-          <button
-            type="button"
-            className={styles.chevron}
-            onClick={handleMinimize}
-            aria-label={labels.restore}
-            title={labels.restore}
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          {previewOpen && previewParticipant && previewRow ? (
+            <div className={styles.previewWrap}>
+              <LiveDocFloatingGridTile
+                participant={previewParticipant}
+                name={previewRow.name}
+                size="hero"
+                mediaRestrictions={mediaRestrictions}
+              />
+            </div>
+          ) : null}
         </div>
       ) : (
         <>

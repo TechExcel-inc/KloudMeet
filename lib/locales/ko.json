@@ -202,6 +202,7 @@
   "meeting.documentPipTitle": "회의 중",
   "meeting.documentPipMinimize": "최소화",
   "meeting.documentPipRestore": "복원",
+  "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "회의 로딩 중…",
   "prejoin.entryLoadError": "회의 정보를 불러오지 못했습니다. 네트워크를 확인한 후 다시 시도하세요.",
   "prejoin.entryRetry": "다시 시도",

@@ -216,6 +216,7 @@
   "meeting.documentPipTitle": "In meeting",
   "meeting.documentPipMinimize": "Minimize",
   "meeting.documentPipRestore": "Restore",
+  "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "Loading meeting…",
   "prejoin.entryLoadError": "Could not load meeting info. Check your network and try again.",
   "prejoin.entryRetry": "Retry",

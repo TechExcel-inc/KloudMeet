@@ -13,15 +13,17 @@ import {
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import {
   MeetingDocumentPipPanel,
+  pipPillWindowSize,
+  PIP_EXPANDED_H,
+  PIP_EXPANDED_W,
   type MeetingDocumentPipLabels,
 } from '@/lib/MeetingDocumentPipPanel';
-
-const PIP_WIDTH = 360;
-const PIP_HEIGHT = 560;
 
 export interface UseMeetingDocumentPipOptions {
   /** 入会且允许时开启监听（网页端由调用方排除手机/Electron） */
   enabled: boolean;
+  /** 为 true 时浮窗保持打开，切回本 tab 也不自动关掉 */
+  stayOpen: boolean;
   room: Room;
   micEnabled: boolean;
   camEnabled: boolean;
@@ -33,6 +35,12 @@ export interface UseMeetingDocumentPipOptions {
   onLeave: () => void;
   onMuteParticipant: (identity: string, disable: boolean) => void;
   onDisableParticipantVideo: (identity: string, disable: boolean) => void;
+  onWindowClosed?: () => void;
+}
+
+export interface MeetingDocumentPipApi {
+  open: () => Promise<boolean>;
+  close: () => void;
 }
 
 function hasLiveCapture(room: Room): boolean {
@@ -115,6 +123,7 @@ function bindPipTileClicks(
  */
 export function useMeetingDocumentPip({
   enabled,
+  stayOpen,
   room,
   micEnabled,
   camEnabled,
@@ -126,10 +135,12 @@ export function useMeetingDocumentPip({
   onLeave,
   onMuteParticipant,
   onDisableParticipantVideo,
-}: UseMeetingDocumentPipOptions): void {
+  onWindowClosed,
+}: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
   const pipWindowRef = useRef<Window | null>(null);
   const rootRef = useRef<Root | null>(null);
   const openingRef = useRef(false);
+  const closingFromApiRef = useRef(false);
   const unbindClicksRef = useRef<(() => void) | null>(null);
 
   const micRef = useRef(micEnabled);
@@ -142,7 +153,10 @@ export function useMeetingDocumentPip({
   const onLeaveRef = useRef(onLeave);
   const onMuteRef = useRef(onMuteParticipant);
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
+  const onWindowClosedRef = useRef(onWindowClosed);
+  const stayOpenRef = useRef(stayOpen);
   const roomRef = useRef(room);
+  const minimizedRef = useRef(false);
 
   micRef.current = micEnabled;
   camRef.current = camEnabled;
@@ -154,9 +168,12 @@ export function useMeetingDocumentPip({
   onLeaveRef.current = onLeave;
   onMuteRef.current = onMuteParticipant;
   onDisableVideoRef.current = onDisableParticipantVideo;
+  onWindowClosedRef.current = onWindowClosed;
+  stayOpenRef.current = stayOpen;
   roomRef.current = room;
 
   const closePip = useRef(() => {
+    closingFromApiRef.current = true;
     unbindClicksRef.current?.();
     unbindClicksRef.current = null;
     const root = rootRef.current;
@@ -174,8 +191,10 @@ export function useMeetingDocumentPip({
       try {
         win.close();
       } catch {
-        // ignore
+        closingFromApiRef.current = false;
       }
+    } else {
+      closingFromApiRef.current = false;
     }
   }).current;
 
@@ -194,6 +213,10 @@ export function useMeetingDocumentPip({
           labels={labelsRef.current}
           localName={localNameRef.current}
           mediaRestrictions={restrictionsRef.current}
+          initialMinimized={minimizedRef.current}
+          onMinimizedChange={(next) => {
+            minimizedRef.current = next;
+          }}
           onToggleMic={() => onToggleMicRef.current()}
           onToggleCam={() => onToggleCamRef.current()}
           onLeave={() => {
@@ -205,20 +228,23 @@ export function useMeetingDocumentPip({
     );
   }).current;
 
-  const openPip = useRef(async () => {
-    if (!isWebDocumentPipEligible()) return;
-    if (pipWindowRef.current && !pipWindowRef.current.closed) return;
-    if (openingRef.current) return;
+  const openPip = useRef(async (): Promise<boolean> => {
+    if (!isWebDocumentPipEligible()) return false;
+    if (pipWindowRef.current && !pipWindowRef.current.closed) return true;
+    if (openingRef.current) return false;
 
     const api = getDocumentPictureInPicture();
-    if (!api) return;
+    if (!api) return false;
 
     openingRef.current = true;
     try {
-      const pipWindow = await api.requestWindow({
-        width: PIP_WIDTH,
-        height: PIP_HEIGHT,
-      });
+      const count = 1 + roomRef.current.remoteParticipants.size;
+      const pill = pipPillWindowSize(count);
+      const pipWindow = await api.requestWindow(
+        minimizedRef.current
+          ? { width: pill.w, height: pill.h }
+          : { width: PIP_EXPANDED_W, height: PIP_EXPANDED_H },
+      );
 
       pipWindowRef.current = pipWindow;
       copyDocumentStyles(document, pipWindow.document);
@@ -250,23 +276,29 @@ export function useMeetingDocumentPip({
       );
 
       pipWindow.addEventListener('pagehide', () => {
-        if (pipWindowRef.current === pipWindow) {
-          unbindClicksRef.current?.();
-          unbindClicksRef.current = null;
-          const root = rootRef.current;
-          rootRef.current = null;
-          pipWindowRef.current = null;
-          if (root) {
-            try {
-              root.unmount();
-            } catch {
-              // ignore
-            }
+        if (pipWindowRef.current !== pipWindow) return;
+        const userClosed = !closingFromApiRef.current;
+        unbindClicksRef.current?.();
+        unbindClicksRef.current = null;
+        const root = rootRef.current;
+        rootRef.current = null;
+        pipWindowRef.current = null;
+        if (root) {
+          try {
+            root.unmount();
+          } catch {
+            // ignore
           }
         }
+        if (userClosed) {
+          onWindowClosedRef.current?.();
+        }
+        closingFromApiRef.current = false;
       });
+      return true;
     } catch {
       closePip();
+      return false;
     } finally {
       openingRef.current = false;
     }
@@ -294,6 +326,7 @@ export function useMeetingDocumentPip({
     });
 
     const onVisibility = () => {
+      if (stayOpenRef.current) return;
       if (!document.hidden) {
         closePip();
       }
@@ -381,4 +414,6 @@ export function useMeetingDocumentPip({
       }
     };
   }, [enabled, room, micEnabled, camEnabled]);
+
+  return { open: openPip, close: closePip };
 }

@@ -15,7 +15,26 @@
 .rootMinimized {
   min-height: 0;
   background: transparent;
-  justify-content: center;
+  justify-content: flex-start;
+}
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+}
+
+.miniOpen {
+  gap: 8px;
+  padding-bottom: 6px;
+}
+
+.miniOpen .pill {
+  height: auto;
+  flex-shrink: 0;
 }
 
 .pill {
@@ -125,6 +144,127 @@
   background: rgba(255, 255, 255, 0.25);
 }
 
+.pillDismiss {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 12px;
+  margin: -6px -8px -6px 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.stack :global(.floating-avatar-shell:hover),
+.stack :global(.floating-avatar-shell.selected),
+.stack .avatar:hover {
+  z-index: 20 !important;
+  cursor: pointer;
+}
+
+.previewWrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+  padding: 0 6px;
+}
+
+.previewWrap :global(.floating-grid-tile),
+.previewWrap :global(.floating-grid-tile.lk-participant-tile) {
+  display: block !important;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent !important;
+  gap: 0 !important;
+}
+
+.previewWrap :global(.floating-grid-video) {
+  width: 100% !important;
+  height: 100% !important;
+  aspect-ratio: unset !important;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #1e293b;
+  position: relative;
+  display: block;
+}
+
+.previewWrap :global(.floating-grid-video video),
+.previewWrap :global(.floating-grid-avatar) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
+}
+
+.previewWrap :global(.floating-grid-avatar) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.previewWrap :global(.lk-participant-metadata),
+.previewWrap :global(.webcam-floating-participant-metadata) {
+  position: absolute !important;
+  left: 4px !important;
+  bottom: 4px !important;
+  top: auto !important;
+  right: auto !important;
+  width: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.previewWrap :global(.floating-grid-name-row) {
+  gap: 4px !important;
+}
+
+.previewWrap :global(.kloud-custom-mic-indicator),
+.previewWrap :global(.kloud-custom-cam-indicator) {
+  background: rgba(0, 0, 0, 0.58) !important;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 3px !important;
+  margin: 0 !important;
+  opacity: 1 !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+.previewWrap :global(.kloud-custom-mic-indicator svg),
+.previewWrap :global(.kloud-custom-cam-indicator svg) {
+  width: 14px !important;
+  height: 14px !important;
+  max-width: 14px !important;
+  max-height: 14px !important;
+  pointer-events: none;
+}
+
+.previewWrap :global(.kloud-custom-mic-indicator.operator-interactive),
+.previewWrap :global(.kloud-custom-cam-indicator.operator-interactive),
+.previewWrap :global(.kloud-custom-mic-indicator.self-interactive),
+.previewWrap :global(.kloud-custom-cam-indicator.self-interactive) {
+  cursor: pointer;
+}
+
+.previewWrap :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video) {
+  box-shadow: 0 0 0 2px #1f8cf9;
+}
+
 .header {
   flex-shrink: 0;
   display: flex;
@@ -222,9 +362,19 @@
   border-radius: 12px;
 }
 
+.heroCell :global(.floating-grid-tile.lk-participant-tile) {
+  --lk-speaking-indicator-width: 1.5px;
+  --lk-border-radius: 12px;
+}
+
+.compactCell :global(.floating-grid-tile.lk-participant-tile) {
+  --lk-speaking-indicator-width: 1.5px;
+  --lk-border-radius: 10px;
+}
+
 .heroCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video),
 .compactCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video) {
-  box-shadow: 0 0 0 2.5px #1f8cf9;
+  box-shadow: 0 0 0 2px #1f8cf9;
 }
 
 .heroCell :global(.floating-grid-video video),
@@ -242,8 +392,8 @@
   margin-top: 8px;
 }
 
-.stage :global(.kloud-custom-mic-indicator),
-.stage :global(.kloud-custom-cam-indicator) {
+:is(.stage, .previewWrap) :global(.kloud-custom-mic-indicator),
+:is(.stage, .previewWrap) :global(.kloud-custom-cam-indicator) {
   background: rgba(0, 0, 0, 0.58) !important;
   backdrop-filter: blur(4px);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -263,8 +413,8 @@
   pointer-events: auto !important;
 }
 
-.stage :global(.kloud-custom-mic-indicator svg),
-.stage :global(.kloud-custom-cam-indicator svg) {
+:is(.stage, .previewWrap) :global(.kloud-custom-mic-indicator svg),
+:is(.stage, .previewWrap) :global(.kloud-custom-cam-indicator svg) {
   width: 14px !important;
   height: 14px !important;
   max-width: 14px !important;
@@ -272,11 +422,11 @@
   pointer-events: none;
 }
 
-.stage :global(.floating-grid-name-row) {
+:is(.stage, .previewWrap) :global(.floating-grid-name-row) {
   gap: 4px !important;
 }
 
-.stage :global(.webcam-floating-participant-metadata) {
+:is(.stage, .previewWrap) :global(.webcam-floating-participant-metadata) {
   position: absolute !important;
   left: 4px !important;
   bottom: 4px !important;
@@ -287,10 +437,10 @@
   pointer-events: none;
 }
 
-.stage :global(.kloud-custom-mic-indicator.operator-interactive),
-.stage :global(.kloud-custom-cam-indicator.operator-interactive),
-.stage :global(.kloud-custom-mic-indicator.self-interactive),
-.stage :global(.kloud-custom-cam-indicator.self-interactive) {
+:is(.stage, .previewWrap) :global(.kloud-custom-mic-indicator.operator-interactive),
+:is(.stage, .previewWrap) :global(.kloud-custom-cam-indicator.operator-interactive),
+:is(.stage, .previewWrap) :global(.kloud-custom-mic-indicator.self-interactive),
+:is(.stage, .previewWrap) :global(.kloud-custom-cam-indicator.self-interactive) {
   cursor: pointer;
 }
 

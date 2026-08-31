@@ -963,12 +963,14 @@ export function LiveDocFloatingCollapsedAvatar({
   name,
   style,
   onMouseEnter,
+  onClick,
   selected,
 }: {
   participant: Participant;
   name: string;
   style: React.CSSProperties;
   onMouseEnter?: (e: React.MouseEvent) => void;
+  onClick?: (e: React.MouseEvent) => void;
   selected?: boolean;
 }) {
   const isSpeaking = useIsSpeaking(participant);
@@ -980,6 +982,7 @@ export function LiveDocFloatingCollapsedAvatar({
       data-lk-local-participant={participant.isLocal}
       style={style}
       onMouseEnter={onMouseEnter}
+      onClick={onClick}
     >
       <div className="floating-avatar" title={name}>
         {getInitials(name || participant.identity || '?')}

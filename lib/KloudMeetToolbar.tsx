@@ -129,6 +129,10 @@ interface KloudMeetToolbarProps {
   /** Whether captions are currently active */
   captionsEnabled?: boolean;
   onToggleCaptions?: () => void;
+  /** 网页端 Document PiP：本次会议内记住 */
+  canDocumentPip?: boolean;
+  documentPipEnabled?: boolean;
+  onToggleDocumentPip?: () => void;
   onOpenDesktopApp?: () => void;
 }
 
@@ -179,6 +183,9 @@ export function KloudMeetToolbar({
   canToggleCaptions,
   captionsEnabled,
   onToggleCaptions,
+  canDocumentPip = false,
+  documentPipEnabled = false,
+  onToggleDocumentPip,
   onOpenDesktopApp,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
@@ -1378,6 +1385,31 @@ export function KloudMeetToolbar({
     );
   };
 
+  const renderDocumentPipButton = (variant: 'desktop' | 'mobile') => {
+    if (!canDocumentPip) return null;
+    const className =
+      variant === 'mobile'
+        ? `${styles.mobileBtn} ${documentPipEnabled ? styles.active : ''}`
+        : `${styles.tabBtn} ${documentPipEnabled ? styles.tabBtnActive : ''}`;
+    const label = t('toolbar.documentPip');
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => onToggleDocumentPip?.()}
+        title={label}
+        aria-label={label}
+        aria-pressed={documentPipEnabled}
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <rect x="3" y="5" width="12" height="10" rx="1.5" />
+          <path d="M15 9h4a1 1 0 011 1v8a1 1 0 01-1 1H9a1 1 0 01-1-1v-3" strokeLinecap="round" />
+        </svg>
+        {variant === 'desktop' ? label : null}
+      </button>
+    );
+  };
+
   const desktopBubbleStyle = desktopBubblePos
     ? ({
       top:
@@ -1551,7 +1583,10 @@ export function KloudMeetToolbar({
             {/* 5. LiveDoc AI：始终显示 */}
             {renderLiveDocSettingsButton('mobile')}
 
-            {/* 6. More */}
+            {/* 6. Document PiP */}
+            {renderDocumentPipButton('mobile')}
+
+            {/* 7. More */}
             <button
               className={styles.mobileBtn}
               onClick={() => openSheet('more')}
@@ -1771,6 +1806,8 @@ export function KloudMeetToolbar({
                 </svg>
                 {t('toolbar.chats')}
               </button>
+
+              {renderDocumentPipButton('desktop')}
 
               <button ref={moreMenuBtnRef} type="button" className={styles.tabBtn} onClick={() => openSheet('more')}>
                 <svg viewBox="0 0 24 24" fill="currentColor">

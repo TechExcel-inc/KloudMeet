@@ -26,6 +26,7 @@ import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useMeetingDocumentPip } from '@/lib/useMeetingDocumentPip';
+import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
@@ -4272,13 +4273,16 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
-  useMeetingDocumentPip({
+  const [documentPipEnabled, setDocumentPipEnabled] = React.useState(false);
+
+  const documentPip = useMeetingDocumentPip({
     enabled:
       livekitConnected &&
       !isDesktop &&
       !isToolbarMobile &&
       !isRecorderBot &&
       !meetingEndedByHost,
+    stayOpen: documentPipEnabled,
     room,
     micEnabled,
     camEnabled,
@@ -4290,6 +4294,7 @@ export function VideoConferenceComponent(props: {
     onLeave: handleLeaveWithSave,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
+    onWindowClosed: () => setDocumentPipEnabled(false),
   });
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
@@ -8535,6 +8540,25 @@ export function VideoConferenceComponent(props: {
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
           onToggleCaptions={handleToggleCaptions}
+          canDocumentPip={
+            livekitConnected &&
+            !isDesktop &&
+            !isToolbarMobile &&
+            !isRecorderBot &&
+            !meetingEndedByHost &&
+            isWebDocumentPipEligible()
+          }
+          documentPipEnabled={documentPipEnabled}
+          onToggleDocumentPip={() => {
+            if (documentPipEnabled) {
+              setDocumentPipEnabled(false);
+              documentPip.close();
+              return;
+            }
+            void documentPip.open().then((ok) => {
+              if (ok) setDocumentPipEnabled(true);
+            });
+          }}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
