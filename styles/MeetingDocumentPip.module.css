@@ -163,7 +163,9 @@
 }
 
 .previewWrap {
-  flex: 1;
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
   min-height: 0;
   position: relative;
   overflow: hidden;
@@ -174,17 +176,17 @@
 .previewWrap :global(.floating-grid-tile.lk-participant-tile) {
   display: block !important;
   position: relative;
-  width: 100%;
-  height: 100%;
+  width: var(--pip-preview-tile, 108px);
+  height: var(--pip-preview-tile, 108px);
   overflow: hidden;
   background: transparent !important;
   gap: 0 !important;
 }
 
 .previewWrap :global(.floating-grid-video) {
-  width: 100% !important;
-  height: 100% !important;
-  aspect-ratio: unset !important;
+  width: 100%;
+  height: 100%;
+  aspect-ratio: 1 / 1;
   border-radius: 12px;
   overflow: hidden;
   background: #1e293b;
@@ -196,7 +198,7 @@
 .previewWrap :global(.floating-grid-avatar) {
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   object-position: center;
 }
 
@@ -330,10 +332,17 @@
   width: 100%;
 }
 
-.heroCell,
-.compactCell {
+.heroCell {
   min-width: 0;
   position: relative;
+}
+
+.compactCell {
+  position: relative;
+  box-sizing: border-box;
+  flex: 0 0 var(--pip-compact-tile);
+  width: var(--pip-compact-tile);
+  max-width: var(--pip-compact-tile);
 }
 
 .heroCell :global(.floating-grid-tile),
@@ -385,11 +394,34 @@
 }
 
 .compactGrid {
-  display: grid;
-  grid-template-columns: repeat(var(--pip-compact-cols, 4), minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  align-content: flex-start;
   gap: var(--pip-compact-gap, 6px);
   width: 100%;
   margin-top: 8px;
+}
+
+.compactCellHover {
+  flex: 0 0 var(--pip-hero-tile);
+  width: var(--pip-hero-tile);
+  min-width: var(--pip-hero-tile);
+  max-width: var(--pip-hero-tile);
+  height: var(--pip-hero-tile);
+}
+
+.compactCellHover :global(.floating-grid-video) {
+  border-radius: 12px;
+}
+
+.compactCell :global(.floating-grid-tile.lk-participant-tile:hover .floating-grid-video) {
+  box-shadow: none;
+}
+
+.compactCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]) .floating-grid-video),
+.compactCell :global(.floating-grid-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]):hover .floating-grid-video) {
+  box-shadow: 0 0 0 2px #1f8cf9;
 }
 
 :is(.stage, .previewWrap) :global(.kloud-custom-mic-indicator),

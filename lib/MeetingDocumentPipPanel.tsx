@@ -48,7 +48,6 @@ const PILL_PAD_X = 8;
 const PILL_PAD_Y = 6;
 const PILL_GAP = 6;
 const CHEVRON_SIZE = 24;
-const PREVIEW_W = 200;
 const PREVIEW_GAP = 8;
 const PREVIEW_PAD = 6;
 
@@ -80,13 +79,11 @@ function pillInnerSize(count: number): { w: number; h: number } {
   };
 }
 
-function miniWindowSize(count: number, innerW = 0): { w: number; h: number } {
+function miniWindowSize(count: number): { w: number; h: number } {
   const pill = pillInnerSize(count);
-  const w = Math.max(pill.w, PREVIEW_W + PREVIEW_PAD * 2, innerW);
-  const media = Math.max(180, w - PREVIEW_PAD * 2);
   return {
-    w,
-    h: pill.h + PREVIEW_GAP + media + PREVIEW_PAD,
+    w: Math.max(pill.w, HERO_MIN + PREVIEW_PAD * 2),
+    h: pill.h + PREVIEW_GAP + HERO_MIN + PREVIEW_PAD,
   };
 }
 
@@ -196,6 +193,8 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
+  const [compactHoverId, setCompactHoverId] = React.useState<string | null>(null);
+  const compactHoverRef = React.useRef<HTMLDivElement | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
@@ -251,6 +250,8 @@ export function MeetingDocumentPipPanel({
   const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
   const compactCols = fitCols(stageW, COMPACT_GAP, COMPACT_MIN, 8);
   const heroCap = heroCols * HERO_ROWS;
+  const heroW = Math.max(1, (stageW - HERO_GAP * Math.max(0, heroCols - 1)) / heroCols);
+  const compactW = Math.max(1, (stageW - COMPACT_GAP * Math.max(0, compactCols - 1)) / compactCols);
 
   const { heroes, rest } = React.useMemo(
     () =>
@@ -266,6 +267,7 @@ export function MeetingDocumentPipPanel({
 
   const handleMinimize = () => {
     setPreviewId(null);
+    setCompactHoverId(null);
     if (minimized) {
       resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
       setMinimized(false);
@@ -290,7 +292,7 @@ export function MeetingDocumentPipPanel({
       hidePreview();
       return;
     }
-    const mini = miniWindowSize(sortedEntries.length, pipWindow.innerWidth);
+    const mini = miniWindowSize(sortedEntries.length);
     resizePip(pipWindow, mini.w, mini.h);
     setPreviewId(id);
   };
@@ -302,6 +304,11 @@ export function MeetingDocumentPipPanel({
       : room.remoteParticipants.get(previewRow.id)
     : undefined;
   const previewOpen = Boolean(previewRow && previewParticipant);
+
+  React.useLayoutEffect(() => {
+    if (!compactHoverId) return;
+    compactHoverRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [compactHoverId]);
 
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
@@ -364,7 +371,10 @@ export function MeetingDocumentPipPanel({
             ) : null}
           </div>
           {previewOpen && previewParticipant && previewRow ? (
-            <div className={styles.previewWrap}>
+            <div
+              className={styles.previewWrap}
+              style={{ ['--pip-preview-tile' as string]: `${HERO_MIN}px` } as React.CSSProperties}
+            >
               <LiveDocFloatingGridTile
                 participant={previewParticipant}
                 name={previewRow.name}
@@ -401,6 +411,8 @@ export function MeetingDocumentPipPanel({
                 ['--pip-compact-cols' as string]: String(compactCols),
                 ['--pip-hero-gap' as string]: `${HERO_GAP}px`,
                 ['--pip-compact-gap' as string]: `${COMPACT_GAP}px`,
+                ['--pip-hero-tile' as string]: `${heroW}px`,
+                ['--pip-compact-tile' as string]: `${compactW}px`,
               } as React.CSSProperties
             }
           >
@@ -418,17 +430,28 @@ export function MeetingDocumentPipPanel({
             </div>
 
             {rest.length > 0 && (
-              <div className={styles.compactGrid}>
-                {rest.map((e) => (
-                  <div key={e.id} className={styles.compactCell}>
-                    <LiveDocFloatingGridTile
-                      participant={e.participant}
-                      name={e.name}
-                      size="compact"
-                      mediaRestrictions={mediaRestrictions}
-                    />
-                  </div>
-                ))}
+              <div
+                className={styles.compactGrid}
+                onMouseLeave={() => setCompactHoverId(null)}
+              >
+                {rest.map((e) => {
+                  const hovered = compactHoverId === e.id;
+                  return (
+                    <div
+                      key={e.id}
+                      ref={hovered ? compactHoverRef : undefined}
+                      className={`${styles.compactCell}${hovered ? ` ${styles.compactCellHover}` : ''}`}
+                      onMouseEnter={() => setCompactHoverId(e.id)}
+                    >
+                      <LiveDocFloatingGridTile
+                        participant={e.participant}
+                        name={e.name}
+                        size={hovered ? 'hero' : 'compact'}
+                        mediaRestrictions={mediaRestrictions}
+                      />
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
