@@ -340,9 +340,13 @@
 .compactCell {
   position: relative;
   box-sizing: border-box;
-  flex: 0 0 var(--pip-compact-tile);
-  width: var(--pip-compact-tile);
-  max-width: var(--pip-compact-tile);
+  min-width: 0;
+  aspect-ratio: 1 / 1;
+  z-index: 0;
+}
+
+.compactCell:hover {
+  z-index: 6;
 }
 
 .heroCell :global(.floating-grid-tile),
@@ -394,25 +398,44 @@
 }
 
 .compactGrid {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  align-content: flex-start;
+  display: grid;
+  grid-template-columns: repeat(var(--pip-compact-cols, 4), minmax(0, 1fr));
+  align-items: start;
   gap: var(--pip-compact-gap, 6px);
   width: 100%;
   margin-top: 8px;
+  overflow: visible;
 }
 
-.compactCellHover {
-  flex: 0 0 var(--pip-hero-tile);
+.compactCell:hover :global(.floating-grid-tile) {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: var(--pip-hero-tile);
-  min-width: var(--pip-hero-tile);
-  max-width: var(--pip-hero-tile);
   height: var(--pip-hero-tile);
+  z-index: 6;
 }
 
-.compactCellHover :global(.floating-grid-video) {
+.compactCellRowEnd:hover :global(.floating-grid-tile) {
+  left: auto;
+  right: 0;
+}
+
+.compactCell:hover :global(.floating-grid-video) {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
   border-radius: 12px;
+}
+
+.compactCell:hover :global(.floating-grid-tile.lk-participant-tile) {
+  --lk-border-radius: 12px;
+}
+
+.compactCell:hover :global(.floating-grid-avatar) {
+  background: #e8dcc8 !important;
+  color: #111827 !important;
+  font-size: 22px;
 }
 
 .compactCell :global(.floating-grid-tile.lk-participant-tile:hover .floating-grid-video) {
@@ -441,6 +464,37 @@
   padding: 3px !important;
   margin: 0 !important;
   opacity: 1 !important;
+  overflow: visible !important;
+  pointer-events: auto !important;
+}
+
+.heroCell :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
+.heroCell :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]),
+.compactCell :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
+.compactCell :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]) {
+  opacity: 0 !important;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  overflow: hidden !important;
+  pointer-events: none !important;
+}
+
+.heroCell:hover :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
+.heroCell:hover :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]),
+.compactCell:hover :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
+.compactCell:hover :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]) {
+  opacity: 1 !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 3px !important;
+  border: 1px solid rgba(255, 255, 255, 0.1);
   overflow: visible !important;
   pointer-events: auto !important;
 }
