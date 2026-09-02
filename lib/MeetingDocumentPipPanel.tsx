@@ -347,9 +347,15 @@ export function MeetingDocumentPipPanel({
                 );
               })}
               {sortedEntries.length > COLLAPSED_MAX && (
-                <div className={`${styles.avatar} ${styles.overflow}`}>
+                <button
+                  type="button"
+                  className={`${styles.avatar} ${styles.overflow}`}
+                  onClick={handleMinimize}
+                  aria-label={labels.restore}
+                  title={labels.restore}
+                >
                   +{sortedEntries.length - COLLAPSED_MAX}
-                </div>
+                </button>
               )}
             </div>
             <button
