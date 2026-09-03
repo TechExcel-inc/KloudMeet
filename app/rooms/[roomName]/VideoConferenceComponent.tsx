@@ -2464,6 +2464,9 @@ export function VideoConferenceComponent(props: {
       you: t('toolbar.you'),
       minimize: t('meeting.documentPipMinimize'),
       restore: t('meeting.documentPipRestore'),
+      sharing: t('meeting.documentPipSharing'),
+      youSharing: t('meeting.documentPipYouSharing'),
+      shareBadge: t('meeting.documentPipShareBadge'),
     }),
     [t],
   );
@@ -4273,8 +4276,6 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
-  const [documentPipEnabled, setDocumentPipEnabled] = React.useState(false);
-
   const documentPip = useMeetingDocumentPip({
     enabled:
       livekitConnected &&
@@ -4282,7 +4283,6 @@ export function VideoConferenceComponent(props: {
       !isToolbarMobile &&
       !isRecorderBot &&
       !meetingEndedByHost,
-    stayOpen: documentPipEnabled,
     room,
     micEnabled,
     camEnabled,
@@ -4294,7 +4294,6 @@ export function VideoConferenceComponent(props: {
     onLeave: handleLeaveWithSave,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
-    onWindowClosed: () => setDocumentPipEnabled(false),
   });
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
@@ -8548,16 +8547,13 @@ export function VideoConferenceComponent(props: {
             !meetingEndedByHost &&
             isWebDocumentPipEligible()
           }
-          documentPipEnabled={documentPipEnabled}
+          documentPipEnabled={documentPip.isOpen}
           onToggleDocumentPip={() => {
-            if (documentPipEnabled) {
-              setDocumentPipEnabled(false);
+            if (documentPip.isOpen) {
               documentPip.close();
               return;
             }
-            void documentPip.open().then((ok) => {
-              if (ok) setDocumentPipEnabled(true);
-            });
+            void documentPip.open({ sticky: true });
           }}
           chatOpen={chatOpen}
           onToggleChat={() => {

@@ -5,7 +5,11 @@
 import { isToolbarMobileUserAgent } from '@/lib/useToolbarIsMobile';
 
 type DocumentPictureInPicture = {
-  requestWindow(options?: { width?: number; height?: number }): Promise<Window>;
+  requestWindow(options?: {
+    width?: number;
+    height?: number;
+    disallowReturnToOpener?: boolean;
+  }): Promise<Window>;
 };
 
 type MediaSessionWithCapture = MediaSession & {

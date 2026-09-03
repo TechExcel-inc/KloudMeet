@@ -1,7 +1,8 @@
 'use client';
 
 import React from 'react';
-import { RoomEvent, Track, type Participant, type Room } from 'livekit-client';
+import { RoomEvent, Track, type Participant, type Room, type TrackPublication } from 'livekit-client';
+import { VideoTrack } from '@livekit/components-react';
 import { LiveDocFloatingCollapsedAvatar, LiveDocFloatingGridTile } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import { getInitials } from '@/lib/getInitials';
@@ -17,6 +18,9 @@ export interface MeetingDocumentPipLabels {
   you: string;
   minimize: string;
   restore: string;
+  sharing: string;
+  youSharing: string;
+  shareBadge: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -36,6 +40,8 @@ export interface MeetingDocumentPipPanelProps {
 
 export const PIP_EXPANDED_W = 240;
 export const PIP_EXPANDED_H = 420;
+const PIP_SHARE_FOCUS_W = 360;
+const PIP_SHARE_FOCUS_H = 280;
 const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 64;
@@ -96,6 +102,60 @@ export function pipPillWindowSize(count: number): { w: number; h: number } {
 
 export function pipMiniWindowSize(count: number): { w: number; h: number } {
   return miniWindowSize(count);
+}
+
+function sharePreviewSize(count: number): { w: number; h: number } {
+  const pill = pillInnerSize(count);
+  const shareW = Math.max(pill.w, 200);
+  const shareH = Math.round((shareW - PREVIEW_PAD * 2) * (9 / 16));
+  return {
+    w: shareW,
+    h: pill.h + PREVIEW_GAP + shareH + PREVIEW_PAD,
+  };
+}
+
+type ShareInfo = {
+  participant: Participant;
+  publication: TrackPublication;
+  local: boolean;
+  rosterId: string;
+};
+
+function findShare(room: Room): ShareInfo | null {
+  const localPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+  if (localPub?.track && !localPub.isMuted) {
+    return {
+      participant: room.localParticipant,
+      publication: localPub,
+      local: true,
+      rosterId: 'local',
+    };
+  }
+  for (const p of room.remoteParticipants.values()) {
+    const pub = p.getTrackPublication(Track.Source.ScreenShare);
+    if (pub?.track && !pub.isMuted) {
+      return {
+        participant: p,
+        publication: pub,
+        local: false,
+        rosterId: p.identity,
+      };
+    }
+  }
+  return null;
+}
+
+function sharingTitle(labels: MeetingDocumentPipLabels, name: string, local: boolean): string {
+  if (local) return labels.youSharing;
+  return labels.sharing.replace('{name}', name);
+}
+
+function ShareGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+      <path d="M20 18v-1c0-1.1-.9-2-2-2H6c-1.1 0-2 .9-2 2v1H2v1c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2v-1h-2zM6 5h12v8H6V5z" />
+    </svg>
+  );
 }
 
 function fitCols(width: number, gap: number, min: number, max?: number): number {
@@ -196,6 +256,8 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
+  const [shareFocus, setShareFocus] = React.useState(false);
+  const [camInset, setCamInset] = React.useState(true);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
@@ -210,6 +272,8 @@ export function MeetingDocumentPipPanel({
       RoomEvent.TrackUnmuted,
       RoomEvent.TrackPublished,
       RoomEvent.TrackUnpublished,
+      RoomEvent.TrackSubscribed,
+      RoomEvent.TrackUnsubscribed,
       RoomEvent.LocalTrackPublished,
       RoomEvent.LocalTrackUnpublished,
     ] as const;
@@ -252,6 +316,14 @@ export function MeetingDocumentPipPanel({
     ];
   }, [room, localName, labels.you, rosterTick]);
 
+  const share = React.useMemo(() => findShare(room), [room, rosterTick]);
+  const remoteShare = Boolean(share && !share.local);
+  const shareName = share
+    ? share.local
+      ? room.localParticipant.name || localName || labels.you
+      : share.participant.name || share.participant.identity || labels.you
+    : '';
+
   const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
   const compactCols = Math.max(
     COMPACT_COLS_MIN,
@@ -261,20 +333,44 @@ export function MeetingDocumentPipPanel({
   const heroW = Math.max(1, (stageW - HERO_GAP * Math.max(0, heroCols - 1)) / heroCols);
   const compactW = Math.max(1, (stageW - COMPACT_GAP * Math.max(0, compactCols - 1)) / compactCols);
 
-  const { heroes, rest } = React.useMemo(
-    () =>
-      splitRoster(
-        room,
-        sortedEntries,
-        mediaRestrictions.hostIdentity,
-        mediaRestrictions.cohostIdentities,
-        heroCap,
-      ),
-    [room, sortedEntries, mediaRestrictions.hostIdentity, mediaRestrictions.cohostIdentities, heroCap],
-  );
+  const { heroes, rest } = React.useMemo(() => {
+    if (remoteShare) {
+      const people: RosterRow[] = sortedEntries.flatMap((e) => {
+        const participant =
+          e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
+        if (!participant) return [];
+        return [{ id: e.id, name: e.name, participant }];
+      });
+      return { heroes: [] as RosterRow[], rest: people };
+    }
+    return splitRoster(
+      room,
+      sortedEntries,
+      mediaRestrictions.hostIdentity,
+      mediaRestrictions.cohostIdentities,
+      heroCap,
+    );
+  }, [
+    remoteShare,
+    room,
+    sortedEntries,
+    mediaRestrictions.hostIdentity,
+    mediaRestrictions.cohostIdentities,
+    heroCap,
+  ]);
+
+  React.useEffect(() => {
+    if (remoteShare) return;
+    if (!shareFocus) return;
+    setShareFocus(false);
+    if (!minimized) {
+      resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
+    }
+  }, [remoteShare, shareFocus, minimized, pipWindow]);
 
   const handleMinimize = () => {
     setPreviewId(null);
+    setShareFocus(false);
     if (minimized) {
       resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
       setMinimized(false);
@@ -299,9 +395,23 @@ export function MeetingDocumentPipPanel({
       hidePreview();
       return;
     }
-    const mini = miniWindowSize(sortedEntries.length);
+    const remoteSharer = share && !share.local && share.rosterId === id;
+    const mini = remoteSharer
+      ? sharePreviewSize(sortedEntries.length)
+      : miniWindowSize(sortedEntries.length);
     resizePip(pipWindow, mini.w, mini.h);
     setPreviewId(id);
+  };
+
+  const toggleShareFocus = () => {
+    if (!remoteShare || minimized) return;
+    const next = !shareFocus;
+    setShareFocus(next);
+    resizePip(
+      pipWindow,
+      next ? PIP_SHARE_FOCUS_W : PIP_EXPANDED_W,
+      next ? PIP_SHARE_FOCUS_H : PIP_EXPANDED_H,
+    );
   };
 
   const previewRow = previewId ? sortedEntries.find((e) => e.id === previewId) : undefined;
@@ -311,6 +421,16 @@ export function MeetingDocumentPipPanel({
       : room.remoteParticipants.get(previewRow.id)
     : undefined;
   const previewOpen = Boolean(previewRow && previewParticipant);
+  const previewIsRemoteShare = Boolean(
+    share && !share.local && previewRow && previewRow.id === share.rosterId && share.publication.track,
+  );
+  const sharerHasCam = Boolean(
+    share &&
+      share.participant.getTrackPublication(Track.Source.Camera)?.track &&
+      !share.participant.getTrackPublication(Track.Source.Camera)?.isMuted,
+  );
+
+  const isSharer = (id: string) => Boolean(share && share.rosterId === id);
 
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
@@ -322,28 +442,40 @@ export function MeetingDocumentPipPanel({
                 const participant =
                   e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
                 const z = { zIndex: COLLAPSED_MAX - i };
+                const mark = isSharer(e.id);
                 if (!participant) {
                   return (
-                    <div
-                      key={e.id}
-                      className={styles.avatar}
-                      title={e.name}
-                      style={z}
-                      onClick={() => togglePreview(e.id)}
-                    >
-                      {getInitials(e.name || e.id || '?')}
+                    <div key={e.id} className={styles.pillPerson} style={z}>
+                      <div
+                        className={styles.avatar}
+                        title={e.name}
+                        onClick={() => togglePreview(e.id)}
+                      >
+                        {getInitials(e.name || e.id || '?')}
+                      </div>
+                      {mark ? (
+                        <span className={styles.pillShareMark} aria-hidden>
+                          <ShareGlyph />
+                        </span>
+                      ) : null}
                     </div>
                   );
                 }
                 return (
-                  <LiveDocFloatingCollapsedAvatar
-                    key={e.id}
-                    participant={participant}
-                    name={e.name}
-                    style={z}
-                    selected={previewId === e.id}
-                    onClick={() => togglePreview(e.id)}
-                  />
+                  <div key={e.id} className={styles.pillPerson} style={z}>
+                    <LiveDocFloatingCollapsedAvatar
+                      participant={participant}
+                      name={e.name}
+                      style={{ zIndex: 1 }}
+                      selected={previewId === e.id}
+                      onClick={() => togglePreview(e.id)}
+                    />
+                    {mark ? (
+                      <span className={styles.pillShareMark} aria-hidden>
+                        <ShareGlyph />
+                      </span>
+                    ) : null}
+                  </div>
                 );
               })}
               {sortedEntries.length > COLLAPSED_MAX && (
@@ -379,17 +511,29 @@ export function MeetingDocumentPipPanel({
             ) : null}
           </div>
           {previewOpen && previewParticipant && previewRow ? (
-            <div
-              className={styles.previewWrap}
-              style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
-            >
-              <LiveDocFloatingGridTile
-                participant={previewParticipant}
-                name={previewRow.name}
-                size="hero"
-                mediaRestrictions={mediaRestrictions}
-              />
-            </div>
+            previewIsRemoteShare && share ? (
+              <div className={styles.previewShare}>
+                <VideoTrack
+                  trackRef={{
+                    participant: share.participant,
+                    source: Track.Source.ScreenShare,
+                    publication: share.publication,
+                  }}
+                />
+              </div>
+            ) : (
+              <div
+                className={styles.previewWrap}
+                style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
+              >
+                <LiveDocFloatingGridTile
+                  participant={previewParticipant}
+                  name={previewRow.name}
+                  size="hero"
+                  mediaRestrictions={mediaRestrictions}
+                />
+              </div>
+            )
           ) : null}
         </div>
       ) : (
@@ -412,7 +556,7 @@ export function MeetingDocumentPipPanel({
           </header>
           <div
             ref={stageRef}
-            className={`${styles.stage} lk-room-container`}
+            className={`${styles.stage} lk-room-container${shareFocus ? ` ${styles.stageShareFocus}` : ''}`}
             style={
               {
                 ['--pip-hero-cols' as string]: String(heroCols),
@@ -424,9 +568,78 @@ export function MeetingDocumentPipPanel({
               } as React.CSSProperties
             }
           >
+            {share && share.local ? (
+              <div className={styles.shareBanner}>
+                <ShareGlyph />
+                <span>{labels.youSharing}</span>
+              </div>
+            ) : null}
+
+            {remoteShare && share ? (
+              <div
+                className={`${styles.shareStage}${shareFocus ? ` ${styles.shareStageFocus}` : ''}`}
+                role="button"
+                tabIndex={0}
+                onClick={toggleShareFocus}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  toggleShareFocus();
+                }}
+                title={sharingTitle(labels, shareName, false)}
+              >
+                <VideoTrack
+                  trackRef={{
+                    participant: share.participant,
+                    source: Track.Source.ScreenShare,
+                    publication: share.publication,
+                  }}
+                />
+                <span className={styles.shareCaption}>
+                  {sharingTitle(labels, shareName, false)}
+                </span>
+                {camInset && sharerHasCam ? (
+                  <span
+                    className={styles.shareCamInset}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const el = e.target;
+                      if (!(el instanceof Element)) return;
+                      if (el.closest('.kloud-custom-mic-indicator, .kloud-custom-cam-indicator')) {
+                        return;
+                      }
+                      setCamInset(false);
+                    }}
+                  >
+                    <LiveDocFloatingGridTile
+                      participant={share.participant}
+                      name={shareName}
+                      size="compact"
+                      mediaRestrictions={mediaRestrictions}
+                    />
+                  </span>
+                ) : null}
+                {!camInset && sharerHasCam ? (
+                  <span
+                    className={styles.shareCamShow}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCamInset(true);
+                    }}
+                  >
+                    {labels.shareBadge}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {!shareFocus && !remoteShare ? (
             <div className={styles.heroGrid}>
               {heroes.map((e) => (
                 <div key={e.id} className={styles.heroCell}>
+                  {isSharer(e.id) ? (
+                    <span className={styles.shareBadge}>{labels.shareBadge}</span>
+                  ) : null}
                   <LiveDocFloatingGridTile
                     participant={e.participant}
                     name={e.name}
@@ -436,14 +649,18 @@ export function MeetingDocumentPipPanel({
                 </div>
               ))}
             </div>
+            ) : null}
 
-            {rest.length > 0 && (
+            {!shareFocus && rest.length > 0 && (
               <div className={styles.compactGrid}>
                 {rest.map((e, i) => (
                   <div
                     key={e.id}
                     className={`${styles.compactCell}${(i + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
                   >
+                    {isSharer(e.id) ? (
+                      <span className={styles.shareBadge}>{labels.shareBadge}</span>
+                    ) : null}
                     <LiveDocFloatingGridTile
                       participant={e.participant}
                       name={e.name}

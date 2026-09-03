@@ -62,6 +62,21 @@
   margin-left: -8px;
 }
 
+.stack .pillPerson {
+  position: relative;
+  flex-shrink: 0;
+  margin-left: -8px;
+}
+
+.stack .pillPerson:first-child {
+  margin-left: 0;
+}
+
+.stack .pillPerson :global(.floating-avatar-shell),
+.stack .pillPerson .avatar {
+  margin-left: 0;
+}
+
 .stack :global(.floating-avatar-shell:first-child),
 .stack .avatar:first-child {
   margin-left: 0;
@@ -115,6 +130,28 @@
   z-index: 0;
   padding: 0;
   cursor: pointer;
+}
+
+.pillShareMark {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ea580c;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(15, 23, 42, 0.9);
+  z-index: 4;
+  pointer-events: none;
+}
+
+.pillShareMark svg {
+  width: 8px;
+  height: 8px;
 }
 
 .stack :global(.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]))::after {
@@ -325,6 +362,119 @@
   width: 100%;
   max-width: none;
   box-sizing: border-box;
+}
+
+.stageShareFocus {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.shareBanner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: rgba(234, 88, 12, 0.18);
+  color: #fdba74;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.shareStage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0b0c0e;
+  cursor: pointer;
+}
+
+.shareStageFocus {
+  aspect-ratio: auto;
+  flex: 1;
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.shareStage :global(video) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  background: #0b0c0e;
+}
+
+.shareCaption {
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 10px;
+  font-weight: 600;
+  color: #fff;
+  pointer-events: none;
+}
+
+.shareCamInset {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  width: 44px;
+  z-index: 2;
+}
+
+.shareCamInset :global(.floating-grid-video) {
+  border-radius: 8px;
+}
+
+.shareCamShow {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 10px;
+  color: #fff;
+  z-index: 2;
+}
+
+.shareBadge {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  z-index: 3;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(234, 88, 12, 0.92);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.previewShare {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 6px 6px;
+  min-height: 0;
+  aspect-ratio: 16 / 9;
+  background: #0b0c0e;
+  overflow: hidden;
+}
+
+.previewShare :global(video) {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .heroGrid {

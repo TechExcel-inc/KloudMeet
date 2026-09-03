@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RoomContext } from '@livekit/components-react';
 import { RoomEvent, Track, type Room } from 'livekit-client';
@@ -22,8 +22,6 @@ import {
 export interface UseMeetingDocumentPipOptions {
   /** 入会且允许时开启监听（网页端由调用方排除手机/Electron） */
   enabled: boolean;
-  /** 为 true 时浮窗保持打开，切回本 tab 也不自动关掉 */
-  stayOpen: boolean;
   room: Room;
   micEnabled: boolean;
   camEnabled: boolean;
@@ -35,12 +33,31 @@ export interface UseMeetingDocumentPipOptions {
   onLeave: () => void;
   onMuteParticipant: (identity: string, disable: boolean) => void;
   onDisableParticipantVideo: (identity: string, disable: boolean) => void;
-  onWindowClosed?: () => void;
 }
 
 export interface MeetingDocumentPipApi {
-  open: () => Promise<boolean>;
+  open: (opts?: { sticky?: boolean }) => Promise<boolean>;
   close: () => void;
+  isOpen: boolean;
+}
+
+function pipScreenPos(win: Window): { x: number; y: number } | null {
+  try {
+    const x = win.screenX;
+    const y = win.screenY;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    return { x, y };
+  } catch {
+    return null;
+  }
+}
+
+function movePip(win: Window, pos: { x: number; y: number }): void {
+  try {
+    win.moveTo(pos.x, pos.y);
+  } catch {
+    // Document PiP 可能拒绝 moveTo
+  }
 }
 
 function hasLiveCapture(room: Room): boolean {
@@ -123,7 +140,6 @@ function bindPipTileClicks(
  */
 export function useMeetingDocumentPip({
   enabled,
-  stayOpen,
   room,
   micEnabled,
   camEnabled,
@@ -135,13 +151,16 @@ export function useMeetingDocumentPip({
   onLeave,
   onMuteParticipant,
   onDisableParticipantVideo,
-  onWindowClosed,
 }: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
+  const [isOpen, setIsOpen] = useState(false);
   const pipWindowRef = useRef<Window | null>(null);
   const rootRef = useRef<Root | null>(null);
   const openingRef = useRef(false);
   const closingFromApiRef = useRef(false);
   const unbindClicksRef = useRef<(() => void) | null>(null);
+  const stickyRef = useRef(false);
+  const stickyPosRef = useRef<{ x: number; y: number } | null>(null);
+  const stopTrackPosRef = useRef<(() => void) | null>(null);
 
   const micRef = useRef(micEnabled);
   const camRef = useRef(camEnabled);
@@ -153,8 +172,6 @@ export function useMeetingDocumentPip({
   const onLeaveRef = useRef(onLeave);
   const onMuteRef = useRef(onMuteParticipant);
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
-  const onWindowClosedRef = useRef(onWindowClosed);
-  const stayOpenRef = useRef(stayOpen);
   const roomRef = useRef(room);
   const minimizedRef = useRef(false);
 
@@ -168,11 +185,18 @@ export function useMeetingDocumentPip({
   onLeaveRef.current = onLeave;
   onMuteRef.current = onMuteParticipant;
   onDisableVideoRef.current = onDisableParticipantVideo;
-  onWindowClosedRef.current = onWindowClosed;
-  stayOpenRef.current = stayOpen;
   roomRef.current = room;
 
   const closePip = useRef(() => {
+    const win = pipWindowRef.current;
+    if (stickyRef.current && win && !win.closed) {
+      const pos = pipScreenPos(win);
+      if (pos) stickyPosRef.current = pos;
+    }
+    stopTrackPosRef.current?.();
+    stopTrackPosRef.current = null;
+    stickyRef.current = false;
+    setIsOpen(false);
     closingFromApiRef.current = true;
     unbindClicksRef.current?.();
     unbindClicksRef.current = null;
@@ -185,7 +209,6 @@ export function useMeetingDocumentPip({
         // ignore
       }
     }
-    const win = pipWindowRef.current;
     pipWindowRef.current = null;
     if (win && !win.closed) {
       try {
@@ -228,9 +251,13 @@ export function useMeetingDocumentPip({
     );
   }).current;
 
-  const openPip = useRef(async (): Promise<boolean> => {
+  const openPip = useRef(async (opts?: { sticky?: boolean }): Promise<boolean> => {
     if (!isWebDocumentPipEligible()) return false;
-    if (pipWindowRef.current && !pipWindowRef.current.closed) return true;
+    if (opts?.sticky) stickyRef.current = true;
+    if (pipWindowRef.current && !pipWindowRef.current.closed) {
+      setIsOpen(true);
+      return true;
+    }
     if (openingRef.current) return false;
 
     const api = getDocumentPictureInPicture();
@@ -275,9 +302,33 @@ export function useMeetingDocumentPip({
         () => onToggleCamRef.current(),
       );
 
+      if (stickyRef.current) {
+        const saved = stickyPosRef.current;
+        if (saved) movePip(pipWindow, saved);
+        const tick = () => {
+          if (!stickyRef.current) return;
+          const pos = pipScreenPos(pipWindow);
+          if (pos) stickyPosRef.current = pos;
+        };
+        const id = pipWindow.setInterval(tick, 400);
+        pipWindow.addEventListener('resize', tick);
+        pipWindow.addEventListener('blur', tick);
+        stopTrackPosRef.current = () => {
+          pipWindow.clearInterval(id);
+          pipWindow.removeEventListener('resize', tick);
+          pipWindow.removeEventListener('blur', tick);
+        };
+      }
+
       pipWindow.addEventListener('pagehide', () => {
         if (pipWindowRef.current !== pipWindow) return;
-        const userClosed = !closingFromApiRef.current;
+        const fromApi = closingFromApiRef.current;
+        if (stickyRef.current) {
+          const pos = pipScreenPos(pipWindow);
+          if (pos) stickyPosRef.current = pos;
+        }
+        stopTrackPosRef.current?.();
+        stopTrackPosRef.current = null;
         unbindClicksRef.current?.();
         unbindClicksRef.current = null;
         const root = rootRef.current;
@@ -290,11 +341,13 @@ export function useMeetingDocumentPip({
             // ignore
           }
         }
-        if (userClosed) {
-          onWindowClosedRef.current?.();
+        if (!fromApi) {
+          stickyRef.current = false;
         }
+        setIsOpen(false);
         closingFromApiRef.current = false;
       });
+      setIsOpen(true);
       return true;
     } catch {
       closePip();
@@ -326,7 +379,7 @@ export function useMeetingDocumentPip({
     });
 
     const onVisibility = () => {
-      if (stayOpenRef.current) return;
+      if (stickyRef.current) return;
       if (!document.hidden) {
         closePip();
       }
@@ -415,5 +468,5 @@ export function useMeetingDocumentPip({
     };
   }, [enabled, room, micEnabled, camEnabled]);
 
-  return { open: openPip, close: closePip };
+  return { open: openPip, close: closePip, isOpen };
 }
