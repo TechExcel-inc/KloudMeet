@@ -18,8 +18,6 @@ export interface MeetingDocumentPipLabels {
   you: string;
   minimize: string;
   restore: string;
-  sharing: string;
-  youSharing: string;
   shareBadge: string;
 }
 
@@ -40,8 +38,6 @@ export interface MeetingDocumentPipPanelProps {
 
 export const PIP_EXPANDED_W = 240;
 export const PIP_EXPANDED_H = 420;
-const PIP_SHARE_FOCUS_W = 360;
-const PIP_SHARE_FOCUS_H = 280;
 const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 64;
@@ -104,16 +100,6 @@ export function pipMiniWindowSize(count: number): { w: number; h: number } {
   return miniWindowSize(count);
 }
 
-function sharePreviewSize(count: number): { w: number; h: number } {
-  const pill = pillInnerSize(count);
-  const shareW = Math.max(pill.w, 200);
-  const shareH = Math.round((shareW - PREVIEW_PAD * 2) * (9 / 16));
-  return {
-    w: shareW,
-    h: pill.h + PREVIEW_GAP + shareH + PREVIEW_PAD,
-  };
-}
-
 type ShareInfo = {
   participant: Participant;
   publication: TrackPublication;
@@ -145,9 +131,14 @@ function findShare(room: Room): ShareInfo | null {
   return null;
 }
 
-function sharingTitle(labels: MeetingDocumentPipLabels, name: string, local: boolean): string {
-  if (local) return labels.youSharing;
-  return labels.sharing.replace('{name}', name);
+function focusOpener(win: Window): void {
+  const opener = win.opener;
+  if (!opener || opener.closed) return;
+  try {
+    opener.focus();
+  } catch {
+    // 部分环境不允许跨窗 focus
+  }
 }
 
 function ShareGlyph() {
@@ -164,6 +155,18 @@ function fitCols(width: number, gap: number, min: number, max?: number): number 
   const cols = Math.max(1, byMin);
   if (max === undefined) return cols;
   return Math.min(max, cols);
+}
+
+function pillEntries(
+  entries: { id: string; name: string }[],
+  shareId: string | null,
+): { id: string; name: string }[] {
+  const shown = entries.slice(0, COLLAPSED_MAX);
+  if (!shareId || shown.some((e) => e.id === shareId)) return shown;
+  const sharer = entries.find((e) => e.id === shareId);
+  if (!sharer) return shown;
+  if (shown.length < COLLAPSED_MAX) return [...shown, sharer];
+  return [...shown.slice(0, COLLAPSED_MAX - 1), sharer];
 }
 
 function splitRoster(
@@ -256,8 +259,6 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
-  const [shareFocus, setShareFocus] = React.useState(false);
-  const [camInset, setCamInset] = React.useState(true);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
@@ -317,12 +318,7 @@ export function MeetingDocumentPipPanel({
   }, [room, localName, labels.you, rosterTick]);
 
   const share = React.useMemo(() => findShare(room), [room, rosterTick]);
-  const remoteShare = Boolean(share && !share.local);
-  const shareName = share
-    ? share.local
-      ? room.localParticipant.name || localName || labels.you
-      : share.participant.name || share.participant.identity || labels.you
-    : '';
+  const remoteShare = share && !share.local ? share : null;
 
   const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
   const compactCols = Math.max(
@@ -331,46 +327,21 @@ export function MeetingDocumentPipPanel({
   );
   const heroCap = heroCols * HERO_ROWS;
   const heroW = Math.max(1, (stageW - HERO_GAP * Math.max(0, heroCols - 1)) / heroCols);
-  const compactW = Math.max(1, (stageW - COMPACT_GAP * Math.max(0, compactCols - 1)) / compactCols);
 
-  const { heroes, rest } = React.useMemo(() => {
-    if (remoteShare) {
-      const people: RosterRow[] = sortedEntries.flatMap((e) => {
-        const participant =
-          e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
-        if (!participant) return [];
-        return [{ id: e.id, name: e.name, participant }];
-      });
-      return { heroes: [] as RosterRow[], rest: people };
-    }
-    return splitRoster(
-      room,
-      sortedEntries,
-      mediaRestrictions.hostIdentity,
-      mediaRestrictions.cohostIdentities,
-      heroCap,
-    );
-  }, [
-    remoteShare,
-    room,
-    sortedEntries,
-    mediaRestrictions.hostIdentity,
-    mediaRestrictions.cohostIdentities,
-    heroCap,
-  ]);
-
-  React.useEffect(() => {
-    if (remoteShare) return;
-    if (!shareFocus) return;
-    setShareFocus(false);
-    if (!minimized) {
-      resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
-    }
-  }, [remoteShare, shareFocus, minimized, pipWindow]);
+  const { heroes, rest } = React.useMemo(
+    () =>
+      splitRoster(
+        room,
+        sortedEntries,
+        mediaRestrictions.hostIdentity,
+        mediaRestrictions.cohostIdentities,
+        heroCap,
+      ),
+    [room, sortedEntries, mediaRestrictions.hostIdentity, mediaRestrictions.cohostIdentities, heroCap],
+  );
 
   const handleMinimize = () => {
     setPreviewId(null);
-    setShareFocus(false);
     if (minimized) {
       resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
       setMinimized(false);
@@ -395,23 +366,9 @@ export function MeetingDocumentPipPanel({
       hidePreview();
       return;
     }
-    const remoteSharer = share && !share.local && share.rosterId === id;
-    const mini = remoteSharer
-      ? sharePreviewSize(sortedEntries.length)
-      : miniWindowSize(sortedEntries.length);
+    const mini = miniWindowSize(sortedEntries.length);
     resizePip(pipWindow, mini.w, mini.h);
     setPreviewId(id);
-  };
-
-  const toggleShareFocus = () => {
-    if (!remoteShare || minimized) return;
-    const next = !shareFocus;
-    setShareFocus(next);
-    resizePip(
-      pipWindow,
-      next ? PIP_SHARE_FOCUS_W : PIP_EXPANDED_W,
-      next ? PIP_SHARE_FOCUS_H : PIP_EXPANDED_H,
-    );
   };
 
   const previewRow = previewId ? sortedEntries.find((e) => e.id === previewId) : undefined;
@@ -421,16 +378,41 @@ export function MeetingDocumentPipPanel({
       : room.remoteParticipants.get(previewRow.id)
     : undefined;
   const previewOpen = Boolean(previewRow && previewParticipant);
-  const previewIsRemoteShare = Boolean(
-    share && !share.local && previewRow && previewRow.id === share.rosterId && share.publication.track,
-  );
-  const sharerHasCam = Boolean(
-    share &&
-      share.participant.getTrackPublication(Track.Source.Camera)?.track &&
-      !share.participant.getTrackPublication(Track.Source.Camera)?.isMuted,
-  );
-
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
+  const shareInHero = Boolean(remoteShare && rest.length === 0);
+  const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null);
+
+  const backToTab = (e?: React.SyntheticEvent) => {
+    e?.stopPropagation();
+    focusOpener(pipWindow);
+  };
+
+  const personBadge = (id: string) =>
+    isSharer(id) ? <span className={styles.shareBadge}>{labels.shareBadge}</span> : null;
+
+  const shareVideo = remoteShare ? (
+    <div
+      className={styles.shareTile}
+      role="button"
+      tabIndex={0}
+      title={labels.shareBadge}
+      aria-label={labels.shareBadge}
+      onClick={backToTab}
+      onKeyDown={(e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        backToTab(e);
+      }}
+    >
+      <VideoTrack
+        trackRef={{
+          participant: remoteShare.participant,
+          source: Track.Source.ScreenShare,
+          publication: remoteShare.publication,
+        }}
+      />
+    </div>
+  ) : null;
 
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
@@ -438,7 +420,7 @@ export function MeetingDocumentPipPanel({
         <div className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}>
           <div className={styles.pill}>
             <div className={styles.stack}>
-              {sortedEntries.slice(0, COLLAPSED_MAX).map((e, i) => {
+              {collapsed.map((e, i) => {
                 const participant =
                   e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
                 const z = { zIndex: COLLAPSED_MAX - i };
@@ -511,29 +493,17 @@ export function MeetingDocumentPipPanel({
             ) : null}
           </div>
           {previewOpen && previewParticipant && previewRow ? (
-            previewIsRemoteShare && share ? (
-              <div className={styles.previewShare}>
-                <VideoTrack
-                  trackRef={{
-                    participant: share.participant,
-                    source: Track.Source.ScreenShare,
-                    publication: share.publication,
-                  }}
-                />
-              </div>
-            ) : (
-              <div
-                className={styles.previewWrap}
-                style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
-              >
-                <LiveDocFloatingGridTile
-                  participant={previewParticipant}
-                  name={previewRow.name}
-                  size="hero"
-                  mediaRestrictions={mediaRestrictions}
-                />
-              </div>
-            )
+            <div
+              className={styles.previewWrap}
+              style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
+            >
+              <LiveDocFloatingGridTile
+                participant={previewParticipant}
+                name={previewRow.name}
+                size="hero"
+                mediaRestrictions={mediaRestrictions}
+              />
+            </div>
           ) : null}
         </div>
       ) : (
@@ -556,7 +526,7 @@ export function MeetingDocumentPipPanel({
           </header>
           <div
             ref={stageRef}
-            className={`${styles.stage} lk-room-container${shareFocus ? ` ${styles.stageShareFocus}` : ''}`}
+            className={`${styles.stage} lk-room-container`}
             style={
               {
                 ['--pip-hero-cols' as string]: String(heroCols),
@@ -564,111 +534,47 @@ export function MeetingDocumentPipPanel({
                 ['--pip-hero-gap' as string]: `${HERO_GAP}px`,
                 ['--pip-compact-gap' as string]: `${COMPACT_GAP}px`,
                 ['--pip-hero-tile' as string]: `${heroW}px`,
-                ['--pip-compact-tile' as string]: `${compactW}px`,
               } as React.CSSProperties
             }
           >
-            {share && share.local ? (
-              <div className={styles.shareBanner}>
-                <ShareGlyph />
-                <span>{labels.youSharing}</span>
-              </div>
-            ) : null}
-
-            {remoteShare && share ? (
-              <div
-                className={`${styles.shareStage}${shareFocus ? ` ${styles.shareStageFocus}` : ''}`}
-                role="button"
-                tabIndex={0}
-                onClick={toggleShareFocus}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  e.preventDefault();
-                  toggleShareFocus();
-                }}
-                title={sharingTitle(labels, shareName, false)}
-              >
-                <VideoTrack
-                  trackRef={{
-                    participant: share.participant,
-                    source: Track.Source.ScreenShare,
-                    publication: share.publication,
-                  }}
-                />
-                <span className={styles.shareCaption}>
-                  {sharingTitle(labels, shareName, false)}
-                </span>
-                {camInset && sharerHasCam ? (
-                  <span
-                    className={styles.shareCamInset}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const el = e.target;
-                      if (!(el instanceof Element)) return;
-                      if (el.closest('.kloud-custom-mic-indicator, .kloud-custom-cam-indicator')) {
-                        return;
-                      }
-                      setCamInset(false);
-                    }}
-                  >
-                    <LiveDocFloatingGridTile
-                      participant={share.participant}
-                      name={shareName}
-                      size="compact"
-                      mediaRestrictions={mediaRestrictions}
-                    />
-                  </span>
-                ) : null}
-                {!camInset && sharerHasCam ? (
-                  <span
-                    className={styles.shareCamShow}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCamInset(true);
-                    }}
-                  >
-                    {labels.shareBadge}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-
-            {!shareFocus && !remoteShare ? (
             <div className={styles.heroGrid}>
               {heroes.map((e) => (
                 <div key={e.id} className={styles.heroCell}>
-                  {isSharer(e.id) ? (
-                    <span className={styles.shareBadge}>{labels.shareBadge}</span>
-                  ) : null}
                   <LiveDocFloatingGridTile
                     participant={e.participant}
                     name={e.name}
                     size="hero"
                     mediaRestrictions={mediaRestrictions}
                   />
+                  {personBadge(e.id)}
                 </div>
               ))}
+              {shareInHero && shareVideo ? <div className={styles.heroCell}>{shareVideo}</div> : null}
             </div>
-            ) : null}
 
-            {!shareFocus && rest.length > 0 && (
+            {(rest.length > 0 || (remoteShare && !shareInHero)) && (
               <div className={styles.compactGrid}>
                 {rest.map((e, i) => (
                   <div
                     key={e.id}
                     className={`${styles.compactCell}${(i + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
                   >
-                    {isSharer(e.id) ? (
-                      <span className={styles.shareBadge}>{labels.shareBadge}</span>
-                    ) : null}
                     <LiveDocFloatingGridTile
                       participant={e.participant}
                       name={e.name}
                       size="compact"
                       mediaRestrictions={mediaRestrictions}
                     />
+                    {personBadge(e.id)}
                   </div>
                 ))}
+                {remoteShare && !shareInHero && shareVideo ? (
+                  <div
+                    className={`${styles.compactCell}${(rest.length + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
+                  >
+                    {shareVideo}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

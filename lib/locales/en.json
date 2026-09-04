@@ -217,7 +217,6 @@
   "meeting.documentPipMinimize": "Minimize",
   "meeting.documentPipRestore": "Restore",
   "meeting.documentPipSharing": "{name} is sharing",
-  "meeting.documentPipYouSharing": "You are sharing",
   "meeting.documentPipShareBadge": "Sharing",
   "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "Loading meeting…",

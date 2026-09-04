@@ -203,7 +203,6 @@
   "meeting.documentPipMinimize": "最小化",
   "meeting.documentPipRestore": "元に戻す",
   "meeting.documentPipSharing": "{name}が共有中",
-  "meeting.documentPipYouSharing": "共有しています",
   "meeting.documentPipShareBadge": "共有",
   "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",

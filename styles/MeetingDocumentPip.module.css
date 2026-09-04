@@ -65,7 +65,10 @@
 .stack .pillPerson {
   position: relative;
   flex-shrink: 0;
+  width: 30px;
+  height: 30px;
   margin-left: -8px;
+  overflow: visible;
 }
 
 .stack .pillPerson:first-child {
@@ -134,8 +137,8 @@
 
 .pillShareMark {
   position: absolute;
+  top: 18px;
   right: -2px;
-  bottom: -2px;
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -145,7 +148,7 @@
   align-items: center;
   justify-content: center;
   border: 1px solid rgba(15, 23, 42, 0.9);
-  z-index: 4;
+  z-index: 6;
   pointer-events: none;
 }
 
@@ -194,10 +197,14 @@
   cursor: pointer;
 }
 
+.stack .pillPerson:hover,
+.stack .pillPerson:has(:global(.selected)) {
+  z-index: 20 !important;
+}
+
 .stack :global(.floating-avatar-shell:hover),
 .stack :global(.floating-avatar-shell.selected),
 .stack .avatar:hover {
-  z-index: 20 !important;
   cursor: pointer;
 }
 
@@ -364,93 +371,32 @@
   box-sizing: border-box;
 }
 
-.stageShareFocus {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.shareBanner {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 8px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  background: rgba(234, 88, 12, 0.18);
-  color: #fdba74;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.shareStage {
+.shareTile {
   position: relative;
   width: 100%;
-  aspect-ratio: 16 / 9;
-  margin-bottom: 8px;
+  aspect-ratio: 1 / 1;
   border-radius: 10px;
   overflow: hidden;
   background: #0b0c0e;
   cursor: pointer;
 }
 
-.shareStageFocus {
-  aspect-ratio: auto;
-  flex: 1;
-  min-height: 0;
-  margin-bottom: 0;
+.heroCell .shareTile {
+  border-radius: 12px;
 }
 
-.shareStage :global(video) {
+.shareTile :global(video) {
   width: 100%;
   height: 100%;
   object-fit: contain;
   display: block;
-  background: #0b0c0e;
-}
-
-.shareCaption {
-  position: absolute;
-  left: 6px;
-  top: 6px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.62);
-  font-size: 10px;
-  font-weight: 600;
-  color: #fff;
-  pointer-events: none;
-}
-
-.shareCamInset {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  width: 44px;
-  z-index: 2;
-}
-
-.shareCamInset :global(.floating-grid-video) {
-  border-radius: 8px;
-}
-
-.shareCamShow {
-  position: absolute;
-  right: 6px;
-  bottom: 6px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.62);
-  font-size: 10px;
-  color: #fff;
-  z-index: 2;
 }
 
 .shareBadge {
   position: absolute;
   left: 4px;
   top: 4px;
-  z-index: 3;
+  z-index: 7;
   padding: 1px 5px;
   border-radius: 4px;
   background: rgba(234, 88, 12, 0.92);
@@ -458,23 +404,6 @@
   font-size: 9px;
   font-weight: 700;
   pointer-events: none;
-}
-
-.previewShare {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0 6px 6px;
-  min-height: 0;
-  aspect-ratio: 16 / 9;
-  background: #0b0c0e;
-  overflow: hidden;
-}
-
-.previewShare :global(video) {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
 }
 
 .heroGrid {
@@ -559,7 +488,8 @@
   overflow: visible;
 }
 
-.compactCell:hover :global(.floating-grid-tile) {
+.compactCell:hover :global(.floating-grid-tile),
+.compactCell:hover .shareTile {
   position: absolute;
   left: 0;
   top: 0;
@@ -568,9 +498,14 @@
   z-index: 6;
 }
 
-.compactCellRowEnd:hover :global(.floating-grid-tile) {
+.compactCellRowEnd:hover :global(.floating-grid-tile),
+.compactCellRowEnd:hover .shareTile {
   left: auto;
   right: 0;
+}
+
+.compactCell:hover .shareTile {
+  border-radius: 12px;
 }
 
 .compactCell:hover :global(.floating-grid-video) {
