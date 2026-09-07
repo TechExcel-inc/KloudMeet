@@ -212,6 +212,28 @@ function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
   return Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
+const MIC_PUBLISH_RETRY_MS = 800;
+
+/**
+ * 刷新重进时旧页面可能还占着麦克风，入会首次 publish 容易报 NotReadableError。
+ * 失败若被静默吞掉，工具栏仍显示已开麦，实际没有音轨，对方全程听不到。
+ * 这里重试一次并回报麦克风是否真的在发声，由调用方据此校正 UI。
+ */
+async function publishMic(room: Room): Promise<boolean> {
+  const lp = room.localParticipant;
+  try {
+    await lp.setMicrophoneEnabled(true);
+  } catch (err) {
+    console.warn('[KloudMeet] Mic publish failed, retrying once:', err);
+    await new Promise((resolve) => setTimeout(resolve, MIC_PUBLISH_RETRY_MS));
+    await lp.setMicrophoneEnabled(true).catch((retryErr: Error) => {
+      console.warn('[KloudMeet] Mic publish retry failed:', retryErr.message);
+    });
+  }
+  const pub = lp.getTrackPublication(Track.Source.Microphone);
+  return Boolean(pub?.track && !pub.isMuted);
+}
+
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
   connectionDetails: ConnectionDetails;
@@ -815,7 +837,7 @@ export function VideoConferenceComponent(props: {
       await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
     }
     if (props.userChoices.audioEnabled) {
-      await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+      setMicEnabled(await publishMic(room));
     } else {
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
     }
@@ -1202,7 +1224,7 @@ export function VideoConferenceComponent(props: {
                   room.localParticipant.setCameraEnabled(false).catch(() => undefined);
                 }
                 if (props.userChoices.audioEnabled) {
-                  room.localParticipant.setMicrophoneEnabled(true).catch(handleError);
+                  void publishMic(room).then(setMicEnabled);
                 } else {
                   room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
                 }
@@ -1418,7 +1440,7 @@ export function VideoConferenceComponent(props: {
             await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
           }
           if (props.userChoices.audioEnabled) {
-            await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+            setMicEnabled(await publishMic(room));
           }
           if (isToolbarMobileUserAgent()) {
             void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
@@ -1494,7 +1516,7 @@ export function VideoConferenceComponent(props: {
         intentionalDisconnectRef.current = false;
         setConnectError(null);
         if (wasMic) {
-          await room.localParticipant.setMicrophoneEnabled(true).catch(() => undefined);
+          setMicEnabled(await publishMic(room));
         }
         if (wasCam) {
           await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
