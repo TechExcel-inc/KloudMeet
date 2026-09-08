@@ -12,6 +12,10 @@ import {
 } from '@/lib/documentPipSupport';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import {
+  ParticipantRoleMenuProvider,
+  type ParticipantRoleActionsConfig,
+} from '@/lib/ParticipantRoleMenu';
+import {
   MeetingDocumentPipPanel,
   pipPillWindowSize,
   PIP_EXPANDED_H,
@@ -28,6 +32,8 @@ export interface UseMeetingDocumentPipOptions {
   labels: MeetingDocumentPipLabels;
   localName: string;
   mediaRestrictions: KloudTileMediaRestrictionProps;
+  /** 与主界面同一套 ⋯ 角色菜单配置 */
+  roleActions: ParticipantRoleActionsConfig;
   onToggleMic: () => void;
   onToggleCam: () => void;
   onLeave: () => void;
@@ -36,7 +42,7 @@ export interface UseMeetingDocumentPipOptions {
 }
 
 export interface MeetingDocumentPipApi {
-  open: (opts?: { sticky?: boolean }) => Promise<boolean>;
+  open: (opts?: { sticky?: boolean; minimized?: boolean }) => Promise<boolean>;
   close: () => void;
   isOpen: boolean;
 }
@@ -146,6 +152,7 @@ export function useMeetingDocumentPip({
   labels,
   localName,
   mediaRestrictions,
+  roleActions,
   onToggleMic,
   onToggleCam,
   onLeave,
@@ -167,6 +174,7 @@ export function useMeetingDocumentPip({
   const labelsRef = useRef(labels);
   const localNameRef = useRef(localName);
   const restrictionsRef = useRef(mediaRestrictions);
+  const roleActionsRef = useRef(roleActions);
   const onToggleMicRef = useRef(onToggleMic);
   const onToggleCamRef = useRef(onToggleCam);
   const onLeaveRef = useRef(onLeave);
@@ -180,6 +188,7 @@ export function useMeetingDocumentPip({
   labelsRef.current = labels;
   localNameRef.current = localName;
   restrictionsRef.current = mediaRestrictions;
+  roleActionsRef.current = roleActions;
   onToggleMicRef.current = onToggleMic;
   onToggleCamRef.current = onToggleCam;
   onLeaveRef.current = onLeave;
@@ -228,30 +237,39 @@ export function useMeetingDocumentPip({
 
     root.render(
       <RoomContext.Provider value={roomRef.current}>
-        <MeetingDocumentPipPanel
-          room={roomRef.current}
-          pipWindow={win}
-          micEnabled={micRef.current}
-          camEnabled={camRef.current}
-          labels={labelsRef.current}
-          localName={localNameRef.current}
-          mediaRestrictions={restrictionsRef.current}
-          initialMinimized={minimizedRef.current}
-          onMinimizedChange={(next) => {
-            minimizedRef.current = next;
-          }}
-          onToggleMic={() => onToggleMicRef.current()}
-          onToggleCam={() => onToggleCamRef.current()}
-          onLeave={() => {
-            onLeaveRef.current();
-            closePip();
-          }}
-        />
+        <ParticipantRoleMenuProvider
+          {...roleActionsRef.current}
+          doc={win.document}
+          registerBridge={false}
+        >
+          <MeetingDocumentPipPanel
+            room={roomRef.current}
+            pipWindow={win}
+            micEnabled={micRef.current}
+            camEnabled={camRef.current}
+            labels={labelsRef.current}
+            localName={localNameRef.current}
+            mediaRestrictions={restrictionsRef.current}
+            initialMinimized={minimizedRef.current}
+            onMinimizedChange={(next) => {
+              minimizedRef.current = next;
+            }}
+            onToggleMic={() => onToggleMicRef.current()}
+            onToggleCam={() => onToggleCamRef.current()}
+            onLeave={() => {
+              onLeaveRef.current();
+              closePip();
+            }}
+          />
+        </ParticipantRoleMenuProvider>
       </RoomContext.Provider>,
     );
   }).current;
 
-  const openPip = useRef(async (opts?: { sticky?: boolean }): Promise<boolean> => {
+  const openPip = useRef(async (opts?: {
+    sticky?: boolean;
+    minimized?: boolean;
+  }): Promise<boolean> => {
     if (!isWebDocumentPipEligible()) return false;
     if (opts?.sticky) stickyRef.current = true;
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
@@ -262,6 +280,8 @@ export function useMeetingDocumentPip({
 
     const api = getDocumentPictureInPicture();
     if (!api) return false;
+
+    if (opts?.minimized !== undefined) minimizedRef.current = opts.minimized;
 
     openingRef.current = true;
     try {
@@ -277,6 +297,7 @@ export function useMeetingDocumentPip({
       copyDocumentStyles(document, pipWindow.document);
 
       pipWindow.document.documentElement.setAttribute('data-lk-theme', 'default');
+      pipWindow.document.documentElement.setAttribute('data-kloud-pip', 'true');
       pipWindow.document.documentElement.style.height = '100%';
       pipWindow.document.body.style.margin = '0';
       pipWindow.document.body.style.height = '100%';
@@ -361,7 +382,7 @@ export function useMeetingDocumentPip({
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       renderPanel();
     }
-  }, [micEnabled, camEnabled, labels, localName, room, mediaRestrictions, renderPanel]);
+  }, [micEnabled, camEnabled, labels, localName, room, mediaRestrictions, roleActions, renderPanel]);
 
   useEffect(() => {
     if (!enabled || !isWebDocumentPipEligible()) {

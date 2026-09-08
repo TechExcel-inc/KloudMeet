@@ -81,8 +81,16 @@ function shouldShowRoleMenu(
 
 export function ParticipantRoleMenuProvider({
   children,
+  doc,
+  registerBridge = true,
   ...config
-}: ParticipantRoleActionsConfig & { children: React.ReactNode }) {
+}: ParticipantRoleActionsConfig & {
+  children: React.ReactNode;
+  /** 画中画等独立文档：事件与 DOM 查询须绑到该文档 */
+  doc?: Document;
+  /** 同时挂多个 Provider 时，只允许主文档那个占用全局 bridge */
+  registerBridge?: boolean;
+}) {
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
   const [showHostPicker, setShowHostPicker] = useState(false);
@@ -115,25 +123,27 @@ export function ParticipantRoleMenuProvider({
 
   useEffect(() => {
     if (!openMenuIdentity) return;
+    const d = doc ?? document;
     const close = (e: MouseEvent) => {
       const target = e.target as HTMLElement | null;
       if (target?.closest('.kloud-more-menu-anchor, .kloud-tile-more-menu-btn, .kloud-more-menu-portal')) return;
       closeMenu();
     };
-    document.addEventListener('mousedown', close, true);
-    return () => document.removeEventListener('mousedown', close, true);
-  }, [openMenuIdentity, closeMenu]);
+    d.addEventListener('mousedown', close, true);
+    return () => d.removeEventListener('mousedown', close, true);
+  }, [openMenuIdentity, closeMenu, doc]);
 
   useEffect(() => {
-    document.querySelectorAll('.kloud-tile-more-menu-wrap').forEach((el) => {
+    (doc ?? document).querySelectorAll('.kloud-tile-more-menu-wrap').forEach((el) => {
       const id = el.getAttribute('data-kloud-identity');
       const isOpen = id === openMenuIdentity;
       el.classList.toggle('open', isOpen);
       el.querySelector('.kloud-tile-more-menu-btn')?.classList.toggle('open', isOpen);
     });
-  }, [openMenuIdentity]);
+  }, [openMenuIdentity, doc]);
 
   useEffect(() => {
+    if (!registerBridge) return;
     participantRoleMenuBridge.current = {
       toggleMenu,
       getConfig: () => config,
@@ -141,7 +151,7 @@ export function ParticipantRoleMenuProvider({
     return () => {
       participantRoleMenuBridge.current = null;
     };
-  }, [toggleMenu, config]);
+  }, [toggleMenu, config, registerBridge]);
 
   const ctxValue = useMemo<ParticipantRoleMenuContextValue>(
     () => ({
@@ -453,7 +463,7 @@ function ParticipantRoleDropdownPortal({
   anchorRect: DOMRect;
 }) {
   const portalRef = useRef<HTMLDivElement>(null);
-  const [shiftX, setShiftX] = useState(0);
+  const [shift, setShift] = useState({ x: 0, y: 0 });
   const gap = 4;
   const margin = 8;
   const centerX = anchorRect.left + anchorRect.width / 2;
@@ -461,18 +471,22 @@ function ParticipantRoleDropdownPortal({
   useLayoutEffect(() => {
     const el = portalRef.current;
     if (!el) return;
+    const view = el.ownerDocument.defaultView ?? window;
     const rect = el.getBoundingClientRect();
-    let next = 0;
-    if (rect.left < margin) next = margin - rect.left;
-    else if (rect.right > window.innerWidth - margin) next = window.innerWidth - margin - rect.right;
-    setShiftX(next);
+    let x = 0;
+    if (rect.left < margin) x = margin - rect.left;
+    else if (rect.right > view.innerWidth - margin) x = view.innerWidth - margin - rect.right;
+    let y = 0;
+    if (rect.bottom > view.innerHeight - margin) y = view.innerHeight - margin - rect.bottom;
+    if (rect.top + y < margin) y = margin - rect.top;
+    setShift({ x, y });
   }, [anchorRect]);
 
   const style: React.CSSProperties = {
     position: 'fixed',
     top: anchorRect.bottom + gap,
     left: centerX,
-    transform: shiftX === 0 ? 'translateX(-50%)' : `translateX(calc(-50% + ${shiftX}px))`,
+    transform: `translate(calc(-50% + ${shift.x}px), ${shift.y}px)`,
     zIndex: 100000,
   };
 

@@ -25,7 +25,7 @@ import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
-import { useMeetingDocumentPip } from '@/lib/useMeetingDocumentPip';
+import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
@@ -68,6 +68,7 @@ import {
   Participant,
   RemoteTrack,
   RemoteTrackPublication,
+  TrackPublication,
   TrackPublishDefaults,
   VideoCaptureOptions,
   ScreenShareCaptureOptions,
@@ -213,12 +214,10 @@ function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
 }
 
 const MIC_PUBLISH_RETRY_MS = 800;
+const AUDIO_RESUBSCRIBE_DELAY_MS = 1500;
+const AUDIO_RESUBSCRIBE_MAX_TRIES = 2;
 
-/**
- * 刷新重进时旧页面可能还占着麦克风，入会首次 publish 容易报 NotReadableError。
- * 失败若被静默吞掉，工具栏仍显示已开麦，实际没有音轨，对方全程听不到。
- * 这里重试一次并回报麦克风是否真的在发声，由调用方据此校正 UI。
- */
+/** 发布麦克风，失败重试一次，返回是否真的在发声，供调用方校正 UI。 */
 async function publishMic(room: Room): Promise<boolean> {
   const lp = room.localParticipant;
   try {
@@ -281,8 +280,6 @@ export function VideoConferenceComponent(props: {
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
   const [screenShareActive, setScreenShareActive] = React.useState(false);
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
-  /** 共享方左侧竖直用户条（仅本人共享时） */
-  const [presenterLeftRailOpen, setPresenterLeftRailOpen] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
   const localMicRestrictedRef = React.useRef(false);
   const localCamRestrictedRef = React.useRef(false);
@@ -559,7 +556,6 @@ export function VideoConferenceComponent(props: {
     setScreenShareActive(false);
     setIsDrawingMode(false);
     setIsRemoteControlMode(false);
-    setPresenterLeftRailOpen(false);
     setScreenShareSurface('unknown');
     setSurfaceDetected(false);
     setActiveView((prev) => {
@@ -1677,6 +1673,49 @@ export function VideoConferenceComponent(props: {
     };
   }, [room]);
 
+  // ── 桌面端：远端音频订阅失败时补订，避免「只有他没声」卡死 ──
+  React.useEffect(() => {
+    if (isToolbarMobileUserAgent()) return;
+
+    const tries = new Map<string, number>();
+    const timers = new Map<string, number>();
+
+    const handleSubscriptionFailed = (trackSid: string, participant: RemoteParticipant) => {
+      const pub = participant.audioTrackPublications.get(trackSid);
+      if (!pub || pub.permissionStatus === TrackPublication.PermissionStatus.NotAllowed) return;
+      if (timers.has(trackSid)) return;
+      const tried = tries.get(trackSid) ?? 0;
+      if (tried >= AUDIO_RESUBSCRIBE_MAX_TRIES) return;
+      tries.set(trackSid, tried + 1);
+
+      timers.set(
+        trackSid,
+        window.setTimeout(() => {
+          timers.delete(trackSid);
+          if (room.state !== ConnectionState.Connected) return;
+          const target = participant.audioTrackPublications.get(trackSid);
+          if (!target || target.isSubscribed) return;
+          console.warn('[KloudMeet] Re-subscribing failed remote audio:', participant.identity);
+          target.setSubscribed(true);
+        }, AUDIO_RESUBSCRIBE_DELAY_MS),
+      );
+    };
+
+    const handleSubscribed = (_track: RemoteTrack, publication: RemoteTrackPublication) => {
+      tries.delete(publication.trackSid);
+    };
+
+    room.on(RoomEvent.TrackSubscriptionFailed, handleSubscriptionFailed);
+    room.on(RoomEvent.TrackSubscribed, handleSubscribed);
+    return () => {
+      room.off(RoomEvent.TrackSubscriptionFailed, handleSubscriptionFailed);
+      room.off(RoomEvent.TrackSubscribed, handleSubscribed);
+      timers.forEach((id) => window.clearTimeout(id));
+      timers.clear();
+      tries.clear();
+    };
+  }, [room]);
+
   // ── 移动端远程音频：与 Web 端 RoomAudioRenderer 对齐，但单独挂载并主动 startAudio ──
   // iOS/微信等在他人入会或轨道订阅后常需再次 startAudio，否则听不到对方声音。
   React.useEffect(() => {
@@ -2070,6 +2109,9 @@ export function VideoConferenceComponent(props: {
     };
   }, [room, handleError]);
 
+  /** documentPip 在本回调之后才创建，用 ref 转接 */
+  const documentPipOpenRef = React.useRef<MeetingDocumentPipApi['open'] | null>(null);
+
   const handleShareScreen = React.useCallback(() => {
     // Mobile browsers can't do screen share — show a warning toast
     if (isToolbarMobile) {
@@ -2108,6 +2150,13 @@ export function VideoConferenceComponent(props: {
       }
       console.error(e);
     });
+
+    // 开启共享时按底部画中画按钮的方式打开。
+    // requestWindow 与 getDisplayMedia 争用同一次用户手势，抢不到就静默放弃，
+    // 仍可由工具栏按钮或切走标签页时自动打开。
+    if (next) {
+      void documentPipOpenRef.current?.({ sticky: true });
+    }
   }, [
     screenShareActive,
     room,
@@ -2433,6 +2482,8 @@ export function VideoConferenceComponent(props: {
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
+  /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
+  const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
   const livedocHostBootstrappedRef = React.useRef(false);
 
@@ -4309,12 +4360,16 @@ export function VideoConferenceComponent(props: {
     labels: meetingDocumentPipLabels,
     localName: props.userChoices.username || t('toolbar.you'),
     mediaRestrictions: floatingMediaRestrictions,
+    roleActions: participantRoleActions,
     onToggleMic: handleToggleMic,
     onToggleCam: handleToggleCam,
     onLeave: handleLeaveWithSave,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
   });
+  documentPipOpenRef.current = documentPip.open;
+  /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
+  const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
@@ -5945,12 +6000,23 @@ export function VideoConferenceComponent(props: {
         >
           {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
           <div
-            style={{
-              display: shouldDisplayLiveDoc ? 'flex' : 'none',
-              flex: 1,
-              minWidth: 0,
-              overflow: 'hidden',
-            }}
+            style={
+              liveDocMirrorOverlay
+                ? {
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 50,
+                    display: 'flex',
+                    overflow: 'hidden',
+                    background: '#f5f5f5',
+                  }
+                : {
+                    display: shouldDisplayLiveDoc ? 'flex' : 'none',
+                    flex: 1,
+                    minWidth: 0,
+                    overflow: 'hidden',
+                  }
+            }
           >
             <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
               {shouldMountLiveDoc && (
@@ -6080,33 +6146,6 @@ export function VideoConferenceComponent(props: {
                   SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
                 />
               </VideoConferenceErrorBoundary>
-            )}
-
-            {/* Mirror-blocked: overlay LiveDoc on top of the entire screenshare view */}
-            {hasScreenShare && isMirrorBlocked && shouldMountLiveDoc && (
-              <div
-                className="mirror-livedoc-overlay"
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  zIndex: 50,
-                  overflow: 'auto',
-                  background: '#f5f5f5',
-                }}
-              >
-                <LiveDocView
-                  meetingRoomName={meetingRoomName}
-                  participantName={props.userChoices.username}
-                  livedocInstanceId={livedocInstanceId}
-                  hostInitError={livedocInitError}
-                  hostInitInProgress={livedocInitInProgress}
-                  isHost={isHost}
-                  livedocRole={livedocEmbedRole}
-                />
-              </div>
             )}
 
             {/* Safe preview badge (hidden during remote control for clear view) */}
@@ -6280,55 +6319,7 @@ export function VideoConferenceComponent(props: {
           </div>
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
-          {/* 共享方：左侧折叠箭头 + 竖直用户条（复用浮窗展开逻辑，观看方不渲染） */}
-          {screenShareActive && !isRecorderBot && !isToolbarMobile && (() => {
-            const allParticipants = [
-              { id: 'local', name: props.userChoices.username || t('toolbar.you') },
-              ...Array.from(room.remoteParticipants.values()).map((p) => ({
-                id: p.identity,
-                name: p.name || p.identity || '??',
-              })),
-            ];
-            allParticipants.sort((a, b) => {
-              const pA = a.id === 'local' ? room.localParticipant : room.remoteParticipants.get(a.id);
-              const pB = b.id === 'local' ? room.localParticipant : room.remoteParticipants.get(b.id);
-              return (pA?.joinedAt?.getTime() || 0) - (pB?.joinedAt?.getTime() || 0);
-            });
-            return (
-              <>
-                <button
-                  type="button"
-                  className={`presenter-left-rail-toggle${presenterLeftRailOpen ? ' open' : ''}`}
-                  onClick={() => setPresenterLeftRailOpen((v) => !v)}
-                  title={presenterLeftRailOpen ? t('toolbar.collapseWebcams') : t('toolbar.expandWebcams')}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="16" height="16">
-                    {presenterLeftRailOpen ? (
-                      <polyline points="15 18 9 12 15 6" />
-                    ) : (
-                      <polyline points="9 18 15 12 9 6" />
-                    )}
-                  </svg>
-                </button>
-                {presenterLeftRailOpen && (
-                  <div className="presenter-left-rail" aria-label={t('toolbar.nParticipants', { n: allParticipants.length })}>
-                    <div className="presenter-left-rail-inner floating-webcam-panel expanded">
-                      <LiveDocFloatingExpandedParticipantLayout
-                        room={room}
-                        hostIdentity={hostIdentity}
-                        cohostIdentities={cohostIdentities}
-                        sortedEntries={allParticipants}
-                        mediaRestrictions={floatingMediaRestrictions}
-                        orientation="vertical"
-                      />
-                    </div>
-                  </div>
-                )}
-              </>
-            );
-          })()}
-
-          {shouldShowFloatingWebcamPanel &&
+          {floatingWebcamPanelVisible &&
             (() => {
               const allParticipants = [
                 { id: 'local', name: props.userChoices.username || t('toolbar.you') },
@@ -6808,13 +6799,9 @@ export function VideoConferenceComponent(props: {
               .sky-meet-video-wrapper.presenter-sharing .lk-carousel {
                  display: none !important;
               }
-              /* Mirror-block: NUCLEAR — hide ALL video wrapper content, only show LiveDoc overlay */
+              /* Mirror-block: 隐藏视频区内容但保留布局，LiveDoc 由外层遮罩显示 */
               .sky-meet-video-wrapper.mirror-blocked {
                  visibility: hidden !important;
-              }
-              .sky-meet-video-wrapper.mirror-blocked .mirror-livedoc-overlay,
-              .sky-meet-video-wrapper.mirror-blocked .mirror-livedoc-overlay * {
-                 visibility: visible !important;
               }
               /* .screenshare-overlay-badge moved to static block for simpler transitions */
 
@@ -6950,99 +6937,6 @@ export function VideoConferenceComponent(props: {
             @media (max-width: 768px) {
                .screenshare-overlay-container { bottom: auto; top: 72px; left: 10px; }
                .sky-meet-video-wrapper.hide-mirror-video { width: 100% !important; min-width: 0 !important; flex: 0 0 120px !important; }
-            }
-
-            /* 共享方左侧竖直用户条（盖在 LiveDoc iframe 上方） */
-            .presenter-left-rail-toggle {
-               position: absolute;
-               top: 50%;
-               left: 0;
-               transform: translateY(-50%);
-               z-index: 420;
-               width: 28px;
-               height: 64px;
-               display: flex;
-               align-items: center;
-               justify-content: center;
-               background: rgba(30, 41, 59, 0.95);
-               color: rgba(255,255,255,0.85);
-               border: 1px solid rgba(255,255,255,0.12);
-               border-left: none;
-               border-radius: 0 8px 8px 0;
-               cursor: pointer;
-               box-shadow: 4px 0 12px rgba(0,0,0,0.45);
-               transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease;
-            }
-            .presenter-left-rail-toggle:hover {
-               background: rgba(51, 65, 85, 0.98);
-            }
-            .presenter-left-rail-toggle.open {
-               left: 156px;
-            }
-            .presenter-left-rail {
-               position: absolute;
-               top: 12px;
-               bottom: 12px;
-               left: 0;
-               z-index: 410;
-               width: 156px;
-               display: flex;
-               flex-direction: column;
-               pointer-events: auto;
-            }
-            .presenter-left-rail-inner {
-               flex: 1;
-               min-height: 0;
-               overflow-y: auto;
-               overflow-x: hidden;
-               border-left: none;
-               border-radius: 0 14px 14px 0;
-               padding: 8px;
-               box-shadow: 4px 0 24px rgba(0,0,0,0.4);
-               box-sizing: border-box;
-               width: 100%;
-               max-width: 100%;
-               min-width: 0;
-            }
-            .presenter-left-rail .floating-expanded-grid--vertical {
-               flex-direction: column;
-               align-items: stretch;
-               width: 100%;
-               max-width: 100%;
-               gap: 10px;
-               background: transparent;
-               border: none;
-               border-radius: 0;
-               padding: 0;
-               --floating-hero-col-w: 100%;
-               --floating-rest-tile: calc((100% - 8px) / 2);
-            }
-            .presenter-left-rail .floating-expanded-hero-column {
-               width: 100%;
-               align-self: stretch;
-            }
-            .presenter-left-rail .floating-expanded-rest-wrap--vertical {
-               width: 100%;
-               max-width: 100%;
-               min-width: 0;
-               max-height: none;
-               align-self: stretch;
-            }
-            .presenter-left-rail .floating-expanded-rest-grid-2 {
-               display: grid;
-               grid-template-columns: repeat(2, minmax(0, 1fr));
-               gap: 6px;
-               width: 100%;
-            }
-            .presenter-left-rail .floating-expanded-rest-grid-2 .floating-compact-slot {
-               width: 100%;
-               min-width: 0;
-            }
-            .presenter-left-rail .floating-grid-tile--hero .floating-grid-video {
-               aspect-ratio: 1 / 1;
-            }
-            .presenter-left-rail .floating-grid-tile--compact .floating-grid-video {
-               aspect-ratio: 1 / 1;
             }
 
             .floating-webcam-panel {
@@ -7904,6 +7798,26 @@ export function VideoConferenceComponent(props: {
               top: auto;
               right: auto;
               flex-shrink: 0;
+            }
+            /* 画中画窗口很窄，⋯ 下拉整体收紧且不能超出窗口宽度 */
+            [data-kloud-pip] .kloud-more-dropdown {
+              min-width: 0;
+              max-width: calc(100vw - 16px);
+              padding: 3px;
+              border-radius: 8px;
+            }
+            [data-kloud-pip] .kloud-more-dropdown-item {
+              white-space: normal;
+              text-align: left;
+              gap: 6px;
+              padding: 5px 7px;
+              font-size: 11px;
+              line-height: 1.25;
+              border-radius: 5px;
+            }
+            [data-kloud-pip] .kloud-more-dropdown-item svg {
+              width: 13px;
+              height: 13px;
             }
             /* Bottom bar: Mic / Cam / ⋯ only — name moves to center avatar */
             .lk-grid-layout-wrapper .lk-participant-metadata-item .lk-participant-name,
