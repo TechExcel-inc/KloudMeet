@@ -16,6 +16,7 @@
   min-height: 0;
   background: transparent;
   justify-content: flex-start;
+  overflow: visible;
 }
 
 .mini {
@@ -38,6 +39,7 @@
 }
 
 .pill {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -167,23 +169,55 @@
   z-index: 2;
 }
 
+.hoverCluster {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  z-index: 5;
+}
+
 .chevron {
   flex-shrink: 0;
-  width: 24px;
-  height: 24px;
+  position: relative;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
   border: none;
-  border-radius: 50%;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.7);
-  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .chevron:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.hoverHit {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  z-index: 4;
+}
+
+.miniControls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.miniControls .controlBtn {
+  width: 26px;
+  height: 26px;
 }
 
 .pillDismiss {
@@ -622,15 +656,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 12px 10px 14px;
+  gap: 8px;
+  padding: 8px 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
 }
 
 .controlBtn {
-  width: 44px;
-  height: 44px;
+  position: relative;
+  width: 36px;
+  height: 36px;
   border: none;
   border-radius: 50%;
   display: inline-flex;
@@ -665,6 +700,42 @@
 
 .leaveBtn:hover {
   background: #c5221f;
+}
+
+.shareBtnOn {
+  background: rgba(34, 197, 94, 0.32);
+}
+
+.shareBtnOn:hover {
+  background: rgba(34, 197, 94, 0.42);
+}
+
+.shareBtnConflict {
+  color: #fb923c;
+}
+
+.shareConflictDot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f97316;
+  animation: pipShareConflictPing 1.4s ease infinite;
+  pointer-events: none;
+}
+
+@keyframes pipShareConflictPing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.55);
+  }
+  60% {
+    box-shadow: 0 0 0 5px rgba(249, 115, 22, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+  }
 }
 
 .exitMenu {

@@ -204,6 +204,8 @@
   "meeting.documentPipRestore": "元に戻す",
   "meeting.documentPipSharing": "{name}が共有中",
   "meeting.documentPipShareBadge": "共有",
+  "meeting.pipSuggestMessage": "より良い会議体験のため、ピクチャーインピクチャーの利用をおすすめします。",
+  "meeting.pipSuggestEnable": "PiP をオン",
   "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "ミーティングを読み込み中…",
   "prejoin.entryLoadError": "会議情報の読み込みに失敗しました。ネットワークを確認して再試行してください。",

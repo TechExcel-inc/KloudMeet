@@ -1,0 +1,138 @@
+.root {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  z-index: 11800;
+  width: min(460px, calc(100vw - 32px));
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: pipSuggestIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.card {
+  pointer-events: auto;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  padding: 12px 10px 14px 12px;
+  border-radius: 16px;
+  background: #fff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    0 12px 32px rgba(15, 23, 42, 0.12);
+}
+
+.iconWrap {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+.icon {
+  width: 20px;
+  height: 20px;
+}
+
+.message {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: #334155;
+}
+
+.enableBtn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  color: #fff;
+  background: #7c3aed;
+  white-space: nowrap;
+  font-family: inherit;
+  box-shadow: 0 1px 2px rgba(91, 33, 182, 0.25);
+}
+
+.enableBtn:hover {
+  background: #6d28d9;
+}
+
+.enableBtn:active {
+  transform: translateY(0.5px);
+}
+
+.dismissBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #94a3b8;
+  background: transparent;
+  font-family: inherit;
+}
+
+.dismissBtn:hover {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.progress {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 0;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px 2px 0 0;
+  background: #f1f5f9;
+}
+
+.progressBar {
+  height: 100%;
+  width: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #a78bfa, #7c3aed);
+  transform-origin: left center;
+  animation: pipSuggestDrain 20s linear forwards;
+}
+
+@keyframes pipSuggestIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@keyframes pipSuggestDrain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}

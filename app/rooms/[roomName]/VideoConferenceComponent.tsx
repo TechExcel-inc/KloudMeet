@@ -27,6 +27,7 @@ import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
+import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
@@ -2546,6 +2547,9 @@ export function VideoConferenceComponent(props: {
       minimize: t('meeting.documentPipMinimize'),
       restore: t('meeting.documentPipRestore'),
       shareBadge: t('meeting.documentPipShareBadge'),
+      shareScreen: t('toolbar.shareScreen'),
+      stopSharing: t('toolbar.stopSharing'),
+      shareConflict: t('toolbar.shareConflictTitle'),
     }),
     [t],
   );
@@ -4371,6 +4375,9 @@ export function VideoConferenceComponent(props: {
     roleActions: participantRoleActions,
     onToggleMic: handleToggleMic,
     onToggleCam: handleToggleCam,
+    onToggleShare: handleShareScreen,
+    shareActive: screenShareActive,
+    hasScreenShare,
     onLeave: handleLeaveWithSave,
     onEndForAll: handleEndForAll,
     onMuteParticipant: handleMuteParticipant,
@@ -4379,6 +4386,40 @@ export function VideoConferenceComponent(props: {
   documentPipOpenRef.current = documentPip.open;
   /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
   const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
+
+  const [showPipSuggest, setShowPipSuggest] = React.useState(false);
+  const pipSuggestShownRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!documentPip.isOpen) return;
+    pipSuggestShownRef.current = true;
+    setShowPipSuggest(false);
+  }, [documentPip.isOpen]);
+
+  React.useEffect(() => {
+    if (pipSuggestShownRef.current) return;
+    if (!livekitConnected) return;
+    if (isDesktop || isToolbarMobile || isRecorderBot || meetingEndedByHost) return;
+    if (!isWebDocumentPipEligible()) return;
+    if (documentPip.isOpen) return;
+    if (showMeetingReadyModal) return;
+
+    const id = window.setTimeout(() => {
+      if (pipSuggestShownRef.current) return;
+      if (documentPip.isOpen) return;
+      pipSuggestShownRef.current = true;
+      setShowPipSuggest(true);
+    }, 1200);
+    return () => window.clearTimeout(id);
+  }, [
+    livekitConnected,
+    isDesktop,
+    isToolbarMobile,
+    isRecorderBot,
+    meetingEndedByHost,
+    documentPip.isOpen,
+    showMeetingReadyModal,
+  ]);
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
@@ -8537,6 +8578,14 @@ export function VideoConferenceComponent(props: {
         />
 
         {/* --- MODALS --- */}
+        <MeetingPipSuggestPrompt
+          visible={showPipSuggest}
+          onDismiss={() => setShowPipSuggest(false)}
+          onEnable={() => {
+            setShowPipSuggest(false);
+            void documentPip.open({ sticky: true });
+          }}
+        />
         {showMeetingReadyModal && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowMeetingReadyModal(false)}>
             <div className="kloud-modal" onMouseDown={e => e.stopPropagation()}>

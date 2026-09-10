@@ -35,6 +35,9 @@ export interface UseMeetingDocumentPipOptions {
   roleActions: ParticipantRoleActionsConfig;
   onToggleMic: () => void;
   onToggleCam: () => void;
+  onToggleShare: () => void;
+  shareActive: boolean;
+  hasScreenShare: boolean;
   onLeave: () => void;
   onEndForAll?: () => void;
   onMuteParticipant: (identity: string, disable: boolean) => void;
@@ -136,6 +139,9 @@ export function useMeetingDocumentPip({
   roleActions,
   onToggleMic,
   onToggleCam,
+  onToggleShare,
+  shareActive,
+  hasScreenShare,
   onLeave,
   onEndForAll,
   onMuteParticipant,
@@ -157,6 +163,9 @@ export function useMeetingDocumentPip({
   const roleActionsRef = useRef(roleActions);
   const onToggleMicRef = useRef(onToggleMic);
   const onToggleCamRef = useRef(onToggleCam);
+  const onToggleShareRef = useRef(onToggleShare);
+  const shareActiveRef = useRef(shareActive);
+  const hasScreenShareRef = useRef(hasScreenShare);
   const onLeaveRef = useRef(onLeave);
   const onEndForAllRef = useRef(onEndForAll);
   const onMuteRef = useRef(onMuteParticipant);
@@ -172,6 +181,9 @@ export function useMeetingDocumentPip({
   roleActionsRef.current = roleActions;
   onToggleMicRef.current = onToggleMic;
   onToggleCamRef.current = onToggleCam;
+  onToggleShareRef.current = onToggleShare;
+  shareActiveRef.current = shareActive;
+  hasScreenShareRef.current = hasScreenShare;
   onLeaveRef.current = onLeave;
   onEndForAllRef.current = onEndForAll;
   onMuteRef.current = onMuteParticipant;
@@ -232,6 +244,23 @@ export function useMeetingDocumentPip({
             }}
             onToggleMic={() => onToggleMicRef.current()}
             onToggleCam={() => onToggleCamRef.current()}
+            onToggleShare={() => {
+              if (!shareActiveRef.current) {
+                stickyRef.current = true;
+                const pip = pipWindowRef.current;
+                const opener = pip?.opener;
+                if (opener && !opener.closed) {
+                  try {
+                    opener.focus();
+                  } catch {
+                    // 部分环境不允许跨窗 focus
+                  }
+                }
+              }
+              onToggleShareRef.current();
+            }}
+            shareActive={shareActiveRef.current}
+            hasScreenShare={hasScreenShareRef.current}
             onLeave={() => {
               onLeaveRef.current();
               closePip();
@@ -340,7 +369,7 @@ export function useMeetingDocumentPip({
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       renderPanel();
     }
-  }, [micEnabled, camEnabled, labels, localName, room, mediaRestrictions, roleActions, renderPanel]);
+  }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, renderPanel]);
 
   useEffect(() => {
     if (!enabled || !isWebDocumentPipEligible()) {

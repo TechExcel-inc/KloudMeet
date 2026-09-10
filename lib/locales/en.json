@@ -218,6 +218,8 @@
   "meeting.documentPipRestore": "Restore",
   "meeting.documentPipSharing": "{name} is sharing",
   "meeting.documentPipShareBadge": "Sharing",
+  "meeting.pipSuggestMessage": "For a better meeting experience, we recommend turning on picture-in-picture.",
+  "meeting.pipSuggestEnable": "Turn on PiP",
   "toolbar.documentPip": "PiP",
   "prejoin.loadingMeeting": "Loading meeting…",
   "prejoin.entryLoadError": "Could not load meeting info. Check your network and try again.",

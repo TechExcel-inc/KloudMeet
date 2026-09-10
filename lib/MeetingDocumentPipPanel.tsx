@@ -20,6 +20,9 @@ export interface MeetingDocumentPipLabels {
   minimize: string;
   restore: string;
   shareBadge: string;
+  shareScreen: string;
+  stopSharing: string;
+  shareConflict: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -32,6 +35,9 @@ export interface MeetingDocumentPipPanelProps {
   mediaRestrictions: KloudTileMediaRestrictionProps;
   onToggleMic: () => void;
   onToggleCam: () => void;
+  onToggleShare: () => void;
+  shareActive: boolean;
+  hasScreenShare: boolean;
   onLeave: () => void;
   onEndForAll?: () => void;
   initialMinimized?: boolean;
@@ -57,6 +63,7 @@ const PILL_GAP = 6;
 const CHEVRON_SIZE = 24;
 const PREVIEW_GAP = 8;
 const PREVIEW_PAD = 6;
+const MINI_HOVER_W = 60;
 
 type RosterRow = {
   id: string;
@@ -86,16 +93,20 @@ function pillInnerSize(count: number): { w: number; h: number } {
   };
 }
 
+function pillWindowSize(count: number): { w: number; h: number } {
+  return { w: PIP_EXPANDED_W, h: pillInnerSize(count).h };
+}
+
 function miniWindowSize(count: number): { w: number; h: number } {
   const pill = pillInnerSize(count);
   return {
-    w: Math.max(pill.w, PREVIEW_TILE + PREVIEW_PAD * 2),
+    w: PIP_EXPANDED_W,
     h: pill.h + PREVIEW_GAP + PREVIEW_TILE + PREVIEW_PAD,
   };
 }
 
 export function pipPillWindowSize(count: number): { w: number; h: number } {
-  return pillInnerSize(count);
+  return pillWindowSize(count);
 }
 
 export function pipMiniWindowSize(count: number): { w: number; h: number } {
@@ -255,6 +266,9 @@ export function MeetingDocumentPipPanel({
   mediaRestrictions,
   onToggleMic,
   onToggleCam,
+  onToggleShare,
+  shareActive,
+  hasScreenShare,
   onLeave,
   onEndForAll,
   initialMinimized = false,
@@ -262,6 +276,7 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
+  const [miniControls, setMiniControls] = React.useState(false);
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
@@ -318,7 +333,16 @@ export function MeetingDocumentPipPanel({
 
   React.useEffect(() => {
     if (minimized) setExitMenuOpen(false);
+    else setMiniControls(false);
   }, [minimized]);
+
+  React.useEffect(() => {
+    if (!minimized) return;
+    const root = pipWindow.document.documentElement;
+    const hide = () => setMiniControls(false);
+    root.addEventListener('mouseleave', hide);
+    return () => root.removeEventListener('mouseleave', hide);
+  }, [minimized, pipWindow]);
 
   React.useEffect(() => {
     if (!exitMenuOpen) return;
@@ -381,7 +405,7 @@ export function MeetingDocumentPipPanel({
       onMinimizedChange?.(false);
       return;
     }
-    const pill = pillInnerSize(sortedEntries.length);
+    const pill = pillWindowSize(sortedEntries.length);
     resizePip(pipWindow, pill.w, pill.h);
     setMinimized(true);
     onMinimizedChange?.(true);
@@ -389,9 +413,29 @@ export function MeetingDocumentPipPanel({
 
   const hidePreview = () => {
     if (!previewId) return;
-    const pill = pillInnerSize(sortedEntries.length);
+    const pill = pillWindowSize(sortedEntries.length);
     resizePip(pipWindow, pill.w, pill.h);
     setPreviewId(null);
+  };
+
+  const showMiniControls = () => {
+    hidePreview();
+    setMiniControls(true);
+  };
+
+  const toggleMiniControls = () => {
+    if (miniControls) {
+      setMiniControls(false);
+      return;
+    }
+    showMiniControls();
+  };
+
+  const onChevronEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
+    const from = e.relatedTarget;
+    const cluster = e.currentTarget.parentElement;
+    if (from instanceof Node && cluster?.contains(from)) return;
+    toggleMiniControls();
   };
 
   const togglePreview = (id: string) => {
@@ -447,27 +491,142 @@ export function MeetingDocumentPipPanel({
     </div>
   ) : null;
 
+  const renderControls = (compact: boolean) => {
+    const icon = compact ? 14 : 16;
+    const shareConflict = hasScreenShare && !shareActive;
+    const shareLabel = shareConflict
+      ? labels.shareConflict
+      : shareActive
+        ? labels.stopSharing
+        : labels.shareScreen;
+    return (
+      <div className={compact ? styles.miniControls : styles.controls}>
+        <button
+          type="button"
+          className={`${styles.controlBtn} ${micEnabled ? '' : styles.controlOff}`}
+          onClick={onToggleMic}
+          aria-label={micEnabled ? labels.muteMic : labels.unmuteMic}
+          title={micEnabled ? labels.muteMic : labels.unmuteMic}
+        >
+          {micEnabled ? (
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
+              <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
+              <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
+              <path d="M4 4l16 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`${styles.controlBtn} ${camEnabled ? '' : styles.controlOff}`}
+          onClick={onToggleCam}
+          aria-label={camEnabled ? labels.turnOffCam : labels.turnOnCam}
+          title={camEnabled ? labels.turnOffCam : labels.turnOnCam}
+        >
+          {camEnabled ? (
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
+              <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
+              <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
+              <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+            </svg>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`${styles.controlBtn}${shareActive ? ` ${styles.shareBtnOn}` : ''}${shareConflict ? ` ${styles.shareBtnConflict}` : ''}`}
+          onClick={onToggleShare}
+          aria-label={shareLabel}
+          title={shareLabel}
+        >
+          {shareConflict ? <span className={styles.shareConflictDot} /> : null}
+          <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+          </svg>
+        </button>
+        <div ref={compact ? undefined : leaveWrapRef} className={styles.leaveWrap}>
+          {!compact && exitMenuOpen && canEndForAll ? (
+            <div className={styles.exitMenu} role="menu">
+              <button type="button" className={styles.exitMenuItem} role="menuitem" onClick={onLeave}>
+                {labels.leave}
+              </button>
+              <button
+                type="button"
+                className={`${styles.exitMenuItem} ${styles.exitMenuItemDanger}`}
+                role="menuitem"
+                onClick={onEndForAll}
+              >
+                {labels.endForEveryone}
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className={`${styles.controlBtn} ${styles.leaveBtn}`}
+            onClick={compact ? onLeave : handleLeaveClick}
+            aria-label={labels.leave}
+            title={labels.leave}
+            aria-haspopup={!compact && canEndForAll ? 'menu' : undefined}
+            aria-expanded={!compact && canEndForAll ? exitMenuOpen : undefined}
+          >
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
+              <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.69 7.46 7 12 7s8.66 1.69 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
       {minimized ? (
-        <div className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}>
+        <div
+          className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}
+          onMouseLeave={() => setMiniControls(false)}
+        >
           <div className={styles.pill}>
-            <div className={styles.stack}>
-              {collapsed.map((e, i) => {
-                const participant =
-                  e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
-                const z = { zIndex: COLLAPSED_MAX - i };
-                const mark = isSharer(e.id);
-                if (!participant) {
+            {miniControls ? (
+              renderControls(true)
+            ) : (
+              <div className={styles.stack}>
+                {collapsed.map((e, i) => {
+                  const participant =
+                    e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
+                  const z = { zIndex: COLLAPSED_MAX - i };
+                  const mark = isSharer(e.id);
+                  if (!participant) {
+                    return (
+                      <div key={e.id} className={styles.pillPerson} style={z}>
+                        <div
+                          className={styles.avatar}
+                          title={e.name}
+                          onClick={() => togglePreview(e.id)}
+                        >
+                          {getInitials(e.name || e.id || '?')}
+                        </div>
+                        {mark ? (
+                          <span className={styles.pillShareMark} aria-hidden>
+                            <ShareGlyph />
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  }
                   return (
                     <div key={e.id} className={styles.pillPerson} style={z}>
-                      <div
-                        className={styles.avatar}
-                        title={e.name}
+                      <LiveDocFloatingCollapsedAvatar
+                        participant={participant}
+                        name={e.name}
+                        style={{ zIndex: 1 }}
+                        selected={previewId === e.id}
                         onClick={() => togglePreview(e.id)}
-                      >
-                        {getInitials(e.name || e.id || '?')}
-                      </div>
+                      />
                       {mark ? (
                         <span className={styles.pillShareMark} aria-hidden>
                           <ShareGlyph />
@@ -475,48 +634,21 @@ export function MeetingDocumentPipPanel({
                       ) : null}
                     </div>
                   );
-                }
-                return (
-                  <div key={e.id} className={styles.pillPerson} style={z}>
-                    <LiveDocFloatingCollapsedAvatar
-                      participant={participant}
-                      name={e.name}
-                      style={{ zIndex: 1 }}
-                      selected={previewId === e.id}
-                      onClick={() => togglePreview(e.id)}
-                    />
-                    {mark ? (
-                      <span className={styles.pillShareMark} aria-hidden>
-                        <ShareGlyph />
-                      </span>
-                    ) : null}
-                  </div>
-                );
-              })}
-              {sortedEntries.length > COLLAPSED_MAX && (
-                <button
-                  type="button"
-                  className={`${styles.avatar} ${styles.overflow}`}
-                  onClick={handleMinimize}
-                  aria-label={labels.restore}
-                  title={labels.restore}
-                >
-                  +{sortedEntries.length - COLLAPSED_MAX}
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              className={styles.chevron}
-              onClick={handleMinimize}
-              aria-label={labels.restore}
-              title={labels.restore}
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {previewOpen ? (
+                })}
+                {sortedEntries.length > COLLAPSED_MAX && (
+                  <button
+                    type="button"
+                    className={`${styles.avatar} ${styles.overflow}`}
+                    onClick={handleMinimize}
+                    aria-label={labels.restore}
+                    title={labels.restore}
+                  >
+                    +{sortedEntries.length - COLLAPSED_MAX}
+                  </button>
+                )}
+              </div>
+            )}
+            {previewOpen && !miniControls ? (
               <button
                 type="button"
                 className={styles.pillDismiss}
@@ -524,6 +656,24 @@ export function MeetingDocumentPipPanel({
                 aria-label={labels.minimize}
               />
             ) : null}
+            <div className={styles.hoverCluster}>
+              <div
+                className={styles.hoverHit}
+                style={{ width: MINI_HOVER_W }}
+                onMouseEnter={showMiniControls}
+              />
+              <button
+                type="button"
+                className={styles.chevron}
+                onClick={handleMinimize}
+                onMouseEnter={onChevronEnter}
+                aria-label={labels.restore}
+              >
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            </div>
           </div>
           {previewOpen && previewParticipant && previewRow ? (
             <div
@@ -551,8 +701,8 @@ export function MeetingDocumentPipPanel({
                 aria-label={labels.minimize}
                 title={labels.minimize}
               >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M5 12h14" strokeLinecap="round" />
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <polyline points="6 15 12 9 18 15" />
                 </svg>
               </button>
             </div>
@@ -612,81 +762,7 @@ export function MeetingDocumentPipPanel({
             )}
           </div>
 
-          <div className={styles.controls}>
-            <button
-              type="button"
-              className={`${styles.controlBtn} ${micEnabled ? '' : styles.controlOff}`}
-              onClick={onToggleMic}
-              aria-label={micEnabled ? labels.muteMic : labels.unmuteMic}
-              title={micEnabled ? labels.muteMic : labels.unmuteMic}
-            >
-              {micEnabled ? (
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
-                  <path d="M4 4l16 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-                </svg>
-              )}
-            </button>
-
-            <button
-              type="button"
-              className={`${styles.controlBtn} ${camEnabled ? '' : styles.controlOff}`}
-              onClick={onToggleCam}
-              aria-label={camEnabled ? labels.turnOffCam : labels.turnOnCam}
-              title={camEnabled ? labels.turnOffCam : labels.turnOnCam}
-            >
-              {camEnabled ? (
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
-                  <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-                </svg>
-              )}
-            </button>
-
-            <div ref={leaveWrapRef} className={styles.leaveWrap}>
-              {exitMenuOpen && canEndForAll ? (
-                <div className={styles.exitMenu} role="menu">
-                  <button
-                    type="button"
-                    className={styles.exitMenuItem}
-                    role="menuitem"
-                    onClick={onLeave}
-                  >
-                    {labels.leave}
-                  </button>
-                  <button
-                    type="button"
-                    className={`${styles.exitMenuItem} ${styles.exitMenuItemDanger}`}
-                    role="menuitem"
-                    onClick={onEndForAll}
-                  >
-                    {labels.endForEveryone}
-                  </button>
-                </div>
-              ) : null}
-              <button
-                type="button"
-                className={`${styles.controlBtn} ${styles.leaveBtn}`}
-                onClick={handleLeaveClick}
-                aria-label={labels.leave}
-                title={labels.leave}
-                aria-haspopup={canEndForAll ? 'menu' : undefined}
-                aria-expanded={canEndForAll ? exitMenuOpen : undefined}
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                  <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.69 7.46 7 12 7s8.66 1.69 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          {renderControls(false)}
         </>
       )}
     </div>
