@@ -14,6 +14,7 @@ export interface MeetingDocumentPipLabels {
   turnOffCam: string;
   turnOnCam: string;
   leave: string;
+  endForEveryone: string;
   meeting: string;
   you: string;
   minimize: string;
@@ -32,6 +33,7 @@ export interface MeetingDocumentPipPanelProps {
   onToggleMic: () => void;
   onToggleCam: () => void;
   onLeave: () => void;
+  onEndForAll?: () => void;
   initialMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
 }
@@ -254,10 +256,13 @@ export function MeetingDocumentPipPanel({
   onToggleMic,
   onToggleCam,
   onLeave,
+  onEndForAll,
   initialMinimized = false,
   onMinimizedChange,
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
+  const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
+  const leaveWrapRef = React.useRef<HTMLDivElement>(null);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
@@ -306,6 +311,34 @@ export function MeetingDocumentPipPanel({
       pipWindow.removeEventListener('resize', sync);
     };
   }, [pipWindow, minimized]);
+
+  const canEndForAll = Boolean(
+    onEndForAll && (mediaRestrictions.isHost || mediaRestrictions.isCohost),
+  );
+
+  React.useEffect(() => {
+    if (minimized) setExitMenuOpen(false);
+  }, [minimized]);
+
+  React.useEffect(() => {
+    if (!exitMenuOpen) return;
+    const doc = pipWindow.document;
+    const onPointer = (e: Event) => {
+      const target = e.target as Node | null;
+      if (leaveWrapRef.current?.contains(target)) return;
+      setExitMenuOpen(false);
+    };
+    doc.addEventListener('pointerdown', onPointer, true);
+    return () => doc.removeEventListener('pointerdown', onPointer, true);
+  }, [exitMenuOpen, pipWindow]);
+
+  const handleLeaveClick = () => {
+    if (canEndForAll) {
+      setExitMenuOpen((open) => !open);
+      return;
+    }
+    onLeave();
+  };
 
   const sortedEntries = React.useMemo(() => {
     return [
@@ -618,17 +651,41 @@ export function MeetingDocumentPipPanel({
               )}
             </button>
 
-            <button
-              type="button"
-              className={`${styles.controlBtn} ${styles.leaveBtn}`}
-              onClick={onLeave}
-              aria-label={labels.leave}
-              title={labels.leave}
-            >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.69 7.46 7 12 7s8.66 1.69 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
-              </svg>
-            </button>
+            <div ref={leaveWrapRef} className={styles.leaveWrap}>
+              {exitMenuOpen && canEndForAll ? (
+                <div className={styles.exitMenu} role="menu">
+                  <button
+                    type="button"
+                    className={styles.exitMenuItem}
+                    role="menuitem"
+                    onClick={onLeave}
+                  >
+                    {labels.leave}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${styles.exitMenuItem} ${styles.exitMenuItemDanger}`}
+                    role="menuitem"
+                    onClick={onEndForAll}
+                  >
+                    {labels.endForEveryone}
+                  </button>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                className={`${styles.controlBtn} ${styles.leaveBtn}`}
+                onClick={handleLeaveClick}
+                aria-label={labels.leave}
+                title={labels.leave}
+                aria-haspopup={canEndForAll ? 'menu' : undefined}
+                aria-expanded={canEndForAll ? exitMenuOpen : undefined}
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.69 7.46 7 12 7s8.66 1.69 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+                </svg>
+              </button>
+            </div>
           </div>
         </>
       )}

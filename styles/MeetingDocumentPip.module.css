@@ -654,6 +654,10 @@
   background: #fad2cf;
 }
 
+.leaveWrap {
+  position: relative;
+}
+
 .leaveBtn {
   background: #d93025;
   color: #fff;
@@ -661,4 +665,44 @@
 
 .leaveBtn:hover {
   background: #c5221f;
+}
+
+.exitMenu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 168px;
+  max-width: min(220px, calc(100vw - 16px));
+  padding: 4px;
+  border-radius: 8px;
+  background: #2b2d31;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.exitMenuItem {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.exitMenuItem:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.exitMenuItemDanger {
+  color: #f87171;
 }

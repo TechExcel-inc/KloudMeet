@@ -246,6 +246,8 @@ export function VideoConferenceComponent(props: {
 }) {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
+  const tRef = React.useRef(t);
+  tRef.current = t;
   const router = useRouter();
   const searchParams = useSearchParams();
   const keyProvider = React.useMemo(() => new ExternalE2EEKeyProvider(), []);
@@ -765,12 +767,12 @@ export function VideoConferenceComponent(props: {
   const showScreenShareRestoreFailedToast = React.useCallback(() => {
     if (typeof document === 'undefined') return;
     const toastEl = document.createElement('div');
-    toastEl.textContent = t('meeting.screenShareRestoreFailed');
+    toastEl.textContent = tRef.current('meeting.screenShareRestoreFailed');
     toastEl.style.cssText =
       'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
     document.body.appendChild(toastEl);
     setTimeout(() => toastEl.remove(), 4000);
-  }, [t]);
+  }, []);
 
   /** Re-request getDisplayMedia after renew/reconnect when we were sharing. */
   const restoreScreenShareAfterReconnect = React.useCallback(async () => {
@@ -1287,19 +1289,24 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, handleUnexpectedDisconnected);
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
-      // Cancel any pending retry
-      if (connectRetryTimerRef.current) clearTimeout(connectRetryTimerRef.current);
-      if (hostEndedRedirectTimerRef.current) clearTimeout(hostEndedRedirectTimerRef.current);
-      // Properly disconnect when component unmounts (fixes StrictMode double-mount)
-      if (room.state !== ConnectionState.Disconnected) {
-        room.disconnect().catch(console.error);
-        connectAttemptedRef.current = false;
-      }
     };
     // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
     // whose values are only needed at initial connect time, not for re-connections.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, ensureConnectionDetails, enterSeriousFailureAndPragmaticRejoin]);
+
+  // Disconnect only when this Room instance is discarded (unmount / new Room).
+  // Must not run when connect-effect deps churn (e.g. locale → t → callback identity).
+  React.useEffect(() => {
+    return () => {
+      if (connectRetryTimerRef.current) clearTimeout(connectRetryTimerRef.current);
+      if (hostEndedRedirectTimerRef.current) clearTimeout(hostEndedRedirectTimerRef.current);
+      if (room.state !== ConnectionState.Disconnected) {
+        room.disconnect().catch(console.error);
+        connectAttemptedRef.current = false;
+      }
+    };
+  }, [room]);
 
   const lowPowerMode = useLowCPUOptimizer(room);
 
@@ -2533,6 +2540,7 @@ export function VideoConferenceComponent(props: {
       turnOffCam: t('toolbar.turnOffCam'),
       turnOnCam: t('toolbar.turnOnCam'),
       leave: t('toolbar.leaveTheMeeting'),
+      endForEveryone: t('toolbar.endForEveryone'),
       meeting: t('meeting.documentPipTitle'),
       you: t('toolbar.you'),
       minimize: t('meeting.documentPipMinimize'),
@@ -4364,6 +4372,7 @@ export function VideoConferenceComponent(props: {
     onToggleMic: handleToggleMic,
     onToggleCam: handleToggleCam,
     onLeave: handleLeaveWithSave,
+    onEndForAll: handleEndForAll,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
   });

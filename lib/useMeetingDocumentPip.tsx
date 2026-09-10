@@ -17,7 +17,6 @@ import {
 } from '@/lib/ParticipantRoleMenu';
 import {
   MeetingDocumentPipPanel,
-  pipPillWindowSize,
   PIP_EXPANDED_H,
   PIP_EXPANDED_W,
   type MeetingDocumentPipLabels,
@@ -37,6 +36,7 @@ export interface UseMeetingDocumentPipOptions {
   onToggleMic: () => void;
   onToggleCam: () => void;
   onLeave: () => void;
+  onEndForAll?: () => void;
   onMuteParticipant: (identity: string, disable: boolean) => void;
   onDisableParticipantVideo: (identity: string, disable: boolean) => void;
 }
@@ -45,25 +45,6 @@ export interface MeetingDocumentPipApi {
   open: (opts?: { sticky?: boolean; minimized?: boolean }) => Promise<boolean>;
   close: () => void;
   isOpen: boolean;
-}
-
-function pipScreenPos(win: Window): { x: number; y: number } | null {
-  try {
-    const x = win.screenX;
-    const y = win.screenY;
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    return { x, y };
-  } catch {
-    return null;
-  }
-}
-
-function movePip(win: Window, pos: { x: number; y: number }): void {
-  try {
-    win.moveTo(pos.x, pos.y);
-  } catch {
-    // Document PiP 可能拒绝 moveTo
-  }
 }
 
 function hasLiveCapture(room: Room): boolean {
@@ -156,6 +137,7 @@ export function useMeetingDocumentPip({
   onToggleMic,
   onToggleCam,
   onLeave,
+  onEndForAll,
   onMuteParticipant,
   onDisableParticipantVideo,
 }: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
@@ -166,8 +148,6 @@ export function useMeetingDocumentPip({
   const closingFromApiRef = useRef(false);
   const unbindClicksRef = useRef<(() => void) | null>(null);
   const stickyRef = useRef(false);
-  const stickyPosRef = useRef<{ x: number; y: number } | null>(null);
-  const stopTrackPosRef = useRef<(() => void) | null>(null);
 
   const micRef = useRef(micEnabled);
   const camRef = useRef(camEnabled);
@@ -178,6 +158,7 @@ export function useMeetingDocumentPip({
   const onToggleMicRef = useRef(onToggleMic);
   const onToggleCamRef = useRef(onToggleCam);
   const onLeaveRef = useRef(onLeave);
+  const onEndForAllRef = useRef(onEndForAll);
   const onMuteRef = useRef(onMuteParticipant);
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
   const roomRef = useRef(room);
@@ -192,18 +173,13 @@ export function useMeetingDocumentPip({
   onToggleMicRef.current = onToggleMic;
   onToggleCamRef.current = onToggleCam;
   onLeaveRef.current = onLeave;
+  onEndForAllRef.current = onEndForAll;
   onMuteRef.current = onMuteParticipant;
   onDisableVideoRef.current = onDisableParticipantVideo;
   roomRef.current = room;
 
   const closePip = useRef(() => {
     const win = pipWindowRef.current;
-    if (stickyRef.current && win && !win.closed) {
-      const pos = pipScreenPos(win);
-      if (pos) stickyPosRef.current = pos;
-    }
-    stopTrackPosRef.current?.();
-    stopTrackPosRef.current = null;
     stickyRef.current = false;
     setIsOpen(false);
     closingFromApiRef.current = true;
@@ -260,6 +236,14 @@ export function useMeetingDocumentPip({
               onLeaveRef.current();
               closePip();
             }}
+            onEndForAll={
+              onEndForAllRef.current
+                ? () => {
+                    onEndForAllRef.current?.();
+                    closePip();
+                  }
+                : undefined
+            }
           />
         </ParticipantRoleMenuProvider>
       </RoomContext.Provider>,
@@ -285,13 +269,11 @@ export function useMeetingDocumentPip({
 
     openingRef.current = true;
     try {
-      const count = 1 + roomRef.current.remoteParticipants.size;
-      const pill = pipPillWindowSize(count);
-      const pipWindow = await api.requestWindow(
-        minimizedRef.current
-          ? { width: pill.w, height: pill.h }
-          : { width: PIP_EXPANDED_W, height: PIP_EXPANDED_H },
-      );
+      // Chrome 只在 requestWindow 宽高与上次请求一致时复用位置；实际大小由上次关闭时的窗口缓存还原。
+      const pipWindow = await api.requestWindow({
+        width: PIP_EXPANDED_W,
+        height: PIP_EXPANDED_H,
+      });
 
       pipWindowRef.current = pipWindow;
       copyDocumentStyles(document, pipWindow.document);
@@ -323,33 +305,9 @@ export function useMeetingDocumentPip({
         () => onToggleCamRef.current(),
       );
 
-      if (stickyRef.current) {
-        const saved = stickyPosRef.current;
-        if (saved) movePip(pipWindow, saved);
-        const tick = () => {
-          if (!stickyRef.current) return;
-          const pos = pipScreenPos(pipWindow);
-          if (pos) stickyPosRef.current = pos;
-        };
-        const id = pipWindow.setInterval(tick, 400);
-        pipWindow.addEventListener('resize', tick);
-        pipWindow.addEventListener('blur', tick);
-        stopTrackPosRef.current = () => {
-          pipWindow.clearInterval(id);
-          pipWindow.removeEventListener('resize', tick);
-          pipWindow.removeEventListener('blur', tick);
-        };
-      }
-
       pipWindow.addEventListener('pagehide', () => {
         if (pipWindowRef.current !== pipWindow) return;
         const fromApi = closingFromApiRef.current;
-        if (stickyRef.current) {
-          const pos = pipScreenPos(pipWindow);
-          if (pos) stickyPosRef.current = pos;
-        }
-        stopTrackPosRef.current?.();
-        stopTrackPosRef.current = null;
         unbindClicksRef.current?.();
         unbindClicksRef.current = null;
         const root = rootRef.current;
