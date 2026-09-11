@@ -1,4 +1,5 @@
 .root {
+  position: relative;
   box-sizing: border-box;
   width: 100%;
   height: 100%;
@@ -33,6 +34,31 @@
   padding-bottom: 6px;
 }
 
+.copyToast {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+  transform: translate(-50%, -50%);
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.94);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.root:not(.rootMinimized) .copyToast {
+  top: auto;
+  bottom: 56px;
+  transform: translateX(-50%);
+}
+
 .miniOpen .pill {
   height: auto;
   flex-shrink: 0;
@@ -51,6 +77,7 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 20px;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  overflow: visible;
 }
 
 .stack {
@@ -213,6 +240,7 @@
   gap: 4px;
   min-width: 0;
   flex: 1;
+  overflow: visible;
 }
 
 .miniControls .controlBtn {
@@ -652,6 +680,8 @@
 }
 
 .controls {
+  position: relative;
+  z-index: 8;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -660,6 +690,7 @@
   padding: 8px 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
+  overflow: visible;
 }
 
 .controlBtn {
@@ -691,6 +722,76 @@
 
 .leaveWrap {
   position: relative;
+  z-index: 3;
+  overflow: visible;
+}
+
+.shareWrap {
+  position: relative;
+  z-index: 4;
+  overflow: visible;
+}
+
+.shareWrap:has(.shareMenuAbove),
+.shareWrap:has(.shareMenuCover),
+.leaveWrap:has(.shareMenuAbove) {
+  z-index: 12;
+}
+
+.shareMenuAbove,
+.shareMenuCover {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: 0;
+  padding: 4px;
+  border-radius: 8px;
+  background: #2b2d31;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.shareMenuAbove {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  z-index: 20;
+  transform: translateX(-50%);
+}
+
+.leaveMenu {
+  left: auto;
+  right: 0;
+  transform: none;
+}
+
+.shareMenuCover {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 21;
+  transform: translate(-50%, -50%);
+  min-width: 100%;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+}
+
+.shareMenuAbove .exitMenuItem {
+  white-space: nowrap;
+}
+
+.shareWrap .shareMenuAbove .exitMenuItem {
+  text-align: center;
+}
+
+.shareMenuCover .exitMenuItem {
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
 }
 
 .leaveBtn {
@@ -710,8 +811,22 @@
   background: rgba(34, 197, 94, 0.42);
 }
 
+.inviteBtn {
+  color: rgba(52, 211, 153, 0.95);
+}
+
+.inviteBtn:hover {
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.14);
+}
+
 .shareBtnConflict {
   color: #fb923c;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.shareBtnConflict:hover {
+  background: rgba(255, 255, 255, 0.36);
 }
 
 .shareConflictDot {
@@ -736,23 +851,6 @@
   100% {
     box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
   }
-}
-
-.exitMenu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 8px);
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 168px;
-  max-width: min(220px, calc(100vw - 16px));
-  padding: 4px;
-  border-radius: 8px;
-  background: #2b2d31;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .exitMenuItem {

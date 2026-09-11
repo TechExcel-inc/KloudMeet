@@ -19,8 +19,19 @@ import {
   MeetingDocumentPipPanel,
   PIP_EXPANDED_H,
   PIP_EXPANDED_W,
+  PIP_MINIMIZED_H,
   type MeetingDocumentPipLabels,
 } from '@/lib/MeetingDocumentPipPanel';
+
+function resizePipWindow(win: Window, innerW: number, innerH: number): void {
+  const chromeW = Math.max(0, win.outerWidth - win.innerWidth);
+  const chromeH = Math.max(0, win.outerHeight - win.innerHeight);
+  try {
+    win.resizeTo(Math.ceil(innerW + chromeW), Math.ceil(innerH + chromeH));
+  } catch {
+    // Document PiP 部分环境不允许 resizeTo
+  }
+}
 
 export interface UseMeetingDocumentPipOptions {
   /** 入会且允许时开启监听（网页端由调用方排除手机/Electron） */
@@ -172,6 +183,7 @@ export function useMeetingDocumentPip({
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
   const roomRef = useRef(room);
   const minimizedRef = useRef(false);
+  const openedInMeetingRef = useRef(false);
 
   micRef.current = micEnabled;
   camRef.current = camEnabled;
@@ -295,16 +307,25 @@ export function useMeetingDocumentPip({
     if (!api) return false;
 
     if (opts?.minimized !== undefined) minimizedRef.current = opts.minimized;
+    const firstInMeeting = !openedInMeetingRef.current;
+    if (firstInMeeting) minimizedRef.current = true;
 
     openingRef.current = true;
     try {
       // Chrome 只在 requestWindow 宽高与上次请求一致时复用位置；实际大小由上次关闭时的窗口缓存还原。
+      // 本场首次打开写死缩小态：宽 240、高 59.2。
       const pipWindow = await api.requestWindow({
         width: PIP_EXPANDED_W,
-        height: PIP_EXPANDED_H,
+        height: firstInMeeting ? PIP_MINIMIZED_H : PIP_EXPANDED_H,
       });
 
       pipWindowRef.current = pipWindow;
+      if (firstInMeeting) {
+        const fit = () => resizePipWindow(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
+        fit();
+        pipWindow.requestAnimationFrame(fit);
+        openedInMeetingRef.current = true;
+      }
       copyDocumentStyles(document, pipWindow.document);
 
       pipWindow.document.documentElement.setAttribute('data-lk-theme', 'default');

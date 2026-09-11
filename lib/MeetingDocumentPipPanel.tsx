@@ -23,6 +23,8 @@ export interface MeetingDocumentPipLabels {
   shareScreen: string;
   stopSharing: string;
   shareConflict: string;
+  invite: string;
+  inviteCopied: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -46,6 +48,7 @@ export interface MeetingDocumentPipPanelProps {
 
 export const PIP_EXPANDED_W = 240;
 export const PIP_EXPANDED_H = 420;
+export const PIP_MINIMIZED_H = 59.2;
 const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 64;
@@ -64,6 +67,7 @@ const CHEVRON_SIZE = 24;
 const PREVIEW_GAP = 8;
 const PREVIEW_PAD = 6;
 const MINI_HOVER_W = 60;
+const MINI_SHOW_DELAY_MS = 2000;
 
 type RosterRow = {
   id: string;
@@ -152,6 +156,38 @@ function focusOpener(win: Window): void {
   } catch {
     // 部分环境不允许跨窗 focus
   }
+}
+
+function copyMeetingLink(pipWindow: Window): Promise<boolean> {
+  let href = '';
+  try {
+    const opener = pipWindow.opener;
+    href = opener && !opener.closed ? opener.location.href : window.location.href;
+  } catch {
+    href = window.location.href;
+  }
+  if (!href) return Promise.resolve(false);
+  const clip = pipWindow.navigator.clipboard;
+  if (clip) {
+    return clip.writeText(href).then(
+      () => true,
+      () => copyWithExec(pipWindow.document, href),
+    );
+  }
+  return Promise.resolve(copyWithExec(pipWindow.document, href));
+}
+
+function copyWithExec(doc: Document, text: string): boolean {
+  const el = doc.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', '');
+  el.style.position = 'fixed';
+  el.style.left = '-9999px';
+  doc.body.appendChild(el);
+  el.select();
+  const ok = doc.execCommand('copy');
+  el.remove();
+  return ok;
 }
 
 function ShareGlyph() {
@@ -276,8 +312,13 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
+  const [shareMenuOpen, setShareMenuOpen] = React.useState(false);
   const [miniControls, setMiniControls] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+  const copiedTimerRef = React.useRef<number | null>(null);
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
+  const shareWrapRef = React.useRef<HTMLDivElement>(null);
+  const showMiniTimerRef = React.useRef<number | null>(null);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
@@ -327,41 +368,75 @@ export function MeetingDocumentPipPanel({
     };
   }, [pipWindow, minimized]);
 
+  React.useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current !== null) pipWindow.clearTimeout(copiedTimerRef.current);
+    };
+  }, [pipWindow]);
+
   const canEndForAll = Boolean(
     onEndForAll && (mediaRestrictions.isHost || mediaRestrictions.isCohost),
   );
 
   React.useEffect(() => {
-    if (minimized) setExitMenuOpen(false);
-    else setMiniControls(false);
+    if (minimized) {
+      setExitMenuOpen(false);
+      setShareMenuOpen(false);
+    } else {
+      clearShowMiniTimer();
+      setMiniControls(false);
+    }
   }, [minimized]);
 
   React.useEffect(() => {
     if (!minimized) return;
     const root = pipWindow.document.documentElement;
-    const hide = () => setMiniControls(false);
+    const hide = () => {
+      clearShowMiniTimer();
+      setShareMenuOpen(false);
+      setMiniControls(false);
+    };
     root.addEventListener('mouseleave', hide);
-    return () => root.removeEventListener('mouseleave', hide);
+    return () => {
+      root.removeEventListener('mouseleave', hide);
+      clearShowMiniTimer();
+    };
   }, [minimized, pipWindow]);
 
   React.useEffect(() => {
-    if (!exitMenuOpen) return;
+    if (!shareActive) setShareMenuOpen(false);
+  }, [shareActive]);
+
+  React.useEffect(() => {
+    if (!exitMenuOpen && !shareMenuOpen) return;
     const doc = pipWindow.document;
     const onPointer = (e: Event) => {
       const target = e.target as Node | null;
       if (leaveWrapRef.current?.contains(target)) return;
+      if (shareWrapRef.current?.contains(target)) return;
       setExitMenuOpen(false);
+      setShareMenuOpen(false);
     };
     doc.addEventListener('pointerdown', onPointer, true);
     return () => doc.removeEventListener('pointerdown', onPointer, true);
-  }, [exitMenuOpen, pipWindow]);
+  }, [exitMenuOpen, shareMenuOpen, pipWindow]);
 
   const handleLeaveClick = () => {
     if (canEndForAll) {
+      setShareMenuOpen(false);
       setExitMenuOpen((open) => !open);
       return;
     }
     onLeave();
+  };
+
+  const handleShareClick = () => {
+    if (shareActive) {
+      setExitMenuOpen(false);
+      setShareMenuOpen((open) => !open);
+      return;
+    }
+    onToggleShare();
   };
 
   const sortedEntries = React.useMemo(() => {
@@ -375,7 +450,6 @@ export function MeetingDocumentPipPanel({
   }, [room, localName, labels.you, rosterTick]);
 
   const share = React.useMemo(() => findShare(room), [room, rosterTick]);
-  const remoteShare = share && !share.local ? share : null;
 
   const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
   const compactCols = Math.max(
@@ -418,13 +492,29 @@ export function MeetingDocumentPipPanel({
     setPreviewId(null);
   };
 
+  const clearShowMiniTimer = () => {
+    if (showMiniTimerRef.current === null) return;
+    pipWindow.clearTimeout(showMiniTimerRef.current);
+    showMiniTimerRef.current = null;
+  };
+
   const showMiniControls = () => {
     hidePreview();
     setMiniControls(true);
   };
 
+  const armShowMiniControls = () => {
+    if (miniControls) return;
+    if (showMiniTimerRef.current !== null) return;
+    showMiniTimerRef.current = pipWindow.setTimeout(() => {
+      showMiniTimerRef.current = null;
+      showMiniControls();
+    }, MINI_SHOW_DELAY_MS);
+  };
+
   const toggleMiniControls = () => {
     if (miniControls) {
+      setShareMenuOpen(false);
       setMiniControls(false);
       return;
     }
@@ -456,7 +546,7 @@ export function MeetingDocumentPipPanel({
     : undefined;
   const previewOpen = Boolean(previewRow && previewParticipant);
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
-  const shareInHero = Boolean(remoteShare && rest.length === 0);
+  const shareInHero = Boolean(share && rest.length === 0);
   const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null);
 
   const backToTab = (e?: React.SyntheticEvent) => {
@@ -467,7 +557,7 @@ export function MeetingDocumentPipPanel({
   const personBadge = (id: string) =>
     isSharer(id) ? <span className={styles.shareBadge}>{labels.shareBadge}</span> : null;
 
-  const shareVideo = remoteShare ? (
+  const shareVideo = share ? (
     <div
       className={styles.shareTile}
       role="button"
@@ -483,13 +573,25 @@ export function MeetingDocumentPipPanel({
     >
       <VideoTrack
         trackRef={{
-          participant: remoteShare.participant,
+          participant: share.participant,
           source: Track.Source.ScreenShare,
-          publication: remoteShare.publication,
+          publication: share.publication,
         }}
       />
     </div>
   ) : null;
+
+  const flashCopied = () => {
+    void copyMeetingLink(pipWindow).then((ok) => {
+      if (!ok) return;
+      setCopied(true);
+      if (copiedTimerRef.current !== null) pipWindow.clearTimeout(copiedTimerRef.current);
+      copiedTimerRef.current = pipWindow.setTimeout(() => {
+        copiedTimerRef.current = null;
+        setCopied(false);
+      }, 1800);
+    });
+  };
 
   const renderControls = (compact: boolean) => {
     const icon = compact ? 14 : 16;
@@ -499,8 +601,9 @@ export function MeetingDocumentPipPanel({
       : shareActive
         ? labels.stopSharing
         : labels.shareScreen;
-    return (
-      <div className={compact ? styles.miniControls : styles.controls}>
+
+    const row = (
+      <>
         <button
           type="button"
           className={`${styles.controlBtn} ${micEnabled ? '' : styles.controlOff}`}
@@ -539,19 +642,52 @@ export function MeetingDocumentPipPanel({
         </button>
         <button
           type="button"
-          className={`${styles.controlBtn}${shareActive ? ` ${styles.shareBtnOn}` : ''}${shareConflict ? ` ${styles.shareBtnConflict}` : ''}`}
-          onClick={onToggleShare}
-          aria-label={shareLabel}
-          title={shareLabel}
+          className={`${styles.controlBtn} ${styles.inviteBtn}`}
+          aria-label={labels.invite}
+          title={labels.invite}
+          onClick={flashCopied}
         >
-          {shareConflict ? <span className={styles.shareConflictDot} /> : null}
           <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
           </svg>
         </button>
+        <div ref={shareWrapRef} className={styles.shareWrap}>
+          {shareMenuOpen && shareActive ? (
+            <div
+              className={compact ? styles.shareMenuCover : styles.shareMenuAbove}
+              role="menu"
+            >
+              <button
+                type="button"
+                className={styles.exitMenuItem}
+                role="menuitem"
+                onClick={() => {
+                  setShareMenuOpen(false);
+                  onToggleShare();
+                }}
+              >
+                {labels.stopSharing}
+              </button>
+            </div>
+          ) : null}
+          <button
+            type="button"
+            className={`${styles.controlBtn}${hasScreenShare ? ` ${styles.shareBtnConflict}` : ''}`}
+            onClick={handleShareClick}
+            aria-label={shareLabel}
+            title={shareLabel}
+            aria-haspopup={shareActive ? 'menu' : undefined}
+            aria-expanded={shareActive ? shareMenuOpen : undefined}
+          >
+            {hasScreenShare ? <span className={styles.shareConflictDot} /> : null}
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
         <div ref={compact ? undefined : leaveWrapRef} className={styles.leaveWrap}>
           {!compact && exitMenuOpen && canEndForAll ? (
-            <div className={styles.exitMenu} role="menu">
+            <div className={`${styles.shareMenuAbove} ${styles.leaveMenu}`} role="menu">
               <button type="button" className={styles.exitMenuItem} role="menuitem" onClick={onLeave}>
                 {labels.leave}
               </button>
@@ -559,7 +695,7 @@ export function MeetingDocumentPipPanel({
                 type="button"
                 className={`${styles.exitMenuItem} ${styles.exitMenuItemDanger}`}
                 role="menuitem"
-                onClick={onEndForAll}
+                onClick={() => onEndForAll?.()}
               >
                 {labels.endForEveryone}
               </button>
@@ -579,16 +715,30 @@ export function MeetingDocumentPipPanel({
             </svg>
           </button>
         </div>
-      </div>
+      </>
     );
+
+    if (compact) {
+      return <div className={styles.miniControls}>{row}</div>;
+    }
+    return <div className={styles.controls}>{row}</div>;
   };
 
   return (
     <div className={`${styles.root}${minimized ? ` ${styles.rootMinimized}` : ''}`}>
+      {copied ? (
+        <div className={styles.copyToast} role="status">
+          {labels.inviteCopied}
+        </div>
+      ) : null}
       {minimized ? (
         <div
           className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}
-          onMouseLeave={() => setMiniControls(false)}
+          onMouseLeave={() => {
+            clearShowMiniTimer();
+            setShareMenuOpen(false);
+            setMiniControls(false);
+          }}
         >
           <div className={styles.pill}>
             {miniControls ? (
@@ -660,7 +810,8 @@ export function MeetingDocumentPipPanel({
               <div
                 className={styles.hoverHit}
                 style={{ width: MINI_HOVER_W }}
-                onMouseEnter={showMiniControls}
+                onMouseEnter={armShowMiniControls}
+                onMouseLeave={clearShowMiniTimer}
               />
               <button
                 type="button"
@@ -735,7 +886,7 @@ export function MeetingDocumentPipPanel({
               {shareInHero && shareVideo ? <div className={styles.heroCell}>{shareVideo}</div> : null}
             </div>
 
-            {(rest.length > 0 || (remoteShare && !shareInHero)) && (
+            {(rest.length > 0 || (share && !shareInHero)) && (
               <div className={styles.compactGrid}>
                 {rest.map((e, i) => (
                   <div
@@ -751,7 +902,7 @@ export function MeetingDocumentPipPanel({
                     {personBadge(e.id)}
                   </div>
                 ))}
-                {remoteShare && !shareInHero && shareVideo ? (
+                {share && !shareInHero && shareVideo ? (
                   <div
                     className={`${styles.compactCell}${(rest.length + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
                   >

@@ -2550,6 +2550,8 @@ export function VideoConferenceComponent(props: {
       shareScreen: t('toolbar.shareScreen'),
       stopSharing: t('toolbar.stopSharing'),
       shareConflict: t('toolbar.shareConflictTitle'),
+      invite: t('toolbar.invite'),
+      inviteCopied: t('meeting.documentPipCopied'),
     }),
     [t],
   );

@@ -210,6 +210,7 @@
   "meeting.documentPipRestore": "还原",
   "meeting.documentPipSharing": "{name} 正在共享",
   "meeting.documentPipShareBadge": "共享",
+  "meeting.documentPipCopied": "链接已复制",
   "meeting.pipSuggestMessage": "为了更好的会议体验，建议开启画中画。",
   "meeting.pipSuggestEnable": "开启画中画",
   "toolbar.documentPip": "画中画",
