@@ -217,13 +217,17 @@ export function useCaptions({
         // 核心优化：直接利用广播方的默认翻译，省去重复调用的费用
         if (data.defaultTargetLanguage === myReadLanguage && data.defaultTranslatedText) {
            showCaptionsToGUI({ ...data, src: data.defaultTranslatedText });
-        } else if (speakLanguage !== myReadLanguage && speakLanguage !== 'auto') {
-           // 只有在没命中默认语言，且不等于原文语言的情况下，才去调接口翻译
+        } else if (
+          data.tp === 0 &&
+          speakLanguage !== myReadLanguage &&
+          speakLanguage !== 'auto'
+        ) {
+           // 仅最终句翻译；中间结果（tp=1）不打 /api/translate
            translateText(data.src, myReadLanguage, speakLanguage)
              .then(translated => showCaptionsToGUI({ ...data, src: translated }))
              .catch(() => showCaptionsToGUI(data));
         } else {
-           showCaptionsToGUI(data); // 读语言 = 说语言，直接显示原文
+           showCaptionsToGUI(data); // 读语言 = 说语言，或仍在识别中，直接显示原文
         }
       } catch (e) {
         console.error('[useCaptions] Failed to parse caption data', e);
@@ -311,15 +315,19 @@ export function useCaptions({
               defaultTargetLanguage,
             };
 
-            // 核心优化：广播方先进行一次默认目标语言的翻译，再广播给所有人
-            if (speakLanguage !== defaultTargetLanguage && speakLanguage !== 'auto') {
+            // 仅最终句翻译；中间结果（type=1）每个 delta 都会回调，不能打翻译接口
+            if (
+              d.type === 0 &&
+              speakLanguage !== defaultTargetLanguage &&
+              speakLanguage !== 'auto'
+            ) {
               try {
                 payload.defaultTranslatedText = await translateText(d.src, defaultTargetLanguage, speakLanguage);
               } catch (e) {
-                payload.defaultTranslatedText = d.src; // 失败则 fallback 到原文
+                payload.defaultTranslatedText = d.src;
               }
             } else {
-              payload.defaultTranslatedText = d.src; // 说的就是目标的语言
+              payload.defaultTranslatedText = d.src;
             }
 
             // 本端立即显示 (既然本端语言就是 defaultTargetLanguage，直接使用翻译好的结果)

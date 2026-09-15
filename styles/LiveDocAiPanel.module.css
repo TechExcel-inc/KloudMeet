@@ -504,55 +504,57 @@
 
 .transcriptBody {
   padding: 0 15px 18px;
-}
-
-.transcriptGroup {
-  margin-bottom: 18px;
-}
-
-.timeDivider {
-  margin: 14px 0;
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 11px;
-  text-align: center;
-}
-
-.speaker,
-.speakerSelf {
-  margin: 7px 2px 4px;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-}
-
-.speakerSelf {
-  text-align: right;
-}
-
-.messageWrap,
-.messageSelfWrap {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
 }
 
-.messageSelfWrap {
-  align-items: flex-end;
+.captionGroup {
+  margin-bottom: 16px;
 }
 
-.message,
-.messageSelf {
-  max-width: 82%;
-  margin-bottom: 4px;
-  padding: 8px 10px;
-  border-radius: 10px;
-  color: rgba(255, 255, 255, 0.88);
-  background: rgba(255, 255, 255, 0.08);
-  line-height: 1.45;
+.speakerRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.speakerAvatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: var(--speaker-bg, #6366f1);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.speakerLabel {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.speakerTime {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.38);
+  font-size: 11px;
+}
+
+.captionBubble {
+  margin: 0 0 4px 36px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 13px;
+  line-height: 1.5;
   word-break: break-word;
-}
-
-.messageSelf {
-  background: rgba(88, 86, 214, 0.5);
 }
 
 .nestedOverlay {

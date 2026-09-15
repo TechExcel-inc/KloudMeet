@@ -9,6 +9,7 @@ type DocumentPictureInPicture = {
     width?: number;
     height?: number;
     disallowReturnToOpener?: boolean;
+    preferInitialWindowPlacement?: boolean;
   }): Promise<Window>;
 };
 

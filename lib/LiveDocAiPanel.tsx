@@ -9,8 +9,8 @@ import type {
   LiveDocAiPickerKind,
   LiveDocAiState,
   LiveDocAiTab,
-  LiveDocAiTranscriptItem,
 } from './liveDocAiProtocol';
+import { authFetch } from './kloudSession';
 import styles from '../styles/LiveDocAiPanel.module.css';
 
 interface LiveDocAiBubblePos {
@@ -36,10 +36,30 @@ interface LiveDocAiPanelProps {
   onOpenDocument: (itemId: number) => void;
 }
 
-interface TranscriptGroup {
-  elapsed: string;
-  items: LiveDocAiTranscriptItem[];
+interface MeetingCaption {
+  id: string;
+  speakerName: string;
+  content: string;
+  offsetSeconds: number | null;
 }
+
+interface CaptionGroup {
+  speaker: string;
+  items: MeetingCaption[];
+}
+
+const SPEAKER_COLORS = [
+  '#6366f1',
+  '#ec4899',
+  '#14b8a6',
+  '#f59e0b',
+  '#8b5cf6',
+  '#10b981',
+  '#ef4444',
+  '#3b82f6',
+];
+
+const TRANSCRIPT_POLL_MS = 5000;
 
 const FILE_ACCEPT = [
   '.stl',
@@ -116,39 +136,126 @@ function isKloudPasteDocumentUrl(text: string): boolean {
   );
 }
 
-function toTimestamp(value: number | string): number {
-  if (typeof value === 'number') return value;
-  const numeric = Number(value);
-  if (Number.isFinite(numeric)) return numeric;
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+function getActiveMeetingId(): number | null {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('activeMeetingId') : null;
+    if (!raw) return null;
+    const id = Number.parseInt(raw, 10);
+    return Number.isNaN(id) ? null : id;
+  } catch {
+    return null;
+  }
 }
 
-function formatElapsed(milliseconds: number): string {
-  const seconds = Math.max(0, Math.floor(milliseconds / 1000));
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const remainingSeconds = seconds % 60;
-  const mm = String(minutes).padStart(2, '0');
-  const ss = String(remainingSeconds).padStart(2, '0');
-  return hours > 0 ? `${String(hours).padStart(2, '0')}:${mm}:${ss}` : `${mm}:${ss}`;
+function fmtOffset(secs: number): string {
+  if (secs < 0) return '--:--';
+  if (secs === 0) return '0:00';
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-function groupTranscript(items: LiveDocAiTranscriptItem[]): TranscriptGroup[] {
-  if (!items.length) return [];
-  const firstTimestamp = toTimestamp(items[0].captionTime);
-  let groupStart = firstTimestamp;
-  const groups: TranscriptGroup[] = [{ elapsed: '', items: [] }];
+function getInitials(name: string): string {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
 
+function speakerColor(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i += 1) h = name.charCodeAt(i) + ((h << 5) - h);
+  return SPEAKER_COLORS[Math.abs(h) % SPEAKER_COLORS.length];
+}
+
+function parseCaption(value: unknown): MeetingCaption | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  const content = typeof item.content === 'string' ? item.content.trim() : '';
+  if (!content) return null;
+  const speakerName = typeof item.speakerName === 'string' && item.speakerName.trim()
+    ? item.speakerName.trim()
+    : 'Unknown';
+  const offsetSeconds = typeof item.offsetSeconds === 'number' ? item.offsetSeconds : null;
+  const id = item.id;
+  return {
+    id: id === undefined || id === null ? `${speakerName}-${content}` : String(id),
+    speakerName,
+    content,
+    offsetSeconds,
+  };
+}
+
+function groupBySpeaker(items: MeetingCaption[]): CaptionGroup[] {
+  const groups: CaptionGroup[] = [];
   items.forEach((item) => {
-    const timestamp = toTimestamp(item.captionTime);
-    if (groups[groups.length - 1].items.length && timestamp - groupStart > 5 * 60 * 1000) {
-      groups.push({ elapsed: formatElapsed(timestamp - firstTimestamp), items: [] });
-      groupStart = timestamp;
+    const last = groups[groups.length - 1];
+    if (!last || last.speaker !== item.speakerName) {
+      groups.push({ speaker: item.speakerName, items: [item] });
+      return;
     }
-    groups[groups.length - 1].items.push(item);
+    last.items.push(item);
   });
   return groups;
+}
+
+function useMeetingCaptions(enabled: boolean): { items: MeetingCaption[]; loading: boolean } {
+  const [items, setItems] = React.useState<MeetingCaption[]>([]);
+  const [loading, setLoading] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false;
+    let first = true;
+    let seq = 0;
+
+    const load = async () => {
+      const meetingId = getActiveMeetingId();
+      if (!meetingId) {
+        if (!cancelled) {
+          setItems([]);
+          setLoading(false);
+        }
+        return;
+      }
+      const requestId = ++seq;
+      if (first) setLoading(true);
+      try {
+        const res = await authFetch(`/api/transcripts/${meetingId}`);
+        if (!res.ok) {
+          if (!cancelled && first && requestId === seq) setItems([]);
+          return;
+        }
+        const data: unknown = await res.json();
+        const raw =
+          data && typeof data === 'object' && Array.isArray((data as { captions?: unknown }).captions)
+            ? (data as { captions: unknown[] }).captions
+            : [];
+        if (cancelled || requestId !== seq) return;
+        setItems(raw.map(parseCaption).filter((row): row is MeetingCaption => row !== null));
+      } catch {
+        if (!cancelled && first && requestId === seq) setItems([]);
+      } finally {
+        if (!cancelled && requestId === seq) {
+          setLoading(false);
+          first = false;
+        }
+      }
+    };
+
+    void load();
+    const timer = window.setInterval(() => {
+      void load();
+    }, TRANSCRIPT_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [enabled]);
+
+  return { items, loading };
 }
 
 export function LiveDocAiPanel({
@@ -182,6 +289,9 @@ export function LiveDocAiPanel({
   const uploadMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const summaryMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const activeFileMenuBtnRef = React.useRef<HTMLButtonElement | null>(null);
+  const transcriptBodyRef = React.useRef<HTMLDivElement>(null);
+  const transcriptStickRef = React.useRef(true);
+  const meetingCaptions = useMeetingCaptions(open && activeTab === 'transcript');
 
   const runAction = React.useCallback(
     (action: string, payload?: Record<string, unknown>) => {
@@ -265,6 +375,13 @@ export function LiveDocAiPanel({
     setPendingOpenItemId(itemId);
   };
 
+  React.useLayoutEffect(() => {
+    if (!open || activeTab !== 'transcript') return;
+    const el = transcriptBodyRef.current;
+    if (!el || !transcriptStickRef.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [open, activeTab, meetingCaptions.items, transcriptSearch]);
+
   if (!open || typeof document === 'undefined') return null;
 
   const documents = state?.documents.items || [];
@@ -275,14 +392,13 @@ export function LiveDocAiPanel({
       )
     : documents;
 
-  const captions = state?.transcript.items || [];
   const normalizedTranscriptSearch = transcriptSearch.trim().toLowerCase();
   const filteredCaptions = normalizedTranscriptSearch
-    ? captions.filter((item) =>
-        item.captionContent.toLowerCase().includes(normalizedTranscriptSearch),
+    ? meetingCaptions.items.filter((item) =>
+        `${item.speakerName} ${item.content}`.toLowerCase().includes(normalizedTranscriptSearch),
       )
-    : captions;
-  const transcriptGroups = groupTranscript(filteredCaptions);
+    : meetingCaptions.items;
+  const captionGroups = groupBySpeaker(filteredCaptions);
 
   const handleLocalFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -388,7 +504,66 @@ export function LiveDocAiPanel({
           </div>
         )}
 
-        {!connected || !state ? (
+        {activeTab === 'transcript' ? (
+          <main className={styles.body}>
+            <div className={styles.transcriptTab}>
+              <div className={styles.searchBox}>
+                <span aria-hidden>⌕</span>
+                <input
+                  value={transcriptSearch}
+                  onChange={(event) => setTranscriptSearch(event.target.value)}
+                  placeholder={t('liveDocAi.searchTranscript')}
+                />
+                <button type="button" className={styles.moreButton} aria-label={t('liveDocAi.more')}>
+                  •••
+                </button>
+              </div>
+              <div
+                ref={transcriptBodyRef}
+                className={styles.transcriptBody}
+                onScroll={() => {
+                  const el = transcriptBodyRef.current;
+                  if (!el) return;
+                  transcriptStickRef.current =
+                    el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+                }}
+              >
+                {meetingCaptions.loading && !meetingCaptions.items.length && (
+                  <div className={styles.empty}>{t('liveDocAi.loadingTranscript')}</div>
+                )}
+                {!meetingCaptions.loading && !captionGroups.length && (
+                  <div className={styles.empty}>{t('liveDocAi.noTranscript')}</div>
+                )}
+                {captionGroups.map((group, groupIndex) => (
+                  <section
+                    key={`${group.speaker}-${groupIndex}`}
+                    className={styles.captionGroup}
+                  >
+                    <div className={styles.speakerRow}>
+                      <span
+                        className={styles.speakerAvatar}
+                        style={{ ['--speaker-bg' as string]: speakerColor(group.speaker) }}
+                      >
+                        {getInitials(group.speaker)}
+                      </span>
+                      <span className={styles.speakerLabel}>{group.speaker}</span>
+                      {group.items[0].offsetSeconds !== null && (
+                        <span className={styles.speakerTime}>
+                          {fmtOffset(group.items[0].offsetSeconds)}
+                        </span>
+                      )}
+                    </div>
+                    {group.items.map((row, rowIndex) => (
+                      <div key={`${row.id}-${rowIndex}`} className={styles.captionBubble}>
+                        {row.content}
+                      </div>
+                    ))}
+                  </section>
+                ))}
+              </div>
+            </div>
+          </main>
+        ) : !connected || !state ? (
           <div className={styles.loading} role="status" aria-live="polite">
             {!error && <span className={styles.loadingSpinner} aria-hidden />}
             <span>{t('liveDocAi.connecting')}</span>
@@ -582,63 +757,6 @@ export function LiveDocAiPanel({
                       </button>
                     </div>
                   )}
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'transcript' && (
-              <div className={styles.transcriptTab}>
-                <div className={styles.searchBox}>
-                  <span aria-hidden>⌕</span>
-                  <input
-                    value={transcriptSearch}
-                    onChange={(event) => setTranscriptSearch(event.target.value)}
-                    placeholder={t('liveDocAi.searchTranscript')}
-                  />
-                  <button type="button" className={styles.moreButton} aria-label={t('liveDocAi.more')}>
-                    •••
-                  </button>
-                </div>
-                <div className={styles.transcriptBody}>
-                  {state.transcript.error && (
-                    <div className={styles.empty}>{state.transcript.error}</div>
-                  )}
-                  {state.transcript.loading && (
-                    <div className={styles.empty}>{t('liveDocAi.loadingTranscript')}</div>
-                  )}
-                  {!state.transcript.error &&
-                    !state.transcript.loading &&
-                    !transcriptGroups.length && (
-                      <div className={styles.empty}>{t('liveDocAi.noTranscript')}</div>
-                    )}
-                  {transcriptGroups.map((group, groupIndex) => (
-                    <section
-                      key={`${group.elapsed}-${groupIndex}`}
-                      className={styles.transcriptGroup}
-                    >
-                      {groupIndex > 0 && <div className={styles.timeDivider}>{group.elapsed}</div>}
-                      {group.items.map((message, index) => {
-                        const isSelf = message.userName === state.transcript.selfUserName;
-                        const showSpeaker =
-                          index === 0 || message.userName !== group.items[index - 1].userName;
-                        return (
-                          <div
-                            key={`${message.id}-${index}`}
-                            className={isSelf ? styles.messageSelfWrap : styles.messageWrap}
-                          >
-                            {showSpeaker && (
-                              <div className={isSelf ? styles.speakerSelf : styles.speaker}>
-                                {message.userName}
-                              </div>
-                            )}
-                            <div className={isSelf ? styles.messageSelf : styles.message}>
-                              {message.captionContent}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </section>
-                  ))}
                 </div>
               </div>
             )}

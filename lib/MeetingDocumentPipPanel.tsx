@@ -409,7 +409,6 @@ export function MeetingDocumentPipPanel({
 
   React.useEffect(() => {
     if (!exitMenuOpen && !shareMenuOpen) return;
-    const doc = pipWindow.document;
     const onPointer = (e: Event) => {
       const target = e.target as Node | null;
       if (leaveWrapRef.current?.contains(target)) return;
@@ -417,9 +416,27 @@ export function MeetingDocumentPipPanel({
       setExitMenuOpen(false);
       setShareMenuOpen(false);
     };
-    doc.addEventListener('pointerdown', onPointer, true);
-    return () => doc.removeEventListener('pointerdown', onPointer, true);
+    pipWindow.document.addEventListener('pointerdown', onPointer, true);
+    return () => pipWindow.document.removeEventListener('pointerdown', onPointer, true);
   }, [exitMenuOpen, shareMenuOpen, pipWindow]);
+
+  React.useEffect(() => {
+    const hideMenus = () => {
+      setExitMenuOpen(false);
+      setShareMenuOpen(false);
+    };
+    pipWindow.addEventListener('blur', hideMenus);
+    const opener = pipWindow.opener;
+    if (opener && !opener.closed) {
+      opener.addEventListener('pointerdown', hideMenus, true);
+    }
+    return () => {
+      pipWindow.removeEventListener('blur', hideMenus);
+      if (opener && !opener.closed) {
+        opener.removeEventListener('pointerdown', hideMenus, true);
+      }
+    };
+  }, [pipWindow]);
 
   const handleLeaveClick = () => {
     if (canEndForAll) {
@@ -479,16 +496,14 @@ export function MeetingDocumentPipPanel({
       onMinimizedChange?.(false);
       return;
     }
-    const pill = pillWindowSize(sortedEntries.length);
-    resizePip(pipWindow, pill.w, pill.h);
+    resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
     setMinimized(true);
     onMinimizedChange?.(true);
   };
 
   const hidePreview = () => {
     if (!previewId) return;
-    const pill = pillWindowSize(sortedEntries.length);
-    resizePip(pipWindow, pill.w, pill.h);
+    resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
     setPreviewId(null);
   };
 
@@ -512,20 +527,14 @@ export function MeetingDocumentPipPanel({
     }, MINI_SHOW_DELAY_MS);
   };
 
-  const toggleMiniControls = () => {
-    if (miniControls) {
-      setShareMenuOpen(false);
-      setMiniControls(false);
-      return;
-    }
-    showMiniControls();
+  const hideMiniControls = () => {
+    setShareMenuOpen(false);
+    setMiniControls(false);
   };
 
-  const onChevronEnter = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const from = e.relatedTarget;
-    const cluster = e.currentTarget.parentElement;
-    if (from instanceof Node && cluster?.contains(from)) return;
-    toggleMiniControls();
+  const onChevronEnter = () => {
+    if (!miniControls) return;
+    hideMiniControls();
   };
 
   const togglePreview = (id: string) => {

@@ -4390,28 +4390,17 @@ export function VideoConferenceComponent(props: {
   const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
 
   const [showPipSuggest, setShowPipSuggest] = React.useState(false);
-  const pipSuggestShownRef = React.useRef(false);
 
   React.useEffect(() => {
-    if (!documentPip.isOpen) return;
-    pipSuggestShownRef.current = true;
-    setShowPipSuggest(false);
-  }, [documentPip.isOpen]);
-
-  React.useEffect(() => {
-    if (pipSuggestShownRef.current) return;
-    if (!livekitConnected) return;
-    if (isDesktop || isToolbarMobile || isRecorderBot || meetingEndedByHost) return;
-    if (!isWebDocumentPipEligible()) return;
-    if (documentPip.isOpen) return;
-    if (showMeetingReadyModal) return;
-
-    const id = window.setTimeout(() => {
-      if (pipSuggestShownRef.current) return;
-      if (documentPip.isOpen) return;
-      pipSuggestShownRef.current = true;
-      setShowPipSuggest(true);
-    }, 1200);
+    if (!livekitConnected || isDesktop || isToolbarMobile || isRecorderBot || meetingEndedByHost) {
+      setShowPipSuggest(false);
+      return;
+    }
+    if (!isWebDocumentPipEligible() || documentPip.isOpen || showMeetingReadyModal) {
+      setShowPipSuggest(false);
+      return;
+    }
+    const id = window.setTimeout(() => setShowPipSuggest(true), 1200);
     return () => window.clearTimeout(id);
   }, [
     livekitConnected,
@@ -8582,9 +8571,8 @@ export function VideoConferenceComponent(props: {
         {/* --- MODALS --- */}
         <MeetingPipSuggestPrompt
           visible={showPipSuggest}
-          onDismiss={() => setShowPipSuggest(false)}
+          attendeeCount={1 + room.remoteParticipants.size}
           onEnable={() => {
-            setShowPipSuggest(false);
             void documentPip.open({ sticky: true });
           }}
         />

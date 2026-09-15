@@ -134,6 +134,28 @@ export function ParticipantRoleMenuProvider({
   }, [openMenuIdentity, closeMenu, doc]);
 
   useEffect(() => {
+    if (!doc) return;
+    const win = doc.defaultView;
+    if (!win) return;
+    const hide = () => {
+      closeMenu();
+      setShowHostPicker(false);
+      setConfirmHostId(null);
+    };
+    win.addEventListener('blur', hide);
+    const opener = win.opener;
+    if (opener && !opener.closed) {
+      opener.addEventListener('pointerdown', hide, true);
+    }
+    return () => {
+      win.removeEventListener('blur', hide);
+      if (opener && !opener.closed) {
+        opener.removeEventListener('pointerdown', hide, true);
+      }
+    };
+  }, [closeMenu, doc]);
+
+  useEffect(() => {
     (doc ?? document).querySelectorAll('.kloud-tile-more-menu-wrap').forEach((el) => {
       const id = el.getAttribute('data-kloud-identity');
       const isOpen = id === openMenuIdentity;

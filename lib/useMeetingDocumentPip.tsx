@@ -17,20 +17,36 @@ import {
 } from '@/lib/ParticipantRoleMenu';
 import {
   MeetingDocumentPipPanel,
-  PIP_EXPANDED_H,
   PIP_EXPANDED_W,
   PIP_MINIMIZED_H,
   type MeetingDocumentPipLabels,
 } from '@/lib/MeetingDocumentPipPanel';
 
-function resizePipWindow(win: Window, innerW: number, innerH: number): void {
-  const chromeW = Math.max(0, win.outerWidth - win.innerWidth);
-  const chromeH = Math.max(0, win.outerHeight - win.innerHeight);
+function sessionFlag(key: string): boolean | null {
   try {
-    win.resizeTo(Math.ceil(innerW + chromeW), Math.ceil(innerH + chromeH));
+    const raw = sessionStorage.getItem(key);
+    if (raw === '1') return true;
+    if (raw === '0') return false;
+    return null;
   } catch {
-    // Document PiP 部分环境不允许 resizeTo
+    return null;
   }
+}
+
+function writeSessionFlag(key: string, value: boolean): void {
+  try {
+    sessionStorage.setItem(key, value ? '1' : '0');
+  } catch {
+    // 无存储权限时跳过
+  }
+}
+
+function pipOpenedKey(roomName: string): string {
+  return `skymeet:doc-pip:${roomName}:opened`;
+}
+
+function pipMiniKey(roomName: string): string {
+  return `skymeet:doc-pip:${roomName}:mini`;
 }
 
 export interface UseMeetingDocumentPipOptions {
@@ -253,6 +269,7 @@ export function useMeetingDocumentPip({
             initialMinimized={minimizedRef.current}
             onMinimizedChange={(next) => {
               minimizedRef.current = next;
+              writeSessionFlag(pipMiniKey(roomRef.current.name), next);
             }}
             onToggleMic={() => onToggleMicRef.current()}
             onToggleCam={() => onToggleCamRef.current()}
@@ -306,26 +323,33 @@ export function useMeetingDocumentPip({
     const api = getDocumentPictureInPicture();
     if (!api) return false;
 
-    if (opts?.minimized !== undefined) minimizedRef.current = opts.minimized;
-    const firstInMeeting = !openedInMeetingRef.current;
-    if (firstInMeeting) minimizedRef.current = true;
+    const roomName = roomRef.current.name;
+    if (opts?.minimized !== undefined) {
+      minimizedRef.current = opts.minimized;
+    } else if (sessionFlag(pipOpenedKey(roomName)) !== true) {
+      minimizedRef.current = true;
+    } else {
+      const storedMini = sessionFlag(pipMiniKey(roomName));
+      if (storedMini !== null) minimizedRef.current = storedMini;
+    }
+    const firstOpen = sessionFlag(pipOpenedKey(roomName)) !== true && !openedInMeetingRef.current;
 
     openingRef.current = true;
     try {
-      // Chrome 只在 requestWindow 宽高与上次请求一致时复用位置；实际大小由上次关闭时的窗口缓存还原。
-      // 本场首次打开写死缩小态：宽 240、高 59.2。
-      const pipWindow = await api.requestWindow({
-        width: PIP_EXPANDED_W,
-        height: firstInMeeting ? PIP_MINIMIZED_H : PIP_EXPANDED_H,
-      });
+      // Chrome 用 requestWindow 的宽高当位置缓存键，变了就丢；moveTo 禁用，打开后 resizeTo 也常无效。
+      // 本场第一次：按缩小固定高度 59.2 打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
+      const pipWindow = firstOpen
+        ? await api.requestWindow({
+            width: PIP_EXPANDED_W,
+            height: PIP_MINIMIZED_H,
+            preferInitialWindowPlacement: true,
+          })
+        : await api.requestWindow();
 
       pipWindowRef.current = pipWindow;
-      if (firstInMeeting) {
-        const fit = () => resizePipWindow(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
-        fit();
-        pipWindow.requestAnimationFrame(fit);
-        openedInMeetingRef.current = true;
-      }
+      openedInMeetingRef.current = true;
+      writeSessionFlag(pipOpenedKey(roomName), true);
+      writeSessionFlag(pipMiniKey(roomName), minimizedRef.current);
       copyDocumentStyles(document, pipWindow.document);
 
       pipWindow.document.documentElement.setAttribute('data-lk-theme', 'default');
