@@ -4527,6 +4527,7 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (!floatingCollapsedPreviewId) return;
     if (floatingCollapsedPreviewId === 'local') return;
+    if (floatingCollapsedPreviewId === '__share__') return;
     if (!room.remoteParticipants.has(floatingCollapsedPreviewId)) {
       setFloatingCollapsedPreviewId(null);
     }
@@ -6455,6 +6456,18 @@ export function VideoConferenceComponent(props: {
                             +{overflow}
                           </div>
                         )}
+                        {hasScreenShare && screenShareTracks[0] ? (
+                          <div
+                            className={`floating-share-avatar${
+                              floatingCollapsedPreviewId === '__share__' ? ' selected' : ''
+                            }`}
+                            style={{ zIndex: 0 }}
+                            title={t('meeting.documentPipShareBadge')}
+                            onMouseEnter={() => handleCollapsedAvatarHover('__share__')}
+                          >
+                            <VideoTrack trackRef={screenShareTracks[0]} />
+                          </div>
+                        ) : null}
                       </div>
                       <button
                         className="floating-chevron-btn"
@@ -6479,6 +6492,17 @@ export function VideoConferenceComponent(props: {
                       </button>
                     </div>
                     {floatingCollapsedPreviewId && (() => {
+                      if (floatingCollapsedPreviewId === '__share__' && screenShareTracks[0]) {
+                        return (
+                          <div
+                            className="floating-collapsed-preview floating-collapsed-preview--share"
+                            onMouseDown={(e) => e.stopPropagation()}
+                            onTouchStart={(e) => e.stopPropagation()}
+                          >
+                            <VideoTrack trackRef={screenShareTracks[0]} />
+                          </div>
+                        );
+                      }
                       const previewEntry = allParticipants.find((p) => p.id === floatingCollapsedPreviewId);
                       if (!previewEntry) return null;
                       const previewParticipant =
@@ -7093,6 +7117,49 @@ export function VideoConferenceComponent(props: {
                font-size: 10px;
                color: rgba(255,255,255,0.8);
                border-color: rgba(255,255,255,0.2);
+            }
+            .floating-stacked-avatars .floating-share-avatar {
+               margin-left: -8px;
+               width: 30px;
+               height: 30px;
+               border-radius: 50%;
+               overflow: hidden;
+               flex-shrink: 0;
+               background: #0b0c0e;
+               border: 2px solid rgba(15, 23, 42, 0.9);
+               box-sizing: border-box;
+               cursor: pointer;
+            }
+            .floating-stacked-avatars .floating-share-avatar:hover {
+               transform: scale(1.15);
+            }
+            .floating-stacked-avatars .floating-share-avatar.selected {
+               border-color: #60a5fa;
+               box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.45);
+            }
+            .floating-stacked-avatars .floating-share-avatar div,
+            .floating-stacked-avatars .floating-share-avatar video {
+               width: 100%;
+               height: 100%;
+            }
+            .floating-stacked-avatars .floating-share-avatar video {
+               object-fit: cover;
+               display: block;
+            }
+            .floating-collapsed-preview--share {
+               aspect-ratio: 1 / 1;
+               border-radius: 12px;
+               overflow: hidden;
+               background: #0b0c0e;
+            }
+            .floating-collapsed-preview--share div,
+            .floating-collapsed-preview--share video {
+               width: 100%;
+               height: 100%;
+            }
+            .floating-collapsed-preview--share video {
+               object-fit: cover;
+               display: block;
             }
             .floating-chevron-btn {
                background: rgba(255,255,255,0.1);

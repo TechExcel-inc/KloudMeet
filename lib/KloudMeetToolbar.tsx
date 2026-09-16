@@ -235,6 +235,7 @@ export function KloudMeetToolbar({
   const attendeeOpenRef = useRef(attendeeOpen);
   attendeeOpenRef.current = attendeeOpen;
   const lastPointerClientYRef = useRef(0);
+  const lastPointerClientXRef = useRef(0);
   const desktopAutoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 父页自行隐藏底栏（如离开 3s）后，与插件 chrome 状态可能短暂不同步 */
   const parentOnlyHiddenRef = useRef(false);
@@ -391,10 +392,14 @@ export function KloudMeetToolbar({
     const trackPointerY = (e: PointerEvent | TouchEvent | MouseEvent) => {
       if ('clientY' in e && typeof e.clientY === 'number') {
         lastPointerClientYRef.current = e.clientY;
+        if ('clientX' in e && typeof e.clientX === 'number') {
+          lastPointerClientXRef.current = e.clientX;
+        }
         return;
       }
       if ('touches' in e && e.touches[0]) {
         lastPointerClientYRef.current = e.touches[0].clientY;
+        lastPointerClientXRef.current = e.touches[0].clientX;
       }
     };
     window.addEventListener('pointerdown', trackPointerY, true);
@@ -404,6 +409,32 @@ export function KloudMeetToolbar({
       window.removeEventListener('touchstart', trackPointerY, true);
     };
   }, []);
+
+  useEffect(() => {
+    if (isMobile) return;
+    const onMove = (e: MouseEvent) => {
+      lastPointerClientXRef.current = e.clientX;
+      lastPointerClientYRef.current = e.clientY;
+    };
+    const onFocus = () => {
+      if (visibleRef.current || syncPlayerActiveRef.current) return;
+      const el = document.elementFromPoint(
+        lastPointerClientXRef.current,
+        lastPointerClientYRef.current,
+      );
+      if (!el) return;
+      if (el.closest(`.${styles.hoverZone}`) || el.closest(`.${styles.chevronHandle}`)) {
+        parentOnlyHiddenRef.current = false;
+        setVisible(true);
+      }
+    };
+    window.addEventListener('mousemove', onMove, { passive: true });
+    window.addEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('focus', onFocus);
+    };
+  }, [isMobile]);
 
   useEffect(() => {
     try {

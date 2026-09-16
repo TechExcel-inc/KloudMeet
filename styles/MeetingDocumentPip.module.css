@@ -104,6 +104,35 @@
   margin-left: 0;
 }
 
+.pillShareTile {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #0b0c0e;
+  border: 2px solid rgba(15, 23, 42, 0.9);
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.pillShareTile :global(div),
+.pillShareTile :global(video) {
+  width: 100%;
+  height: 100%;
+}
+
+.pillShareTile :global(video) {
+  object-fit: cover;
+  display: block;
+}
+
+.pillShareTileSelected {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.45);
+}
+
 .stack .pillPerson :global(.floating-avatar-shell),
 .stack .pillPerson .avatar {
   margin-left: 0;
@@ -278,6 +307,24 @@
   position: relative;
   overflow: hidden;
   padding: 0 6px;
+}
+
+.previewWrapShare .shareTile {
+  width: var(--pip-preview-tile, 108px);
+  height: var(--pip-preview-tile, 108px);
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.previewWrapShare .shareTile :global(div),
+.previewWrapShare .shareTile :global(video) {
+  width: 100%;
+  height: 100%;
+}
+
+.previewWrapShare .shareTile :global(video) {
+  object-fit: contain;
 }
 
 .previewWrap :global(.floating-grid-tile),

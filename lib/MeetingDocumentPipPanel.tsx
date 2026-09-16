@@ -58,6 +58,7 @@ const COMPACT_MIN = 48;
 const COMPACT_COLS_MIN = 4;
 const COMPACT_COLS_MAX = 8;
 const COLLAPSED_MAX = 5;
+const SHARE_PREVIEW_ID = '__share__';
 const AVATAR_SIZE = 30;
 const AVATAR_STEP = 22;
 const PILL_PAD_X = 8;
@@ -404,6 +405,14 @@ export function MeetingDocumentPipPanel({
   }, [minimized, pipWindow]);
 
   React.useEffect(() => {
+    const restore = () => focusOpener(pipWindow);
+    pipWindow.document.documentElement.addEventListener('mouseleave', restore);
+    return () => {
+      pipWindow.document.documentElement.removeEventListener('mouseleave', restore);
+    };
+  }, [pipWindow]);
+
+  React.useEffect(() => {
     if (!shareActive) setShareMenuOpen(false);
   }, [shareActive]);
 
@@ -514,7 +523,6 @@ export function MeetingDocumentPipPanel({
   };
 
   const showMiniControls = () => {
-    hidePreview();
     setMiniControls(true);
   };
 
@@ -553,7 +561,8 @@ export function MeetingDocumentPipPanel({
       ? room.localParticipant
       : room.remoteParticipants.get(previewRow.id)
     : undefined;
-  const previewOpen = Boolean(previewRow && previewParticipant);
+  const sharePreviewOpen = previewId === SHARE_PREVIEW_ID && Boolean(share);
+  const previewOpen = Boolean(previewRow && previewParticipant) || sharePreviewOpen;
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
   const shareInHero = Boolean(share && rest.length === 0);
   const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null);
@@ -805,6 +814,32 @@ export function MeetingDocumentPipPanel({
                     +{sortedEntries.length - COLLAPSED_MAX}
                   </button>
                 )}
+                {share ? (
+                  <div className={styles.pillPerson} style={{ zIndex: 0 }}>
+                    <div
+                      className={`${styles.pillShareTile}${
+                        previewId === SHARE_PREVIEW_ID ? ` ${styles.pillShareTileSelected}` : ''
+                      }`}
+                      title={labels.shareBadge}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => togglePreview(SHARE_PREVIEW_ID)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter' && e.key !== ' ') return;
+                        e.preventDefault();
+                        togglePreview(SHARE_PREVIEW_ID);
+                      }}
+                    >
+                      <VideoTrack
+                        trackRef={{
+                          participant: share.participant,
+                          source: Track.Source.ScreenShare,
+                          publication: share.publication,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
             {previewOpen && !miniControls ? (
@@ -821,6 +856,9 @@ export function MeetingDocumentPipPanel({
                 style={{ width: MINI_HOVER_W }}
                 onMouseEnter={armShowMiniControls}
                 onMouseLeave={clearShowMiniTimer}
+                onClick={() => {
+                  hidePreview();
+                }}
               />
               <button
                 type="button"
@@ -835,7 +873,14 @@ export function MeetingDocumentPipPanel({
               </button>
             </div>
           </div>
-          {previewOpen && previewParticipant && previewRow ? (
+          {sharePreviewOpen && share ? (
+            <div
+              className={`${styles.previewWrap} ${styles.previewWrapShare}`}
+              style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
+            >
+              {shareVideo}
+            </div>
+          ) : previewOpen && previewParticipant && previewRow ? (
             <div
               className={styles.previewWrap}
               style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
