@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json({ token });
   } catch (err) {
+    console.error('[transcripts/realtime-token]', err);
     return NextResponse.json({ error: 'Failed to get token' }, { status: 500 });
   }
 }

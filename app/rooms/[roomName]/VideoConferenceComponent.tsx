@@ -8597,6 +8597,7 @@ export function VideoConferenceComponent(props: {
             }
             void documentPip.open({ sticky: true });
           }}
+          livekitToken={props.connectionDetails.participantToken}
           chatOpen={chatOpen}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);

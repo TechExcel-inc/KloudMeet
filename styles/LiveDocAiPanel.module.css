@@ -581,6 +581,8 @@
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
+  /* Room 页 html 为 color-scheme: dark，原生 select 会白字叠白底 */
+  color-scheme: light;
 }
 
 .confirmDialog h3,
@@ -729,8 +731,14 @@
 .optionDialog select {
   min-height: 38px;
   padding: 0 10px;
+  color: #111827;
   border: 1px solid #d1d5db;
   border-radius: 6px;
+  background: #fff;
+}
+
+.optionDialog select option {
+  color: #111827;
   background: #fff;
 }
 

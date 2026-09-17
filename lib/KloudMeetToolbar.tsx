@@ -134,6 +134,8 @@ interface KloudMeetToolbarProps {
   documentPipEnabled?: boolean;
   onToggleDocumentPip?: () => void;
   onOpenDesktopApp?: () => void;
+  /** LiveKit participant JWT，LiveDoc AI Summary 拉取本场聊天 */
+  livekitToken?: string;
 }
 
 export function KloudMeetToolbar({
@@ -187,6 +189,7 @@ export function KloudMeetToolbar({
   documentPipEnabled = false,
   onToggleDocumentPip,
   onOpenDesktopApp,
+  livekitToken = '',
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
   const { t } = useI18n();
@@ -1485,6 +1488,7 @@ export function KloudMeetToolbar({
         onClearError={liveDocAiBridge.clearError}
         onAction={liveDocAiBridge.sendAction}
         onOpenDocument={handleLiveDocDocumentOpen}
+        livekitToken={livekitToken}
       />
 
       {!visible && !syncPlayerActive && (

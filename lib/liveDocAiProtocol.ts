@@ -22,6 +22,19 @@ export interface LiveDocAiTranscriptItem {
   userName: string;
   pageNumber?: number;
   attachmentId?: number;
+  /** HH:mm:ss，与 /meetingDetail 的 text[].time 对齐 */
+  time?: string;
+}
+
+/**
+ * SkyMeet → LiveDoc：`summary.generate` 的 payload。
+ * `captions` 与 `meeting_caption/list_with_voice` 的 `data.captions` 同形。
+ * 有内容时插件应直接用，不再请求 list_with_voice；不传或空则走原接口。
+ */
+export interface LiveDocAiSummaryGeneratePayload {
+  detailLevel: 0 | 2;
+  language: 'en' | 'cn';
+  captions?: LiveDocAiTranscriptItem[];
 }
 
 export interface LiveDocAiPickerItem {

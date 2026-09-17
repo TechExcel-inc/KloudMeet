@@ -9,6 +9,7 @@ import type {
   LiveDocAiPickerKind,
   LiveDocAiState,
   LiveDocAiTab,
+  LiveDocAiTranscriptItem,
 } from './liveDocAiProtocol';
 import { authFetch } from './kloudSession';
 import styles from '../styles/LiveDocAiPanel.module.css';
@@ -34,6 +35,8 @@ interface LiveDocAiPanelProps {
   onClearError: () => void;
   onAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
   onOpenDocument: (itemId: number) => void;
+  /** LiveKit participant JWT，用于拉取本场聊天 */
+  livekitToken?: string;
 }
 
 interface MeetingCaption {
@@ -41,6 +44,7 @@ interface MeetingCaption {
   speakerName: string;
   content: string;
   offsetSeconds: number | null;
+  captionTimeMs: number | null;
 }
 
 interface CaptionGroup {
@@ -60,6 +64,9 @@ const SPEAKER_COLORS = [
 ];
 
 const TRANSCRIPT_POLL_MS = 5000;
+const SUMMARY_CAPTION_LIMIT = 2000;
+const SUMMARY_CHAT_LIMIT = 500;
+const SUMMARY_SOURCE_TIMEOUT_MS = 15000;
 
 const FILE_ACCEPT = [
   '.stl',
@@ -147,6 +154,109 @@ function getActiveMeetingId(): number | null {
   }
 }
 
+function getMeetingStartedAtMs(): number | null {
+  try {
+    const raw = typeof window !== 'undefined' ? localStorage.getItem('activeMeetingStartedAt') : null;
+    if (!raw) return null;
+    const ms = new Date(raw).getTime();
+    return Number.isNaN(ms) ? null : ms;
+  } catch {
+    return null;
+  }
+}
+
+function roomNameFromPath(): string {
+  if (typeof window === 'undefined') return '';
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  const last = segments[segments.length - 1];
+  return last ? decodeURIComponent(last) : '';
+}
+
+function fmtHms(secs: number): string {
+  const n = Math.max(0, Math.floor(secs));
+  const h = Math.floor(n / 3600);
+  const m = Math.floor((n % 3600) / 60);
+  const s = n % 60;
+  return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+}
+
+function offsetFromTimestamp(timestamp: number): number {
+  const start = getMeetingStartedAtMs();
+  if (start === null) return 0;
+  return Math.max(0, Math.floor((timestamp - start) / 1000));
+}
+
+function takeLast<T>(items: T[], limit: number): T[] {
+  if (items.length <= limit) return items;
+  return items.slice(items.length - limit);
+}
+
+function parseTimeMs(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const ms = Date.parse(value);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
+function captionTimeMs(offsetSeconds: number | null, explicit: number | null): number {
+  if (explicit !== null) return explicit;
+  if (offsetSeconds !== null) {
+    const start = getMeetingStartedAtMs();
+    if (start !== null) return start + offsetSeconds * 1000;
+  }
+  return Date.now();
+}
+
+function toTranscriptItem(input: {
+  id: string | number;
+  userName: string;
+  captionContent: string;
+  offsetSeconds: number | null;
+  captionTimeMs: number | null;
+}): LiveDocAiTranscriptItem {
+  const captionTime = captionTimeMs(input.offsetSeconds, input.captionTimeMs);
+  const offset =
+    input.offsetSeconds !== null
+      ? input.offsetSeconds
+      : Math.max(0, Math.floor((captionTime - (getMeetingStartedAtMs() ?? captionTime)) / 1000));
+  return {
+    id: input.id,
+    userName: input.userName,
+    captionContent: input.captionContent,
+    captionTime,
+    time: fmtHms(offset),
+    pageNumber: 0,
+    attachmentId: 0,
+  };
+}
+
+function parseChatForSummary(value: unknown): LiveDocAiTranscriptItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const row = value as Record<string, unknown>;
+  if (row.kind === 'livedoc') return null;
+  const message = typeof row.message === 'string' ? row.message.trim() : '';
+  if (!message) return null;
+  const senderName =
+    typeof row.senderName === 'string' && row.senderName.trim()
+      ? row.senderName.trim()
+      : 'Unknown';
+  const timestamp =
+    typeof row.timestamp === 'number' && Number.isFinite(row.timestamp) ? row.timestamp : 0;
+  const id =
+    typeof row.clientMessageId === 'string' && row.clientMessageId
+      ? row.clientMessageId
+      : `chat-${timestamp}`;
+  return toTranscriptItem({
+    id,
+    userName: senderName,
+    captionContent: message,
+    offsetSeconds: timestamp ? offsetFromTimestamp(timestamp) : null,
+    captionTimeMs: timestamp || null,
+  });
+}
+
 function fmtOffset(secs: number): string {
   if (secs < 0) return '--:--';
   if (secs === 0) return '0:00';
@@ -185,7 +295,79 @@ function parseCaption(value: unknown): MeetingCaption | null {
     speakerName,
     content,
     offsetSeconds,
+    captionTimeMs: parseTimeMs(item.captionTime),
   };
+}
+
+function toTranscriptFromCaption(row: MeetingCaption): LiveDocAiTranscriptItem {
+  return toTranscriptItem({
+    id: row.id,
+    userName: row.speakerName,
+    captionContent: row.content,
+    offsetSeconds: row.offsetSeconds,
+    captionTimeMs: row.captionTimeMs,
+  });
+}
+
+function sortByCaptionTime(items: LiveDocAiTranscriptItem[]): LiveDocAiTranscriptItem[] {
+  return items.slice().sort((a, b) => {
+    const ta = typeof a.captionTime === 'number' ? a.captionTime : 0;
+    const tb = typeof b.captionTime === 'number' ? b.captionTime : 0;
+    return ta - tb;
+  });
+}
+
+/** fetchSummaryCaptions — 拉取本场字幕，失败则空数组（让 LiveDoc 走原总结）。 */
+async function fetchSummaryCaptions(): Promise<LiveDocAiTranscriptItem[]> {
+  const meetingId = getActiveMeetingId();
+  if (!meetingId) return [];
+  try {
+    const res = await authFetch(`/api/transcripts/${meetingId}`, {
+      signal: AbortSignal.timeout(SUMMARY_SOURCE_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    const raw =
+      data && typeof data === 'object' && Array.isArray((data as { captions?: unknown }).captions)
+        ? (data as { captions: unknown[] }).captions
+        : [];
+    const captions: LiveDocAiTranscriptItem[] = [];
+    raw.forEach((item) => {
+      const parsed = parseCaption(item);
+      if (parsed) captions.push(toTranscriptFromCaption(parsed));
+    });
+    return takeLast(captions, SUMMARY_CAPTION_LIMIT);
+  } catch {
+    return [];
+  }
+}
+
+/** fetchSummaryChats — 拉取本场文字聊天，并转成与 list_with_voice 相同的 captions 项。 */
+async function fetchSummaryChats(livekitToken: string): Promise<LiveDocAiTranscriptItem[]> {
+  const roomName = roomNameFromPath();
+  const token = livekitToken.trim();
+  if (!roomName || !token) return [];
+  try {
+    const res = await fetch(`/api/meetings/${encodeURIComponent(roomName)}/chat-messages`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(SUMMARY_SOURCE_TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const data: unknown = await res.json();
+    const raw =
+      data && typeof data === 'object' && Array.isArray((data as { messages?: unknown }).messages)
+        ? (data as { messages: unknown[] }).messages
+        : [];
+    const chats: LiveDocAiTranscriptItem[] = [];
+    raw.forEach((item) => {
+      const parsed = parseChatForSummary(item);
+      if (parsed) chats.push(parsed);
+    });
+    return takeLast(chats, SUMMARY_CHAT_LIMIT);
+  } catch {
+    return [];
+  }
 }
 
 function groupBySpeaker(items: MeetingCaption[]): CaptionGroup[] {
@@ -270,6 +452,7 @@ export function LiveDocAiPanel({
   onClearError,
   onAction,
   onOpenDocument,
+  livekitToken = '',
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
@@ -284,6 +467,8 @@ export function LiveDocAiPanel({
   const [summaryOptionsOpen, setSummaryOptionsOpen] = React.useState(false);
   const [summaryDetailLevel, setSummaryDetailLevel] = React.useState<0 | 2>(2);
   const [summaryLanguage, setSummaryLanguage] = React.useState<'en' | 'cn'>('en');
+  const [summaryPreparing, setSummaryPreparing] = React.useState(false);
+  const summaryBusyRef = React.useRef(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const fileMenuBtnRefs = React.useRef<Map<number, HTMLButtonElement>>(new Map());
   const uploadMenuBtnRef = React.useRef<HTMLButtonElement>(null);
@@ -364,6 +549,7 @@ export function LiveDocAiPanel({
       setPendingOpenItemId(null);
       setSummaryMenuOpen(false);
       setSummaryOptionsOpen(false);
+      setSummaryPreparing(false);
     }
   }, [open]);
 
@@ -419,12 +605,33 @@ export function LiveDocAiPanel({
   };
 
   const submitSummary = () => {
+    if (summaryBusyRef.current) return;
+    summaryBusyRef.current = true;
     setSummaryOptionsOpen(false);
     setSummaryMenuOpen(false);
-    runAction('summary.generate', {
-      detailLevel: summaryDetailLevel,
-      language: summaryLanguage,
-    });
+    setSummaryPreparing(true);
+    void (async () => {
+      try {
+        const [speech, chats] = await Promise.all([
+          fetchSummaryCaptions(),
+          fetchSummaryChats(livekitToken),
+        ]);
+        const captions = sortByCaptionTime([...speech, ...chats]);
+        const payload: Record<string, unknown> = {
+          detailLevel: summaryDetailLevel,
+          language: summaryLanguage,
+        };
+        if (captions.length) {
+          payload.captions = captions;
+        }
+        await onAction('summary.generate', payload);
+      } catch {
+        // LiveDoc bridge 已写入 error
+      } finally {
+        summaryBusyRef.current = false;
+        setSummaryPreparing(false);
+      }
+    })();
   };
 
   if (!bubblePos) {
@@ -726,11 +933,11 @@ export function LiveDocAiPanel({
                   </div>
                 </div>
                 <div className={styles.summaryContent}>
-                  {state.summary.phase === 'error' ? (
+                  {state.summary.phase === 'error' && !summaryPreparing ? (
                     <div className={styles.empty}>
                       {state.summary.error || t('liveDocAi.summaryError')}
                     </div>
-                  ) : state.summary.phase === 'loading' ? (
+                  ) : summaryPreparing || state.summary.phase === 'loading' ? (
                     <div className={styles.empty}>
                       {t('liveDocAi.summaryGenerating', {
                         percent: Math.round(state.summary.progress * 100),
@@ -883,7 +1090,12 @@ export function LiveDocAiPanel({
                 <button type="button" onClick={() => setSummaryOptionsOpen(false)}>
                   {t('common.cancel')}
                 </button>
-                <button type="button" className={styles.primaryButton} onClick={submitSummary}>
+                <button
+                  type="button"
+                  className={styles.primaryButton}
+                  disabled={summaryPreparing || busy}
+                  onClick={submitSummary}
+                >
                   {t('liveDocAi.submit')}
                 </button>
               </div>

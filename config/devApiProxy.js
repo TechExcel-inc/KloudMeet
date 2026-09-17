@@ -21,7 +21,6 @@ const LOCAL_API_PREFIXES = [
   'livedoc',
   // SSO validates kloud.cn cookie via PeerTime UserProfile API
   'auth/sso',
-  'transcripts',
 ];
 
 /**
