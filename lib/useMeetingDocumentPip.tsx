@@ -77,6 +77,17 @@ export interface MeetingDocumentPipApi {
   isOpen: boolean;
 }
 
+let keepaliveStream: MediaStream | null = null;
+let keepaliveGen = 0;
+
+/** 开麦/摄像头前立刻放开占麦，避免和 LiveKit 抢同一设备 */
+export function releaseDocumentPipKeepalive(): void {
+  keepaliveGen += 1;
+  if (!keepaliveStream) return;
+  keepaliveStream.getTracks().forEach((track) => track.stop());
+  keepaliveStream = null;
+}
+
 function hasLiveCapture(room: Room): boolean {
   const local = room.localParticipant;
   const sources = [Track.Source.Microphone, Track.Source.Camera, Track.Source.ScreenShare];
@@ -271,8 +282,14 @@ export function useMeetingDocumentPip({
               minimizedRef.current = next;
               writeSessionFlag(pipMiniKey(roomRef.current.name), next);
             }}
-            onToggleMic={() => onToggleMicRef.current()}
-            onToggleCam={() => onToggleCamRef.current()}
+            onToggleMic={() => {
+              releaseDocumentPipKeepalive();
+              onToggleMicRef.current();
+            }}
+            onToggleCam={() => {
+              releaseDocumentPipKeepalive();
+              onToggleCamRef.current();
+            }}
             onToggleShare={() => {
               if (!shareActiveRef.current) {
                 stickyRef.current = true;
@@ -375,8 +392,14 @@ export function useMeetingDocumentPip({
         () => restrictionsRef.current.isHost || restrictionsRef.current.isCohost,
         (identity, disable) => onMuteRef.current(identity, disable),
         (identity, disable) => onDisableVideoRef.current(identity, disable),
-        () => onToggleMicRef.current(),
-        () => onToggleCamRef.current(),
+        () => {
+          releaseDocumentPipKeepalive();
+          onToggleMicRef.current();
+        },
+        () => {
+          releaseDocumentPipKeepalive();
+          onToggleCamRef.current();
+        },
       );
 
       pipWindow.addEventListener('pagehide', () => {
@@ -479,22 +502,26 @@ export function useMeetingDocumentPip({
 
   useEffect(() => {
     if (!enabled || !isWebDocumentPipEligible()) return;
-    if (hasLiveCapture(room)) return;
+    if (micEnabled || camEnabled || hasLiveCapture(room)) {
+      releaseDocumentPipKeepalive();
+      return;
+    }
 
     let cancelled = false;
-    let stream: MediaStream | null = null;
 
     const start = async () => {
+      const gen = keepaliveGen;
       try {
         const next = await navigator.mediaDevices.getUserMedia({
           audio: true,
           video: false,
         });
-        if (cancelled) {
+        if (cancelled || gen !== keepaliveGen) {
           next.getTracks().forEach((track) => track.stop());
           return;
         }
-        stream = next;
+        keepaliveStream?.getTracks().forEach((track) => track.stop());
+        keepaliveStream = next;
       } catch {
         // 无麦克风权限时 Chrome 不会走自动 PiP
       }
@@ -503,10 +530,8 @@ export function useMeetingDocumentPip({
     void start();
 
     const onLocalTrack = () => {
-      if (!stream) return;
       if (!hasLiveCapture(room)) return;
-      stream.getTracks().forEach((track) => track.stop());
-      stream = null;
+      releaseDocumentPipKeepalive();
     };
 
     room.on(RoomEvent.LocalTrackPublished, onLocalTrack);
@@ -514,10 +539,7 @@ export function useMeetingDocumentPip({
     return () => {
       cancelled = true;
       room.off(RoomEvent.LocalTrackPublished, onLocalTrack);
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
-        stream = null;
-      }
+      releaseDocumentPipKeepalive();
     };
   }, [enabled, room, micEnabled, camEnabled]);
 
