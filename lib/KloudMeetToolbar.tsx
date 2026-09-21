@@ -415,27 +415,46 @@ export function KloudMeetToolbar({
 
   useEffect(() => {
     if (isMobile) return;
+    const hoverSel = `.${styles.hoverZone}`;
+    const chevronSel = `.${styles.chevronHandle}`;
+    const tryReveal = (el?: EventTarget | null) => {
+      if (visibleRef.current || syncPlayerActiveRef.current) return true;
+      const hit =
+        (el instanceof Element && (el.closest(hoverSel) || el.closest(chevronSel))) ||
+        !!document.querySelector(hoverSel)?.matches(':hover') ||
+        !!document.querySelector(chevronSel)?.matches(':hover');
+      if (!hit) return false;
+      parentOnlyHiddenRef.current = false;
+      setVisible(true);
+      return true;
+    };
     const onMove = (e: MouseEvent) => {
       lastPointerClientXRef.current = e.clientX;
       lastPointerClientYRef.current = e.clientY;
+      tryReveal(e.target);
     };
-    const onFocus = () => {
-      if (visibleRef.current || syncPlayerActiveRef.current) return;
-      const el = document.elementFromPoint(
-        lastPointerClientXRef.current,
-        lastPointerClientYRef.current,
-      );
-      if (!el) return;
-      if (el.closest(`.${styles.hoverZone}`) || el.closest(`.${styles.chevronHandle}`)) {
-        parentOnlyHiddenRef.current = false;
-        setVisible(true);
-      }
+    let poll = 0;
+    const stopPoll = () => {
+      if (!poll) return;
+      window.clearInterval(poll);
+      poll = 0;
+    };
+    const onBlur = () => {
+      stopPoll();
+      poll = window.setInterval(() => {
+        if (document.hasFocus() || tryReveal()) stopPoll();
+      }, 100);
     };
     window.addEventListener('mousemove', onMove, { passive: true });
-    window.addEventListener('focus', onFocus);
+    window.addEventListener('pointerover', onMove, { capture: true, passive: true });
+    window.addEventListener('focus', stopPoll);
+    window.addEventListener('blur', onBlur);
     return () => {
+      stopPoll();
       window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pointerover', onMove, true);
+      window.removeEventListener('focus', stopPoll);
+      window.removeEventListener('blur', onBlur);
     };
   }, [isMobile]);
 

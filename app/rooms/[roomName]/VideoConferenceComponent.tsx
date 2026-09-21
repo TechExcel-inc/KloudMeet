@@ -2552,6 +2552,7 @@ export function VideoConferenceComponent(props: {
       shareConflict: t('toolbar.shareConflictTitle'),
       invite: t('toolbar.invite'),
       inviteCopied: t('meeting.documentPipCopied'),
+      showControls: t('meeting.documentPipShowControls'),
     }),
     [t],
   );
@@ -6796,22 +6797,22 @@ export function VideoConferenceComponent(props: {
                 font-weight: 600 !important;
                 text-transform: none !important;
               }
-              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile > button,
-              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-button,
-              .sky-meet-video-wrapper .lk-carousel > .lk-participant-tile .lk-focus-toggle-button {
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-carousel > .lk-participant-tile > button,
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-carousel > .lk-participant-tile .lk-button,
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-carousel > .lk-participant-tile .lk-focus-toggle-button {
                 display: none !important;
                 pointer-events: none !important;
               }
 
               /* 4. Hide all redundant LiveKit controls (Maximize, PiP, etc.) from the screenshare tile entirely */
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile button,
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile .lk-button,
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile .lk-focus-toggle-button,
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="button"],
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="action"],
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="lk-pip"],
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="focus-toggle"],
-              .sky-meet-video-wrapper .lk-focus-layout > .lk-participant-tile [class*="lk-participant-metadata"] {
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile button,
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile .lk-button,
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile .lk-focus-toggle-button,
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile [class*="button"],
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile [class*="action"],
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile [class*="lk-pip"],
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile [class*="focus-toggle"],
+              .sky-meet-video-wrapper .lk-video-conference[data-kloud-webcam-layout="screenshare"] .lk-focus-layout > .lk-participant-tile [class*="lk-participant-metadata"] {
                 display: none !important;
                 visibility: hidden !important;
                 opacity: 0 !important;

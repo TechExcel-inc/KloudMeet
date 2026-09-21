@@ -205,6 +205,7 @@
   "meeting.documentPipSharing": "{name}が共有中",
   "meeting.documentPipShareBadge": "共有",
   "meeting.documentPipCopied": "コピーしました",
+  "meeting.documentPipShowControls": "コントロールを表示",
   "meeting.pipSuggestTitle": "ミーティングドック",
   "meeting.pipSuggestMessage": "どの画面でも参加者の状態を確認できます。",
   "meeting.pipSuggestEnable": "オンにする",

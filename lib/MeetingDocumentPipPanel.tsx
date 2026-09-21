@@ -25,6 +25,7 @@ export interface MeetingDocumentPipLabels {
   shareConflict: string;
   invite: string;
   inviteCopied: string;
+  showControls: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -315,6 +316,7 @@ export function MeetingDocumentPipPanel({
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
   const [shareMenuOpen, setShareMenuOpen] = React.useState(false);
   const [miniControls, setMiniControls] = React.useState(false);
+  const [miniHint, setMiniHint] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const copiedTimerRef = React.useRef<number | null>(null);
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
@@ -386,6 +388,7 @@ export function MeetingDocumentPipPanel({
     } else {
       clearShowMiniTimer();
       setMiniControls(false);
+      setMiniHint(false);
     }
   }, [minimized]);
 
@@ -396,6 +399,7 @@ export function MeetingDocumentPipPanel({
       clearShowMiniTimer();
       setShareMenuOpen(false);
       setMiniControls(false);
+      setMiniHint(false);
     };
     root.addEventListener('mouseleave', hide);
     return () => {
@@ -403,14 +407,6 @@ export function MeetingDocumentPipPanel({
       clearShowMiniTimer();
     };
   }, [minimized, pipWindow]);
-
-  React.useEffect(() => {
-    const restore = () => focusOpener(pipWindow);
-    pipWindow.document.documentElement.addEventListener('mouseleave', restore);
-    return () => {
-      pipWindow.document.documentElement.removeEventListener('mouseleave', restore);
-    };
-  }, [pipWindow]);
 
   React.useEffect(() => {
     if (!shareActive) setShareMenuOpen(false);
@@ -538,6 +534,7 @@ export function MeetingDocumentPipPanel({
   const hideMiniControls = () => {
     setShareMenuOpen(false);
     setMiniControls(false);
+    setMiniHint(false);
   };
 
   const onChevronEnter = () => {
@@ -756,6 +753,7 @@ export function MeetingDocumentPipPanel({
             clearShowMiniTimer();
             setShareMenuOpen(false);
             setMiniControls(false);
+            setMiniHint(false);
           }}
         >
           <div className={styles.pill}>
@@ -772,7 +770,7 @@ export function MeetingDocumentPipPanel({
                     return (
                       <div key={e.id} className={styles.pillPerson} style={z}>
                         <div
-                          className={styles.avatar}
+                          className={`${styles.avatar}${previewId === e.id ? ` ${styles.avatarSelected}` : ''}`}
                           title={e.name}
                           onClick={() => togglePreview(e.id)}
                         >
@@ -854,12 +852,37 @@ export function MeetingDocumentPipPanel({
               <div
                 className={styles.hoverHit}
                 style={{ width: MINI_HOVER_W }}
-                onMouseEnter={armShowMiniControls}
-                onMouseLeave={clearShowMiniTimer}
+                onMouseEnter={() => {
+                  setMiniHint(true);
+                  armShowMiniControls();
+                }}
+                onMouseLeave={() => {
+                  setMiniHint(false);
+                  clearShowMiniTimer();
+                }}
                 onClick={() => {
                   hidePreview();
                 }}
-              />
+              >
+                {miniHint && !miniControls ? (
+                  <button
+                    type="button"
+                    className={styles.miniHintBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      clearShowMiniTimer();
+                      showMiniControls();
+                    }}
+                    aria-label={labels.showControls}
+                    title={labels.showControls}
+                  >
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
+                ) : null}
+              </div>
               <button
                 type="button"
                 className={styles.chevron}

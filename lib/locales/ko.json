@@ -205,6 +205,7 @@
   "meeting.documentPipSharing": "{name} 공유 중",
   "meeting.documentPipShareBadge": "공유",
   "meeting.documentPipCopied": "복사됨",
+  "meeting.documentPipShowControls": "컨트롤 표시",
   "meeting.pipSuggestTitle": "미팅 독",
   "meeting.pipSuggestMessage": "어떤 화면에서든 참석자 상태를 확인하세요.",
   "meeting.pipSuggestEnable": "사용",

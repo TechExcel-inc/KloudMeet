@@ -128,7 +128,7 @@ export function KloudVideoConference({
   const focusTrack: TrackReferenceOrPlaceholder | undefined = (() => {
     if (activeScreenShareTrack) return activeScreenShareTrack;
     if (webcamLayoutMode === 'spotlight') return spotlightTrack;
-    return undefined;
+    return pinnedTrack;
   })();
 
   const carouselTracks = React.useMemo(
@@ -160,26 +160,15 @@ export function KloudVideoConference({
     }
   }, [activeScreenShareTrack, pinDispatch, screenShareKey]);
 
-  // Spotlight 时同步 pin；Tile 仅在确有 pin 时清理（避免 clear_pin 每次返回新 [] 导致死循环）
+  // Spotlight 的焦点由布局直接决定，不沿用 Tile 中手动选择的人物。
   React.useEffect(() => {
     if (hasActiveScreenShare) return;
-
-    if (webcamLayoutMode === 'tile') {
-      if (pinState && pinState.length > 0) {
-        pinDispatch?.({ msg: 'clear_pin' });
-      }
-      return;
-    }
-
-    if (webcamLayoutMode !== 'spotlight' || !spotlightTrack) return;
-    if (isEqualTrackRef(pinnedTrack, spotlightTrack)) return;
-    pinDispatch?.({ msg: 'set_pin', trackReference: spotlightTrack });
+    if (webcamLayoutMode !== 'spotlight' || !pinState?.length) return;
+    pinDispatch?.({ msg: 'clear_pin' });
   }, [
     hasActiveScreenShare,
     pinDispatch,
     pinState,
-    pinnedTrack,
-    spotlightTrack,
     webcamLayoutMode,
   ]);
 

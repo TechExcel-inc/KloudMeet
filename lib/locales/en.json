@@ -219,6 +219,7 @@
   "meeting.documentPipSharing": "{name} is sharing",
   "meeting.documentPipShareBadge": "Sharing",
   "meeting.documentPipCopied": "Link copied",
+  "meeting.documentPipShowControls": "Show controls",
   "meeting.pipSuggestTitle": "Meeting Dock",
   "meeting.pipSuggestMessage": "Know attendee status in any view.",
   "meeting.pipSuggestEnable": "Enable",

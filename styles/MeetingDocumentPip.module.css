@@ -110,7 +110,7 @@
   border-radius: 50%;
   overflow: hidden;
   background: #0b0c0e;
-  border: 2px solid rgba(15, 23, 42, 0.9);
+  border: 2px solid rgba(255, 255, 255, 0.4);
   box-sizing: border-box;
   cursor: pointer;
   padding: 0;
@@ -129,8 +129,7 @@
 }
 
 .pillShareTileSelected {
-  border-color: #60a5fa;
-  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.45);
+  border-color: rgba(255, 255, 255, 0.92);
 }
 
 .stack .pillPerson :global(.floating-avatar-shell),
@@ -215,14 +214,26 @@
   height: 8px;
 }
 
+.stack :global(.floating-avatar-shell.selected)::after,
 .stack :global(.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]))::after {
   content: '';
   position: absolute;
   inset: -2px;
-  border: 2px solid #fff;
   border-radius: 50%;
   pointer-events: none;
   z-index: 2;
+}
+
+.stack :global(.floating-avatar-shell.selected)::after {
+  border: 2px solid rgba(255, 255, 255, 0.88);
+}
+
+.stack :global(.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]))::after {
+  border: 2px solid #fff;
+}
+
+.stack .avatarSelected {
+  border-color: rgba(255, 255, 255, 0.88);
 }
 
 .hoverCluster {
@@ -261,6 +272,29 @@
   right: 100%;
   bottom: 0;
   z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.miniHintBtn {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0;
+}
+
+.miniHintBtn:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .miniControls {
@@ -315,6 +349,8 @@
   aspect-ratio: 1 / 1;
   border-radius: 12px;
   flex-shrink: 0;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.45);
 }
 
 .previewWrapShare .shareTile :global(div),
@@ -347,6 +383,8 @@
   background: #1e293b;
   position: relative;
   display: block;
+  box-sizing: border-box;
+  border: 2px solid rgba(255, 255, 255, 0.45);
 }
 
 .previewWrap :global(.floating-grid-video video),

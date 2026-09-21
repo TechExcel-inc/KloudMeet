@@ -211,6 +211,7 @@
   "meeting.documentPipSharing": "{name} 正在共享",
   "meeting.documentPipShareBadge": "共享",
   "meeting.documentPipCopied": "链接已复制",
+  "meeting.documentPipShowControls": "显示控制栏",
   "meeting.pipSuggestTitle": "会议悬浮窗",
   "meeting.pipSuggestMessage": "随时查看参会者状态。",
   "meeting.pipSuggestEnable": "开启",
