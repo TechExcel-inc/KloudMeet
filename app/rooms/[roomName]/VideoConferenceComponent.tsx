@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import toast from 'react-hot-toast';
 import { decodePassphrase } from '@/lib/client-utils';
 import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
@@ -106,6 +107,7 @@ import { getInitials } from '@/lib/getInitials';
 import {
   ParticipantRoleMenuProvider,
   participantRoleMenuBridge,
+  shouldShowRoleMenu,
   KLoud_TILE_MORE_BTN_SVG,
   type ParticipantRoleActionsConfig,
 } from '@/lib/ParticipantRoleMenu';
@@ -150,7 +152,17 @@ import {
 const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
-const HOST_MIC_LOCK_MS = 5000;
+/**
+ * 主持人静音 / 禁用摄像头持久生效：到期时间推到远未来，只能由主持人显式取消来解除。
+ * 仍沿用原有的 lockUntil 协议字段，心跳与 CORRECTION 的一致性校验逻辑无需改动。
+ */
+const HOST_MIC_LOCK_MS = 100 * 365 * 24 * 60 * 60 * 1000;
+/** setTimeout 延迟超过 int32 会溢出并立即触发，永久锁不需要排到期检查 */
+const MAX_LOCK_TIMEOUT_MS = 2 ** 31 - 1;
+/** 举手者取消静音后持续说话多久自动放下手（阈值用于过滤咳嗽、键盘等瞬时噪声） */
+const AUTO_LOWER_HAND_MS = 1500;
+/** "XXX 举手了" 提示的合并窗口，避免多人同时举手刷屏 */
+const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 
 const LiveDocView = dynamic(
@@ -285,6 +297,8 @@ export function VideoConferenceComponent(props: {
   const [isWebcamSidebarCollapsed, setIsWebcamSidebarCollapsed] = React.useState(false);
   const [isDrawingMode, setIsDrawingMode] = React.useState(false);
   const localMicRestrictedRef = React.useRef(false);
+  /** 解除本人禁麦标记；handleToggleMic 定义在 sendMeetingMsg 之前，故用 ref 桥接 */
+  const clearOwnMicRestrictionRef = React.useRef<(() => void) | null>(null);
   const localCamRestrictedRef = React.useRef(false);
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   // Remote control permission flow
@@ -2007,10 +2021,10 @@ export function VideoConferenceComponent(props: {
       return;
     }
     const next = !micEnabled;
+    // 被主持人静音后本人仍可自行开麦：开麦的同时解除自己的禁麦标记，
+    // 否则红色禁麦角标会与实际发声状态不符，且会被 enforceHostMute 立刻重新静音。
     if (next && localMicRestrictedRef.current) {
-      setMicEnabled(false);
-      room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
-      return;
+      clearOwnMicRestrictionRef.current?.();
     }
     setMicEnabled(next);
     void room.localParticipant
@@ -2241,7 +2255,7 @@ export function VideoConferenceComponent(props: {
 
   // ── Mute All / Unmute All ──
   // Track whether mute-all is active so the button can show the right state.
-  // Participants can still unmute themselves after a mute-all (non-locking).
+  // 全体静音持久生效：期间参会者无法自行开麦，直到主持人点「解除全体静音」。
   const [muteAllActive, setMuteAllActive] = React.useState(false);
 
   const isPresenterScreencast = screenShareActive;
@@ -2323,6 +2337,13 @@ export function VideoConferenceComponent(props: {
   const [hostDisabledVideoIdentities, setHostDisabledVideoIdentities] = React.useState<string[]>([]);
   const [hostDisabledVideoUntilByIdentity, setHostDisabledVideoUntilByIdentity] = React.useState<Record<string, number>>({});
   const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>([]);
+  // 举手：handRaised 是本地用户自己的权威状态（心跳上报的数据源），
+  // raisedHands 是主持人下发的全房间举手队列镜像（驱动 tile 角标与参会者面板）。
+  const [handRaised, setHandRaised] = React.useState(false);
+  const [raisedHands, setRaisedHands] = React.useState<string[]>([]);
+  const handRaisedRef = React.useRef(false);
+  const handRaisedAtRef = React.useRef<number | null>(null);
+  const raisedHandsRef = React.useRef<string[]>([]);
   const hostMutedIdentitiesRef = React.useRef(hostMutedIdentities);
   const hostDisabledVideoIdentitiesRef = React.useRef(hostDisabledVideoIdentities);
   const muteAllActiveRef = React.useRef(muteAllActive);
@@ -2334,6 +2355,16 @@ export function VideoConferenceComponent(props: {
     muteAllActiveRef.current = muteAllActive;
     exemptFromMuteAllIdentitiesRef.current = exemptFromMuteAllIdentities;
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, exemptFromMuteAllIdentities]);
+
+  React.useEffect(() => {
+    handRaisedRef.current = handRaised;
+    if (!handRaised) handRaisedAtRef.current = null;
+  }, [handRaised]);
+
+  React.useEffect(() => {
+    raisedHandsRef.current = raisedHands;
+    updateCustomMicsRef.current?.();
+  }, [raisedHands]);
 
   React.useEffect(() => {
     const refreshTimedMicLocks = () => {
@@ -2386,7 +2417,10 @@ export function VideoConferenceComponent(props: {
     if (candidates.length === 0) return;
 
     const nextExpiry = Math.min(...candidates);
-    const timeout = window.setTimeout(refreshTimedMicLocks, Math.max(0, nextExpiry - Date.now()) + 50);
+    const delay = Math.max(0, nextExpiry - Date.now()) + 50;
+    // 永久锁不排定时器：既没有到期可言，超长延迟还会让 setTimeout 溢出成立即触发
+    if (delay > MAX_LOCK_TIMEOUT_MS) return;
+    const timeout = window.setTimeout(refreshTimedMicLocks, delay);
     return () => window.clearTimeout(timeout);
   }, [hostMutedUntilByIdentity, hostDisabledVideoUntilByIdentity, muteAllLockUntil]);
 
@@ -2622,6 +2656,10 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentities: string[];
     hostDisabledVideoUntilByIdentity: Record<string, number>;
     captionsOn: boolean;
+    /** 举手队列，按举手先后排序 */
+    raisedHands: string[];
+    /** identity → 举手时刻（发送端时钟），仅用于主持人重连后按心跳重建队列顺序 */
+    raisedHandAtByIdentity: Record<string, number>;
   }>({
     view: activeView,
     presenter: [],
@@ -2634,6 +2672,8 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentities: [],
     hostDisabledVideoUntilByIdentity: {},
     captionsOn: false,
+    raisedHands: [],
+    raisedHandAtByIdentity: {},
   });
 
   const presenterListsEqual = React.useCallback(
@@ -2645,6 +2685,26 @@ export function VideoConferenceComponent(props: {
     },
     [],
   );
+
+  /** buildCorrection — 用主持人当前权威状态组装一条 CORRECTION 消息体 */
+  const buildCorrection = React.useCallback(() => {
+    const auth = authState.current;
+    return {
+      type: 'CORRECTION',
+      view: auth.view,
+      presenter: auth.presenter,
+      livedocInstanceId: auth.livedocInstanceId,
+      muteAllActive: auth.muteAllActive,
+      muteAllLockUntil: auth.muteAllLockUntil,
+      hostMutedIdentities: auth.hostMutedIdentities,
+      hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
+      exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
+      hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
+      hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
+      captionsOn: auth.captionsOn,
+      raisedHands: auth.raisedHands,
+    } as const;
+  }, []);
 
   // Keep authState in sync when host changes view locally
   // Note: when host is the presenter (isLocalScreenShare), their local view is 'liveDoc'
@@ -2757,6 +2817,90 @@ export function VideoConferenceComponent(props: {
     setExemptFromMuteAllIdentities([]);
   }, [sendMeetingMsg]);
 
+  // ═══ Raise Hand ═══
+  // 举手权限与 Mute All 一致：主持人 / 联席主持人 / 联席演示者 / 当前屏幕共享者。
+  const canManageHands = isHost || isCohost || isCopresenter || isAutoPresenter;
+  // DataChannel 处理器用 ref 校验发送者身份，避免把角色列表塞进那个大 effect 的依赖里。
+  const canManageHandsByRef = React.useRef<(identity: string) => boolean>(() => false);
+  React.useEffect(() => {
+    canManageHandsByRef.current = (identity: string) =>
+      identity === hostIdentity ||
+      cohostIdentities.includes(identity) ||
+      copresenterIdentities.includes(identity) ||
+      identity === autoPresenterIdentity;
+  }, [hostIdentity, cohostIdentities, copresenterIdentities, autoPresenterIdentity]);
+  const notifyHandRaisedRef = React.useRef<((identity: string) => void) | null>(null);
+
+  /**
+   * applyHostHands — 主持人提交新的权威举手队列并广播
+   *
+   * 只有队列真正发生变化时才发 CORRECTION，避免心跳聚合导致每 5 秒刷一次全量状态。
+   */
+  const applyHostHands = React.useCallback(
+    (next: string[]) => {
+      const auth = authState.current;
+      if (presenterListsEqual(next, auth.raisedHands)) return;
+      auth.raisedHands = next;
+      auth.raisedHandAtByIdentity = Object.fromEntries(
+        Object.entries(auth.raisedHandAtByIdentity).filter(([id]) => next.includes(id)),
+      );
+      setRaisedHands(next);
+      sendMeetingMsg(buildCorrection());
+    },
+    [presenterListsEqual, sendMeetingMsg, buildCorrection],
+  );
+
+  // 下面三个操作都必须无条件广播 RAISE_HAND / LOWER_HAND / LOWER_ALL_HANDS：
+  // 每个参会者的 handRaised 是自己心跳上报的数据源，若只更新主持人权威队列而不通知本人，
+  // 被放下的手会在下一次心跳聚合时被重新加回队列。
+
+  /** handleToggleHand — 本地用户举手 / 放下自己的手 */
+  const handleToggleHand = React.useCallback(() => {
+    const identity = room.localParticipant.identity;
+    if (handRaisedRef.current) {
+      setHandRaised(false);
+      setRaisedHands((prev) => prev.filter((id) => id !== identity));
+      sendMeetingMsg({ type: 'LOWER_HAND', identity });
+      if (isHost) {
+        applyHostHands(authState.current.raisedHands.filter((id) => id !== identity));
+      }
+      return;
+    }
+    const raisedAt = Date.now();
+    handRaisedAtRef.current = raisedAt;
+    setHandRaised(true);
+    setRaisedHands((prev) => (prev.includes(identity) ? prev : [...prev, identity]));
+    sendMeetingMsg({ type: 'RAISE_HAND', identity, raisedAt });
+    if (isHost) {
+      authState.current.raisedHandAtByIdentity[identity] = raisedAt;
+      applyHostHands([
+        ...authState.current.raisedHands.filter((id) => id !== identity),
+        identity,
+      ]);
+    }
+  }, [room, isHost, sendMeetingMsg, applyHostHands]);
+
+  /** handleLowerParticipantHand — 管理角色放下指定参会者的手 */
+  const handleLowerParticipantHand = React.useCallback(
+    (identity: string) => {
+      if (identity === room.localParticipant.identity) setHandRaised(false);
+      setRaisedHands((prev) => prev.filter((id) => id !== identity));
+      sendMeetingMsg({ type: 'LOWER_HAND', identity });
+      if (isHost) {
+        applyHostHands(authState.current.raisedHands.filter((id) => id !== identity));
+      }
+    },
+    [room, isHost, sendMeetingMsg, applyHostHands],
+  );
+
+  /** handleLowerAllHands — 管理角色清空整个举手队列 */
+  const handleLowerAllHands = React.useCallback(() => {
+    setHandRaised(false);
+    setRaisedHands([]);
+    sendMeetingMsg({ type: 'LOWER_ALL_HANDS' });
+    if (isHost) applyHostHands([]);
+  }, [isHost, sendMeetingMsg, applyHostHands]);
+
   // Send a targeted mute to a single participant, or cancel the host restriction (host/co-host only).
   // Canceling restriction does NOT turn the participant's mic back on.
   const handleMuteParticipant = React.useCallback(
@@ -2787,6 +2931,31 @@ export function VideoConferenceComponent(props: {
     },
     [sendMeetingMsg],
   );
+
+  /**
+   * clearOwnMicRestriction — 本人主动开麦时解除自己的禁麦标记
+   *
+   * 复用 UNMUTE_PARTICIPANT 让各端（含主持人）同步清掉红色角标：
+   * 主持人不清的话，下一次心跳比对会把禁麦状态重新纠正回来。
+   * 同时加入全体静音豁免名单，覆盖「被 Mute All 静音」的情形。
+   */
+  const clearOwnMicRestriction = React.useCallback(() => {
+    const identity = room.localParticipant.identity;
+    // 抢在 state 落地前置位，避免 TrackUnmuted 触发 enforceHostMute 把麦克风又关掉
+    localMicRestrictedRef.current = false;
+    sendMeetingMsg({ type: 'UNMUTE_PARTICIPANT', targetIdentity: identity });
+    setHostMutedUntilByIdentity((prev) => {
+      if (!(identity in prev)) return prev;
+      const next = { ...prev };
+      delete next[identity];
+      return next;
+    });
+    setHostMutedIdentities((prev) => prev.filter((id) => id !== identity));
+    setExemptFromMuteAllIdentities((prev) =>
+      prev.includes(identity) ? prev : [...prev, identity],
+    );
+  }, [room, sendMeetingMsg]);
+  clearOwnMicRestrictionRef.current = clearOwnMicRestriction;
 
   // Disable a participant's camera, or cancel the host restriction (host/co-host only).
   // Canceling restriction does NOT turn the participant's camera back on.
@@ -3058,53 +3227,22 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (!isHost) return;
     const handler = (participant: RemoteParticipant) => {
-      const auth = authState.current;
       // Send full meeting state to new joiner so they immediately adopt the
       // current meeting mode and see correct mute indicators.
-      sendMeetingMsg(
-        {
-          type: 'CORRECTION',
-          view: auth.view,
-          presenter: auth.presenter,
-          livedocInstanceId: auth.livedocInstanceId,
-          muteAllActive: auth.muteAllActive,
-          muteAllLockUntil: auth.muteAllLockUntil,
-          hostMutedIdentities: auth.hostMutedIdentities,
-          hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
-          exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
-          hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
-          hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
-          captionsOn: auth.captionsOn,
-        },
-        [participant.identity],
-      );
+      sendMeetingMsg(buildCorrection(), [participant.identity]);
     };
     room.on(RoomEvent.ParticipantConnected, handler);
     return () => {
       room.off(RoomEvent.ParticipantConnected, handler);
     };
-  }, [room, isHost, sendMeetingMsg]);
+  }, [room, isHost, sendMeetingMsg, buildCorrection]);
 
   // Host/Presenter/Co-host: broadcast VIEW_CHANGE to all participants
   const broadcastViewChange = React.useCallback(
     (view: ViewMode) => {
       if (isHost) {
         authState.current.view = view;
-        const auth = authState.current;
-        sendMeetingMsg({
-          type: 'CORRECTION',
-          view: auth.view,
-          presenter: auth.presenter,
-          livedocInstanceId: auth.livedocInstanceId,
-          muteAllActive: auth.muteAllActive,
-          muteAllLockUntil: auth.muteAllLockUntil,
-          hostMutedIdentities: auth.hostMutedIdentities,
-          hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
-          exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
-          hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
-          hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
-          captionsOn: auth.captionsOn,
-        });
+        sendMeetingMsg(buildCorrection());
       }
       sendMeetingMsg({ type: 'VIEW_CHANGE', view });
       // Persist for late joiners (privileged only; skip duplicate mode)
@@ -3127,7 +3265,7 @@ export function VideoConferenceComponent(props: {
         });
       }
     },
-    [sendMeetingMsg, isHost],
+    [sendMeetingMsg, isHost, buildCorrection],
   );
 
   // Keep the ref in sync for handleViewChange
@@ -3225,6 +3363,11 @@ export function VideoConferenceComponent(props: {
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
+          }
+          // 举手队列以主持人为准；本地 handRaised 不在此处覆盖，
+          // 主持人重连后会通过心跳重新收到本地举手态并补回队列。
+          if (Array.isArray(msg.raisedHands)) {
+            setRaisedHands(msg.raisedHands.filter((id: unknown) => typeof id === 'string'));
           }
         } else if (msg.type === 'SET_PRESENTER') {
           if (msg.identity) {
@@ -3433,6 +3576,44 @@ export function VideoConferenceComponent(props: {
           if (!isHost) {
             sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity: room.localParticipant.identity });
           }
+        } else if (msg.type === 'RAISE_HAND') {
+          // 只接受"本人举自己的手"，防止伪造他人举手
+          const target = typeof msg.identity === 'string' ? msg.identity : null;
+          if (!target || !senderIdentity || target !== senderIdentity) return;
+          const raisedAt = typeof msg.raisedAt === 'number' ? msg.raisedAt : Date.now();
+          setRaisedHands((prev) => (prev.includes(target) ? prev : [...prev, target]));
+          if (isHost) {
+            const auth = authState.current;
+            auth.raisedHandAtByIdentity[target] = raisedAt;
+            applyHostHands([...auth.raisedHands.filter((id) => id !== target), target]);
+          }
+          notifyHandRaisedRef.current?.(target);
+        } else if (msg.type === 'LOWER_HAND') {
+          const target = typeof msg.identity === 'string' ? msg.identity : null;
+          if (!target || !senderIdentity) return;
+          // 放手只允许本人或管理角色发起
+          if (target !== senderIdentity && !canManageHandsByRef.current(senderIdentity)) return;
+          if (target === room.localParticipant.identity) setHandRaised(false);
+          setRaisedHands((prev) => prev.filter((id) => id !== target));
+          if (isHost) {
+            // 联席主持人发起的放手需由主持人转发给本人：晚加入者可能还不知道
+            // 发起者是联席主持人而拒收，导致对方的手在下次心跳里被加回队列。
+            // 仅在队列确实发生变化时转发，避免主持人身份切换期间来回转发。
+            const wasQueued = authState.current.raisedHands.includes(target);
+            applyHostHands(authState.current.raisedHands.filter((id) => id !== target));
+            if (wasQueued && target !== senderIdentity && target !== room.localParticipant.identity) {
+              sendMeetingMsg({ type: 'LOWER_HAND', identity: target }, [target]);
+            }
+          }
+        } else if (msg.type === 'LOWER_ALL_HANDS') {
+          if (!senderIdentity || !canManageHandsByRef.current(senderIdentity)) return;
+          setHandRaised(false);
+          setRaisedHands([]);
+          if (isHost) {
+            const hadQueue = authState.current.raisedHands.length > 0;
+            applyHostHands([]);
+            if (hadQueue) sendMeetingMsg({ type: 'LOWER_ALL_HANDS' });
+          }
         } else if (msg.type === 'HEARTBEAT' && isHost && senderIdentity) {
           // Host receives heartbeat — compare and correct if needed
           const auth = authState.current;
@@ -3470,6 +3651,30 @@ export function VideoConferenceComponent(props: {
             msg.hostDisabledVideoUntilByIdentity && typeof msg.hostDisabledVideoUntilByIdentity === 'object'
               ? (msg.hostDisabledVideoUntilByIdentity as Record<string, number>)
               : {};
+
+          // 举手持久化：每个参会者在心跳里上报自己的举手态，主持人据此重建权威队列。
+          // 主持人刷新/重连后队列会在一个心跳周期内自动恢复，无需服务端存储。
+          const guestHandRaised = (msg as { handRaised?: boolean }).handRaised === true;
+          const guestHandRaisedAt = typeof (msg as { handRaisedAt?: number }).handRaisedAt === 'number'
+            ? (msg as { handRaisedAt: number }).handRaisedAt
+            : Date.now();
+          const authHands = auth.raisedHands;
+          if (guestHandRaised && !authHands.includes(senderIdentity)) {
+            auth.raisedHandAtByIdentity[senderIdentity] = guestHandRaisedAt;
+            // 按上报时刻插入，保证主持人重连后各端看到的排队顺序一致
+            const insertAt = authHands.findIndex(
+              (id) => (auth.raisedHandAtByIdentity[id] ?? 0) > guestHandRaisedAt,
+            );
+            const rebuilt = [...authHands];
+            rebuilt.splice(insertAt === -1 ? rebuilt.length : insertAt, 0, senderIdentity);
+            applyHostHands(rebuilt);
+          } else if (!guestHandRaised && authHands.includes(senderIdentity)) {
+            applyHostHands(authHands.filter((id) => id !== senderIdentity));
+          }
+          const guestRaisedHands = Array.isArray((msg as { raisedHands?: unknown }).raisedHands)
+            ? ((msg as { raisedHands: string[] }).raisedHands)
+            : [];
+
           if (
             msg.view !== auth.view ||
             !presenterListsEqual(guestPresenters, auth.presenter) ||
@@ -3481,25 +3686,10 @@ export function VideoConferenceComponent(props: {
             !presenterListsEqual(guestHostDisabledVideo, auth.hostDisabledVideoIdentities) ||
             JSON.stringify(guestHostDisabledVideoUntil) !== JSON.stringify(auth.hostDisabledVideoUntilByIdentity) ||
             livedocMismatch ||
-            captionsMismatch
+            captionsMismatch ||
+            !presenterListsEqual(guestRaisedHands, auth.raisedHands)
           ) {
-            sendMeetingMsg(
-              {
-                type: 'CORRECTION',
-                view: auth.view,
-                presenter: auth.presenter,
-                livedocInstanceId: auth.livedocInstanceId,
-                muteAllActive: auth.muteAllActive,
-                muteAllLockUntil: auth.muteAllLockUntil,
-                hostMutedIdentities: auth.hostMutedIdentities,
-                hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
-                exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
-                hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
-                hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
-                captionsOn: auth.captionsOn,
-              },
-              [senderIdentity],
-            );
+            sendMeetingMsg(buildCorrection(), [senderIdentity]);
           }
         } else if (msg.type === 'CAPTIONS_ON') {
           // Host/Co-host 开启了全局字幕 — 本地启动识别
@@ -3534,6 +3724,8 @@ export function VideoConferenceComponent(props: {
     presenterListsEqual,
     isLocalScreenShare,
     isLocalControlOperator,
+    applyHostHands,
+    buildCorrection,
   ]);
 
   // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.
@@ -3546,24 +3738,12 @@ export function VideoConferenceComponent(props: {
         activeView === 'liveDoc' && isLocalScreenShare ? 'shareScreen' : activeView;
       auth.presenter = copresenterIdentities;
       auth.livedocInstanceId = livedocInstanceId;
+      // 接过主持人身份时用本地举手队列镜像播种，避免主持人转让后队列被清空
+      if (auth.raisedHands.length === 0 && raisedHandsRef.current.length > 0) {
+        auth.raisedHands = raisedHandsRef.current;
+      }
       for (const [, participant] of room.remoteParticipants) {
-        sendMeetingMsg(
-          {
-            type: 'CORRECTION',
-            view: auth.view,
-            presenter: auth.presenter,
-            livedocInstanceId: auth.livedocInstanceId,
-            muteAllActive: auth.muteAllActive,
-            muteAllLockUntil: auth.muteAllLockUntil,
-            hostMutedIdentities: auth.hostMutedIdentities,
-            hostMutedUntilByIdentity: auth.hostMutedUntilByIdentity,
-            exemptFromMuteAllIdentities: auth.exemptFromMuteAllIdentities,
-            hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
-            hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
-            captionsOn: auth.captionsOn,
-          },
-          [participant.identity],
-        );
+        sendMeetingMsg(buildCorrection(), [participant.identity]);
       }
     }
     wasHostRef.current = isHost;
@@ -3576,7 +3756,92 @@ export function VideoConferenceComponent(props: {
     livedocInstanceId,
     room,
     sendMeetingMsg,
+    buildCorrection,
   ]);
+
+  // 取消静音后持续说话自动放下手：仅对本地用户生效，避免各端重复广播
+  React.useEffect(() => {
+    if (!handRaised) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const clearTimer = () => {
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+    };
+    const handleSpeakers = (speakers: Participant[]) => {
+      const local = room.localParticipant;
+      const isSpeakingNow =
+        speakers.some((p) => p.identity === local.identity) && local.isMicrophoneEnabled;
+      if (!isSpeakingNow) {
+        clearTimer();
+        return;
+      }
+      if (timer !== null) return;
+      timer = setTimeout(() => {
+        timer = null;
+        if (handRaisedRef.current) handleToggleHand();
+      }, AUTO_LOWER_HAND_MS);
+    };
+    room.on(RoomEvent.ActiveSpeakersChanged, handleSpeakers);
+    return () => {
+      clearTimer();
+      room.off(RoomEvent.ActiveSpeakersChanged, handleSpeakers);
+    };
+  }, [room, handRaised, handleToggleHand]);
+
+  // "XXX 举手了" 提示：短窗口内合并，多人同时举手只弹一条
+  React.useEffect(() => {
+    const pending = new Set<string>();
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    notifyHandRaisedRef.current = (identity: string) => {
+      if (identity === room.localParticipant.identity) return;
+      pending.add(identity);
+      if (timer !== null) return;
+      timer = setTimeout(() => {
+        timer = null;
+        const names = Array.from(pending).map(
+          (id) => room.remoteParticipants.get(id)?.name || id,
+        );
+        pending.clear();
+        const name = names[0];
+        if (!name) return;
+        toast(
+          names.length > 1
+            ? t('toolbar.handRaisedToastMulti', {
+                name,
+                others: names.length - 1,
+                total: names.length,
+              })
+            : t('toolbar.handRaisedToast', { name }),
+        );
+      }, HAND_TOAST_MERGE_MS);
+    };
+    return () => {
+      notifyHandRaisedRef.current = null;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [room, t]);
+
+  // 参会者离开时清理其举手记录（离线者不再发心跳，必须显式剔除）
+  React.useEffect(() => {
+    const handleLeft = (participant: RemoteParticipant) => {
+      setRaisedHands((prev) =>
+        prev.includes(participant.identity)
+          ? prev.filter((id) => id !== participant.identity)
+          : prev,
+      );
+      if (isHost) {
+        applyHostHands(
+          authState.current.raisedHands.filter((id) => id !== participant.identity),
+        );
+      }
+    };
+    room.on(RoomEvent.ParticipantDisconnected, handleLeft);
+    return () => {
+      room.off(RoomEvent.ParticipantDisconnected, handleLeft);
+    };
+  }, [room, isHost, applyHostHands]);
 
   // All participants: send heartbeat every 5s to the authoritative host identity
   React.useEffect(() => {
@@ -3599,6 +3864,11 @@ export function VideoConferenceComponent(props: {
           hostDisabledVideoIdentities,
           hostDisabledVideoUntilByIdentity,
           captionsOn: captionsRunningRef.current,
+          // 自己的举手态 + 举手时刻：主持人据此重建权威队列（举手持久化）
+          handRaised: handRaisedRef.current,
+          handRaisedAt: handRaisedAtRef.current,
+          // 本地举手队列镜像，供主持人检测不一致后下发 CORRECTION
+          raisedHands: raisedHandsRef.current,
         },
         [hostIdentity],
       );
@@ -3730,6 +4000,7 @@ export function VideoConferenceComponent(props: {
     // SVG templates for the mic icon
     const micSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/></svg>`;
     const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
+    const handSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12"/></svg>`;
     const camSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`;
     const camOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
 
@@ -3755,6 +4026,7 @@ export function VideoConferenceComponent(props: {
       const restrictedMicIdentities = hostMutedIdentitiesRef.current;
       const restrictedVideoIdentities = hostDisabledVideoIdentitiesRef.current;
       const exemptIdentities = exemptFromMuteAllIdentitiesRef.current;
+      const handIdentities = raisedHandsRef.current;
 
       tiles.forEach((tile) => {
         const inCarousel = !!tile.closest('.lk-carousel');
@@ -3781,6 +4053,22 @@ export function VideoConferenceComponent(props: {
         const isLocal = participant.identity === room.localParticipant.identity;
         tile.setAttribute('data-lk-participant', identity);
         tile.setAttribute('data-lk-local-participant', isLocal ? 'true' : 'false');
+
+        // 举手角标：主网格 / 移动网格 / 共享 carousel 走 DOM 注入；
+        // LiveDoc 侧栏与浮窗由 KloudTileHandBadge 渲染，此处跳过以免重复注入
+        if (!inWebcamSidebar && !inFloating) {
+          const existingHandBadge = tile.querySelector('.kloud-tile-hand-badge');
+          if (!handIdentities.includes(identity)) {
+            existingHandBadge?.remove();
+          } else if (!existingHandBadge) {
+            const handBadge = document.createElement('div');
+            handBadge.className = 'kloud-tile-hand-badge';
+            handBadge.setAttribute('data-kloud-identity', identity);
+            handBadge.setAttribute('aria-hidden', 'true');
+            handBadge.innerHTML = handSvg;
+            tile.appendChild(handBadge);
+          }
+        }
 
         let metadata = tile.querySelector('.lk-participant-metadata');
         if (!metadata && inCarousel) {
@@ -3933,9 +4221,11 @@ export function VideoConferenceComponent(props: {
 
         if (shouldInjectDomMoreMenu) {
           const roleConfig = participantRoleMenuBridge.current?.getConfig();
-          const canManageRoles = roleConfig?.canManageRoles ?? (isHost || isCohost);
           const isThisHost = identity === hostIdentity;
-          const showMoreMenu = canManageRoles && (isThisHost || (!isLocal && !isThisHost));
+          // 与 React 版 ⋯ 菜单共用可见性判断，避免"能放手但看不到菜单"的分叉
+          const showMoreMenu = roleConfig
+            ? shouldShowRoleMenu(identity, roleConfig)
+            : (isHost || isCohost) && (isThisHost || !isLocal);
 
           let moreWrap = tile.querySelector('.kloud-tile-more-menu-wrap') as HTMLElement | null;
           if (!showMoreMenu) {
@@ -4273,6 +4563,7 @@ export function VideoConferenceComponent(props: {
       roomLocalIdentity: room.localParticipant.identity,
       isHost,
       isCohost,
+      raisedHands,
     }),
     [
       hostMutedIdentities,
@@ -4286,6 +4577,7 @@ export function VideoConferenceComponent(props: {
       room.localParticipant.identity,
       isHost,
       isCohost,
+      raisedHands,
     ],
   );
 
@@ -4297,6 +4589,9 @@ export function VideoConferenceComponent(props: {
       canManageRoles: isHost || isCohost,
       localIdentity: room.localParticipant.identity,
       autoPresenterIdentity,
+      raisedHands,
+      canLowerHands: canManageHands,
+      onLowerHand: handleLowerParticipantHand,
       onAddCopresenter: (identity) => {
         setCopresenterIdentities((prev) => (prev.includes(identity) ? prev : [...prev, identity]));
         sendMeetingMsg({ type: 'SET_PRESENTER', identity });
@@ -4359,6 +4654,9 @@ export function VideoConferenceComponent(props: {
       room.localParticipant.identity,
       autoPresenterIdentity,
       sendMeetingMsg,
+      raisedHands,
+      canManageHands,
+      handleLowerParticipantHand,
     ],
   );
 
@@ -6612,6 +6910,9 @@ export function VideoConferenceComponent(props: {
                   onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
                   hostMutedIdentities={hostMutedIdentities}
                   hostDisabledVideoIdentities={hostDisabledVideoIdentities}
+                  raisedHands={raisedHands}
+                  canManageHands={canManageHands}
+                  onLowerAllHands={handleLowerAllHands}
                 />
               </div>
             </div>
@@ -8138,6 +8439,48 @@ export function VideoConferenceComponent(props: {
               50% { opacity: 0.7; transform: scale(0.9); }
             }
 
+            /* 举手角标：画面左上角的琥珀色手掌（只读，不可点击） */
+            .kloud-tile-hand-badge {
+              position: absolute;
+              top: 6px;
+              left: 6px;
+              z-index: 6;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              width: 26px;
+              height: 26px;
+              padding: 4px;
+              box-sizing: border-box;
+              border-radius: 8px;
+              border: 1px solid rgba(245, 158, 11, 0.45);
+              background: rgba(24, 16, 2, 0.72);
+              backdrop-filter: blur(4px);
+              color: #f59e0b;
+              pointer-events: none;
+              animation: kloud-hand-raise-in 0.22s ease-out;
+            }
+            .kloud-tile-hand-badge svg {
+              display: block;
+              width: 100%;
+              height: 100%;
+            }
+            .lk-mobile-scroll-grid .kloud-tile-hand-badge,
+            .webcam-sidebar-panel .kloud-tile-hand-badge,
+            .floating-webcam-panel .kloud-tile-hand-badge,
+            .sky-meet-video-wrapper .lk-carousel .kloud-tile-hand-badge {
+              top: 4px;
+              left: 4px;
+              width: 20px;
+              height: 20px;
+              padding: 3px;
+              border-radius: 6px;
+            }
+            @keyframes kloud-hand-raise-in {
+              from { opacity: 0; transform: translateY(4px) scale(0.85); }
+              to { opacity: 1; transform: none; }
+            }
+
             /* Host hover interactions */
             .lk-grid-layout-wrapper .kloud-custom-mic-indicator.operator-interactive,
             .webcam-sidebar-panel .kloud-custom-mic-indicator.operator-interactive,
@@ -8576,6 +8919,9 @@ export function VideoConferenceComponent(props: {
           muteAllActive={muteAllActive}
           onMuteAll={handleMuteAll}
           onUnmuteAll={handleUnmuteAll}
+          handRaised={handRaised}
+          onToggleHand={handleToggleHand}
+          raisedHandCount={canManageHands ? raisedHands.length : 0}
           onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
           isMutedByHost={isLocalMicRestricted}
           isCamDisabledByHost={isLocalCamRestricted}
@@ -8632,6 +8978,9 @@ export function VideoConferenceComponent(props: {
                 onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
                 hostMutedIdentities={hostMutedIdentities}
                 hostDisabledVideoIdentities={hostDisabledVideoIdentities}
+                raisedHands={raisedHands}
+                canManageHands={canManageHands}
+                onLowerAllHands={handleLowerAllHands}
               />
             )
           }

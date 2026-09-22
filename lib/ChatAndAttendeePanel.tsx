@@ -246,6 +246,11 @@ interface AttendeePanelProps {
   hostMutedIdentities?: string[];
   /** Identities whose camera was disabled by the host */
   hostDisabledVideoIdentities?: string[];
+  /** Raised-hand queue, ordered by when each hand went up */
+  raisedHands?: string[];
+  /** Whether the local user may lower other people's hands (host / co-host / presenter) */
+  canManageHands?: boolean;
+  onLowerAllHands?: () => void;
 }
 
 export function AttendeePanel({
@@ -262,6 +267,9 @@ export function AttendeePanel({
   onDisableParticipantVideo,
   hostMutedIdentities = [],
   hostDisabledVideoIdentities = [],
+  raisedHands = [],
+  canManageHands = false,
+  onLowerAllHands,
 }: AttendeePanelProps) {
   const { t } = useI18n();
   const room = useRoomContext();
@@ -330,6 +338,11 @@ export function AttendeePanel({
       })
     : sorted;
 
+  // 举手总数：剔除已离会但队列里还没清掉的 identity
+  const raisedHandCount = raisedHands.filter((identity) =>
+    participants.some((p) => p.identity === identity),
+  ).length;
+
   return (
     <div className="kloud-attendee-panel">
       <div className="kloud-attendee-header">
@@ -365,6 +378,20 @@ export function AttendeePanel({
         )}
       </div>
 
+      {/* Raised hands — 只显示总数与「全部放下」；放下单个人走该行的 ⋯ 菜单 */}
+      {raisedHandCount > 0 && (
+        <div className="kloud-hand-queue">
+          <span className="kloud-hand-queue-title">
+            {t('attendee.raisedHands')} ({raisedHandCount})
+          </span>
+          {canManageHands && onLowerAllHands && (
+            <button type="button" className="kloud-lower-all-btn" onClick={onLowerAllHands}>
+              {t('attendee.lowerAllHands')}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Search bar — only when 5+ participants */}
       {participants.length >= 5 && (
         <div className="kloud-attendee-search">
@@ -398,6 +425,7 @@ export function AttendeePanel({
           const isOperator = isThisHost || isThisCohost || isThisAutoPresenter;
           // Also: the LOCAL user who has canMuteAll never shows the red badge for themselves
           const isForceMuted = !!(muteAllActive && !isOperator && !(isLocalParticipant && canMuteAll));
+          const handOrder = raisedHands.indexOf(p.identity);
 
           return (
             <div key={p.identity} className="kloud-attendee-row">
@@ -412,6 +440,14 @@ export function AttendeePanel({
                   {roles.map((r) => (
                     <span key={r.cls} className={`kloud-attendee-role ${r.cls}`}>{r.label}</span>
                   ))}
+                  {handOrder >= 0 && (
+                    <span className="kloud-attendee-hand-chip" title={t('attendee.raisedHands')}>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="9" height="9" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12" />
+                      </svg>
+                      {handOrder + 1}
+                    </span>
+                  )}
                 </div>
               </div>
 
@@ -880,6 +916,55 @@ export const chatAndAttendeeStyles = `
   .role-attendee {
     color: rgba(255,255,255,0.4);
     background: rgba(255,255,255,0.05);
+  }
+
+  /* Raised-hand summary bar (count + Lower All; individual lowering lives in the row ⋯ menu) */
+  .kloud-hand-queue {
+    margin: 2px 8px 6px;
+    padding: 5px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(245, 158, 11, 0.28);
+    background: rgba(245, 158, 11, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .kloud-hand-queue-title {
+    color: #fbbf24;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .kloud-lower-all-btn {
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    background: rgba(245, 158, 11, 0.14);
+    color: #fbbf24;
+    font-size: 10px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .kloud-lower-all-btn:hover {
+    background: rgba(245, 158, 11, 0.26);
+    color: #fff;
+  }
+
+  /* Raised-hand chip inside the roster row */
+  .kloud-attendee-hand-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(245, 158, 11, 0.16);
+    color: #fbbf24;
+    font-size: 9px;
+    font-weight: 700;
   }
 
   /* Force-muted badge (shown when host has muted all) */

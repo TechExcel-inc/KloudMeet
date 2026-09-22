@@ -46,6 +46,8 @@ export type KloudTileMediaRestrictionProps = {
   roomLocalIdentity: string;
   isHost: boolean;
   isCohost: boolean;
+  /** 举手队列：按举手先后排序的 identity 列表，由主持人权威状态下发 */
+  raisedHands: string[];
 };
 
 function isKloudTargetOperator(identity: string, props: KloudTileMediaRestrictionProps): boolean {
@@ -54,6 +56,38 @@ function isKloudTargetOperator(identity: string, props: KloudTileMediaRestrictio
     props.cohostIdentities.includes(identity) ||
     props.autoPresenterIdentity === identity ||
     props.copresenterIdentities.includes(identity)
+  );
+}
+
+/**
+ * KloudTileHandBadge — 画面左上角的举手角标
+ *
+ * 举手状态只读：是否显示取决于主持人下发的 raisedHands 队列，角标本身不可点击。
+ * LiveDoc 侧栏 / 浮窗 / Document PiP 走本组件；主网格与 carousel 走 DOM 注入。
+ */
+function KloudTileHandBadge({
+  identity,
+  mediaRestrictions,
+}: {
+  identity: string;
+  mediaRestrictions: KloudTileMediaRestrictionProps;
+}) {
+  if (!mediaRestrictions.raisedHands.includes(identity)) return null;
+  return (
+    <div className="kloud-tile-hand-badge" data-kloud-identity={identity} aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        width="100%"
+        height="100%"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12" />
+      </svg>
+    </div>
   );
 }
 
@@ -576,6 +610,7 @@ export function LiveDocWebcamSidebarTile({
       data-lk-local-participant={participant.isLocal ? 'true' : 'false'}
       data-lk-source={Track.Source.Camera}
     >
+      <KloudTileHandBadge identity={participant.identity} mediaRestrictions={mediaRestrictions} />
       <div className="webcam-sidebar-video">
         {hasVideo && camPub?.track ? (
           <VideoTrack
@@ -641,6 +676,7 @@ export function LiveDocFloatingGridTile({
       data-kloud-force-muted={isForceMuted ? 'true' : 'false'}
     >
       <ParticipantTileRoleMoreMenu identity={identity} />
+      <KloudTileHandBadge identity={identity} mediaRestrictions={mediaRestrictions} />
       <div className="floating-grid-video">
         {hasVideo && camPub?.track ? (
           <VideoTrack

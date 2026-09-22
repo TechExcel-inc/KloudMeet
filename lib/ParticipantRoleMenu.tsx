@@ -3,6 +3,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useParticipants } from '@livekit/components-react';
 import { getInitials } from '@/lib/getInitials';
+import { useI18n } from '@/lib/i18n';
 
 export interface ParticipantRoleActionsConfig {
   hostIdentity: string | null;
@@ -11,6 +12,11 @@ export interface ParticipantRoleActionsConfig {
   canManageRoles: boolean;
   localIdentity: string;
   autoPresenterIdentity: string | null;
+  /** 举手队列，按举手先后排序；决定 ⋯ 菜单里是否出现「放下手」 */
+  raisedHands: string[];
+  /** 是否有权放下他人的手（主持人 / 联席主持人 / 演示者，范围比 canManageRoles 宽） */
+  canLowerHands: boolean;
+  onLowerHand?: (identity: string) => void;
   onAddCopresenter?: (identity: string) => void;
   onRemoveCopresenter?: (identity: string) => void;
   onSetCohost?: (identity: string) => void;
@@ -69,11 +75,24 @@ function getRoles(
   return roles;
 }
 
+/** canLowerParticipantHand — 本地用户能否放下该参会者举起的手 */
+function canLowerParticipantHand(
+  identity: string,
+  config: Pick<ParticipantRoleActionsConfig, 'canLowerHands' | 'raisedHands'>,
+): boolean {
+  return config.canLowerHands && config.raisedHands.includes(identity);
+}
+
 function shouldShowRoleMenu(
   identity: string,
-  config: Pick<ParticipantRoleActionsConfig, 'hostIdentity' | 'localIdentity' | 'canManageRoles'>,
+  config: Pick<
+    ParticipantRoleActionsConfig,
+    'hostIdentity' | 'localIdentity' | 'canManageRoles' | 'canLowerHands' | 'raisedHands'
+  >,
 ): boolean {
-  if (!config.canManageRoles) return false;
+  // 演示者不能管理角色，但可以放下他人的手，所以这两种权限都能打开菜单；
+  // 菜单内部的角色操作仍单独受 canManageRoles 约束。
+  if (!config.canManageRoles && !canLowerParticipantHand(identity, config)) return false;
   const isThisHost = identity === config.hostIdentity;
   const isLocal = identity === config.localIdentity;
   return isThisHost || (!isLocal && !isThisHost);
@@ -349,6 +368,7 @@ function ParticipantRoleDropdownContent({
   onClose?: () => void;
 }) {
   const ctx = useContext(ParticipantRoleMenuContext);
+  const { t } = useI18n();
   if (!ctx) return null;
 
   const {
@@ -357,6 +377,7 @@ function ParticipantRoleDropdownContent({
     cohostIdentities,
     localIdentity,
     canManageRoles,
+    onLowerHand,
     onAddCopresenter,
     onRemoveCopresenter,
     onSetCohost,
@@ -378,10 +399,27 @@ function ParticipantRoleDropdownContent({
   const isThisCopresenter = copresenterIdentities.includes(identity);
   const canRemoveFromMeeting =
     canManageRoles && !isThisHost && !isLocalParticipant && !!onRemoveFromMeeting;
+  const showLowerHand = canLowerParticipantHand(identity, ctx) && !!onLowerHand;
+  // 仅凭放手权限打开的菜单，手被别人先放下后就没有可用项了，不要留一个空壳下拉
+  if (!canManageRoles && !showLowerHand) return null;
 
   return (
     <div className="kloud-more-dropdown" onMouseDown={(e) => e.stopPropagation()}>
-      {isThisHost && isLocalParticipant && (
+      {showLowerHand && (
+        <button
+          className="kloud-more-dropdown-item"
+          onClick={() => {
+            onLowerHand?.(identity);
+            closeMenu();
+          }}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12" />
+          </svg>
+          {t('toolbar.lowerHand')}
+        </button>
+      )}
+      {canManageRoles && isThisHost && isLocalParticipant && (
         <button
           className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
           onClick={() => {
@@ -402,7 +440,7 @@ function ParticipantRoleDropdownContent({
           {isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
         </button>
       )}
-      {!isThisHost && (
+      {canManageRoles && !isThisHost && (
         <>
           <button
             className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
@@ -441,7 +479,7 @@ function ParticipantRoleDropdownContent({
           </button>
         </>
       )}
-      {isThisHost && (
+      {canManageRoles && isThisHost && (
         <button
           className="kloud-more-dropdown-item"
           onClick={() => {
