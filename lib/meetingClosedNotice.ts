@@ -1,6 +1,9 @@
 import { authHeaders } from '@/lib/kloudSession';
+import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 
 const MEETING_CLOSED_NOTICE_KEY = 'kloudMeetingClosedNotice';
+/** 断线后判断会议是否结束；弱网下请求挂住会阻塞重连，必须有上限 */
+const MEETING_STATUS_TIMEOUT_MS = 6_000;
 
 /** Persist a short message shown on the home page after redirect. */
 export function setMeetingClosedNotice(message: string): void {
@@ -29,10 +32,11 @@ export async function isMeetingEnded(roomName: string, maxAttempts = 4): Promise
   const encoded = encodeURIComponent(roomName);
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
-      const res = await fetch(`/api/meetings/${encoded}`, {
-        cache: 'no-store',
-        headers: authHeaders(),
-      });
+      const res = await fetchWithTimeout(
+        `/api/meetings/${encoded}`,
+        { cache: 'no-store', headers: authHeaders() },
+        MEETING_STATUS_TIMEOUT_MS,
+      );
       if (res.ok) {
         const data = await res.json();
         if (data?.status === 'ENDED' || data?.status === 'CANCELED') {

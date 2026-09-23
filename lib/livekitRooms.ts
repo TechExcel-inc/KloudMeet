@@ -12,21 +12,28 @@ export function getRoomServiceClient(): RoomServiceClient | null {
 }
 
 const LIVEKIT_LIST_ROOMS_TIMEOUT_MS = 8_000;
+/** 入会/重连换票路径上的 LiveKit 服务端调用上限，避免拖慢 /api/connection-details */
+const LIVEKIT_EVICT_TIMEOUT_MS = 5_000;
+
+/** withTimeout — 为 LiveKit 服务端 API 调用加超时 */
+function withTimeout<T>(task: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+  });
+  return Promise.race([task, timeout]).finally(() => clearTimeout(timer));
+}
 
 /** Returns LiveKit room names that currently have an active session. */
 export async function listActiveRoomNames(): Promise<string[]> {
   const client = getRoomServiceClient();
   if (!client) return [];
   try {
-    const rooms = await Promise.race([
+    const rooms = await withTimeout(
       client.listRooms(),
-      new Promise<never>((_, reject) => {
-        setTimeout(
-          () => reject(new Error('LiveKit listRooms timed out')),
-          LIVEKIT_LIST_ROOMS_TIMEOUT_MS,
-        );
-      }),
-    ]);
+      LIVEKIT_LIST_ROOMS_TIMEOUT_MS,
+      'LiveKit listRooms',
+    );
     return rooms.map((r) => r.name);
   } catch (e) {
     console.error('[livekitRooms] listRooms failed', e);
@@ -82,7 +89,11 @@ export async function evictParticipantsByMemberId(
   }
 
   try {
-    const participants = await client.listParticipants(roomName);
+    const participants = await withTimeout(
+      client.listParticipants(roomName),
+      LIVEKIT_EVICT_TIMEOUT_MS,
+      'LiveKit listParticipants',
+    );
     console.log(`[evict] Room "${roomName}" has ${participants.length} participant(s):`,
       participants.map(p => ({ identity: p.identity, sid: p.sid })));
     let evicted = 0;
@@ -109,10 +120,14 @@ export async function evictParticipantsByMemberId(
           JSON.stringify({ type: 'SESSION_EVICTED' }),
         );
         try {
-          await client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
-            destinationIdentities: [p.identity],
-            topic: 'kloud-session',
-          });
+          await withTimeout(
+            client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
+              destinationIdentities: [p.identity],
+              topic: 'kloud-session',
+            }),
+            LIVEKIT_EVICT_TIMEOUT_MS,
+            'LiveKit sendData',
+          );
           console.log(`[evict] Sent SESSION_EVICTED to ${p.identity}, waiting 150ms…`);
           await new Promise((r) => setTimeout(r, 150));
         } catch (sendErr) {
@@ -120,7 +135,11 @@ export async function evictParticipantsByMemberId(
         }
 
         console.log(`[evict] Removing participant: ${p.identity} (memberId=${pid})`);
-        await client.removeParticipant(roomName, p.identity);
+        await withTimeout(
+          client.removeParticipant(roomName, p.identity),
+          LIVEKIT_EVICT_TIMEOUT_MS,
+          'LiveKit removeParticipant',
+        );
         console.log(`[evict] Successfully removed: ${p.identity}`);
         evicted++;
       } catch (e) {

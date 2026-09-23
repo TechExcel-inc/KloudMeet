@@ -11,7 +11,6 @@ import {
 } from 'livekit-client';
 import {
   AudioTrack,
-  ConnectionStateToast,
   ParticipantTile,
   useIsMuted,
   useIsSpeaking,
@@ -33,6 +32,7 @@ import {
   LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
 } from './roomConstants';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
+import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 
 export type KloudTileMediaRestrictionProps = {
   hostMutedIdentities: string[];
@@ -580,7 +580,7 @@ export function MobileVideoLayout() {
         </button>
       )}
 
-      <ConnectionStateToast />
+      <KloudConnectionStateToast />
     </div>
   );
 }

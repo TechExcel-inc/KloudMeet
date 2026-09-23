@@ -8,6 +8,7 @@ import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
+import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 import { KloudMeetToolbar, ViewMode, WebcamLayoutMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
 import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
@@ -52,7 +53,7 @@ import {
   VideoTrack,
   useTracks,
   ParticipantTile,
-  ConnectionStateToast,
+  RoomAudioRenderer,
   TrackMutedIndicator,
   useIsSpeaking,
 } from '@livekit/components-react';
@@ -68,6 +69,8 @@ import {
   ConnectionState,
   RemoteParticipant,
   Participant,
+  LocalAudioTrack,
+  LocalTrackPublication,
   RemoteTrack,
   RemoteTrackPublication,
   TrackPublication,
@@ -77,6 +80,7 @@ import {
   Track,
   DataPacket_Kind,
   DisconnectReason,
+  DefaultReconnectPolicy,
 } from 'livekit-client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -229,6 +233,38 @@ function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
 const MIC_PUBLISH_RETRY_MS = 800;
 const AUDIO_RESUBSCRIBE_DELAY_MS = 1500;
 const AUDIO_RESUBSCRIBE_MAX_TRIES = 2;
+/** 重连退避上限；不设次数上限，直到连上或进入终止状态 */
+const RECONNECT_MAX_DELAY_MS = 10_000;
+/** 连续失败到第几轮起每次都换新票（旧票可能已被服务端拒绝） */
+const RECONNECT_FRESH_TOKEN_ATTEMPT = 3;
+/** 第几轮失败时输出一次严重日志，之后每隔该轮数再输出一次 */
+const RECONNECT_SERIOUS_LOG_EVERY = 6;
+/** 断线兜底巡检：防止某条触发路径漏掉导致永远不重连 */
+const RECONNECT_WATCHDOG_MS = 5_000;
+/** /api/connection-details 超时；挂住会让所有重连共享同一个永不返回的 Promise */
+const CONNECTION_DETAILS_TIMEOUT_MS = 15_000;
+/** 麦克风上行巡检间隔 */
+const MIC_WATCHDOG_MS = 3_000;
+/** 连续多少次巡检无上行数据时 restartTrack */
+const MIC_STALL_RESTART_TICKS = 3;
+/** 连续多少次巡检无上行数据时取消发布并重新发布 */
+const MIC_STALL_REPUBLISH_TICKS = 6;
+/** 麦克风补发失败后的最大冷却巡检轮数 */
+const MIC_REPUBLISH_MAX_COOLDOWN_TICKS = 10;
+const MEETING_CLOSED_ERROR = 'MeetingClosedError';
+/** 后台换票失败后的重试间隔 */
+const TOKEN_REFRESH_RETRY_MS = 60_000;
+/**
+ * SDK 内部重连（resume → 失败自动升级 full reconnect，保留 Room 与已发布轨道）的间隔。
+ * SDK 默认间隔封顶 7s、约 50s 放弃；这里封顶 2s（网络恢复后最多 ~3s 就发起下一次），
+ * 约 2 分钟后再交给应用层重建。
+ */
+const LIVEKIT_RECONNECT_DELAYS_MS: number[] = [
+  0,
+  300,
+  1_000,
+  ...Array.from({ length: 55 }, () => 2_000),
+];
 
 /** 发布麦克风，失败重试一次，返回是否真的在发声，供调用方校正 UI。 */
 async function publishMic(room: Room): Promise<boolean> {
@@ -290,6 +326,12 @@ export function VideoConferenceComponent(props: {
   const localShareViewSessionRef = React.useRef<{ previousView: ViewMode } | null>(null);
   const [webcamLayoutMode, setWebcamLayoutMode] = React.useState<WebcamLayoutMode>('tile');
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
+  /**
+   * 用户当前“想不想开麦/开摄像头”。重连恢复与麦克风保活以此为准，
+   * 不能用 props.userChoices（那只是准备页的初始选择）。
+   */
+  const desiredMicRef = React.useRef(props.userChoices.audioEnabled);
+  const desiredCamRef = React.useRef(props.userChoices.videoEnabled);
   // Stores the mic state BEFORE a MUTE_ALL command arrived, so UNMUTE_ALL can restore it.
   const preMuteAllMicRef = React.useRef<boolean | null>(null);
   const [camEnabled, setCamEnabled] = React.useState(props.userChoices.videoEnabled);
@@ -447,7 +489,9 @@ export function VideoConferenceComponent(props: {
       // 手机切后台常见 pagehide/freeze；不断连，靠现有 visibility 恢复音频
       disconnectOnPageLeave: !isMobileClient,
       e2ee: keyProvider && worker && e2eeEnabled ? { keyProvider, worker } : undefined,
-      singlePeerConnection: true,
+      reconnectPolicy: new DefaultReconnectPolicy(LIVEKIT_RECONNECT_DELAYS_MS),
+      // 单 PC 模式在断网后 full reconnect 重新发布麦克风时易出现对方听不到，沿用双 PC
+      singlePeerConnection: false,
     };
   }, [props.userChoices, props.options.hq, props.options.codec, e2eeEnabled, keyProvider, worker]);
 
@@ -576,10 +620,12 @@ export function VideoConferenceComponent(props: {
     setScreenShareSurface('unknown');
     setSurfaceDetected(false);
     setActiveView((prev) => {
-      // Only skip end during token renew / rejoin (not browser "Stop sharing")
+      // Only skip end while disconnected / reconnecting AND a restore will run afterwards
+      // (restoreScreenShareAfterReconnect ends the session itself if restore fails).
       if (
         localShareViewSessionRef.current &&
-        (tokenRenewInProgressRef.current || pragmaticRejoinInFlightRef.current)
+        screenShareRestorePendingRef.current &&
+        (reconnectInFlightRef.current || room.state !== ConnectionState.Connected)
       ) {
         return prev;
       }
@@ -663,10 +709,14 @@ export function VideoConferenceComponent(props: {
   }, []);
 
   const connectAttemptedRef = React.useRef(false);
-  const connectRetryCountRef = React.useRef(0);
-  const MAX_CONNECT_RETRIES = 6;
-  // Tracks the pending retry setTimeout so we can cancel on unmount
-  const connectRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 当前连续失败轮次，连上后清零；决定退避时长与是否换票 */
+  const reconnectAttemptRef = React.useRef(0);
+  const reconnectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 同一时刻只允许一个 connect 尝试 */
+  const reconnectInFlightRef = React.useRef(false);
+  /** 下一轮必须换新票（上次 JWT 被拒 / 被顶号后重新接管） */
+  const reconnectFreshRef = React.useRef(false);
+  /** 终止状态：主动离开、会议结束、登录失效等，不再自动重连 */
   const intentionalDisconnectRef = React.useRef(false);
   const hasConnectedOnceRef = React.useRef(false);
   const connectionDetailsRef = React.useRef(props.connectionDetails);
@@ -682,17 +732,10 @@ export function VideoConferenceComponent(props: {
   const removedFromMeetingHandledRef = React.useRef(false);
   const hostEndedHandledRef = React.useRef(false);
   const hostEndedRedirectTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Retry counter for unexpected in-room errors (silent auto-recover only — not UX theater)
-  const unexpectedErrorRetryCountRef = React.useRef(0);
-  const MAX_UNEXPECTED_RETRIES = 6;
-  /** Silent JWT renew in progress — disconnect must not look like an unexpected drop. */
-  const tokenRenewInProgressRef = React.useRef(false);
   /** Last LiveKit DisconnectReason name for serious-failure RCA logs. */
   const lastDisconnectReasonRef = React.useRef<string | undefined>(undefined);
-  /** One-shot pragmatic rejoin after auto-recover exhaustion (avoids retry loops). */
-  const pragmaticRejoinInFlightRef = React.useRef(false);
   /**
-   * Local screen share was active — restore after token renew / reconnect.
+   * Local screen share was active — restore after reconnect.
    * Set on publish; cleared on intentional stop or after restore attempt.
    */
   const screenShareRestorePendingRef = React.useRef(false);
@@ -706,6 +749,12 @@ export function VideoConferenceComponent(props: {
     } catch {
       /* ignore */
     }
+  }, []);
+
+  const clearReconnectTimer = React.useCallback(() => {
+    if (!reconnectTimerRef.current) return;
+    clearTimeout(reconnectTimerRef.current);
+    reconnectTimerRef.current = null;
   }, []);
 
   const refreshConnectionDetails = React.useCallback(async (): Promise<ConnectionDetails> => {
@@ -724,10 +773,20 @@ export function VideoConferenceComponent(props: {
         url.searchParams.append('region', props.region);
       }
 
-      const response = await fetch(url.toString(), connectionDetailsFetchInit({ cache: 'no-store' }));
+      const response = await fetchWithTimeout(
+        url.toString(),
+        connectionDetailsFetchInit({ cache: 'no-store' }),
+        CONNECTION_DETAILS_TIMEOUT_MS,
+      );
       if (response.status === 401) {
         handleKloudSessionExpired();
         throw new Error('Session expired');
+      }
+      if (response.status === 403 || response.status === 404) {
+        // 会议已结束 / 不存在：终止状态，不再重试
+        const closed = new Error(`会议已关闭 ${response.status}: ${await response.text()}`);
+        closed.name = MEETING_CLOSED_ERROR;
+        throw closed;
       }
       if (!response.ok) {
         throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
@@ -844,12 +903,10 @@ export function VideoConferenceComponent(props: {
     } catch {
       /* proceed with defaults */
     }
-    if (props.userChoices.videoEnabled) {
-      await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
-    } else {
-      await room.localParticipant.setCameraEnabled(false).catch(() => undefined);
-    }
-    if (props.userChoices.audioEnabled) {
+    // 被主持人禁用时不恢复，避免发布后立刻被 enforceHost* 再关掉
+    const wantCam = desiredCamRef.current && !localCamRestrictedRef.current;
+    await room.localParticipant.setCameraEnabled(wantCam).catch(() => undefined);
+    if (desiredMicRef.current && !localMicRestrictedRef.current) {
       setMicEnabled(await publishMic(room));
     } else {
       await room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
@@ -858,111 +915,16 @@ export function VideoConferenceComponent(props: {
       void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
     }
     await restoreScreenShareAfterReconnect();
-  }, [props.userChoices, room, restoreScreenShareAfterReconnect]);
-
-  /**
-   * Auto-recover exhausted → bug path: heavy log, then one pragmatic forceRefresh rejoin.
-   * Do not present "failed N times" as the product experience; only surface UI if rejoin fails.
-   */
-  const enterSeriousFailureAndPragmaticRejoin = React.useCallback(
-    (opts: {
-      phase: 'retries-exhausted' | 'unexpected-disconnect';
-      attempt: number;
-      maxAttempts: number;
-      error: Error;
-      path: string;
-    }) => {
-      const authFail = isLiveKitAuthError(opts.error);
-      const failureKind = classifyLiveKitFailure(opts.error);
-      logSeriousLiveKitFailure({
-        phase: opts.phase,
-        attempt: opts.attempt,
-        maxAttempts: opts.maxAttempts,
-        roomName: connectionDetailsRef.current?.roomName,
-        roomState: room.state,
-        disconnectReason: lastDisconnectReasonRef.current,
-        authFail,
-        failureKind,
-        participantToken: connectionDetailsRef.current?.participantToken,
-        error: opts.error,
-        extra: { path: opts.path },
-      });
-
-      if (pragmaticRejoinInFlightRef.current) {
-        setConnectError(opts.error.message);
-        return;
-      }
-      if (duplicateSessionHandledRef.current || removedFromMeetingHandledRef.current) {
-        return;
-      }
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        // Stay quiet until online recovery; still logged above as serious.
-        setConnectError(opts.error.message);
-        return;
-      }
-
-      pragmaticRejoinInFlightRef.current = true;
-      connectAttemptedRef.current = true;
-      connectRetryCountRef.current = 0;
-      unexpectedErrorRetryCountRef.current = 0;
-      intentionalDisconnectRef.current = false;
-      console.warn(
-        '[KloudMeet] Pragmatic rejoin after auto-recover failure — not retry theater; continuing meeting',
-      );
-
-      connectRoom({ forceRefresh: true })
-        .then(async () => {
-          hasConnectedOnceRef.current = true;
-          intentionalDisconnectRef.current = false;
-          setConnectError(null);
-          try {
-            const rn = connectionDetailsRef.current.roomName;
-            if (rn) sessionStorage.setItem('activeKloudRoom', rn);
-          } catch {
-            /* ignore */
-          }
-          await restoreLocalMediaAfterReconnect();
-          console.warn('[KloudMeet] Pragmatic rejoin succeeded');
-        })
-        .catch((err: unknown) => {
-          const error = err instanceof Error ? err : new Error(String(err));
-          if (isKloudSessionExpiredError(error)) {
-            return;
-          }
-          logSeriousLiveKitFailure({
-            phase: 'pragmatic-rejoin-failed',
-            attempt: 1,
-            maxAttempts: 1,
-            roomName: connectionDetailsRef.current?.roomName,
-            roomState: room.state,
-            disconnectReason: lastDisconnectReasonRef.current,
-            authFail: isLiveKitAuthError(error),
-            failureKind: classifyLiveKitFailure(error),
-            participantToken: connectionDetailsRef.current?.participantToken,
-            error,
-            extra: { path: opts.path, priorError: opts.error.message },
-          });
-          setConnectError(error.message);
-        })
-        .finally(() => {
-          pragmaticRejoinInFlightRef.current = false;
-          connectAttemptedRef.current = false;
-        });
-    },
-    [connectRoom, restoreLocalMediaAfterReconnect, room],
-  );
+  }, [props.userChoices.videoDeviceId, props.userChoices.audioDeviceId, room, restoreScreenShareAfterReconnect]);
 
   const markIntentionalDisconnect = React.useCallback(() => {
     intentionalDisconnectRef.current = true;
-    if (connectRetryTimerRef.current) {
-      clearTimeout(connectRetryTimerRef.current);
-      connectRetryTimerRef.current = null;
-    }
+    clearReconnectTimer();
     if (hostEndedRedirectTimerRef.current) {
       clearTimeout(hostEndedRedirectTimerRef.current);
       hostEndedRedirectTimerRef.current = null;
     }
-  }, []);
+  }, [clearReconnectTimer]);
 
   const handleClosedByHostExit = React.useCallback(() => {
     if (hostEndedHandledRef.current) return;
@@ -980,13 +942,9 @@ export function VideoConferenceComponent(props: {
     hostEndedHandledRef.current = true;
     intentionalDisconnectRef.current = true;
 
-    if (connectRetryTimerRef.current) {
-      clearTimeout(connectRetryTimerRef.current);
-      connectRetryTimerRef.current = null;
-    }
+    clearReconnectTimer();
     setConnectError(null);
-    connectRetryCountRef.current = 0;
-    unexpectedErrorRetryCountRef.current = 0;
+    reconnectAttemptRef.current = 0;
 
     setMeetingClosedNotice(t('meeting.closedByHostToast'));
     setMeetingEndedByHost(true);
@@ -1008,7 +966,7 @@ export function VideoConferenceComponent(props: {
     hostEndedRedirectTimerRef.current = setTimeout(() => {
       router.push('/');
     }, 2200);
-  }, [room, router, t, props.meetingOwnerMemberId, clearActiveKloudRoom]);
+  }, [room, router, t, props.meetingOwnerMemberId, clearActiveKloudRoom, clearReconnectTimer]);
 
   /** Host/co-host 将本端移出会议 */
   const handleRemovedFromMeeting = React.useCallback(() => {
@@ -1016,10 +974,7 @@ export function VideoConferenceComponent(props: {
     removedFromMeetingHandledRef.current = true;
     intentionalDisconnectRef.current = true;
 
-    if (connectRetryTimerRef.current) {
-      clearTimeout(connectRetryTimerRef.current);
-      connectRetryTimerRef.current = null;
-    }
+    clearReconnectTimer();
     setConnectError(null);
     setRemovedFromMeeting(true);
     clearActiveKloudRoom();
@@ -1037,284 +992,223 @@ export function VideoConferenceComponent(props: {
     setTimeout(() => {
       router.push('/');
     }, 2500);
-  }, [room, router, clearActiveKloudRoom]);
+  }, [room, router, clearActiveKloudRoom, clearReconnectTimer]);
 
-  // Compute exponential backoff capped at 8s so 6 retries finish in ~30s instead of ~63s.
+  /** 下一轮退避：1s 起步翻倍、封顶 10s，叠加 ±20% 抖动，避免多人同时断网后同一时刻挤进服务端 */
   const computeBackoffMs = React.useCallback((attempt: number): number => {
-    return Math.min(8000, Math.pow(2, attempt - 1) * 1000);
+    const base = Math.min(RECONNECT_MAX_DELAY_MS, 1000 * 2 ** Math.max(0, attempt - 1));
+    return Math.round(base * (0.8 + Math.random() * 0.4));
   }, []);
 
-  // ─── isRetryableConnectError ─────────────────────────────────────────────
-  // MUST be declared BEFORE the useEffect that references it.
-  // Arrow functions are NOT hoisted; placing them after the effect causes
-  // "isRetryableConnectError is not a function" at runtime.
-  const isRetryableConnectError = React.useCallback((err: Error): boolean => {
-    const msg = err.message?.toLowerCase() ?? '';
-    return (
-      msg.includes('signal connection') ||
-      msg.includes('abort handler') ||
-      msg.includes('abort') ||
-      msg.includes('websocket') ||
-      msg.includes('network') ||
-      msg.includes('failed to fetch') ||
-      msg.includes('timed out') ||
-      msg.includes('disconnect') ||
-      msg.includes('disconnected') ||
-      msg.includes('client initiated disconnect') ||
-      err.name === 'AbortError'
-    );
-  }, []);
-
+  /** 组件卸载后不能再排重连（Room 已被丢弃） */
+  const mountedRef = React.useRef(true);
   React.useEffect(() => {
-    // Always register event listeners (so cleanup always has something to remove)
-    const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
-      if (reason !== undefined && reason !== null) {
-        lastDisconnectReasonRef.current =
-          DisconnectReason[reason] ?? String(reason);
-      }
-      console.log('[KloudMeet] Disconnected event received. reason=', reason, 'intentional=', intentionalDisconnectRef.current, 'duplicateHandled=', duplicateSessionHandledRef.current);
-      // During reconnection, voluntary disconnect, or silent token renew
-      if (intentionalDisconnectRef.current || tokenRenewInProgressRef.current) return;
-      // Server forced remove (host kick or duplicate-session eviction)
-      if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
-          reason === DisconnectReason.DUPLICATE_IDENTITY) {
-        intentionalDisconnectRef.current = true;
-        clearActiveKloudRoom();
-        try {
-          localStorage.removeItem('activeMeetingId');
-          localStorage.removeItem('activeMeetingStartedAt');
-        } catch { /* ignore */ }
-        if (removedFromMeetingHandledRef.current) {
-          setRemovedFromMeeting(true);
-          setTimeout(() => router.push('/'), 2500);
-          return;
-        }
-        // Duplicate-session eviction or unknown PARTICIPANT_REMOVED → session moved UI.
-        // Stay on the room page so the user can rejoin from this tab (takes over again).
-        duplicateSessionHandledRef.current = true;
-        setEvictedByDuplicateSession(true);
-        return;
-      }
-      if (intentionalDisconnectRef.current) return;
-      if (!hasConnectedOnceRef.current) return;
-      if (hostEndedHandledRef.current) return;
-
-      const roomName = connectionDetailsRef.current?.roomName;
-      if (!roomName) {
-        handleError(new Error('LiveKit connection disconnected unexpectedly'));
-        return;
-      }
-
-      intentionalDisconnectRef.current = true;
-      void (async () => {
-        const ended = await isMeetingEnded(roomName);
-        if (ended) {
-          if (
-            isDbMeetingOwner(
-              props.meetingOwnerMemberId,
-              room.localParticipant.metadata,
-            )
-          ) {
-            hostEndedHandledRef.current = true;
-            intentionalDisconnectRef.current = false;
-            handleError(new Error('LiveKit connection disconnected unexpectedly'));
-            return;
-          }
-          handleClosedByHostExit();
-          return;
-        }
-        intentionalDisconnectRef.current = false;
-        handleError(new Error('LiveKit connection disconnected unexpectedly'));
-      })();
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
     };
-    room.on(RoomEvent.Disconnected, handleUnexpectedDisconnected);
-    room.on(RoomEvent.EncryptionError, handleEncryptionError);
-    room.on(RoomEvent.MediaDevicesError, handleError);
+  }, []);
 
-    if (e2eeSetupComplete && !connectAttemptedRef.current) {
-      // Check if room is already connected or connecting
-      if (room.state === ConnectionState.Connected || room.state === ConnectionState.Reconnecting) {
-        console.warn('[LiveKit] Room already connected, skipping connect()');
-      } else {
-        connectAttemptedRef.current = true;
+  /** 被移出、被顶号、主动离开 / 会议结束 / 登录失效时停止自动重连 */
+  const isReconnectBlocked = React.useCallback(
+    (): boolean =>
+      !mountedRef.current ||
+      intentionalDisconnectRef.current ||
+      duplicateSessionHandledRef.current ||
+      removedFromMeetingHandledRef.current,
+    [],
+  );
 
-        // ─── doConnect: self-contained recursive retry with exponential backoff ───────
-        // All retry rounds go through this single function so the backoff counters
-        // are always correct regardless of which attempt fails.
-        // `fresh: true` re-issues JWT via /api/connection-details before connect
-        // (auth/revoked only). Network retries reuse a still-valid JWT.
-        const doConnect = (opts?: { fresh?: boolean }) => {
-          const runConnect = async () => {
-            const cd = await ensureConnectionDetails({ forceRefresh: !!opts?.fresh });
-            await room.connect(cd.serverUrl, cd.participantToken, connectOptions);
-          };
+  /** 首次入会成功后的一次性动作（入会弹窗、复制链接、记录开始时间） */
+  const handleFirstConnected = React.useCallback(() => {
+    const rn = props.connectionDetails.roomName;
+    replaceBrowserRoomUrl(rn);
 
-          runConnect()
-            .then(() => {
-              hasConnectedOnceRef.current = true;
-              intentionalDisconnectRef.current = false;
-              const rn = props.connectionDetails.roomName;
-              replaceBrowserRoomUrl(rn);
-
-              const isMeetingOwner = isDbMeetingOwner(
-                props.meetingOwnerMemberId,
-                room.localParticipant.metadata,
-              );
-              const wasRefresh =
-                typeof window !== 'undefined' &&
-                sessionStorage.getItem('activeKloudRoom') ===
-                  window.location.pathname.split('/').filter(Boolean).pop();
-              if (isMeetingOwner && !wasRefresh) {
-                setShowMeetingReadyModal(true);
-              }
-
-              const canAutoCopyMeetingUrl =
-                typeof window !== 'undefined' &&
-                typeof document !== 'undefined' &&
-                typeof navigator !== 'undefined' &&
-                !!navigator.clipboard &&
-                document.hasFocus();
-              if (canAutoCopyMeetingUrl) {
-                navigator.clipboard
-                  .writeText(window.location.href)
-                  .then(() => {
-                    console.log('Meeting URL auto-copied to clipboard!');
-                  })
-                  .catch((error) => {
-                    // Ignore expected focus-related clipboard rejections.
-                    if (error?.name !== 'NotAllowedError') {
-                      console.warn('Failed to auto-copy meeting URL:', error);
-                    }
-                  });
-              }
-
-              // Fallback: only DB meeting owner may update (matches PUT /api/meetings auth).
-              if (isMeetingOwner) {
-                fetch(`/api/meetings/${rn}`, {
-                  method: 'PUT',
-                  headers: authHeaders({ 'Content-Type': 'application/json' }),
-                  body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
-                }).catch((e) => console.warn('[meeting start fallback] failed', e));
-              }
-
-              // Reset retry counters on success
-              connectRetryCountRef.current = 0;
-              setConnectError(null);
-
-              // Enable camera/mic AFTER connection is established.
-              // Validate device IDs first — if the selected device has disappeared
-              // (unplugged, virtual device gone, stale ID), clear it so the browser
-              // falls back to the system default instead of throwing NotFoundError.
-              const enableDevices = async () => {
-                try {
-                  const devices = await navigator.mediaDevices.enumerateDevices();
-                  const videoIds = new Set(devices.filter(d => d.kind === 'videoinput').map(d => d.deviceId));
-                  const audioIds = new Set(devices.filter(d => d.kind === 'audioinput').map(d => d.deviceId));
-
-                  const wantedVideo = props.userChoices.videoDeviceId;
-                  if (wantedVideo && !videoIds.has(wantedVideo)) {
-                    console.warn('[KloudMeet] Saved video device not found, falling back to default');
-                    room.options.videoCaptureDefaults = {
-                      ...room.options.videoCaptureDefaults,
-                      deviceId: undefined,
-                    };
-                  }
-                  const wantedAudio = props.userChoices.audioDeviceId;
-                  if (wantedAudio && !audioIds.has(wantedAudio)) {
-                    console.warn('[KloudMeet] Saved audio device not found, falling back to default');
-                    room.options.audioCaptureDefaults = {
-                      ...room.options.audioCaptureDefaults,
-                      deviceId: undefined,
-                    };
-                  }
-                } catch (e) {
-                  console.warn('[KloudMeet] Could not enumerate devices, proceeding with defaults:', e);
-                }
-
-                if (props.userChoices.videoEnabled) {
-                  room.localParticipant.setCameraEnabled(true).catch(handleError);
-                } else {
-                  room.localParticipant.setCameraEnabled(false).catch(() => undefined);
-                }
-                if (props.userChoices.audioEnabled) {
-                  void publishMic(room).then(setMicEnabled);
-                } else {
-                  room.localParticipant.setMicrophoneEnabled(false).catch(() => undefined);
-                }
-
-                // 同步 UA：hook 首帧可能仍为 false，移动端入会后首次 startAudio 不能漏
-                if (isToolbarMobileUserAgent()) {
-                  void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
-                }
-              };
-              enableDevices();
-            })
-            .catch((error: Error) => {
-              connectAttemptedRef.current = false;
-              if (isKloudSessionExpiredError(error)) {
-                return;
-              }
-
-              const authFail = isLiveKitAuthError(error);
-              if (authFail || isRetryableConnectError(error)) {
-                if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-                  console.warn('[KloudMeet] Offline during connect — defer auto-recover until online');
-                  connectAttemptedRef.current = false;
-                  return;
-                }
-                const attempt = connectRetryCountRef.current + 1;
-                if (attempt <= MAX_CONNECT_RETRIES) {
-                  const delay = computeBackoffMs(attempt);
-                  const fresh =
-                    authFail || attempt >= Math.ceil(MAX_CONNECT_RETRIES / 2);
-                  console.warn(
-                    `[KloudMeet] LiveKit connect — silent auto-recover ${attempt}/${MAX_CONNECT_RETRIES}` +
-                      ` (fresh=${fresh}) in ${delay}ms…`,
-                    error.message,
-                  );
-                  connectRetryCountRef.current = attempt;
-                  connectRetryTimerRef.current = setTimeout(() => {
-                    connectRetryTimerRef.current = null;
-                    if (room.state === ConnectionState.Disconnected) {
-                      connectAttemptedRef.current = true;
-                      doConnect(fresh ? { fresh: true } : undefined);
-                    }
-                  }, delay);
-                  return;
-                }
-                connectRetryCountRef.current = 0;
-                enterSeriousFailureAndPragmaticRejoin({
-                  phase: 'retries-exhausted',
-                  attempt: MAX_CONNECT_RETRIES,
-                  maxAttempts: MAX_CONNECT_RETRIES,
-                  error,
-                  path: 'initial-connect',
-                });
-              } else {
-                handleError(error);
-              }
-            });
-        };
-
-        doConnect();
-      }
+    const isMeetingOwner = isDbMeetingOwner(
+      props.meetingOwnerMemberId,
+      room.localParticipant.metadata,
+    );
+    const wasRefresh =
+      typeof window !== 'undefined' &&
+      sessionStorage.getItem('activeKloudRoom') ===
+        window.location.pathname.split('/').filter(Boolean).pop();
+    if (isMeetingOwner && !wasRefresh) {
+      setShowMeetingReadyModal(true);
     }
 
-    return () => {
-      room.off(RoomEvent.Disconnected, handleUnexpectedDisconnected);
-      room.off(RoomEvent.EncryptionError, handleEncryptionError);
-      room.off(RoomEvent.MediaDevicesError, handleError);
-    };
-    // NOTE: props.userChoices intentionally excluded — it's an unstable object ref
-    // whose values are only needed at initial connect time, not for re-connections.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [e2eeSetupComplete, room, props.connectionDetails, isRetryableConnectError, clearActiveKloudRoom, ensureConnectionDetails, enterSeriousFailureAndPragmaticRejoin]);
+    const canAutoCopyMeetingUrl =
+      typeof window !== 'undefined' &&
+      typeof document !== 'undefined' &&
+      typeof navigator !== 'undefined' &&
+      !!navigator.clipboard &&
+      document.hasFocus();
+    if (canAutoCopyMeetingUrl) {
+      navigator.clipboard.writeText(window.location.href).catch((error: unknown) => {
+        // Ignore expected focus-related clipboard rejections.
+        if (!(error instanceof Error) || error.name !== 'NotAllowedError') {
+          console.warn('Failed to auto-copy meeting URL:', error);
+        }
+      });
+    }
+
+    // Fallback: only DB meeting owner may update (matches PUT /api/meetings auth).
+    if (isMeetingOwner) {
+      fetch(`/api/meetings/${rn}`, {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ actualStartedAt: new Date().toISOString() }),
+      }).catch((e) => console.warn('[meeting start fallback] failed', e));
+    }
+  }, [props.connectionDetails.roomName, props.meetingOwnerMemberId, room]);
+
+  const scheduleReconnectRef = React.useRef<(opts?: { immediate?: boolean }) => void>(
+    () => undefined,
+  );
+
+  /**
+   * runReconnect — 执行一次连接尝试（首次入会与断线重连共用）
+   *
+   * 失败后自动排下一轮，不设次数上限，直到连上或进入终止状态。
+   * 已入会后的重连会先确认会议未结束，避免 LiveKit 自动重建已结束的房间。
+   */
+  const runReconnect = React.useCallback(async (): Promise<void> => {
+    if (reconnectInFlightRef.current || isReconnectBlocked()) return;
+    if (room.state !== ConnectionState.Disconnected) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      scheduleReconnectRef.current();
+      return;
+    }
+
+    reconnectInFlightRef.current = true;
+    connectAttemptedRef.current = true;
+    clearReconnectTimer();
+    const attempt = reconnectAttemptRef.current + 1;
+    reconnectAttemptRef.current = attempt;
+    const firstConnect = !hasConnectedOnceRef.current;
+
+    try {
+      const roomName = connectionDetailsRef.current?.roomName;
+      if (!firstConnect && roomName) {
+        const ended = await isMeetingEnded(roomName, attempt === 1 ? 4 : 1);
+        if (ended) {
+          if (!isDbMeetingOwner(props.meetingOwnerMemberId, room.localParticipant.metadata)) {
+            handleClosedByHostExit();
+            return;
+          }
+          // 发起人（如个人会议室）交给 connection-details 判定能否重开，避免旧票复活已结束的房间
+          reconnectFreshRef.current = true;
+        }
+      }
+      if (isReconnectBlocked()) return;
+
+      const forceRefresh =
+        reconnectFreshRef.current || attempt >= RECONNECT_FRESH_TOKEN_ATTEMPT;
+      await connectRoom({ forceRefresh });
+
+      reconnectAttemptRef.current = 0;
+      reconnectFreshRef.current = false;
+      if (firstConnect) handleFirstConnected();
+      hasConnectedOnceRef.current = true;
+      setConnectError(null);
+      try {
+        const rn = connectionDetailsRef.current.roomName;
+        if (rn) sessionStorage.setItem('activeKloudRoom', rn);
+      } catch {
+        /* ignore */
+      }
+      if (attempt > 1 || !firstConnect) {
+        console.warn(`[KloudMeet] LiveKit connected after ${attempt} attempt(s)`);
+      }
+      await restoreLocalMediaAfterReconnect();
+      return;
+    } catch (err: unknown) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      if (isKloudSessionExpiredError(error)) {
+        // 登录失效由 handleKloudSessionExpired 引导重新登录
+        intentionalDisconnectRef.current = true;
+        return;
+      }
+      if (error.name === MEETING_CLOSED_ERROR) {
+        handleClosedByHostExit();
+        intentionalDisconnectRef.current = true;
+        return;
+      }
+      if (isLiveKitAuthError(error)) {
+        reconnectFreshRef.current = true;
+      }
+      console.warn(`[KloudMeet] LiveKit connect attempt ${attempt} failed:`, error.message);
+      if (attempt % RECONNECT_SERIOUS_LOG_EVERY === 0) {
+        logSeriousLiveKitFailure({
+          phase: 'recovery',
+          attempt,
+          maxAttempts: 0,
+          roomName: connectionDetailsRef.current?.roomName,
+          roomState: room.state,
+          disconnectReason: lastDisconnectReasonRef.current,
+          authFail: isLiveKitAuthError(error),
+          failureKind: classifyLiveKitFailure(error),
+          participantToken: connectionDetailsRef.current?.participantToken,
+          error,
+          extra: { firstConnect },
+        });
+      }
+    } finally {
+      reconnectInFlightRef.current = false;
+    }
+    scheduleReconnectRef.current();
+  }, [
+    clearReconnectTimer,
+    connectRoom,
+    handleClosedByHostExit,
+    handleFirstConnected,
+    isReconnectBlocked,
+    props.meetingOwnerMemberId,
+    restoreLocalMediaAfterReconnect,
+    room,
+  ]);
+
+  /**
+   * scheduleReconnect — 排下一轮重连（已连接 / 连接中 / 已有尝试在进行时忽略）
+   *
+   * @param opts.immediate  立即尝试（断线瞬间、网络恢复、标签页回到前台），会顶掉正在等待的退避
+   */
+  const scheduleReconnect = React.useCallback(
+    (opts?: { immediate?: boolean }) => {
+      if (isReconnectBlocked()) return;
+      if (room.state !== ConnectionState.Disconnected) return;
+      if (reconnectInFlightRef.current) return;
+      if (reconnectTimerRef.current) {
+        if (!opts?.immediate) return;
+        clearReconnectTimer();
+      }
+      const delay = opts?.immediate ? 0 : computeBackoffMs(reconnectAttemptRef.current + 1);
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        void runReconnect();
+      }, delay);
+    },
+    [clearReconnectTimer, computeBackoffMs, isReconnectBlocked, room, runReconnect],
+  );
+  scheduleReconnectRef.current = scheduleReconnect;
+
+  // 首次入会：E2EE 准备好后发起连接，失败同样走无限重试
+  React.useEffect(() => {
+    if (!e2eeSetupComplete || connectAttemptedRef.current) return;
+    if (room.state !== ConnectionState.Disconnected) {
+      console.warn('[LiveKit] Room already connected, skipping connect()');
+      return;
+    }
+    void runReconnect();
+  }, [e2eeSetupComplete, room, runReconnect]);
 
   // Disconnect only when this Room instance is discarded (unmount / new Room).
   // Must not run when connect-effect deps churn (e.g. locale → t → callback identity).
   React.useEffect(() => {
     return () => {
-      if (connectRetryTimerRef.current) clearTimeout(connectRetryTimerRef.current);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (hostEndedRedirectTimerRef.current) clearTimeout(hostEndedRedirectTimerRef.current);
       if (room.state !== ConnectionState.Disconnected) {
         room.disconnect().catch(console.error);
@@ -1352,72 +1246,12 @@ export function VideoConferenceComponent(props: {
       console.warn('[KloudMeet] Media device unavailable, user may switch in settings:', error.message);
       return;
     }
-    // Signal/network / JWT auth: silent auto-recover is the rule.
-    // Exhaustion is a bug path → heavy log + pragmatic rejoin (not "failed 6 times" UX).
-    if (isLiveKitAuthError(error) || isRetryableConnectError(error)) {
-      if (pragmaticRejoinInFlightRef.current) {
-        return;
-      }
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-        console.warn('[KloudMeet] Offline during disconnect — defer auto-recover until online');
-        return;
-      }
-      const attempt = unexpectedErrorRetryCountRef.current + 1;
-      const authFail = isLiveKitAuthError(error);
-      if (attempt <= MAX_UNEXPECTED_RETRIES && room.state === ConnectionState.Disconnected) {
-        unexpectedErrorRetryCountRef.current = attempt;
-        const delay = computeBackoffMs(attempt);
-        const forceRefresh = authFail || attempt >= Math.ceil(MAX_UNEXPECTED_RETRIES / 2);
-        console.warn(
-          `[KloudMeet] LiveKit disconnect — silent auto-recover ${attempt}/${MAX_UNEXPECTED_RETRIES}` +
-            ` (forceRefresh=${forceRefresh}) in ${delay}ms:`,
-          error.message,
-        );
-        connectRetryTimerRef.current = setTimeout(() => {
-          connectRetryTimerRef.current = null;
-          if (room.state === ConnectionState.Disconnected) {
-            connectRoom({ forceRefresh })
-              .then(() => {
-                console.log('[KloudMeet] Auto-recover succeeded');
-                unexpectedErrorRetryCountRef.current = 0;
-                hasConnectedOnceRef.current = true;
-                intentionalDisconnectRef.current = false;
-                setConnectError(null);
-                void restoreLocalMediaAfterReconnect();
-              })
-              .catch((retryErr) => {
-                handleError(retryErr instanceof Error ? retryErr : new Error(String(retryErr)));
-              });
-          }
-        }, delay);
-        return;
-      }
-      unexpectedErrorRetryCountRef.current = 0;
-      enterSeriousFailureAndPragmaticRejoin({
-        phase: 'retries-exhausted',
-        attempt: Math.max(attempt - 1, MAX_UNEXPECTED_RETRIES),
-        maxAttempts: MAX_UNEXPECTED_RETRIES,
-        error,
-        path: 'unexpected-disconnect',
-      });
-      return;
-    }
-    // Any other error: bug path (log hard) + pragmatic rejoin escape hatch
-    enterSeriousFailureAndPragmaticRejoin({
-      phase: 'unexpected-disconnect',
-      attempt: 0,
-      maxAttempts: MAX_UNEXPECTED_RETRIES,
-      error,
-      path: 'unhandled',
-    });
-  }, [
-    computeBackoffMs,
-    connectRoom,
-    enterSeriousFailureAndPragmaticRejoin,
-    isRetryableConnectError,
-    restoreLocalMediaAfterReconnect,
-    room,
-  ]);
+    // 其余错误一律交给重连控制器：已连接时为 no-op，已断开时进入无限重试
+    console.warn('[KloudMeet] LiveKit error:', error.message);
+    // 首次 connect 未发起前（E2EE 未就绪）不能抢跑
+    if (!connectAttemptedRef.current) return;
+    scheduleReconnectRef.current();
+  }, []);
 
   const handleEncryptionError = React.useCallback((error: Error) => {
     // Route encryption errors through the same inline UI — no alert()
@@ -1425,152 +1259,66 @@ export function VideoConferenceComponent(props: {
     setConnectError(`加密错误: ${error.message}`);
   }, []);
 
-  /** Old tab was kicked — mint a new ticket and take the meeting back on this tab. */
-  const rejoinAfterDuplicateSession = React.useCallback(() => {
-    if (room.state !== ConnectionState.Disconnected) {
-      room.disconnect().catch(() => undefined);
-    }
-
-    duplicateSessionHandledRef.current = false;
-    setEvictedByDuplicateSession(false);
-    intentionalDisconnectRef.current = false;
-    connectAttemptedRef.current = true;
-    connectRetryCountRef.current = 0;
-    unexpectedErrorRetryCountRef.current = 0;
-    setConnectError(null);
-
-    console.warn('[KloudMeet] Rejoin after session moved — taking over from this tab');
-    connectRoom({ forceRefresh: true })
-      .then(() => {
-        hasConnectedOnceRef.current = true;
-        intentionalDisconnectRef.current = false;
-        duplicateSessionHandledRef.current = false;
-        setEvictedByDuplicateSession(false);
-        setConnectError(null);
-        try {
-          const rn = connectionDetailsRef.current.roomName;
-          if (rn) sessionStorage.setItem('activeKloudRoom', rn);
-        } catch {
-          /* ignore */
-        }
-        const enableDevices = async () => {
-          if (props.userChoices.videoEnabled) {
-            await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
-          }
-          if (props.userChoices.audioEnabled) {
-            setMicEnabled(await publishMic(room));
-          }
-          if (isToolbarMobileUserAgent()) {
-            void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
-          }
-        };
-        void enableDevices();
-      })
-      .catch((err: Error) => {
-        connectAttemptedRef.current = false;
-        intentionalDisconnectRef.current = false;
-        console.warn('[KloudMeet] Rejoin after session moved failed:', err.message);
-        setConnectError(err.message);
-      });
-  }, [connectRoom, room, props.userChoices.audioEnabled, props.userChoices.videoEnabled]);
-
-  // ── Proactive LiveKit JWT renew (before exp) ──
-  // Healthy connections are untouched until ~5min before expiry. Then we
-  // intentionally disconnect → mint a new token → reconnect, restoring mic/cam.
-  // Must disconnect BEFORE refreshConnectionDetails so member eviction does not
-  // surface as "session moved" while still in-room.
   React.useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-
-    const clearTimer = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
+    const handleUnexpectedDisconnected = (reason?: DisconnectReason) => {
+      if (reason !== undefined && reason !== null) {
+        lastDisconnectReasonRef.current =
+          DisconnectReason[reason] ?? String(reason);
       }
-    };
-
-    const schedule = () => {
-      clearTimer();
-      if (cancelled) return;
-      if (tokenRenewInProgressRef.current) return;
-      if (room.state !== ConnectionState.Connected) return;
-      const waitMs = msUntilLiveKitTokenRenew(connectionDetailsRef.current.participantToken);
-      if (waitMs == null) return;
-      const delay = Math.max(waitMs, LIVEKIT_TOKEN_RENEW_MIN_DELAY_MS);
-      timer = setTimeout(() => {
-        void renew();
-      }, delay);
-    };
-
-    const renew = async () => {
-      if (cancelled || tokenRenewInProgressRef.current) return;
-      if (duplicateSessionHandledRef.current) return;
-      if (removedFromMeetingHandledRef.current) return;
-      if (hostEndedHandledRef.current) return;
-      if (room.state !== ConnectionState.Connected) return;
-
-      tokenRenewInProgressRef.current = true;
-      intentionalDisconnectRef.current = true;
-      const wasMic = room.localParticipant.isMicrophoneEnabled;
-      const wasCam = room.localParticipant.isCameraEnabled;
-      const wasScreenShare = room.localParticipant.isScreenShareEnabled;
-      if (wasScreenShare) {
-        screenShareRestorePendingRef.current = true;
-      }
-
-      try {
-        console.warn('[KloudMeet] Renewing LiveKit token before expiry');
-        await room.disconnect();
-        const cd = await refreshConnectionDetails();
-        if (cancelled) {
-          // Effect torn down mid-renew — don't leave intentionalDisconnect stuck,
-          // or online/visibility recovery would never run.
-          intentionalDisconnectRef.current = false;
+      console.warn('[KloudMeet] Disconnected. reason=', lastDisconnectReasonRef.current, 'intentional=', intentionalDisconnectRef.current);
+      if (intentionalDisconnectRef.current) return;
+      // Server forced remove (host kick or duplicate-session eviction)
+      if (reason === DisconnectReason.PARTICIPANT_REMOVED ||
+          reason === DisconnectReason.DUPLICATE_IDENTITY) {
+        intentionalDisconnectRef.current = true;
+        clearReconnectTimer();
+        clearActiveKloudRoom();
+        try {
+          localStorage.removeItem('activeMeetingId');
+          localStorage.removeItem('activeMeetingStartedAt');
+        } catch { /* ignore */ }
+        if (removedFromMeetingHandledRef.current) {
+          setRemovedFromMeeting(true);
+          setTimeout(() => router.push('/'), 2500);
           return;
         }
-        await room.connect(cd.serverUrl, cd.participantToken, connectOptionsRef.current);
-        hasConnectedOnceRef.current = true;
-        intentionalDisconnectRef.current = false;
-        setConnectError(null);
-        if (wasMic) {
-          setMicEnabled(await publishMic(room));
-        }
-        if (wasCam) {
-          await room.localParticipant.setCameraEnabled(true).catch(() => undefined);
-        }
-        await restoreScreenShareAfterReconnect();
-        schedule();
-      } catch (e: unknown) {
-        intentionalDisconnectRef.current = false;
-        const err = e instanceof Error ? e : new Error(String(e));
-        console.warn('[KloudMeet] Token renew failed:', err.message);
-        if (!cancelled) {
-          handleError(err);
-        }
-      } finally {
-        tokenRenewInProgressRef.current = false;
+        // Duplicate-session eviction or unknown PARTICIPANT_REMOVED → session moved UI.
+        // Stay on the room page so the user can rejoin from this tab (takes over again).
+        duplicateSessionHandledRef.current = true;
+        setEvictedByDuplicateSession(true);
+        return;
       }
+      // 首次入会失败由 runReconnect 自己排下一轮
+      if (!hasConnectedOnceRef.current) return;
+      scheduleReconnectRef.current({ immediate: true });
     };
-
-    const onConnected = () => schedule();
-    const onDisconnected = () => {
-      if (!tokenRenewInProgressRef.current) clearTimer();
-    };
-
-    room.on(RoomEvent.Connected, onConnected);
-    room.on(RoomEvent.Disconnected, onDisconnected);
-    if (room.state === ConnectionState.Connected) {
-      schedule();
-    }
-
+    room.on(RoomEvent.Disconnected, handleUnexpectedDisconnected);
+    room.on(RoomEvent.EncryptionError, handleEncryptionError);
+    room.on(RoomEvent.MediaDevicesError, handleError);
     return () => {
-      cancelled = true;
-      clearTimer();
-      room.off(RoomEvent.Connected, onConnected);
-      room.off(RoomEvent.Disconnected, onDisconnected);
+      room.off(RoomEvent.Disconnected, handleUnexpectedDisconnected);
+      room.off(RoomEvent.EncryptionError, handleEncryptionError);
+      room.off(RoomEvent.MediaDevicesError, handleError);
     };
-  }, [room, refreshConnectionDetails, handleError, restoreScreenShareAfterReconnect]);
+  }, [room, router, handleError, handleEncryptionError, clearActiveKloudRoom, clearReconnectTimer]);
+
+  /** Old tab was kicked — mint a new ticket and take the meeting back on this tab. */
+  const rejoinAfterDuplicateSession = React.useCallback(() => {
+    void (async () => {
+      clearReconnectTimer();
+      if (room.state !== ConnectionState.Disconnected) {
+        await room.disconnect().catch(() => undefined);
+      }
+      duplicateSessionHandledRef.current = false;
+      setEvictedByDuplicateSession(false);
+      intentionalDisconnectRef.current = false;
+      reconnectAttemptRef.current = 0;
+      reconnectFreshRef.current = true;
+      setConnectError(null);
+      console.warn('[KloudMeet] Rejoin after session moved — taking over from this tab');
+      await runReconnect();
+    })();
+  }, [clearReconnectTimer, room, runReconnect]);
 
   // Track local screen share so unexpected drops / auto-recover can restore it.
   React.useEffect(() => {
@@ -1581,16 +1329,12 @@ export function VideoConferenceComponent(props: {
     };
     const onLocalUnpub = (pub: { source?: Track.Source }) => {
       if (pub.source !== Track.Source.ScreenShare) return;
-      // Disconnect/renew unpublish must keep the pending flag; only clear on user stop
+      // Disconnect unpublish must keep the pending flag; only clear on user stop
       // (handled in toggle) or when not in a recovery path and share truly ended mid-session.
-      if (
-        tokenRenewInProgressRef.current ||
-        pragmaticRejoinInFlightRef.current ||
-        intentionalDisconnectRef.current
-      ) {
+      if (reconnectInFlightRef.current || intentionalDisconnectRef.current) {
         return;
       }
-      if (room.state === ConnectionState.Disconnected) {
+      if (room.state !== ConnectionState.Connected) {
         return;
       }
       screenShareRestorePendingRef.current = false;
@@ -1606,62 +1350,184 @@ export function VideoConferenceComponent(props: {
     };
   }, [room]);
 
-  // ── Network/visibility-driven recovery ──
-  // Online / tab-visible again → silent auto-recover (rule). Not a "retry theater" UI.
+  // ── JWT 后台换票：只更新本地保存的票据（供 API Bearer 与下次重连使用），不断开连接 ──
+  // LiveKit 仅在建立连接时校验 JWT，已连接会话不受过期影响，无需断线续签。
   React.useEffect(() => {
-    const recover = (reason: string) => {
-      if (duplicateSessionHandledRef.current) return;
-      if (intentionalDisconnectRef.current) return;
-      if (tokenRenewInProgressRef.current) return;
-      if (pragmaticRejoinInFlightRef.current) return;
-      if (!hasConnectedOnceRef.current) return;
-      if (
-        room.state === ConnectionState.Connected ||
-        room.state === ConnectionState.Reconnecting ||
-        room.state === ConnectionState.Connecting
-      ) {
-        return;
-      }
-      if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
 
-      console.log(`[KloudMeet] Recovery triggered (${reason})`);
-
-      if (connectRetryTimerRef.current) {
-        clearTimeout(connectRetryTimerRef.current);
-        connectRetryTimerRef.current = null;
-      }
-      connectRetryCountRef.current = 0;
-      unexpectedErrorRetryCountRef.current = 0;
-      connectAttemptedRef.current = true;
-      setConnectError(null);
-
-      connectRoom({ forceRefresh: true })
-        .then(async () => {
-          hasConnectedOnceRef.current = true;
-          intentionalDisconnectRef.current = false;
-          setConnectError(null);
-          await restoreLocalMediaAfterReconnect();
-        })
-        .catch((err) => {
-          connectAttemptedRef.current = false;
-          console.warn('[KloudMeet] Visibility/online auto-recover failed:', err?.message);
-          handleError(err instanceof Error ? err : new Error(String(err)));
-        });
+    const schedule = (delayMs?: number) => {
+      if (timer) clearTimeout(timer);
+      if (cancelled) return;
+      const waitMs =
+        delayMs ?? msUntilLiveKitTokenRenew(connectionDetailsRef.current.participantToken);
+      if (waitMs == null) return;
+      timer = setTimeout(() => {
+        void refresh();
+      }, Math.max(waitMs, LIVEKIT_TOKEN_RENEW_MIN_DELAY_MS));
     };
 
-    const handleOnline = () => recover('online');
+    const refresh = async (): Promise<void> => {
+      if (cancelled || isReconnectBlocked()) return;
+      try {
+        await refreshConnectionDetails();
+        schedule();
+      } catch (err: unknown) {
+        if (isKloudSessionExpiredError(err)) return;
+        console.warn(
+          '[KloudMeet] Background token refresh failed, retrying:',
+          err instanceof Error ? err.message : err,
+        );
+        schedule(TOKEN_REFRESH_RETRY_MS);
+      }
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [refreshConnectionDetails, isReconnectBlocked]);
+
+  // ── 重连触发：网络恢复 / 标签页回到前台立即重试；断线期间定时巡检兜底 ──
+  React.useEffect(() => {
+    const kick = (immediate: boolean) => {
+      // 首次 connect 还没发起前不抢跑（等 E2EE 准备完成）
+      if (!connectAttemptedRef.current) return;
+      scheduleReconnectRef.current({ immediate });
+    };
+    const handleOnline = () => kick(true);
     const handleVisibility = () => {
       if (document.visibilityState !== 'visible') return;
-      recover('visibility');
+      kick(true);
     };
+    const watchdog = window.setInterval(() => kick(false), RECONNECT_WATCHDOG_MS);
 
     window.addEventListener('online', handleOnline);
     document.addEventListener('visibilitychange', handleVisibility);
     return () => {
+      window.clearInterval(watchdog);
       window.removeEventListener('online', handleOnline);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [room, connectRoom, handleError, restoreLocalMediaAfterReconnect]);
+  }, []);
+
+  // 用户开关意图跟随本地轨道的 mute/unmute/publish 事件（手动开关、主持人静音、
+  // 独处自动静音、全员静音都会产生这些事件）；断线导致的 unpublish 不改变意图。
+  React.useEffect(() => {
+    const setDesired = (source: Track.Source, on: boolean) => {
+      if (source === Track.Source.Microphone) desiredMicRef.current = on;
+      if (source === Track.Source.Camera) desiredCamRef.current = on;
+    };
+    const onMuted = (pub: TrackPublication, participant: Participant) => {
+      if (participant !== room.localParticipant) return;
+      setDesired(pub.source, false);
+    };
+    const onUnmuted = (pub: TrackPublication, participant: Participant) => {
+      if (participant !== room.localParticipant) return;
+      setDesired(pub.source, true);
+    };
+    const onPublished = (pub: LocalTrackPublication) => {
+      if (pub.isMuted) return;
+      setDesired(pub.source, true);
+    };
+    room.on(RoomEvent.TrackMuted, onMuted);
+    room.on(RoomEvent.TrackUnmuted, onUnmuted);
+    room.on(RoomEvent.LocalTrackPublished, onPublished);
+    return () => {
+      room.off(RoomEvent.TrackMuted, onMuted);
+      room.off(RoomEvent.TrackUnmuted, onUnmuted);
+      room.off(RoomEvent.LocalTrackPublished, onPublished);
+    };
+  }, [room]);
+
+  // ── 麦克风保活：用户想开麦时，保证轨道已发布且真的在上行发包 ──
+  // 覆盖：发布失败无人补发、设备被系统/其他应用占用（track muted / ended）、发送端卡死。
+  React.useEffect(() => {
+    let stalls = 0;
+    let lastBytes = -1;
+    let failures = 0;
+    let cooldown = 0;
+    let busy = false;
+
+    const reset = () => {
+      stalls = 0;
+      lastBytes = -1;
+    };
+
+    const republish = async (): Promise<void> => {
+      const ok = await publishMic(room);
+      setMicEnabled(ok);
+      failures = ok ? 0 : failures + 1;
+      cooldown = Math.min(failures, MIC_REPUBLISH_MAX_COOLDOWN_TICKS);
+      reset();
+    };
+
+    const tick = async (): Promise<void> => {
+      if (busy) return;
+      if (cooldown > 0) {
+        cooldown -= 1;
+        return;
+      }
+      if (
+        room.state !== ConnectionState.Connected ||
+        reconnectInFlightRef.current ||
+        !desiredMicRef.current ||
+        localMicRestrictedRef.current
+      ) {
+        reset();
+        return;
+      }
+      busy = true;
+      try {
+        const lp = room.localParticipant;
+        const pub = lp.getTrackPublication(Track.Source.Microphone);
+        const track = pub?.track;
+        if (!pub || !(track instanceof LocalAudioTrack)) {
+          console.warn('[KloudMeet] Mic expected but not published — republishing');
+          await republish();
+          return;
+        }
+        if (pub.isMuted) {
+          reset();
+          return;
+        }
+        const media = track.mediaStreamTrack;
+        if (media.readyState === 'ended') {
+          console.warn('[KloudMeet] Mic track ended — restarting');
+          await track.restartTrack();
+          reset();
+          return;
+        }
+        const stats = await track.getSenderStats();
+        const bytes = stats?.bytesSent ?? -1;
+        const frozen = bytes >= 0 && lastBytes >= 0 && bytes <= lastBytes;
+        lastBytes = bytes;
+        stalls = media.muted || frozen ? stalls + 1 : 0;
+        if (stalls === MIC_STALL_RESTART_TICKS) {
+          console.warn('[KloudMeet] Mic uplink stalled — restarting track');
+          await track.restartTrack();
+          lastBytes = -1;
+          return;
+        }
+        if (stalls >= MIC_STALL_REPUBLISH_TICKS) {
+          console.warn('[KloudMeet] Mic uplink still stalled — republishing');
+          await lp.unpublishTrack(track);
+          await republish();
+        }
+      } catch (err: unknown) {
+        console.warn(
+          '[KloudMeet] Mic watchdog failed:',
+          err instanceof Error ? err.message : err,
+        );
+      } finally {
+        busy = false;
+      }
+    };
+
+    const id = window.setInterval(() => void tick(), MIC_WATCHDOG_MS);
+    return () => window.clearInterval(id);
+  }, [room]);
 
   React.useEffect(() => {
     if (lowPowerMode) {
@@ -1822,6 +1688,35 @@ export function VideoConferenceComponent(props: {
       document.removeEventListener('touchstart', onGesture, opts);
       document.removeEventListener('pointerdown', onGesture, opts);
       document.removeEventListener('click', onGesture, opts);
+    };
+  }, [room]);
+
+  // ── 桌面端：浏览器拦截自动播放时（如刷新后跳过准备页直接入会，没有用户手势），
+  // 在下一次任意点击/按键时静默 startAudio，否则本端听不到任何人 ──
+  React.useEffect(() => {
+    if (isToolbarMobileUserAgent()) return;
+
+    const onGesture = () => {
+      if (room.canPlaybackAudio) return;
+      room.startAudio().catch((err: unknown) => {
+        console.warn(
+          '[KloudMeet] startAudio on gesture failed:',
+          err instanceof Error ? err.message : err,
+        );
+      });
+    };
+    const handlePlaybackStatus = (allowed: boolean) => {
+      if (!allowed) console.warn('[KloudMeet] Audio playback blocked — waiting for user gesture');
+    };
+
+    const opts: AddEventListenerOptions = { capture: true, passive: true };
+    document.addEventListener('pointerdown', onGesture, opts);
+    document.addEventListener('keydown', onGesture, opts);
+    room.on(RoomEvent.AudioPlaybackStatusChanged, handlePlaybackStatus);
+    return () => {
+      document.removeEventListener('pointerdown', onGesture, opts);
+      document.removeEventListener('keydown', onGesture, opts);
+      room.off(RoomEvent.AudioPlaybackStatusChanged, handlePlaybackStatus);
     };
   }, [room]);
 
@@ -2027,6 +1922,7 @@ export function VideoConferenceComponent(props: {
       clearOwnMicRestrictionRef.current?.();
     }
     setMicEnabled(next);
+    desiredMicRef.current = next;
     void room.localParticipant
       .setMicrophoneEnabled(next)
       .then(() => {
@@ -2034,6 +1930,7 @@ export function VideoConferenceComponent(props: {
       })
       .catch((error: Error) => {
         setMicEnabled(!next);
+        desiredMicRef.current = !next;
         handleError(error);
       });
   }, [canUseRealtimeMediaControls, micEnabled, room, handleError, showMediaUnavailableToast]);
@@ -2050,6 +1947,7 @@ export function VideoConferenceComponent(props: {
       return;
     }
     setCamEnabled(next);
+    desiredCamRef.current = next;
     void room.localParticipant
       .setCameraEnabled(next)
       .then(() => {
@@ -2057,6 +1955,7 @@ export function VideoConferenceComponent(props: {
       })
       .catch((error: Error) => {
         setCamEnabled(!next);
+        desiredCamRef.current = !next;
         handleError(error);
       });
   }, [canUseRealtimeMediaControls, camEnabled, room, handleError, showMediaUnavailableToast]);
@@ -3281,7 +3180,7 @@ export function VideoConferenceComponent(props: {
         // 服务端踢人通知（可能来自 meeting-control 或 kloud-session）
         if (msg.type === 'SESSION_EVICTED') {
           // Self token renew / voluntary leave must not show "Session Moved"
-          if (tokenRenewInProgressRef.current || intentionalDisconnectRef.current) {
+          if (intentionalDisconnectRef.current) {
             return;
           }
           duplicateSessionHandledRef.current = true;
@@ -5518,6 +5417,8 @@ export function VideoConferenceComponent(props: {
         <ParticipantRoleMenuProvider {...participantRoleActions}>
         {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
         {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
+        {/* 桌面端远端音频挂在错误边界之外：视频区域反复出错被卸载时仍能听到声音 */}
+        {!isToolbarMobile && <RoomAudioRenderer />}
         <KeyboardShortcuts />
 
         {/* ── Host ended meeting (remote end or END_MEETING) ── */}
@@ -5848,13 +5749,6 @@ export function VideoConferenceComponent(props: {
                     markIntentionalDisconnect();
                     clearActiveKloudRoom();
                     setConnectError(null);
-                    connectAttemptedRef.current = false;
-                    connectRetryCountRef.current = 0;
-                    unexpectedErrorRetryCountRef.current = 0;
-                    if (connectRetryTimerRef.current) {
-                      clearTimeout(connectRetryTimerRef.current);
-                      connectRetryTimerRef.current = null;
-                    }
                     room.disconnect().catch(console.error);
                     router.push('/');
                   }}
@@ -5877,46 +5771,14 @@ export function VideoConferenceComponent(props: {
                 </button>
                 <button
                   onClick={() => {
-                    // Manual pragmatic rejoin after bug-path failure (escape hatch, not retry theater).
+                    // Manual rejoin: hand back to the reconnect controller with a fresh ticket.
                     setConnectError(null);
-                    connectAttemptedRef.current = false;
-                    connectRetryCountRef.current = 0;
-                    unexpectedErrorRetryCountRef.current = 0;
-                    if (connectRetryTimerRef.current) {
-                      clearTimeout(connectRetryTimerRef.current);
-                      connectRetryTimerRef.current = null;
-                    }
-                    if (room.state === ConnectionState.Disconnected) {
-                      connectAttemptedRef.current = true;
-                      console.warn('[KloudMeet] Manual rejoin after serious LiveKit failure');
-                      connectRoom({ forceRefresh: true })
-                        .then(async () => {
-                          hasConnectedOnceRef.current = true;
-                          intentionalDisconnectRef.current = false;
-                          connectRetryCountRef.current = 0;
-                          setConnectError(null);
-                          await restoreLocalMediaAfterReconnect();
-                        })
-                        .catch((err: Error) => {
-                          connectAttemptedRef.current = false;
-                          if (isKloudSessionExpiredError(err)) {
-                            return;
-                          }
-                          logSeriousLiveKitFailure({
-                            phase: 'manual-rejoin',
-                            attempt: 1,
-                            maxAttempts: 1,
-                            roomName: connectionDetailsRef.current?.roomName,
-                            roomState: room.state,
-                            disconnectReason: lastDisconnectReasonRef.current,
-                            authFail: isLiveKitAuthError(err),
-                            failureKind: classifyLiveKitFailure(err),
-                            participantToken: connectionDetailsRef.current?.participantToken,
-                            error: err instanceof Error ? err : new Error(String(err)),
-                          });
-                          setConnectError(err.message);
-                        });
-                    }
+                    intentionalDisconnectRef.current = false;
+                    reconnectAttemptRef.current = 0;
+                    reconnectFreshRef.current = true;
+                    clearReconnectTimer();
+                    console.warn('[KloudMeet] Manual rejoin');
+                    void runReconnect();
                   }}
                   style={{
                     padding: '10px 24px',
@@ -6478,7 +6340,7 @@ export function VideoConferenceComponent(props: {
             {isToolbarMobile && activeView === 'webcam' && !hasScreenShare && webcamLayoutMode === 'tile' ? (
               <MobileVideoLayout />
             ) : isToolbarMobile && !hasScreenShare && webcamLayoutMode === 'tile' ? (
-              <ConnectionStateToast />
+              <KloudConnectionStateToast />
             ) : (
               <VideoConferenceErrorBoundary>
                 <KloudVideoConference

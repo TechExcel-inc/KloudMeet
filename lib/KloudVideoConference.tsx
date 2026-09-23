@@ -12,20 +12,19 @@ import * as React from 'react';
 import {
   CarouselLayout,
   Chat,
-  ConnectionStateToast,
   ControlBar,
   FocusLayout,
   FocusLayoutContainer,
   GridLayout,
   LayoutContextProvider,
   ParticipantTile,
-  RoomAudioRenderer,
   useCreateLayoutContext,
   usePinnedTracks,
   useRoomContext,
   useTracks,
   type MessageFormatter,
 } from '@livekit/components-react';
+import { KloudConnectionStateToast } from './KloudConnectionStateToast';
 
 export type WebcamLayoutMode = 'tile' | 'spotlight';
 
@@ -279,8 +278,8 @@ export function KloudVideoConference({
           )}
         </LayoutContextProvider>
       )}
-      <RoomAudioRenderer />
-      <ConnectionStateToast />
+      {/* 远端音频由会议页顶层渲染（错误边界之外），此处不再重复挂载 */}
+      <KloudConnectionStateToast />
     </div>
   );
 }
