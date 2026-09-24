@@ -277,26 +277,6 @@
   justify-content: flex-end;
 }
 
-.miniHintBtn {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border: none;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: rgba(255, 255, 255, 0.75);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 0;
-}
-
-.miniHintBtn:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
 .miniControls {
   display: flex;
   align-items: center;

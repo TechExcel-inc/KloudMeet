@@ -167,7 +167,7 @@ export function TopToolbar({ onBack, onSignIn, onSignOut, onOpenSettings, onOpen
                 </svg>
               </button>
               {appSwitcherOpen && (
-                <div className={styles.dropdownMenu} style={{ minWidth: '360px', padding: '16px' }}>
+                <div className={styles.dropdownMenu} style={{ width: '252px', minWidth: '252px', boxSizing: 'border-box', padding: '16px' }}>
                   <div style={{ fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#94a3b8', fontWeight: 700, marginBottom: '8px' }}>
                     Kloud Platform
                   </div>
