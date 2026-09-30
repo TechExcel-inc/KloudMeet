@@ -318,6 +318,7 @@ export function MeetingDocumentPipPanel({
   const [copied, setCopied] = React.useState(false);
   const copiedTimerRef = React.useRef<number | null>(null);
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
+  const leaveMenuInlineRef = React.useRef<HTMLDivElement>(null);
   const shareWrapRef = React.useRef<HTMLDivElement>(null);
   const showMiniTimerRef = React.useRef<number | null>(null);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
@@ -394,6 +395,7 @@ export function MeetingDocumentPipPanel({
     const root = pipWindow.document.documentElement;
     const hide = () => {
       clearShowMiniTimer();
+      setExitMenuOpen(false);
       setShareMenuOpen(false);
       setMiniControls(false);
     };
@@ -413,13 +415,17 @@ export function MeetingDocumentPipPanel({
     const onPointer = (e: Event) => {
       const target = e.target as Node | null;
       if (leaveWrapRef.current?.contains(target)) return;
+      if (leaveMenuInlineRef.current?.contains(target)) return;
       if (shareWrapRef.current?.contains(target)) return;
-      setExitMenuOpen(false);
+      // 最小化退出菜单只在鼠标移出 PiP 窗口时关闭，窗口内点击不收起
+      if (!(minimized && exitMenuOpen)) {
+        setExitMenuOpen(false);
+      }
       setShareMenuOpen(false);
     };
     pipWindow.document.addEventListener('pointerdown', onPointer, true);
     return () => pipWindow.document.removeEventListener('pointerdown', onPointer, true);
-  }, [exitMenuOpen, shareMenuOpen, pipWindow]);
+  }, [exitMenuOpen, shareMenuOpen, minimized, pipWindow]);
 
   React.useEffect(() => {
     const hideMenus = () => {
@@ -695,7 +701,7 @@ export function MeetingDocumentPipPanel({
             </svg>
           </button>
         </div>
-        <div ref={compact ? undefined : leaveWrapRef} className={styles.leaveWrap}>
+        <div ref={leaveWrapRef} className={styles.leaveWrap}>
           {!compact && exitMenuOpen && canEndForAll ? (
             <div className={`${styles.shareMenuAbove} ${styles.leaveMenu}`} role="menu">
               <button type="button" className={styles.exitMenuItem} role="menuitem" onClick={onLeave}>
@@ -714,11 +720,11 @@ export function MeetingDocumentPipPanel({
           <button
             type="button"
             className={`${styles.controlBtn} ${styles.leaveBtn}`}
-            onClick={compact ? onLeave : handleLeaveClick}
+            onClick={canEndForAll ? handleLeaveClick : onLeave}
             aria-label={labels.leave}
             title={labels.leave}
-            aria-haspopup={!compact && canEndForAll ? 'menu' : undefined}
-            aria-expanded={!compact && canEndForAll ? exitMenuOpen : undefined}
+            aria-haspopup={canEndForAll ? 'menu' : undefined}
+            aria-expanded={canEndForAll ? exitMenuOpen : undefined}
           >
             <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
               <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.69 7.46 7 12 7s8.66 1.69 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.11-.7-.28-.79-.73-1.68-1.36-2.66-1.85-.33-.16-.56-.5-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
@@ -747,9 +753,25 @@ export function MeetingDocumentPipPanel({
           onMouseLeave={() => {
             clearShowMiniTimer();
             setShareMenuOpen(false);
-            setMiniControls(false);
+            // 退出菜单保留到鼠标移出整个 PiP 窗口（documentElement mouseleave）
+            if (!exitMenuOpen) setMiniControls(false);
           }}
         >
+          {exitMenuOpen && canEndForAll ? (
+            <div ref={leaveMenuInlineRef} className={styles.leaveMenuInline} role="menu">
+              <button type="button" className={styles.exitMenuItem} role="menuitem" onClick={onLeave}>
+                {labels.leave}
+              </button>
+              <button
+                type="button"
+                className={`${styles.exitMenuItem} ${styles.exitMenuItemDanger}`}
+                role="menuitem"
+                onClick={() => onEndForAll?.()}
+              >
+                {labels.endForEveryone}
+              </button>
+            </div>
+          ) : null}
           <div className={styles.pill}>
             {miniControls ? (
               renderControls(true)

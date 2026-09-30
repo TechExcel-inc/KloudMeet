@@ -857,6 +857,40 @@
   transform: none;
 }
 
+/* 最小化条：横向双选项盖在整个窗口正中央，避免贴边被裁切 */
+.leaveMenuInline {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 40;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: calc(100vw - 16px);
+  padding: 3px;
+  border-radius: 8px;
+  background: #2b2d31;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.leaveMenuInline .exitMenuItem {
+  width: auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  padding: 5px 10px;
+  font-size: 12px;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .shareMenuCover {
   position: absolute;
   left: 50%;
