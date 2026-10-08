@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { canManageRecording } from '@/lib/apiAuth';
+import {
+  authorizeRecordingView,
+  ensureShareKey,
+  findRecordingByKey,
+  isRecordingResponse,
+} from '@/lib/recordingShare';
 
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -17,14 +24,29 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const recordingId = parseInt(id);
-    if (isNaN(recordingId)) {
-      return NextResponse.json({ error: 'Invalid recording ID' }, { status: 400 });
+    const located = await findRecordingByKey(id);
+    if (!located) {
+      return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
     }
 
-    // 查询录制记录 + 关联会议信息
+    const access = await authorizeRecordingView(req, located);
+    if (isRecordingResponse(access)) return access;
+
+    if (located.status !== 'READY') {
+      return NextResponse.json(
+        { error: `Recording is not ready yet (status: ${located.status})` },
+        { status: 404 },
+      );
+    }
+
+    const shareKey = await ensureShareKey(located);
+    const canManage =
+      access.memberId !== null
+        ? await canManageRecording(access.memberId, located)
+        : false;
+
     const recording = await prisma.recording.findUnique({
-      where: { id: recordingId },
+      where: { id: located.id },
       include: {
         meeting: {
           include: {
@@ -66,6 +88,9 @@ export async function GET(
     return NextResponse.json({
       recording: {
         id: recording.id,
+        shareKey,
+        visibility: recording.visibility,
+        canManage,
         fileName: recording.fileName,
         durationSeconds: recording.durationSeconds,
         fileSizeBytes: recording.fileSizeBytes,
@@ -77,7 +102,7 @@ export async function GET(
       meeting: recording.meeting
         ? {
             id: recording.meeting.id,
-            kloudMeetingId: (recording.meeting as any).kloudMeetingId ?? null,
+            kloudMeetingId: recording.meeting.kloudMeetingId,
             title: recording.meeting.title,
             roomName: recording.meeting.roomName,
             status: recording.meeting.status,

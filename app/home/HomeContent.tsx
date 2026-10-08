@@ -6,6 +6,7 @@ import { HelpModal } from '@/lib/HelpModal';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { consumeMeetingClosedNotice } from '@/lib/meetingClosedNotice';
+import { safeReplayNext } from '@/lib/recordingReplayPath';
 import styles from '../../styles/Home.module.css';
 import type { AuthUser, PageView } from './types';
 import { useToast } from './components/useToast';
@@ -23,6 +24,7 @@ export function HomeContent() {
   const [authInitialized, setAuthInitialized] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const toast = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -194,8 +196,24 @@ export function HomeContent() {
     };
   }, [searchParams]);
 
+  useEffect(() => {
+    if (!authInitialized || user) return;
+    if (safeReplayNext(searchParams.get('next'))) setView('login');
+  }, [authInitialized, user, searchParams]);
+
+  useEffect(() => {
+    if (!authInitialized || !user) return;
+    const next = safeReplayNext(searchParams.get('next'));
+    if (next) router.replace(next);
+  }, [authInitialized, user, searchParams, router]);
+
   const handleAuthSuccess = (u: AuthUser) => {
     setUser(u);
+    const next = safeReplayNext(searchParams.get('next'));
+    if (next) {
+      router.replace(next);
+      return;
+    }
     setView('dashboard');
   };
 

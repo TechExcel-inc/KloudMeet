@@ -2,10 +2,11 @@
  * /meeting/[meetingId]/summary
  *
  * 按会议 ID 访问回放页的快捷路由。
- * 查找该会议最新一条 READY 状态的录制，重定向到 /recordings/{id}。
+ * 查找该会议最新一条 READY 状态的录制，重定向到 /recordings/{shareKey}。
  */
 import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
+import { ensureShareKey } from '@/lib/recordingShare';
 
 interface Props {
   params: Promise<{ meetingId: string }>;
@@ -30,7 +31,8 @@ export default async function MeetingSummaryPage({ params }: Props) {
   });
 
   if (recording) {
-    redirect(`/recordings/${recording.id}`);
+    const shareKey = await ensureShareKey(recording);
+    redirect(`/recordings/${shareKey}`);
   }
 
   // 没有可用录制 → 查 UPLOADING/PROCESSING
@@ -44,7 +46,8 @@ export default async function MeetingSummaryPage({ params }: Props) {
   });
 
   if (processing) {
-    redirect(`/recordings/${processing.id}`);
+    const shareKey = await ensureShareKey(processing);
+    redirect(`/recordings/${shareKey}`);
   }
 
   // 没有任何录制

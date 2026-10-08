@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { newShareKey } from '@/lib/recordingShare';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -131,6 +132,8 @@ export async function POST(
       data: {
         meetingId: meeting.id,
         teamMemberId: teamMemberId,
+        shareKey: newShareKey(),
+        visibility: 'PRIVATE',
         fileName: `${roomName}-${timestamp}.mp4`,
         storageProvider: S3_ENDPOINT?.includes('aliyuncs') ? 'ALI_OSS' : 'S3',
         storageKey: info.egressId, // Temporarily store egressId here

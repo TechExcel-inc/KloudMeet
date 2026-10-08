@@ -239,6 +239,8 @@ model MeetUser {
 
 model Recording {
   id              Int                      @id @default(autoincrement())
+  shareKey        String?                  @unique(map: "Recording_shareKey_key")
+  visibility      String                   @default("PRIVATE")
   meetingId       Int
   teamMemberId    Int
   fileName        String

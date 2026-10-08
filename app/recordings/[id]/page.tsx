@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
+import { recordingReplayPath } from '@/lib/recordingReplayPath';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -675,15 +676,31 @@ export default function ReplayPage() {
   // 加载聚合数据
   useEffect(() => {
     if (!id) return;
+    let redirected = false;
     (async () => {
       try {
         // 从 localStorage 读取 token（和 Dashboard 一致）
         const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
         const token = stored ? (JSON.parse(stored).token || '') : '';
 
-        const res = await fetch(`/api/recordings/${id}/summary`, {
+        const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/summary`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
+        if (res.status === 401) {
+          redirected = true;
+          try {
+            localStorage.removeItem('kloudUser');
+            sessionStorage.removeItem('kloudUser');
+          } catch {
+            /* ignore */
+          }
+          window.location.href = `/?next=${encodeURIComponent(recordingReplayPath(id))}`;
+          return;
+        }
+        if (res.status === 403) {
+          setError(t('replay.noAccess'));
+          return;
+        }
         if (!res.ok) {
           const d = await res.json();
           setError(d.error || '加载失败');
@@ -694,10 +711,10 @@ export default function ReplayPage() {
       } catch (e: any) {
         setError(e.message || '网络错误');
       } finally {
-        setLoading(false);
+        if (!redirected) setLoading(false);
       }
     })();
-  }, [id]);
+  }, [id, t]);
 
   const seekTo = useCallback((secs: number) => {
     if (videoRef.current) {

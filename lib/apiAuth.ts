@@ -64,6 +64,20 @@ export async function canAccessRecording(
   return !!participated;
 }
 
+/** Host or the member who started the recording may change visibility / rotate the link. */
+export async function canManageRecording(
+  memberId: number,
+  recording: { teamMemberId: number | null; meetingId: number },
+): Promise<boolean> {
+  if (recording.teamMemberId === memberId) return true;
+
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: recording.meetingId },
+    select: { createdByMemberId: true },
+  });
+  return !!meeting && meeting.createdByMemberId === memberId;
+}
+
 /** Public fields for pre-join / anonymous join flow. */
 export function publicMeetingPayload(meeting: Record<string, unknown>) {
   const { recordings: _r, ...rest } = meeting;

@@ -6,6 +6,7 @@ import {
   expireIdleMeetingIfNeeded,
   isMeetingPermanentlyClosed,
 } from '@/lib/meetingRejoin';
+import { fillShareKeys } from '@/lib/recordingShare';
 
 export async function GET(request: NextRequest) {
   try {
@@ -57,8 +58,9 @@ export async function GET(request: NextRequest) {
           recordings: {
             select: {
               id: true,
+              shareKey: true,
+              visibility: true,
               status: true,
-              storageUrl: true,
               durationSeconds: true,
             },
           },
@@ -78,7 +80,14 @@ export async function GET(request: NextRequest) {
       meetings.map((m) => expireIdleMeetingIfNeeded(m)),
     );
 
-    const enhancedMeetings = meetingsAfterIdle.map((m) => {
+    const meetingsWithKeys = await Promise.all(
+      meetingsAfterIdle.map(async (m) => ({
+        ...m,
+        recordings: await fillShareKeys(m.recordings),
+      })),
+    );
+
+    const enhancedMeetings = meetingsWithKeys.map((m) => {
       const mx = m as any;
       const isLive = isRoomLiveInList(m.roomName, activeRooms);
       const isActive = isMeetingPermanentlyClosed(m.status) ? false : isLive;

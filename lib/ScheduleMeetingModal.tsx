@@ -13,6 +13,16 @@ interface ScheduleMeetingModalProps {
   onSave: () => void;
 }
 
+type RecordingVisibility = 'PUBLIC' | 'PRIVATE';
+
+function readyRecording(meeting: {
+  recordings?: { status?: string; visibility?: string; shareKey?: string | null }[];
+} | null | undefined) {
+  const rows = meeting?.recordings;
+  if (!Array.isArray(rows)) return null;
+  return rows.find((row) => row.status === 'READY' && row.shareKey) ?? null;
+}
+
 const FALLBACK_TIMEZONES = [
   'UTC',
   'America/Los_Angeles',
@@ -173,6 +183,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const isFinished = existingMeeting?.status === 'ENDED' || existingMeeting?.status === 'FINISHED';
   const isCanceled = existingMeeting?.status === 'CANCELED';
   const isReadOnly = isFinished || isCanceled;
+  const recording = readyRecording(existingMeeting);
+  const [recordingVisibility, setRecordingVisibility] = useState<RecordingVisibility>(
+    recording?.visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
+  );
 
   useEffect(() => {
     if (!showInviteMenu) return;
@@ -275,6 +289,26 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       else if (durationStr === '300min(5h)') durationMinutes = 300;
       else if (durationStr === '360min(6h)') durationMinutes = 360;
       else if (durationStr === '420min(7h)') durationMinutes = 420;
+
+      if (recording?.shareKey && recording.visibility !== recordingVisibility) {
+        const visibilityRes = await authFetch(
+          `/api/recordings/${encodeURIComponent(recording.shareKey)}`,
+          {
+            method: 'PATCH',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ visibility: recordingVisibility }),
+          },
+        );
+        if (!visibilityRes.ok) {
+          alert(t('dash.recordingVisibilityFailed'));
+          return;
+        }
+      }
+
+      if (isReadOnly) {
+        onSave();
+        return;
+      }
 
       if (existingMeeting?.roomName) {
         await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
@@ -551,15 +585,31 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               <div className={styles.formRow}>
                 <label className={styles.label}>{t('schedule.accessOption')}</label>
                 <div className={styles.inputWrapper} style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', paddingTop: '0.6rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="radio" name="access" value="public" defaultChecked className={styles.radio} disabled={isReadOnly} />
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: recording?.shareKey ? 'pointer' : 'default' }}>
+                    <input
+                      type="radio"
+                      name="access"
+                      value="public"
+                      className={styles.radio}
+                      checked={recordingVisibility === 'PUBLIC'}
+                      onChange={() => setRecordingVisibility('PUBLIC')}
+                      disabled={!recording?.shareKey}
+                    />
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.public')}</div>
                       <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.publicDesc')}</div>
                     </div>
                   </label>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer' }}>
-                    <input type="radio" name="access" value="private" className={styles.radio} disabled={isReadOnly} />
+                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: recording?.shareKey ? 'pointer' : 'default' }}>
+                    <input
+                      type="radio"
+                      name="access"
+                      value="private"
+                      className={styles.radio}
+                      checked={recordingVisibility === 'PRIVATE'}
+                      onChange={() => setRecordingVisibility('PRIVATE')}
+                      disabled={!recording?.shareKey}
+                    />
                     <div>
                       <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.private')}</div>
                       <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.privateDesc')}</div>
@@ -583,8 +633,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                             <div style={{ color: '#64748b', fontSize: '0.8rem' }}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
                           </div>
                         </div>
-                        {r.status === 'READY' && r.storageUrl && (
-                          <a href={r.storageUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>{t('common.view')}</a>
+                        {r.status === 'READY' && r.shareKey && (
+                          <a href={`/recordings/${encodeURIComponent(r.shareKey)}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>{t('common.view')}</a>
                         )}
                       </div>
                     ))}

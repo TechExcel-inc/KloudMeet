@@ -2427,6 +2427,86 @@
   background: #d2e3fc;
 }
 
+.recordingPrivateBadge,
+.recordingPublicBadge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 100px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.recordingPrivateBadge {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.recordingPublicBadge {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.recordingShareAnchor {
+  position: relative;
+}
+
+.recordingShareMenu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
+  z-index: 60;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.recordingShareItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  padding: 8px 10px;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #111827;
+  cursor: pointer;
+}
+
+.recordingShareItem span {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.recordingShareItem:hover {
+  background: #f3f4f6;
+}
+
+.recordingShareItemActive {
+  background: #eef2ff;
+  color: #5227d3;
+}
+
+.recordingShareItem:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* Recording processing pill */
 .recordingProcessing {
   display: flex;
@@ -3240,6 +3320,35 @@
 :global(html[data-theme='dark']) .orgDropdownItem:hover {
   background: #1e293b;
   color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .recordingShareMenu {
+  background: #0f172a;
+  border-color: #334155;
+}
+
+:global(html[data-theme='dark']) .recordingShareItem {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .recordingShareItem span {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .recordingShareItem:hover,
+:global(html[data-theme='dark']) .recordingShareItemActive {
+  background: #1e293b;
+  color: #c7d2fe;
+}
+
+:global(html[data-theme='dark']) .recordingPrivateBadge {
+  background: #1e293b;
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .recordingPublicBadge {
+  background: rgba(16, 185, 129, 0.16);
+  color: #6ee7b7;
 }
 
 :global(html[data-theme='dark']) .orgDropdownIdentity {

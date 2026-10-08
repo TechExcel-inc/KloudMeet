@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { canAccessRecording, forbidden, isAuthError, requireSession } from '@/lib/apiAuth';
+import {
+  authorizeRecordingView,
+  findRecordingByKey,
+  isRecordingResponse,
+} from '@/lib/recordingShare';
 
 const s3Client = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -27,28 +30,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const member = await requireSession(req);
-    if (isAuthError(member)) return member;
-
     const resolvedParams = await params;
-    const recordingId = parseInt(resolvedParams.id, 10);
-
-    if (isNaN(recordingId)) {
-      return NextResponse.json({ error: 'Invalid recording ID' }, { status: 400 });
-    }
-
-    const recording = await prisma.recording.findUnique({
-      where: { id: recordingId },
-    });
-
+    const recording = await findRecordingByKey(resolvedParams.id);
     if (!recording) {
       return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
     }
 
-    const allowed = await canAccessRecording(member.id, recording);
-    if (!allowed) {
-      return forbidden('You do not have access to this recording');
-    }
+    const access = await authorizeRecordingView(req, recording);
+    if (isRecordingResponse(access)) return access;
 
     if (recording.status !== 'READY') {
       return NextResponse.json(
