@@ -4,7 +4,11 @@ import {
   findMeetingByRoomName,
   getMeetingIsActiveByRoomName,
 } from '@/lib/meetingRoomIsActive';
-import { findPersonalRoomOwner, resolveCanonicalRoomName } from '@/lib/personalRoom';
+import {
+  archivePersonalRoomMeeting,
+  findPersonalRoomOwner,
+  resolveCanonicalRoomName,
+} from '@/lib/personalRoom';
 import {
   canManageMeeting,
   forbidden,
@@ -190,10 +194,12 @@ export async function DELETE(
     }
 
     const updated = await prisma.meeting.update({
-      where: { roomName },
-      data: { deletedAt: new Date() }
+      where: { id: current.id },
+      data: { deletedAt: new Date() },
     });
-    return NextResponse.json({ success: true, meeting: updated });
+    await archivePersonalRoomMeeting(current);
+    const meeting = await prisma.meeting.findUnique({ where: { id: current.id } });
+    return NextResponse.json({ success: true, meeting: meeting ?? updated });
   } catch (error) {
     console.error('[meetings DELETE]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

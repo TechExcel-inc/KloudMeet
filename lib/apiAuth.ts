@@ -64,7 +64,7 @@ export async function canAccessRecording(
   return !!participated;
 }
 
-/** Host or the member who started the recording may change visibility / rotate the link. */
+/** Host or the member who started the recording may change visibility. */
 export async function canManageRecording(
   memberId: number,
   recording: { teamMemberId: number | null; meetingId: number },

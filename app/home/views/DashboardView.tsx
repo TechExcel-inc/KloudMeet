@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
@@ -25,6 +26,21 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
+
+function placeRecordingShareMenu(anchor: HTMLElement) {
+  const width = 240;
+  const height = 180;
+  const margin = 8;
+  const rect = anchor.getBoundingClientRect();
+  const openUp =
+    window.innerHeight - rect.bottom < height + margin && rect.top > height + margin;
+  const top = openUp ? rect.top - margin : rect.bottom + margin;
+  const left = Math.max(
+    margin,
+    Math.min(rect.right - width, window.innerWidth - width - margin),
+  );
+  return { top, left, openUp };
+}
 
 export function DashboardView({
   user,
@@ -70,6 +86,7 @@ export function DashboardView({
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
   const [shareMenuId, setShareMenuId] = useState<number | null>(null);
+  const [shareMenuPos, setShareMenuPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
   const [shareBusyId, setShareBusyId] = useState<number | null>(null);
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
@@ -136,37 +153,9 @@ export function DashboardView({
       await navigator.clipboard.writeText(url);
       toast.show(t('dash.recordingLinkCopied'));
       setShareMenuId(null);
+      setShareMenuPos(null);
     } catch {
       toast.show(t('dash.recordingVisibilityFailed'));
-    }
-  };
-
-  const resetRecordingLink = async (recording: { id: number; shareKey?: string | null }) => {
-    if (!recording.shareKey || shareBusyId === recording.id) return;
-    if (!window.confirm(t('dash.recordingLinkResetConfirm'))) return;
-    setShareBusyId(recording.id);
-    try {
-      const res = await fetch(
-        `/api/recordings/${encodeURIComponent(recording.shareKey)}/rotate`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${userToken}` },
-        },
-      );
-      const data = (await res.json().catch(() => null)) as { shareKey?: string } | null;
-      if (!res.ok || !data?.shareKey) {
-        toast.show(t('dash.recordingVisibilityFailed'));
-        return;
-      }
-      updateRecordingInList(recording.id, { shareKey: data.shareKey });
-      const url = `${window.location.origin}${recordingReplayPath(data.shareKey)}`;
-      await navigator.clipboard.writeText(url).catch(() => undefined);
-      toast.show(t('dash.recordingLinkReset'));
-      setShareMenuId(null);
-    } catch {
-      toast.show(t('dash.recordingVisibilityFailed'));
-    } finally {
-      setShareBusyId(null);
     }
   };
 
@@ -186,6 +175,32 @@ export function DashboardView({
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [inviteMenuRoomName]);
+
+  useEffect(() => {
+    if (shareMenuId == null) return;
+    const close = () => {
+      setShareMenuId(null);
+      setShareMenuPos(null);
+    };
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest('[data-recording-share-anchor="true"]') ||
+        target?.closest('[data-recording-share-menu="true"]')
+      ) {
+        return;
+      }
+      close();
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [shareMenuId]);
 
   // Fetch personal room ID from profile
   useEffect(() => {
@@ -720,6 +735,14 @@ export function DashboardView({
     return acc;
   }, {});
 
+  const shareMenuRecording =
+    shareMenuId == null
+      ? null
+      : dbMeetings
+          .flatMap((meeting) => (Array.isArray(meeting.recordings) ? meeting.recordings : []))
+          .find((row: { id: number; shareKey?: string | null }) => row.id === shareMenuId && row.shareKey) ??
+        null;
+
   return (
     <div className={styles.anonWrapper}>
       <TopToolbar 
@@ -882,12 +905,14 @@ export function DashboardView({
                     const isHost = m.createdByMemberId === user.id;
                     const isLive = m.isActive;
                     const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
+                    const cardMenuOpen =
+                      inviteMenuRoomName === m.roomName || shareMenuId === recording?.id;
 
                     return (
                       <div
                         key={m.id || i}
                         className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
-                          inviteMenuRoomName === m.roomName ? ` ${styles.meetingCardInviteMenuOpen}` : ''
+                          cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''
                         }`}
                         onDoubleClick={() => setEditingMeeting(m)}
                       >
@@ -1150,57 +1175,27 @@ export function DashboardView({
                               )}
 
                               {recording?.shareKey && (
-                                <div className={styles.recordingShareAnchor}>
+                                <div className={styles.recordingShareAnchor} data-recording-share-anchor="true">
                                   <button
                                     type="button"
                                     title={t('dash.recordingShare')}
                                     className={styles.iconBtn}
-                                    onClick={() =>
-                                      setShareMenuId((prev) => (prev === recording.id ? null : recording.id))
-                                    }
+                                    aria-expanded={shareMenuId === recording.id}
+                                    onClick={(event) => {
+                                      if (shareMenuId === recording.id) {
+                                        setShareMenuId(null);
+                                        setShareMenuPos(null);
+                                        return;
+                                      }
+                                      setShareMenuPos(placeRecordingShareMenu(event.currentTarget));
+                                      setShareMenuId(recording.id);
+                                    }}
                                   >
                                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
                                       <rect x="3" y="11" width="18" height="11" rx="2" />
                                       <path d="M7 11V7a5 5 0 0110 0v4" strokeLinecap="round" />
                                     </svg>
                                   </button>
-                                  {shareMenuId === recording.id && (
-                                    <div className={styles.recordingShareMenu}>
-                                      <button
-                                        type="button"
-                                        className={`${styles.recordingShareItem} ${recording.visibility !== 'PUBLIC' ? styles.recordingShareItemActive : ''}`}
-                                        disabled={shareBusyId === recording.id}
-                                        onClick={() => void changeRecordingVisibility(recording, 'PRIVATE')}
-                                      >
-                                        {t('dash.recordingPrivate')}
-                                        <span>{t('dash.recordingPrivateHint')}</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={`${styles.recordingShareItem} ${recording.visibility === 'PUBLIC' ? styles.recordingShareItemActive : ''}`}
-                                        disabled={shareBusyId === recording.id}
-                                        onClick={() => void changeRecordingVisibility(recording, 'PUBLIC')}
-                                      >
-                                        {t('dash.recordingPublic')}
-                                        <span>{t('dash.recordingPublicHint')}</span>
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={styles.recordingShareItem}
-                                        onClick={() => void copyRecordingLink(recording.shareKey)}
-                                      >
-                                        {t('dash.recordingCopyLink')}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={styles.recordingShareItem}
-                                        disabled={shareBusyId === recording.id}
-                                        onClick={() => void resetRecordingLink(recording)}
-                                      >
-                                        {t('dash.recordingResetLink')}
-                                      </button>
-                                    </div>
-                                  )}
                                 </div>
                               )}
 
@@ -1612,6 +1607,45 @@ export function DashboardView({
             </div>
           </div>
         </div>
+      )}
+
+      {shareMenuRecording && shareMenuPos && typeof document !== 'undefined' && createPortal(
+        <div
+          className={styles.recordingShareMenu}
+          data-recording-share-menu="true"
+          style={{
+            top: shareMenuPos.top,
+            left: shareMenuPos.left,
+            transform: shareMenuPos.openUp ? 'translateY(-100%)' : undefined,
+          }}
+        >
+          <button
+            type="button"
+            className={`${styles.recordingShareItem} ${shareMenuRecording.visibility !== 'PUBLIC' ? styles.recordingShareItemActive : ''}`}
+            disabled={shareBusyId === shareMenuRecording.id}
+            onClick={() => void changeRecordingVisibility(shareMenuRecording, 'PRIVATE')}
+          >
+            {t('dash.recordingPrivate')}
+            <span>{t('dash.recordingPrivateHint')}</span>
+          </button>
+          <button
+            type="button"
+            className={`${styles.recordingShareItem} ${shareMenuRecording.visibility === 'PUBLIC' ? styles.recordingShareItemActive : ''}`}
+            disabled={shareBusyId === shareMenuRecording.id}
+            onClick={() => void changeRecordingVisibility(shareMenuRecording, 'PUBLIC')}
+          >
+            {t('dash.recordingPublic')}
+            <span>{t('dash.recordingPublicHint')}</span>
+          </button>
+          <button
+            type="button"
+            className={styles.recordingShareItem}
+            onClick={() => void copyRecordingLink(shareMenuRecording.shareKey)}
+          >
+            {t('dash.recordingCopyLink')}
+          </button>
+        </div>,
+        document.body,
       )}
     </div>
   );

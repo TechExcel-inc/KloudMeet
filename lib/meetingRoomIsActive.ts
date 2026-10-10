@@ -101,7 +101,7 @@ export async function findMeetingByRoomName(
 }
 
 /**
- * 仅在「即将入会」时调用：专属会议室 ENDED 后归档并创建新 ACTIVE 记录。
+ * 仅在「即将入会」时调用：专属会议室已结束或已删除时归档，并创建新 ACTIVE 记录。
  */
 export async function ensurePersonalRoomMeeting(
   roomName: string,
@@ -130,23 +130,23 @@ export async function ensurePersonalRoomMeeting(
   }
 
   const recycleStatuses = ['ENDED', 'CANCELED'];
-  const shouldRecyclePersonalRoom =
-    !meeting ||
-    (typeof meeting.status === 'string' &&
+  const closed =
+    Boolean(meeting?.deletedAt) ||
+    (typeof meeting?.status === 'string' &&
       recycleStatuses.includes(meeting.status));
+  const shouldRecyclePersonalRoom = !meeting || closed;
 
   if (shouldRecyclePersonalRoom) {
     if (owner) {
-      if (
-        meeting &&
-        typeof meeting.status === 'string' &&
-        recycleStatuses.includes(meeting.status)
-      ) {
+      if (meeting && closed) {
         const archiveFrom = meeting.roomName;
-        await prisma.meeting.update({
-          where: { id: meeting.id },
-          data: { roomName: `${archiveFrom}_${meeting.id}` },
-        });
+        const archivedName = `${archiveFrom}_${meeting.id}`;
+        if (archiveFrom !== archivedName) {
+          await prisma.meeting.update({
+            where: { id: meeting.id },
+            data: { roomName: archivedName },
+          });
+        }
       }
       const { resolveMemberAccountId } = await import('@/lib/peerTimeCompany');
       const accountId = await resolveMemberAccountId(owner.id);

@@ -2185,9 +2185,20 @@
   gap: 0.55rem;
 }
 
-/* When invite submenu is open, sit above sticky list header (40) and following cards, below topNav (50) */
+/* When a card submenu is open, sit above the sticky list header (40) and following cards, below topNav (50) */
 .meetingCardInviteMenuOpen {
   z-index: 42;
+}
+
+.meetingCardInviteMenuOpen .meetingHoverActions {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.meetingCardInviteMenuOpen .statusBadgeHideable {
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* Base meeting card */
@@ -2454,15 +2465,13 @@
 }
 
 .recordingShareMenu {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
+  position: fixed;
   min-width: 220px;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.15);
-  z-index: 60;
+  z-index: 80;
   padding: 6px;
   display: flex;
   flex-direction: column;
