@@ -21,6 +21,9 @@ const LOCAL_API_PREFIXES = [
   'livedoc',
   // SSO validates kloud.cn cookie via PeerTime UserProfile API
   'auth/sso',
+  // Caption region + Bailian ticket must run locally (client IP + DASHSCOPE_API_KEY)
+  'transcripts/stt-region',
+  'transcripts/funasr-token',
 ];
 
 /**

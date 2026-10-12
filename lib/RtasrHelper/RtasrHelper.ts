@@ -25,9 +25,17 @@ export interface RtasrMessage {
   detectedLanguage?: string;
 }
 
+/** 字幕识别引擎。国内百炼与国外 OpenAI 都实现这一接口。 */
+export interface CaptionEngine {
+  languageCode: string;
+  OnMessage?: (msg: RtasrMessage) => void;
+  Start(deviceId?: string): Promise<void>;
+  Stop(): void;
+}
+
 const TARGET_SAMPLE_RATE = 24000;
 
-export class RtasrHelper {
+export class RtasrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
 
   /** ISO-639-1 语言代码（zh/en/ja/ko/fr/de/es/pt/ru/ar/hi/vi 等）

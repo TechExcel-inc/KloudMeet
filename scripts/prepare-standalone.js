@@ -42,6 +42,11 @@ const publicDest = path.join(standalone, 'public');
 copyDir(staticSrc, staticDest);
 copyDir(publicSrc, publicDest);
 
+for (const file of ['run-next-with-funasr.cjs', 'funasr-relay.cjs']) {
+  fs.copyFileSync(path.join(root, 'scripts', file), path.join(standalone, file));
+}
+copyDir(path.join(root, 'node_modules', 'ws'), path.join(standalone, 'node_modules', 'ws'));
+
 const envProd = path.join(root, '.env.production');
 const envProdDest = path.join(standalone, '.env.production');
 if (fs.existsSync(envProd)) {
@@ -58,4 +63,4 @@ if (fs.existsSync(envLocal)) {
   );
 }
 
-console.log('standalone: copied .next/static and public into .next/standalone');
+console.log('standalone: copied static assets and Fun-ASR relay into .next/standalone');

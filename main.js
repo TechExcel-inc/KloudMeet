@@ -831,13 +831,14 @@ function waitForHttpReady(port, timeoutMs = 90000) {
 async function startPackagedNextServer() {
   const standaloneDir = path.join(process.resourcesPath, 'standalone');
   const serverJs = path.join(standaloneDir, 'server.js');
+  const runner = path.join(standaloneDir, 'run-next-with-funasr.cjs');
   appendStartupLog(`standaloneDir=${standaloneDir}`);
-  if (!fs.existsSync(serverJs)) {
-    throw new Error(`找不到内置服务: ${serverJs}`);
+  if (!fs.existsSync(serverJs) || !fs.existsSync(runner)) {
+    throw new Error(`找不到内置服务: ${serverJs} / ${runner}`);
   }
 
   let stderrBuf = '';
-  nextServerProcess = spawn(process.execPath, [serverJs], {
+  nextServerProcess = spawn(process.execPath, [runner, 'standalone'], {
     cwd: standaloneDir,
     env: {
       ...process.env,

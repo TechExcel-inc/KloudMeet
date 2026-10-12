@@ -4,7 +4,7 @@
  * useCaptions.ts — 会议实时字幕 React Hook
  *
  * 字幕数据流：
- *   麦克风 → RtasrHelper(AssemblyAI) → onMessage → publishData(LiveKit) → 所有参与者 → 渲染
+ *   麦克风 → 国内百炼 Fun-ASR / 国外 OpenAI → onMessage → publishData(LiveKit) → 所有参与者 → 渲染
  *
  * 额外功能（本次新增）：
  *   — 每当本地发言者收到 type=0（最终字幕）时，自动 POST /api/transcripts/save
@@ -20,7 +20,10 @@ import React from 'react';
 import { RoomEvent } from 'livekit-client';
 import type { Room } from 'livekit-client';
 import { RtasrHelper } from './RtasrHelper';
-import type { RtasrMessage } from './RtasrHelper';
+import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
+import { FunAsrHelper } from './FunAsrHelper';
+import { resolveSttProvider } from './sttProvider';
+import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
@@ -149,10 +152,13 @@ export function useCaptions({
     isPartial: false,
   });
   const [captionsRunning, setCaptionsRunning] = React.useState(false);
+  const [engineEpoch, setEngineEpoch] = React.useState(0);
 
-  const rtasrRef = React.useRef<RtasrHelper | null>(null);
+  const rtasrRef = React.useRef<CaptionEngine | null>(null);
+  const providerRef = React.useRef<SttProvider | null>(null);
   const hideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const micEnabledRef = React.useRef(micEnabled);
+  const openSeqRef = React.useRef(0);
   micEnabledRef.current = micEnabled;
 
   const encoder = React.useMemo(() => new TextEncoder(), []);
@@ -217,6 +223,9 @@ export function useCaptions({
         // 核心优化：直接利用广播方的默认翻译，省去重复调用的费用
         if (data.defaultTargetLanguage === myReadLanguage && data.defaultTranslatedText) {
            showCaptionsToGUI({ ...data, src: data.defaultTranslatedText });
+        } else if (data.tp === 1 && speakLanguage !== myReadLanguage) {
+           // 中间结果尚未翻译，避免先显示原文、最终句再切换成译文
+           return;
         } else if (
           data.tp === 0 &&
           speakLanguage !== myReadLanguage &&
@@ -240,23 +249,19 @@ export function useCaptions({
     };
   }, [room, decoder, showCaptionsToGUI, languageCode]);
 
-  // ── 当 mic 关闭时停止本地识别（但保持字幕功能开启，仍能看到别人的字幕）──
-  // ── 当 mic 重新开启时自动恢复本地识别 ──────────────────────────────────
-
+  // 识别只由这里启动和停止。开字幕本身不连引擎，避免和开麦各打一次 token。
   React.useEffect(() => {
-    if (!captionsRunning) return; // 字幕功能没开，不需要做什么
-
-    if (!micEnabled && rtasrRef.current) {
-      // 闭麦：只停止本地语音识别引擎，不关闭字幕功能
-      rtasrRef.current.Stop();
-    } else if (micEnabled && rtasrRef.current) {
-      // 开麦：自动恢复本地语音识别
-      const defaultMic = localStorage.getItem('DefaultMic') || '';
-      rtasrRef.current.Start(defaultMic).catch((err: unknown) => {
-        console.warn('[useCaptions] Failed to restart recognition:', err);
-      });
+    const engine = rtasrRef.current;
+    if (!captionsRunning || !engine) return;
+    if (!micEnabled) {
+      engine.Stop();
+      return;
     }
-  }, [micEnabled, captionsRunning]);
+    const defaultMic = localStorage.getItem('DefaultMic') || '';
+    engine.Start(defaultMic).catch((err: unknown) => {
+      console.warn('[useCaptions] Failed to restart recognition:', err);
+    });
+  }, [micEnabled, captionsRunning, engineEpoch]);
 
   // ── 监听设置变更 ────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -278,9 +283,13 @@ export function useCaptions({
 
   const setCaptionsOpen = React.useCallback(
     async (open: boolean) => {
+      const seq = ++openSeqRef.current;
       if (open) {
-        if (!rtasrRef.current) {
-          const helper = new RtasrHelper();
+        const provider = await resolveSttProvider();
+        if (seq !== openSeqRef.current) return;
+        if (!rtasrRef.current || providerRef.current !== provider) {
+          rtasrRef.current?.Stop();
+          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper() : new RtasrHelper();
           helper.languageCode = languageCode;
 
           helper.OnMessage = async (d: RtasrMessage) => {
@@ -303,6 +312,9 @@ export function useCaptions({
             // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
             const speakLanguage = d.detectedLanguage || settings.speakLanguage || languageCode || 'zh';
             const defaultTargetLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
+            const needsTranslation =
+              speakLanguage !== defaultTargetLanguage &&
+              speakLanguage !== 'auto';
 
             const payload: CaptionPayload = {
               id: d.id,
@@ -318,21 +330,20 @@ export function useCaptions({
             // 仅最终句翻译；中间结果（type=1）每个 delta 都会回调，不能打翻译接口
             if (
               d.type === 0 &&
-              speakLanguage !== defaultTargetLanguage &&
-              speakLanguage !== 'auto'
+              needsTranslation
             ) {
               try {
                 payload.defaultTranslatedText = await translateText(d.src, defaultTargetLanguage, speakLanguage);
               } catch (e) {
                 payload.defaultTranslatedText = d.src;
               }
-            } else {
+            } else if (!needsTranslation) {
               payload.defaultTranslatedText = d.src;
             }
 
-            // 本端立即显示 (既然本端语言就是 defaultTargetLanguage，直接使用翻译好的结果)
-            if (settings.subtitleVisible) {
-                showCaptionsToGUI({ ...payload, src: payload.defaultTranslatedText });
+            // 需要翻译时不显示未翻译的中间结果，只显示最终译文
+            if (settings.subtitleVisible && (d.type === 0 || !needsTranslation)) {
+                showCaptionsToGUI({ ...payload, src: payload.defaultTranslatedText || payload.src });
             }
 
             // 广播给所有参与者
@@ -362,13 +373,13 @@ export function useCaptions({
           };
 
           rtasrRef.current = helper;
+          providerRef.current = provider;
+          setEngineEpoch((n) => n + 1);
         } else {
           // 如果已存在实例，更新语言
           rtasrRef.current.languageCode = languageCode;
         }
 
-        const defaultMic = localStorage.getItem('DefaultMic') || '';
-        
         // 获取最新的用户选择语言并应用到识别引擎
         try {
           const raw = localStorage.getItem('kloud-stt-settings');
@@ -381,7 +392,7 @@ export function useCaptions({
           }
         } catch(e) {}
 
-        await rtasrRef.current.Start(defaultMic);
+        if (seq !== openSeqRef.current) return;
         setCaptionsRunning(true);
       } else {
         if (rtasrRef.current) {
@@ -401,6 +412,7 @@ export function useCaptions({
       if (rtasrRef.current) {
         rtasrRef.current.Stop();
         rtasrRef.current = null;
+        providerRef.current = null;
       }
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
