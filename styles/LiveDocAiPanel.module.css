@@ -168,6 +168,20 @@
   overflow: hidden;
 }
 
+.transcriptToolbar {
+  margin: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.transcriptToolbar .searchBox {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+
 .searchBox {
   height: 36px;
   margin: 10px 14px;
@@ -461,6 +475,13 @@
   margin: 0;
   flex: 1;
   font-size: 16px;
+}
+
+.copyNotice {
+  margin-right: 8px;
+  flex-shrink: 0;
+  color: #a7f3d0;
+  font-size: 12px;
 }
 
 .summaryContent {

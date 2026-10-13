@@ -64,6 +64,7 @@ const SPEAKER_COLORS = [
 ];
 
 const TRANSCRIPT_POLL_MS = 5000;
+const COPY_NOTICE_MS = 1600;
 const SUMMARY_CAPTION_LIMIT = 2000;
 const SUMMARY_CHAT_LIMIT = 500;
 const SUMMARY_SOURCE_TIMEOUT_MS = 15000;
@@ -113,6 +114,55 @@ const FILE_ACCEPT = [
 
 function pad2(value: number): string {
   return String(value).padStart(2, '0');
+}
+
+/** 只复制摘要条目，不含模板标题（如未配置多语言的 System Instruction） */
+function formatSummaryClipboard(summary: LiveDocAiState['summary']): string {
+  const blocks: string[] = [];
+  for (const item of summary.roadmap) {
+    const head = [item.title.trim(), item.time.trim()].filter(Boolean).join('  ');
+    const body = item.summary.trim();
+    const block = [head, body].filter(Boolean).join('\n');
+    if (block) blocks.push(block);
+  }
+  return blocks.join('\n\n');
+}
+
+/** 按时间、说话人、字幕正文逐条拼接 */
+function formatTranscriptClipboard(items: MeetingCaption[]): string {
+  const lines: string[] = [];
+  for (const item of items) {
+    const time = item.offsetSeconds !== null ? fmtOffset(item.offsetSeconds) : '';
+    const head = [time, item.speakerName.trim()].filter(Boolean).join('  ');
+    const body = item.content.trim();
+    const line = [head, body].filter(Boolean).join('  ');
+    if (line) lines.push(line);
+  }
+  return lines.join('\n');
+}
+
+function writeClipboard(text: string): Promise<boolean> {
+  const clip = navigator.clipboard;
+  if (clip?.writeText) {
+    return clip.writeText(text).then(
+      () => true,
+      () => copyWithExec(text),
+    );
+  }
+  return Promise.resolve(copyWithExec(text));
+}
+
+function copyWithExec(text: string): boolean {
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.setAttribute('readonly', '');
+  el.style.position = 'fixed';
+  el.style.left = '-9999px';
+  document.body.appendChild(el);
+  el.select();
+  const ok = document.execCommand('copy');
+  el.remove();
+  return ok;
 }
 
 function formatKloudPasteImageName(mimeType: string, originalName?: string): string {
@@ -468,11 +518,17 @@ export function LiveDocAiPanel({
   const [summaryDetailLevel, setSummaryDetailLevel] = React.useState<0 | 2>(2);
   const [summaryLanguage, setSummaryLanguage] = React.useState<'en' | 'cn'>('en');
   const [summaryPreparing, setSummaryPreparing] = React.useState(false);
+  const [summaryCopied, setSummaryCopied] = React.useState(false);
+  const [transcriptMenuOpen, setTranscriptMenuOpen] = React.useState(false);
+  const [transcriptCopied, setTranscriptCopied] = React.useState(false);
   const summaryBusyRef = React.useRef(false);
+  const summaryCopiedTimerRef = React.useRef<number | null>(null);
+  const transcriptCopiedTimerRef = React.useRef<number | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const fileMenuBtnRefs = React.useRef<Map<number, HTMLButtonElement>>(new Map());
   const uploadMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const summaryMenuBtnRef = React.useRef<HTMLButtonElement>(null);
+  const transcriptMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const activeFileMenuBtnRef = React.useRef<HTMLButtonElement | null>(null);
   const transcriptBodyRef = React.useRef<HTMLDivElement>(null);
   const transcriptStickRef = React.useRef(true);
@@ -550,7 +606,20 @@ export function LiveDocAiPanel({
       setSummaryMenuOpen(false);
       setSummaryOptionsOpen(false);
       setSummaryPreparing(false);
+      setSummaryCopied(false);
+      setTranscriptMenuOpen(false);
+      setTranscriptCopied(false);
     }
+    return () => {
+      if (summaryCopiedTimerRef.current !== null) {
+        window.clearTimeout(summaryCopiedTimerRef.current);
+        summaryCopiedTimerRef.current = null;
+      }
+      if (transcriptCopiedTimerRef.current !== null) {
+        window.clearTimeout(transcriptCopiedTimerRef.current);
+        transcriptCopiedTimerRef.current = null;
+      }
+    };
   }, [open]);
 
   const requestOpenDocument = (itemId: number) => {
@@ -597,6 +666,48 @@ export function LiveDocAiPanel({
       fileSize: file.size,
       fileBuffer,
     });
+  };
+
+  const copySummary = () => {
+    setSummaryMenuOpen(false);
+    const summary = state?.summary;
+    if (!summary) return;
+    const text = formatSummaryClipboard(summary);
+    if (!text) return;
+    void writeClipboard(text).then(
+      (ok) => {
+        if (!ok) return;
+        setSummaryCopied(true);
+        if (summaryCopiedTimerRef.current !== null) {
+          window.clearTimeout(summaryCopiedTimerRef.current);
+        }
+        summaryCopiedTimerRef.current = window.setTimeout(() => {
+          summaryCopiedTimerRef.current = null;
+          setSummaryCopied(false);
+        }, COPY_NOTICE_MS);
+      },
+      () => undefined,
+    );
+  };
+
+  const copyTranscript = () => {
+    setTranscriptMenuOpen(false);
+    const text = formatTranscriptClipboard(meetingCaptions.items);
+    if (!text) return;
+    void writeClipboard(text).then(
+      (ok) => {
+        if (!ok) return;
+        setTranscriptCopied(true);
+        if (transcriptCopiedTimerRef.current !== null) {
+          window.clearTimeout(transcriptCopiedTimerRef.current);
+        }
+        transcriptCopiedTimerRef.current = window.setTimeout(() => {
+          transcriptCopiedTimerRef.current = null;
+          setTranscriptCopied(false);
+        }, COPY_NOTICE_MS);
+      },
+      () => undefined,
+    );
   };
 
   const openPicker = (kind: LiveDocAiPickerKind) => {
@@ -667,6 +778,7 @@ export function LiveDocAiPanel({
             setFileMenuItemId(null);
             setUploadMenuOpen(false);
             setSummaryMenuOpen(false);
+            setTranscriptMenuOpen(false);
           }
         }}
       >
@@ -714,16 +826,37 @@ export function LiveDocAiPanel({
         {activeTab === 'transcript' ? (
           <main className={styles.body}>
             <div className={styles.transcriptTab}>
-              <div className={styles.searchBox}>
-                <span aria-hidden>⌕</span>
-                <input
-                  value={transcriptSearch}
-                  onChange={(event) => setTranscriptSearch(event.target.value)}
-                  placeholder={t('liveDocAi.searchTranscript')}
-                />
-                <button type="button" className={styles.moreButton} aria-label={t('liveDocAi.more')}>
-                  •••
-                </button>
+              <div className={styles.transcriptToolbar}>
+                <div className={styles.searchBox}>
+                  <span aria-hidden>⌕</span>
+                  <input
+                    value={transcriptSearch}
+                    onChange={(event) => setTranscriptSearch(event.target.value)}
+                    placeholder={t('liveDocAi.searchTranscript')}
+                  />
+                </div>
+                {transcriptCopied && (
+                  <span className={styles.copyNotice} role="status">
+                    {t('liveDocAi.copied')}
+                  </span>
+                )}
+                <div className={styles.menuAnchor}>
+                  <button
+                    ref={transcriptMenuBtnRef}
+                    type="button"
+                    className={styles.moreButton}
+                    aria-label={t('liveDocAi.more')}
+                    aria-expanded={transcriptMenuOpen}
+                    onClick={() => {
+                      setFileMenuItemId(null);
+                      setUploadMenuOpen(false);
+                      setSummaryMenuOpen(false);
+                      setTranscriptMenuOpen((value) => !value);
+                    }}
+                  >
+                    •••
+                  </button>
+                </div>
               </div>
               <div
                 ref={transcriptBodyRef}
@@ -917,6 +1050,11 @@ export function LiveDocAiPanel({
               <div className={styles.summaryTab}>
                 <div className={styles.summaryHeader}>
                   <h3>{state.summary.templateTitle || t('toolbar.liveDocPanelSummary')}</h3>
+                  {summaryCopied && (
+                    <span className={styles.copyNotice} role="status">
+                      {t('liveDocAi.copied')}
+                    </span>
+                  )}
                   <div className={styles.menuAnchor}>
                     <button
                       ref={summaryMenuBtnRef}
@@ -1175,14 +1313,19 @@ export function LiveDocAiPanel({
           >
             {t('liveDocAi.regenerateSummary')}
           </button>
-          <button type="button" onClick={() => setSummaryMenuOpen(false)}>
+          <button type="button" onClick={copySummary}>
             {t('liveDocAi.copy')}
           </button>
-          <button type="button" onClick={() => setSummaryMenuOpen(false)}>
-            {t('liveDocAi.summaryDocument')}
-          </button>
-          <button type="button" onClick={() => setSummaryMenuOpen(false)}>
-            {t('liveDocAi.aiInstruction')}
+        </FloatingMenu>
+      )}
+
+      {transcriptMenuOpen && (
+        <FloatingMenu
+          anchorRef={transcriptMenuBtnRef}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <button type="button" onClick={copyTranscript}>
+            {t('liveDocAi.copy')}
           </button>
         </FloatingMenu>
       )}
