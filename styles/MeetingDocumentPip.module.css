@@ -266,6 +266,35 @@
   background: rgba(255, 255, 255, 0.12);
 }
 
+.miniSettings {
+  position: absolute;
+  right: calc(100% + 4px);
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.75);
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hoverCluster:hover .miniSettings {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.miniSettings:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
 .hoverHit {
   position: absolute;
   top: 0;

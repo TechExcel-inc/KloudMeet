@@ -205,6 +205,7 @@
   "meeting.documentPipSharing": "{name}が共有中",
   "meeting.documentPipShareBadge": "共有",
   "meeting.documentPipCopied": "コピーしました",
+  "meeting.documentPipSettings": "設定",
   "meeting.pipSuggestTitle": "スマートカム",
   "meeting.pipSuggestMessage": "参加者の様子をリアルタイムで確認",
   "meeting.pipSuggestEnable": "オンにする",

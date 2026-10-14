@@ -25,6 +25,7 @@ export interface MeetingDocumentPipLabels {
   shareConflict: string;
   invite: string;
   inviteCopied: string;
+  settings: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -68,7 +69,6 @@ const CHEVRON_SIZE = 24;
 const PREVIEW_GAP = 8;
 const PREVIEW_PAD = 6;
 const MINI_HOVER_W = 60;
-const MINI_SHOW_DELAY_MS = 1000;
 
 type RosterRow = {
   id: string;
@@ -320,7 +320,6 @@ export function MeetingDocumentPipPanel({
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
   const leaveMenuInlineRef = React.useRef<HTMLDivElement>(null);
   const shareWrapRef = React.useRef<HTMLDivElement>(null);
-  const showMiniTimerRef = React.useRef<number | null>(null);
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
@@ -385,7 +384,6 @@ export function MeetingDocumentPipPanel({
       setExitMenuOpen(false);
       setShareMenuOpen(false);
     } else {
-      clearShowMiniTimer();
       setMiniControls(false);
     }
   }, [minimized]);
@@ -394,7 +392,6 @@ export function MeetingDocumentPipPanel({
     if (!minimized) return;
     const root = pipWindow.document.documentElement;
     const hide = () => {
-      clearShowMiniTimer();
       setExitMenuOpen(false);
       setShareMenuOpen(false);
       setMiniControls(false);
@@ -402,7 +399,6 @@ export function MeetingDocumentPipPanel({
     root.addEventListener('mouseleave', hide);
     return () => {
       root.removeEventListener('mouseleave', hide);
-      clearShowMiniTimer();
     };
   }, [minimized, pipWindow]);
 
@@ -512,35 +508,6 @@ export function MeetingDocumentPipPanel({
     if (!previewId) return;
     resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
     setPreviewId(null);
-  };
-
-  const clearShowMiniTimer = () => {
-    if (showMiniTimerRef.current === null) return;
-    pipWindow.clearTimeout(showMiniTimerRef.current);
-    showMiniTimerRef.current = null;
-  };
-
-  const showMiniControls = () => {
-    setMiniControls(true);
-  };
-
-  const armShowMiniControls = () => {
-    if (miniControls) return;
-    if (showMiniTimerRef.current !== null) return;
-    showMiniTimerRef.current = pipWindow.setTimeout(() => {
-      showMiniTimerRef.current = null;
-      showMiniControls();
-    }, MINI_SHOW_DELAY_MS);
-  };
-
-  const hideMiniControls = () => {
-    setShareMenuOpen(false);
-    setMiniControls(false);
-  };
-
-  const onChevronEnter = () => {
-    if (!miniControls) return;
-    hideMiniControls();
   };
 
   const togglePreview = (id: string) => {
@@ -751,7 +718,6 @@ export function MeetingDocumentPipPanel({
         <div
           className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}
           onMouseLeave={() => {
-            clearShowMiniTimer();
             setShareMenuOpen(false);
             // 退出菜单保留到鼠标移出整个 PiP 窗口（documentElement mouseleave）
             if (!exitMenuOpen) setMiniControls(false);
@@ -868,15 +834,31 @@ export function MeetingDocumentPipPanel({
               <div
                 className={styles.hoverHit}
                 style={{ width: MINI_HOVER_W }}
-                onMouseEnter={armShowMiniControls}
-                onMouseLeave={clearShowMiniTimer}
                 onClick={hidePreview}
               />
               <button
                 type="button"
+                className={styles.miniSettings}
+                onMouseEnter={() => setMiniControls(true)}
+                aria-label={labels.settings}
+                title={labels.settings}
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  width="14"
+                  height="14"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.04 1.56V20.3h-3v-.08a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 15a1.7 1.7 0 00-1.56-1.04H5.3v-3h.14A1.7 1.7 0 007 9a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0010.66 5a1.7 1.7 0 001.04-1.56V3.3h3v.14A1.7 1.7 0 0015.74 5a1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019.4 9a1.7 1.7 0 001.56 1.04h.04v3h-.04A1.7 1.7 0 0019.4 15z" />
+                </svg>
+              </button>
+              <button
+                type="button"
                 className={styles.chevron}
                 onClick={handleMinimize}
-                onMouseEnter={onChevronEnter}
                 aria-label={labels.restore}
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">

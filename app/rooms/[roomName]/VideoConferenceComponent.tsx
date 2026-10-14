@@ -2485,6 +2485,7 @@ export function VideoConferenceComponent(props: {
       shareConflict: t('toolbar.shareConflictTitle'),
       invite: t('toolbar.invite'),
       inviteCopied: t('meeting.documentPipCopied'),
+      settings: t('meeting.documentPipSettings'),
     }),
     [t],
   );
