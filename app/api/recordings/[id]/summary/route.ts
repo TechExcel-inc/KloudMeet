@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { canManageRecording } from '@/lib/apiAuth';
+import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import {
   authorizeRecordingView,
   ensureShareKey,
@@ -98,6 +99,7 @@ export async function GET(
         createdAt: recording.createdAt,
         streamUrl,
         recordedBy: recording.teamMember,
+        transcribe: transcribeStateOf(recording),
       },
       meeting: recording.meeting
         ? {

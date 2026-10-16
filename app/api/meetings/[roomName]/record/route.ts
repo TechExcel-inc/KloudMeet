@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { newShareKey } from '@/lib/recordingShare';
+import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -114,8 +115,10 @@ export async function POST(
 
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
+    const activityToken = newShareKey();
     const parsedUrl = new URL(pageUrl);
     parsedUrl.searchParams.set('isBot', 'true');
+    parsedUrl.searchParams.set(SPEAK_TOKEN_PARAM, activityToken);
     const targetUrl = parsedUrl.toString();
 
     const info = await egressClient.startWebEgress(
@@ -138,6 +141,7 @@ export async function POST(
         storageProvider: S3_ENDPOINT?.includes('aliyuncs') ? 'ALI_OSS' : 'S3',
         storageKey: info.egressId, // Temporarily store egressId here
         status: 'PROCESSING',
+        activityToken,
       }
     });
 

@@ -1,3 +1,5 @@
+import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
+
 export function roomPath(roomName: string): string {
   return `/rooms/${encodeURIComponent(roomName)}`;
 }
@@ -9,6 +11,8 @@ export function replaceBrowserRoomUrl(roomName: string): void {
   const currentUrl = new URL(window.location.href);
   if (currentUrl.searchParams.get('isBot') === 'true') {
     nextUrl.searchParams.set('isBot', 'true');
+    const token = currentUrl.searchParams.get(SPEAK_TOKEN_PARAM);
+    if (token) nextUrl.searchParams.set(SPEAK_TOKEN_PARAM, token);
   }
   window.history.replaceState(null, '', `${nextUrl.pathname}${nextUrl.search}`);
 }

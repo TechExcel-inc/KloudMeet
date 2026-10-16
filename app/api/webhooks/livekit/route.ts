@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
-import { generateTranscriptFromRecording } from '@/lib/postRecordingTranscription';
 import {
   expireStaleIdleMeetings,
   markMeetingIdleFromEmptyRoom,
@@ -13,6 +12,11 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 
 const receiver = new WebhookReceiver(API_KEY || '', API_SECRET || '');
+
+/** LiveKit egress 时间戳为纳秒；0 表示尚未开始 */
+function nsToDate(ns: bigint): Date | null {
+  return ns > 0n ? new Date(Number(ns / 1_000_000n)) : null;
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,6 +43,17 @@ export async function POST(request: NextRequest) {
       console.error('[webhooks livekit] expire stale idle failed', err);
     });
 
+    // 录像时间零点：尽早写入，结束时用文件实际起点覆盖
+    if ((event.event === 'egress_started' || event.event === 'egress_updated') && event.egressInfo) {
+      const mediaStartedAt = nsToDate(event.egressInfo.startedAt);
+      if (mediaStartedAt) {
+        await prisma.recording.updateMany({
+          where: { storageKey: event.egressInfo.egressId, mediaStartedAt: null },
+          data: { mediaStartedAt },
+        });
+      }
+    }
+
     if (event.event === 'egress_ended' && event.egressInfo) {
       const egressId = event.egressInfo.egressId;
       const fileInfo = event.egressInfo.fileResults?.[0] || (event.egressInfo.result?.case === 'file' ? event.egressInfo.result.value : null);
@@ -56,20 +71,20 @@ export async function POST(request: NextRequest) {
             data: { status: 'FAILED' }
           });
         } else if (fileInfo) {
+          const mediaStartedAt =
+            nsToDate(fileInfo.startedAt) ??
+            recording.mediaStartedAt ??
+            nsToDate(event.egressInfo.startedAt);
           await prisma.recording.update({
             where: { id: recording.id },
             data: {
               status: 'READY',
+              mediaStartedAt,
               storageKey: fileInfo.filename || egressId, // Real Object Key
               storageUrl: fileInfo.location, // Public URL if the bucket is configured as such
               fileSizeBytes: fileInfo.size ? Number(fileInfo.size) : null,
               durationSeconds: fileInfo.duration ? Math.floor(Number(fileInfo.duration) / 1000000000) : null,
             }
-          });
-
-          // If live STT was not enabled, backfill transcripts from the recorded media.
-          void generateTranscriptFromRecording(recording.id).catch((transcribeErr) => {
-            console.error('[webhooks livekit] post-recording transcription failed', transcribeErr);
           });
         }
       }

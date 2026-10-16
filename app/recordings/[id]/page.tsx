@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
+import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
+import { IDLE_TRANSCRIBE, type TranscribeState } from '@/lib/recordingTranscribeState';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -41,6 +43,9 @@ interface ReplayData {
     status: string;
     createdAt: string;
     recordedBy: { fullName: string | null; username: string } | null;
+    canManage: boolean;
+    /** 旧版服务端不返回该字段 */
+    transcribe?: TranscribeState;
   };
   meeting: {
     id: number;
@@ -669,6 +674,7 @@ export default function ReplayPage() {
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [genProgress, setGenProgress] = useState(0);
+  const [reloadKey, setReloadKey] = useState(0);
 
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -714,7 +720,12 @@ export default function ReplayPage() {
         if (!redirected) setLoading(false);
       }
     })();
-  }, [id, t]);
+  }, [id, t, reloadKey]);
+
+  const handleTranscribeDone = useCallback(() => {
+    setReloadKey((k) => k + 1);
+    setActiveTab('transcript');
+  }, []);
 
   const seekTo = useCallback((secs: number) => {
     if (videoRef.current) {
@@ -1069,6 +1080,14 @@ export default function ReplayPage() {
         </div>
         )}
       </div>
+
+      {!hasTranscripts && meeting && recording.canManage && (
+        <RecordingTranscribePrompt
+          recordingKey={id}
+          initial={recording.transcribe ?? IDLE_TRANSCRIBE}
+          onDone={handleTranscribeDone}
+        />
+      )}
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');

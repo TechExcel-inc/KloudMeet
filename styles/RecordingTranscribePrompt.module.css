@@ -1,0 +1,187 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(2, 6, 23, 0.6);
+  animation: fadeIn 0.18s ease-out;
+}
+
+.dialog {
+  width: min(420px, 100%);
+  padding: 24px;
+  border-radius: 14px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+  color: #e2e8f0;
+}
+
+.title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+
+.desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #94a3b8;
+}
+
+.error {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #f87171;
+  word-break: break-word;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.primaryBtn {
+  border: none;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1, #818cf8);
+}
+
+.primaryBtn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.secondaryBtn {
+  border: 1px solid #334155;
+  color: #94a3b8;
+  background: transparent;
+}
+
+.secondaryBtn:hover {
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+.card {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  width: min(320px, calc(100vw - 40px));
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #1e293b;
+  border: 1px solid #334155;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  color: #e2e8f0;
+  animation: fadeIn 0.18s ease-out;
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.cardTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pct {
+  font-size: 12px;
+  font-family: monospace;
+  color: #818cf8;
+}
+
+.track {
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+.bar {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc);
+  box-shadow: 0 0 8px rgba(129, 140, 248, 0.6);
+  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.stage {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.cardText {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #cbd5e1;
+}
+
+.textBtn {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #818cf8;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.pill {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1000;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  background: rgba(30, 41, 59, 0.95);
+  color: #a5b4fc;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.pill:hover {
+  border-color: #6366f1;
+  color: #c7d2fe;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -251,6 +251,12 @@ model Recording {
   durationSeconds Int?
   mimeType        String?
   status          String                   @default("UPLOADING")
+  mediaStartedAt  DateTime?
+  activityToken   String?                  @unique(map: "Recording_activityToken_key")
+  sttTaskId       String?
+  sttStatus       String?
+  sttStartedAt    DateTime?
+  sttError        String?                  @db.Text
   createdAt       DateTime                 @default(now())
   createdBy       String?
   deletedAt       DateTime?
@@ -258,10 +264,27 @@ model Recording {
   meeting         Meeting                  @relation(fields: [meetingId], references: [id], map: "Recording_meetingId_fkey")
   teamMember      TeamMember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
   accessRequests  RecordingAccessRequest[]
+  speakIntervals  RecordingSpeakInterval[]
 
   @@index([meetingId], map: "Recording_meetingId_fkey")
   @@index([teamMemberId], map: "Recording_teamMemberId_fkey")
   @@map("Recording")
+}
+
+model RecordingSpeakInterval {
+  id                  Int       @id @default(autoincrement())
+  recordingId         Int
+  participantIdentity String
+  displayName         String
+  startedAt           DateTime
+  endedAt             DateTime
+  avgLevel            Float
+  peakLevel           Float
+  createdAt           DateTime  @default(now())
+  recording           Recording @relation(fields: [recordingId], references: [id], map: "RecordingSpeakInterval_recordingId_fkey")
+
+  @@index([recordingId, startedAt], map: "RecordingSpeakInterval_recordingId_startedAt_idx")
+  @@map("RecordingSpeakInterval")
 }
 
 model RecordingAccessRequest {

@@ -27,6 +27,8 @@ import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
+import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
+import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
@@ -2450,6 +2452,12 @@ export function VideoConferenceComponent(props: {
       room.off(RoomEvent.Disconnected, onDisconnected);
     };
   }, [room]);
+
+  const speakActivityToken = searchParams?.get(SPEAK_TOKEN_PARAM) ?? null;
+  useSpeakActivityRecorder(
+    room,
+    isRecorderBot && livekitConnected ? speakActivityToken : null,
+  );
 
   const speakWhileMutedMonitoring =
     livekitConnected &&
