@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient } from 'livekit-server-sdk';
+import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
 const API_KEY = process.env.LIVEKIT_API_KEY || '';
@@ -69,6 +70,10 @@ export async function GET(request: NextRequest) {
             where: { id: rec.id },
             data: {
               status: 'READY',
+              mediaStartedAt:
+                egressTimeToDate(fileResults.startedAt) ??
+                rec.mediaStartedAt ??
+                egressTimeToDate(egressInfo.startedAt),
               storageKey: fileResults.filename || egressId,
               storageUrl: fileResults.location,
               fileSizeBytes: fileResults.size ? Number(fileResults.size) : null,

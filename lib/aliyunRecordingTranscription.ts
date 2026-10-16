@@ -126,8 +126,9 @@ async function fetchSentences(url: string): Promise<TimedSentence[]> {
 }
 
 async function speakWindows(recording: Recording): Promise<SpeakWindow[]> {
-  if (!recording.mediaStartedAt) return [];
-  const origin = recording.mediaStartedAt.getTime() + SPEAK_LAG_MS;
+  // 缺少 egress 回调写入的文件起点时，用开始录制请求返回的时间近似（通常偏早 1–2 秒）
+  const start = recording.mediaStartedAt ?? recording.createdAt;
+  const origin = start.getTime() + SPEAK_LAG_MS;
   const rows = await prisma.recordingSpeakInterval.findMany({
     where: { recordingId: recording.id },
     orderBy: { startedAt: 'asc' },

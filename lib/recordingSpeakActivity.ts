@@ -4,6 +4,11 @@ export const SPEAK_ACTIVITY_PATH = '/api/recordings/speak-activity';
 
 export const SPEAK_BATCH_MAX = 500;
 
+/** LiveKit egress 时间戳为纳秒；0 表示尚未开始 */
+export function egressTimeToDate(ns: bigint): Date | null {
+  return ns > 0n ? new Date(Number(ns / 1_000_000n)) : null;
+}
+
 export interface SpeakInterval {
   identity: string;
   name: string;
