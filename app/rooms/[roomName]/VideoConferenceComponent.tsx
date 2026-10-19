@@ -2494,6 +2494,7 @@ export function VideoConferenceComponent(props: {
       invite: t('toolbar.invite'),
       inviteCopied: t('meeting.documentPipCopied'),
       settings: t('meeting.documentPipSettings'),
+      backToMain: t('meeting.documentPipBack'),
     }),
     [t],
   );

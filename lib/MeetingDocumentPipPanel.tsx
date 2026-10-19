@@ -26,6 +26,7 @@ export interface MeetingDocumentPipLabels {
   invite: string;
   inviteCopied: string;
   settings: string;
+  backToMain: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -47,7 +48,7 @@ export interface MeetingDocumentPipPanelProps {
   onMinimizedChange?: (minimized: boolean) => void;
 }
 
-export const PIP_EXPANDED_W = 240;
+export const PIP_EXPANDED_W = 250;
 export const PIP_EXPANDED_H = 420;
 export const PIP_MINIMIZED_H = 59.2;
 const HERO_ROWS = 2;
@@ -577,7 +578,7 @@ export function MeetingDocumentPipPanel({
   };
 
   const renderControls = (compact: boolean) => {
-    const icon = compact ? 14 : 16;
+    const icon = compact ? 13 : 15;
     const shareConflict = hasScreenShare && !shareActive;
     const shareLabel = shareConflict
       ? labels.shareConflict
@@ -668,6 +669,17 @@ export function MeetingDocumentPipPanel({
             </svg>
           </button>
         </div>
+        <button
+          type="button"
+          className={styles.controlBtn}
+          onClick={backToTab}
+          aria-label={labels.backToMain}
+          title={labels.backToMain}
+        >
+          <svg viewBox="0 0 16 16" width={icon} height={icon} fill="currentColor" aria-hidden="true">
+            <path d="M2.85 5.43v1.87a0.68 0.68 0 0 1-0.2 0.49 0.67 0.67 0 0 1-0.49 0.2 0.67 0.67 0 0 1-0.49-0.2 0.66 0.66 0 0 1-0.2-0.49V3.76c0-0.2 0.07-0.36 0.2-0.49a0.67 0.67 0 0 1 0.49-0.2h3.54c0.2 0 0.36 0.07 0.49 0.2a0.66 0.66 0 0 1 0.2 0.49 0.68 0.68 0 0 1-0.2 0.49 0.67 0.67 0 0 1-0.49 0.2H3.83l2.61 2.62a0.66 0.66 0 0 1 0 0.96 0.68 0.68 0 0 1-0.48 0.21c-0.18 0-0.34-0.07-0.48-0.21zm0 7.51c-0.38 0-0.71-0.13-0.98-0.4a1.34 1.34 0 0 1-0.4-0.98V9.88a0.68 0.68 0 0 1 0.69-0.69c0.19 0 0.36 0.07 0.49 0.2a0.67 0.67 0 0 1 0.2 0.49v1.68h4.98c0.2 0 0.36 0.07 0.49 0.2c0.13 0.13 0.2 0.3 0.2 0.49a0.68 0.68 0 0 1-0.69 0.69zm10.51-4.58a0.66 0.66 0 0 1-0.2-0.49V4.45H8.28a0.67 0.67 0 0 1-0.49-0.2 0.67 0.67 0 0 1-0.2-0.49 0.68 0.68 0 0 1 0.69-0.69h4.88c0.38 0 0.71 0.13 0.98 0.4 0.27 0.27 0.4 0.6 0.4 0.98v3.41c0 0.2-0.07 0.36-0.2 0.49a0.67 0.67 0 0 1-0.49 0.2 0.68 0.68 0 0 1-0.49-0.2zm-2.93 4.59a0.69 0.69 0 0 1-0.5-0.2 0.67 0.67 0 0 1-0.2-0.49v-1.8c0-0.19 0.07-0.35 0.2-0.49a0.66 0.66 0 0 1 0.49-0.2h3.43c0.19 0 0.36 0.07 0.49 0.2a0.66 0.66 0 0 1 0.2 0.49v1.81c0 0.2-0.07 0.36-0.2 0.49a0.67 0.67 0 0 1-0.49 0.2z" />
+          </svg>
+        </button>
         <div ref={leaveWrapRef} className={styles.leaveWrap}>
           {!compact && exitMenuOpen && canEndForAll ? (
             <div className={`${styles.shareMenuAbove} ${styles.leaveMenu}`} role="menu">

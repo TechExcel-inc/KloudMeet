@@ -316,8 +316,8 @@
 }
 
 .miniControls .controlBtn {
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
 }
 
 .pillDismiss {
@@ -808,7 +808,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 4px;
   padding: 8px 8px 10px;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(0, 0, 0, 0.25);
@@ -817,8 +817,8 @@
 
 .controlBtn {
   position: relative;
-  width: 36px;
-  height: 36px;
+  width: 31px;
+  height: 31px;
   border: none;
   border-radius: 50%;
   display: inline-flex;

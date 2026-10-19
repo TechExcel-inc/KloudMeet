@@ -360,8 +360,9 @@ export function useMeetingDocumentPip({
             width: PIP_EXPANDED_W,
             height: PIP_MINIMIZED_H,
             preferInitialWindowPlacement: true,
+            disallowReturnToOpener: true,
           })
-        : await api.requestWindow();
+        : await api.requestWindow({ disallowReturnToOpener: true });
 
       pipWindowRef.current = pipWindow;
       openedInMeetingRef.current = true;
