@@ -118,6 +118,7 @@ import {
   type ParticipantRoleActionsConfig,
 } from '@/lib/ParticipantRoleMenu';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
+import { classifyScreenShareFailure } from '@/lib/screenShareFailure';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import {
@@ -840,14 +841,21 @@ export function VideoConferenceComponent(props: {
     [ensureConnectionDetails, room],
   );
 
-  const showScreenShareRestoreFailedToast = React.useCallback(() => {
-    if (typeof document === 'undefined') return;
+  const showScreenShareFailureToast = React.useCallback((error: unknown, restore = false) => {
+    const failure = classifyScreenShareFailure(error);
+    if (!failure || typeof document === 'undefined') return;
+    const reason = failure.kind === 'unknown'
+      ? (failure.detail || tRef.current('meeting.screenShareReason.unknownFallback'))
+      : tRef.current(`meeting.screenShareReason.${failure.kind}`);
     const toastEl = document.createElement('div');
-    toastEl.textContent = tRef.current('meeting.screenShareRestoreFailed');
+    toastEl.textContent = tRef.current(
+      restore ? 'meeting.screenShareRestoreFailedReason' : 'meeting.screenShareFailed',
+      { reason },
+    );
     toastEl.style.cssText =
       'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
     document.body.appendChild(toastEl);
-    setTimeout(() => toastEl.remove(), 4000);
+    setTimeout(() => toastEl.remove(), 4500);
   }, []);
 
   /** Re-request getDisplayMedia after renew/reconnect when we were sharing. */
@@ -874,11 +882,11 @@ export function VideoConferenceComponent(props: {
         '[KloudMeet] Screen share restore failed (browser may require a user gesture):',
         e instanceof Error ? e.message : e,
       );
-      showScreenShareRestoreFailedToast();
+      showScreenShareFailureToast(e, true);
     }
   }, [
     room,
-    showScreenShareRestoreFailedToast,
+    showScreenShareFailureToast,
     beginLocalScreenShareView,
     endLocalScreenShareView,
   ]);
@@ -2064,12 +2072,13 @@ export function VideoConferenceComponent(props: {
 
     room.localParticipant
       .setScreenShareEnabled(next, next ? SCREEN_SHARE_CAPTURE : undefined)
-      .catch((e) => {
+      .catch((e: unknown) => {
       setScreenShareActive(false);
       screenShareRestorePendingRef.current = false;
       if (next) {
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
+        showScreenShareFailureToast(e);
       }
       console.error(e);
     });
@@ -2087,6 +2096,7 @@ export function VideoConferenceComponent(props: {
     isToolbarMobile,
     beginLocalScreenShareView,
     endLocalScreenShareView,
+    showScreenShareFailureToast,
   ]);
 
 
@@ -2917,10 +2927,11 @@ export function VideoConferenceComponent(props: {
       takeoverTimerRef.current = null;
       setScreenShareActive(true);
       beginLocalScreenShareView();
-      room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e) => {
+      room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e: unknown) => {
         setScreenShareActive(false);
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
+        showScreenShareFailureToast(e);
         console.error(e);
       });
     };
@@ -2940,7 +2951,7 @@ export function VideoConferenceComponent(props: {
       takeoverTimerRef.current = setTimeout(poll, 150);
     };
     takeoverTimerRef.current = setTimeout(poll, 150);
-  }, [room, screenShareTracks, sendMeetingMsg, beginLocalScreenShareView, endLocalScreenShareView]);
+  }, [room, screenShareTracks, sendMeetingMsg, beginLocalScreenShareView, endLocalScreenShareView, showScreenShareFailureToast]);
 
   React.useEffect(
     () => () => {

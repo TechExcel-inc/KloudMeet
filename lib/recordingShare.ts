@@ -8,6 +8,7 @@ import {
   forbidden,
   isAuthError,
   requireSession,
+  unauthorized,
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 
@@ -83,18 +84,26 @@ export function recordingSharePayload(recording: { shareKey: string; visibility:
 export async function authorizeRecordingView(
   req: NextRequest,
   recording: Recording,
+  lookupKey?: string,
 ): Promise<NextResponse | { memberId: number | null }> {
   if (recording.deletedAt) {
     return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
   }
 
-  if (recording.visibility === 'PUBLIC') {
-    const member = await getSessionTeamMember(req);
+  const member = await getSessionTeamMember(req);
+  const openedByShareKey = Boolean(
+    member &&
+    lookupKey &&
+    !/^\d+$/.test(lookupKey) &&
+    recording.shareKey &&
+    recording.shareKey === lookupKey,
+  );
+
+  if (recording.visibility === 'PUBLIC' || openedByShareKey) {
     return { memberId: member?.id ?? null };
   }
 
-  const member = await requireSession(req);
-  if (isAuthError(member)) return member;
+  if (!member) return unauthorized();
 
   const allowed = await canAccessRecording(member.id, recording);
   if (!allowed) return forbidden('You do not have access to this recording');
@@ -115,6 +124,31 @@ export async function loadManagedRecording(
 
   const allowed = await canManageRecording(member.id, recording);
   if (!allowed) return forbidden('You cannot change this recording');
+
+  const shareKey = await ensureShareKey(recording);
+  return { memberId: member.id, recording: { ...recording, shareKey }, shareKey };
+}
+
+/**
+ * loadAccessibleRecording — 已登录且能观看该录像的用户（主持、录制者、参会者，或公开链接）。
+ * 用于解析字幕；改公开范围仍走 loadManagedRecording。
+ */
+export async function loadAccessibleRecording(
+  req: NextRequest,
+  key: string,
+): Promise<NextResponse | { memberId: number; recording: Recording; shareKey: string }> {
+  const member = await requireSession(req);
+  if (isAuthError(member)) return member;
+
+  const recording = await findRecordingByKey(key);
+  if (!recording || recording.deletedAt) {
+    return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+  }
+
+  const access = await authorizeRecordingView(req, recording, key);
+  if (isRecordingResponse(access) || access.memberId === null) {
+    return isRecordingResponse(access) ? access : unauthorized();
+  }
 
   const shareKey = await ensureShareKey(recording);
   return { memberId: member.id, recording: { ...recording, shareKey }, shareKey };

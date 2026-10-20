@@ -30,7 +30,7 @@ export async function GET(
       return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
     }
 
-    const access = await authorizeRecordingView(req, located);
+    const access = await authorizeRecordingView(req, located, id);
     if (isRecordingResponse(access)) return access;
 
     if (located.status !== 'READY') {
@@ -45,30 +45,33 @@ export async function GET(
       access.memberId !== null
         ? await canManageRecording(access.memberId, located)
         : false;
+    const canTranscribe = access.memberId !== null;
 
-    const recording = await prisma.recording.findUnique({
-      where: { id: located.id },
-      include: {
-        meeting: {
-          include: {
-            createdByMember: { select: { id: true, fullName: true, username: true, avatarUrl: true } },
-            participants: {
-              include: {
-                teamMember: { select: { id: true, fullName: true, username: true, avatarUrl: true } },
+    const loadReplay = (recordingId: number) =>
+      prisma.recording.findUnique({
+        where: { id: recordingId },
+        include: {
+          meeting: {
+            include: {
+              createdByMember: { select: { id: true, fullName: true, username: true, avatarUrl: true } },
+              participants: {
+                include: {
+                  teamMember: { select: { id: true, fullName: true, username: true, avatarUrl: true } },
+                },
+                orderBy: { joinedAt: 'asc' },
               },
-              orderBy: { joinedAt: 'asc' },
-            },
-            summaryItems: { orderBy: { sortOrder: 'asc' } },
-            // 只取前100条 transcript，前端再分页
-            transcripts: {
-              orderBy: { captionTime: 'asc' },
-              take: 500,
+              summaryItems: { orderBy: { sortOrder: 'asc' } },
+              transcripts: {
+                orderBy: { captionTime: 'asc' },
+                take: 500,
+              },
             },
           },
+          teamMember: { select: { id: true, fullName: true, username: true } },
         },
-        teamMember: { select: { id: true, fullName: true, username: true } },
-      },
-    });
+      });
+
+    let recording = await loadReplay(located.id);
 
     if (!recording || recording.deletedAt) {
       return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
@@ -92,6 +95,7 @@ export async function GET(
         shareKey,
         visibility: recording.visibility,
         canManage,
+        canTranscribe,
         fileName: recording.fileName,
         durationSeconds: recording.durationSeconds,
         fileSizeBytes: recording.fileSizeBytes,

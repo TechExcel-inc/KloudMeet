@@ -48,7 +48,7 @@ export interface MeetingDocumentPipPanelProps {
   onMinimizedChange?: (minimized: boolean) => void;
 }
 
-export const PIP_EXPANDED_W = 250;
+export const PIP_EXPANDED_W = 240;
 export const PIP_EXPANDED_H = 420;
 export const PIP_MINIMIZED_H = 59.2;
 const HERO_ROWS = 2;
@@ -635,40 +635,39 @@ export function MeetingDocumentPipPanel({
             <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
           </svg>
         </button>
-        <div ref={shareWrapRef} className={styles.shareWrap}>
-          {shareMenuOpen && shareActive ? (
-            <div
-              className={compact ? styles.shareMenuCover : styles.shareMenuAbove}
-              role="menu"
+        {compact ? null : (
+          <div ref={shareWrapRef} className={styles.shareWrap}>
+            {shareMenuOpen && shareActive ? (
+              <div className={styles.shareMenuAbove} role="menu">
+                <button
+                  type="button"
+                  className={styles.exitMenuItem}
+                  role="menuitem"
+                  onClick={() => {
+                    setShareMenuOpen(false);
+                    onToggleShare();
+                  }}
+                >
+                  {labels.stopSharing}
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className={`${styles.controlBtn}${hasScreenShare ? ` ${styles.shareBtnConflict}` : ''}`}
+              onClick={handleShareClick}
+              aria-label={shareLabel}
+              title={shareLabel}
+              aria-haspopup={shareActive ? 'menu' : undefined}
+              aria-expanded={shareActive ? shareMenuOpen : undefined}
             >
-              <button
-                type="button"
-                className={styles.exitMenuItem}
-                role="menuitem"
-                onClick={() => {
-                  setShareMenuOpen(false);
-                  onToggleShare();
-                }}
-              >
-                {labels.stopSharing}
-              </button>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            className={`${styles.controlBtn}${hasScreenShare ? ` ${styles.shareBtnConflict}` : ''}`}
-            onClick={handleShareClick}
-            aria-label={shareLabel}
-            title={shareLabel}
-            aria-haspopup={shareActive ? 'menu' : undefined}
-            aria-expanded={shareActive ? shareMenuOpen : undefined}
-          >
-            {hasScreenShare ? <span className={styles.shareConflictDot} /> : null}
-            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-          </button>
-        </div>
+              {hasScreenShare ? <span className={styles.shareConflictDot} /> : null}
+              <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </button>
+          </div>
+        )}
         <button
           type="button"
           className={styles.controlBtn}

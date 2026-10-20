@@ -4,9 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
+import { authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
-import { IDLE_TRANSCRIBE, type TranscribeState } from '@/lib/recordingTranscribeState';
+import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -44,6 +45,8 @@ interface ReplayData {
     createdAt: string;
     recordedBy: { fullName: string | null; username: string } | null;
     canManage: boolean;
+    /** 已登录且能观看时为 true，用于弹出解析字幕 */
+    canTranscribe?: boolean;
     /** 旧版服务端不返回该字段 */
     transcribe?: TranscribeState;
   };
@@ -675,9 +678,14 @@ export default function ReplayPage() {
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [genProgress, setGenProgress] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
+  const [sessionOn, setSessionOn] = useState(false);
 
 
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    setSessionOn(Boolean(getKloudSessionBearer()));
+  }, []);
 
   // 加载聚合数据
   useEffect(() => {
@@ -686,11 +694,9 @@ export default function ReplayPage() {
     (async () => {
       try {
         // 从 localStorage 读取 token（和 Dashboard 一致）
-        const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
-        const token = stored ? (JSON.parse(stored).token || '') : '';
-
         const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/summary`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          headers: authHeaders(),
+          cache: 'no-store',
         });
         if (res.status === 401) {
           redirected = true;
@@ -824,6 +830,9 @@ export default function ReplayPage() {
 
   /** 有逐条字幕数据时才展示摘要/逐字稿/信息侧栏及章节卡片等「其余」区域 */
   const hasTranscripts = transcripts.some((tr) => (tr.content || '').trim().length > 0);
+  const sttStatus = recording.transcribe?.status ?? null;
+  const unfinished = isSttActive(sttStatus) || sttStatus === 'FAILED';
+  const canAskTranscribe = recording.canTranscribe === true || recording.canManage || sessionOn;
 
   function secsToHMS(s: number): string {
     const h = Math.floor(s / 3600);
@@ -1081,7 +1090,7 @@ export default function ReplayPage() {
         )}
       </div>
 
-      {!hasTranscripts && meeting && recording.canManage && (
+      {(canAskTranscribe && meeting && (!hasTranscripts || unfinished)) && (
         <RecordingTranscribePrompt
           recordingKey={id}
           initial={recording.transcribe ?? IDLE_TRANSCRIBE}

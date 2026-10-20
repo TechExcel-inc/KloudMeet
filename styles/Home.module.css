@@ -737,6 +737,84 @@
   background: #f3f4f6;
 }
 
+.platformMenu {
+  width: 252px;
+  min-width: 252px;
+  box-sizing: border-box;
+  padding: 16px;
+}
+
+.platformLabel {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.platformGrid {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.platformTile {
+  width: 109px;
+  text-align: center;
+  cursor: pointer;
+  padding: 20px 0;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.platformTile:hover,
+.platformTileActive {
+  background: rgba(82, 39, 211, 0.06);
+}
+
+.platformIconWrap {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.platformIcon {
+  width: 32px;
+  height: 32px;
+}
+
+.platformName {
+  font-size: 14px;
+  font-weight: 400;
+  color: #3d358b;
+}
+
+.platformNameActive {
+  font-weight: 600;
+  color: #5227d3;
+}
+
+.platformIconLivedoc {
+  color: #8b5cf6;
+}
+
+.platformIconMeet {
+  color: #5227d3;
+}
+
+.platformIconMeeting {
+  color: #64748b;
+}
+
+.platformIconLivesync {
+  color: #0ea5e9;
+}
+
+.platformIconKonverse {
+  color: #10b981;
+}
+
 /* Org Dropdown Menu */
 .orgDropdownWrapper {
   position: relative;
@@ -3329,6 +3407,39 @@
 :global(html[data-theme='dark']) .orgDropdownItem:hover {
   background: #1e293b;
   color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .platformTile:hover,
+:global(html[data-theme='dark']) .platformTileActive {
+  background: rgba(196, 181, 253, 0.16);
+}
+
+:global(html[data-theme='dark']) .platformName {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .platformNameActive {
+  color: #ddd6fe;
+}
+
+:global(html[data-theme='dark']) .platformIconLivedoc {
+  color: #c4b5fd;
+}
+
+:global(html[data-theme='dark']) .platformIconMeet {
+  color: #ddd6fe;
+}
+
+:global(html[data-theme='dark']) .platformIconMeeting {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .platformIconLivesync {
+  color: #7dd3fc;
+}
+
+:global(html[data-theme='dark']) .platformIconKonverse {
+  color: #6ee7b7;
 }
 
 :global(html[data-theme='dark']) .recordingShareMenu {

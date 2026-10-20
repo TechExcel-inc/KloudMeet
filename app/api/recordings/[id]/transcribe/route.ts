@@ -3,11 +3,11 @@
  *
  * POST：提交阿里云录音文件识别任务（会议已有字幕时拒绝）。
  * GET ：轮询任务进度；完成时用录制采样的说话区间匹配说话人并写入 MeetingTranscript。
- * 仅录像管理者可用（控制识别费用）。
+ * 已登录且能观看该录像的用户可用。
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isRecordingResponse, loadManagedRecording } from '@/lib/recordingShare';
+import { isRecordingResponse, loadAccessibleRecording } from '@/lib/recordingShare';
 import {
   advanceRecordingTranscription,
   startRecordingTranscription,
@@ -20,7 +20,7 @@ type Params = { params: Promise<{ id: string }> };
 
 export async function POST(req: NextRequest, { params }: Params) {
   try {
-    const loaded = await loadManagedRecording(req, (await params).id);
+    const loaded = await loadAccessibleRecording(req, (await params).id);
     if (isRecordingResponse(loaded)) return loaded;
     const recording = loaded.recording;
 
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 export async function GET(req: NextRequest, { params }: Params) {
   try {
-    const loaded = await loadManagedRecording(req, (await params).id);
+    const loaded = await loadAccessibleRecording(req, (await params).id);
     if (isRecordingResponse(loaded)) return loaded;
     return NextResponse.json(await advanceRecordingTranscription(loaded.recording), {
       headers: { 'Cache-Control': 'no-store' },

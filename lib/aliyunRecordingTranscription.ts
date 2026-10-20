@@ -14,8 +14,11 @@ const DASHSCOPE_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliy
 const MODEL = process.env.DASHSCOPE_FILE_ASR_MODEL || 'paraformer-v2';
 /** 阿里云排队后才下载文件，链接有效期要覆盖排队时间 */
 const FILE_URL_TTL_SECONDS = 12 * 3600;
-/** 提交阶段超过该时长仍未拿到 taskId，视为失败（进程中途退出等） */
+/** 提交阶段超过该时长仍未拿到 taskId，重新提交（进程中途退出等） */
 const SUBMIT_STALE_MS = 2 * 60 * 1000;
+/** 对齐写入的互斥标记；超时后允许下一次打开接着写 */
+const SAVE_LOCK = 'resume';
+const SAVE_STALE_MS = 60 * 1000;
 const SOURCE_PREFIX = 'aliyun';
 
 const s3 = new S3Client({
@@ -80,6 +83,7 @@ async function submitTask(url: string): Promise<string> {
 }
 
 type TaskResult =
+  | { state: 'pending' }
   | { state: 'running' }
   | { state: 'failed'; error: string }
   | { state: 'succeeded'; transcriptionUrl: string };
@@ -92,7 +96,8 @@ async function queryTask(taskId: string): Promise<TaskResult> {
   if (!res.ok) throw new Error(`DashScope query failed (${res.status})`);
   const output = field(json, 'output');
   const status = field(output, 'task_status');
-  if (status === 'PENDING' || status === 'RUNNING') return { state: 'running' };
+  if (status === 'PENDING') return { state: 'pending' };
+  if (status === 'RUNNING') return { state: 'running' };
   const results = field(output, 'results');
   const first: unknown = Array.isArray(results) ? results[0] : undefined;
   const url = field(first, 'transcription_url');
@@ -173,52 +178,53 @@ async function saveTranscripts(recording: Recording, transcriptionUrl: string): 
   ]);
 }
 
-async function markFailed(recordingId: number, err: unknown): Promise<void> {
+async function markFailed(recordingId: number, err: unknown, clearTask = false): Promise<void> {
   await prisma.recording.update({
     where: { id: recordingId },
     data: {
       sttStatus: 'FAILED',
       sttError: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
+      ...(clearTask ? { sttTaskId: null } : {}),
     },
   });
 }
 
-/** RUNNING 阶段按录像时长估算进度（约 0.1 倍实时，最短 30 秒），封顶 90 */
+/**
+ * 识别中按录像时长估算。预计时间内从 5 走到 90；之后按同样时长缓慢趋近 99。
+ * 匹配发言人停在 99，真正写完才是 100。排队不计入。
+ */
 function progressOf(recording: Recording): number {
   const status = toSttStatus(recording.sttStatus);
   if (status === 'SUCCEEDED') return 100;
-  if (status === 'ALIGNING') return 95;
-  if (status === 'SUBMITTING') return 3;
+  if (status === 'ALIGNING') return 99;
   if (status !== 'RUNNING' || !recording.sttStartedAt) return 0;
-  const expected = Math.max(30_000, (recording.durationSeconds ?? 600) * 100);
-  const elapsed = Date.now() - recording.sttStartedAt.getTime();
-  return Math.min(90, Math.round(5 + (elapsed / expected) * 85));
+  const expected = Math.max(60_000, (recording.durationSeconds ?? 600) * 200);
+  const ratio = (Date.now() - recording.sttStartedAt.getTime()) / expected;
+  if (ratio <= 1) return Math.round(5 + ratio * 85);
+  const tail = 9 * (1 - Math.exp(1 - ratio));
+  return Math.min(99, Math.round(90 + tail));
 }
 
 export function transcribeStateOf(recording: Recording): TranscribeState {
   return {
     status: toSttStatus(recording.sttStatus),
     progress: progressOf(recording),
-    error: recording.sttError,
+    error: recording.sttError === SAVE_LOCK ? null : recording.sttError,
   };
 }
 
 /**
- * startRecordingTranscription — 提交阿里云录音文件识别任务
- *
- * 仅在无任务或上次失败时提交；用条件更新抢占，避免重复点击提交多个任务。
- *
- * @param recording  已 READY 的录像
- * @returns 提交后的任务状态
+ * claimAndSubmit — 抢占后向阿里云提交新任务。
+ * 已有 taskId 的失败不走这里，避免丢掉可继续的识别结果。
  */
-export async function startRecordingTranscription(recording: Recording): Promise<TranscribeState> {
+async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
   const staleBefore = new Date(Date.now() - SUBMIT_STALE_MS);
   const claimed = await prisma.recording.updateMany({
     where: {
       id: recording.id,
       OR: [
         { sttStatus: null },
-        { sttStatus: 'FAILED' },
+        { sttStatus: 'FAILED', sttTaskId: null },
         { sttStatus: 'SUBMITTING', sttStartedAt: { lt: staleBefore } },
       ],
     },
@@ -230,11 +236,11 @@ export async function startRecordingTranscription(recording: Recording): Promise
       const taskId = await submitTask(await fileUrl(recording));
       await prisma.recording.update({
         where: { id: recording.id },
-        data: { sttStatus: 'RUNNING', sttTaskId: taskId, sttStartedAt: new Date() },
+        data: { sttStatus: 'RUNNING', sttTaskId: taskId },
       });
     } catch (err) {
       console.error('[aliyunRecordingTranscription] submit failed', err);
-      await markFailed(recording.id, err);
+      await markFailed(recording.id, err, true);
     }
   }
 
@@ -243,43 +249,127 @@ export async function startRecordingTranscription(recording: Recording): Promise
 }
 
 /**
- * advanceRecordingTranscription — 轮询阿里云任务，完成后对齐说话人并写入字幕
+ * continueTask — 用已有阿里云 taskId 接着查进度；识别完成后写入字幕。
+ * 写入中断（ALIGNING / 带 taskId 的 FAILED）会再次拉取结果，不重新提交。
+ */
+async function continueTask(recording: Recording): Promise<void> {
+  const taskId = recording.sttTaskId;
+  if (!taskId) return;
+
+  const result = await queryTask(taskId).catch((err: unknown) => {
+    console.error('[aliyunRecordingTranscription] query failed', err);
+    return null;
+  });
+  if (!result) return;
+
+  if (result.state === 'pending') {
+    if (recording.sttStatus !== 'QUEUED') {
+      await prisma.recording.updateMany({
+        where: {
+          id: recording.id,
+          sttTaskId: taskId,
+          sttStatus: { in: ['RUNNING', 'SUBMITTING', 'ALIGNING', 'FAILED'] },
+        },
+        data: { sttStatus: 'QUEUED', sttError: null },
+      });
+    }
+    return;
+  }
+
+  if (result.state === 'running') {
+    if (recording.sttStatus !== 'RUNNING') {
+      await prisma.recording.updateMany({
+        where: {
+          id: recording.id,
+          sttTaskId: taskId,
+          sttStatus: { in: ['QUEUED', 'ALIGNING', 'FAILED', 'SUBMITTING'] },
+        },
+        data: {
+          sttStatus: 'RUNNING',
+          sttError: null,
+          ...(recording.sttStatus === 'QUEUED' || recording.sttStatus === 'SUBMITTING'
+            ? { sttStartedAt: new Date() }
+            : {}),
+        },
+      });
+    }
+    return;
+  }
+
+  if (result.state === 'failed') {
+    await markFailed(recording.id, new Error(result.error), true);
+    return;
+  }
+
+  const staleSave = new Date(Date.now() - SAVE_STALE_MS);
+  const claimed = await prisma.recording.updateMany({
+    where: {
+      id: recording.id,
+      sttTaskId: taskId,
+      OR: [
+        { sttStatus: 'RUNNING' },
+        { sttStatus: 'FAILED' },
+        { sttStatus: 'ALIGNING', sttError: null },
+        { sttStatus: 'ALIGNING', sttError: SAVE_LOCK, sttStartedAt: { lt: staleSave } },
+      ],
+    },
+    data: { sttStatus: 'ALIGNING', sttError: SAVE_LOCK, sttStartedAt: new Date() },
+  });
+  if (claimed.count === 0) return;
+
+  try {
+    await saveTranscripts(recording, result.transcriptionUrl);
+  } catch (err) {
+    console.error('[aliyunRecordingTranscription] save failed', err);
+    await markFailed(recording.id, err);
+  }
+}
+
+/**
+ * startRecordingTranscription — 提交阿里云录音文件识别任务
  *
- * 由前端轮询驱动；RUNNING → ALIGNING 用条件更新抢占，保证只写入一次。
+ * 进行中或已有 taskId 的失败改为接着查，不重新提交。
+ *
+ * @param recording  已 READY 的录像
+ * @returns 提交后的任务状态
+ */
+export async function startRecordingTranscription(recording: Recording): Promise<TranscribeState> {
+  const status = toSttStatus(recording.sttStatus);
+  if (
+    status === 'RUNNING' ||
+    status === 'QUEUED' ||
+    status === 'ALIGNING' ||
+    status === 'SUBMITTING' ||
+    (status === 'FAILED' && recording.sttTaskId)
+  ) {
+    return advanceRecordingTranscription(recording);
+  }
+  return claimAndSubmit(recording);
+}
+
+/**
+ * advanceRecordingTranscription — 接着上次的解析往下走
+ *
+ * RUNNING 继续查阿里云；ALIGNING 或写入失败则重新拉取结果并写入。
+ * 提交阶段超时则重新提交。由打开回放页和前端轮询驱动。
  *
  * @param recording  录像（读取当前 stt 状态）
  * @returns 最新任务状态
  */
 export async function advanceRecordingTranscription(recording: Recording): Promise<TranscribeState> {
-  const status = toSttStatus(recording.sttStatus);
+  const latest = await prisma.recording.findUnique({ where: { id: recording.id } });
+  const current = latest ?? recording;
+  const status = toSttStatus(current.sttStatus);
 
-  if (status === 'SUBMITTING' && recording.sttStartedAt) {
-    if (Date.now() - recording.sttStartedAt.getTime() > SUBMIT_STALE_MS) {
-      await markFailed(recording.id, new Error('Submit timed out'));
-    }
-  }
-
-  if (status === 'RUNNING' && recording.sttTaskId) {
-    // 查询失败多为网络抖动，保持 RUNNING 等下次轮询
-    const result = await queryTask(recording.sttTaskId).catch((err: unknown) => {
-      console.error('[aliyunRecordingTranscription] query failed', err);
-      return null;
-    });
-    if (result?.state === 'failed') await markFailed(recording.id, new Error(result.error));
-    if (result?.state === 'succeeded') {
-      const claimed = await prisma.recording.updateMany({
-        where: { id: recording.id, sttStatus: 'RUNNING' },
-        data: { sttStatus: 'ALIGNING' },
-      });
-      if (claimed.count > 0) {
-        try {
-          await saveTranscripts(recording, result.transcriptionUrl);
-        } catch (err) {
-          console.error('[aliyunRecordingTranscription] save failed', err);
-          await markFailed(recording.id, err);
-        }
-      }
-    }
+  if (status === 'SUBMITTING') {
+    const stale =
+      !current.sttStartedAt || Date.now() - current.sttStartedAt.getTime() > SUBMIT_STALE_MS;
+    if (stale) return claimAndSubmit(current);
+  } else if (
+    current.sttTaskId &&
+    (status === 'QUEUED' || status === 'RUNNING' || status === 'ALIGNING' || status === 'FAILED')
+  ) {
+    await continueTask(current);
   }
 
   const fresh = await prisma.recording.findUniqueOrThrow({ where: { id: recording.id } });

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { listActiveRoomNames } from '@/lib/livekitRooms';
 import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
@@ -34,17 +35,25 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')?.trim() || '';
     const skip = (page - 1) * pageSize;
 
-    const whereClause: any = {
-      createdByMemberId: member.id,
+    const searchFilter: Prisma.MeetingWhereInput | null = search
+      ? {
+          OR: [
+            { title: { contains: search } },
+            { roomName: { contains: search } },
+          ],
+        }
+      : null;
+    const whereClause: Prisma.MeetingWhereInput = {
       deletedAt: null,
-      ...(search
-        ? {
-            OR: [
-              { title: { contains: search } },
-              { roomName: { contains: search } },
-            ],
-          }
-        : {}),
+      AND: [
+        {
+          OR: [
+            { createdByMemberId: member.id },
+            { participants: { some: { teamMemberId: member.id } } },
+          ],
+        },
+        ...(searchFilter ? [searchFilter] : []),
+      ],
     };
 
     const [total, meetings] = await Promise.all([

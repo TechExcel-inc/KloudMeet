@@ -1,15 +1,15 @@
-export type SttStatus = 'SUBMITTING' | 'RUNNING' | 'ALIGNING' | 'SUCCEEDED' | 'FAILED';
+export type SttStatus = 'SUBMITTING' | 'QUEUED' | 'RUNNING' | 'ALIGNING' | 'SUCCEEDED' | 'FAILED';
 
 export interface TranscribeState {
   status: SttStatus | null;
-  /** 0–100，阿里云不返回真实进度，RUNNING 阶段按录像时长估算 */
+  /** 0–100。排队不显示；识别中按录像时长估算，速度为原先的一半 */
   progress: number;
   error: string | null;
 }
 
 export const IDLE_TRANSCRIBE: TranscribeState = { status: null, progress: 0, error: null };
 
-const STATUSES: readonly SttStatus[] = ['SUBMITTING', 'RUNNING', 'ALIGNING', 'SUCCEEDED', 'FAILED'];
+const STATUSES: readonly SttStatus[] = ['SUBMITTING', 'QUEUED', 'RUNNING', 'ALIGNING', 'SUCCEEDED', 'FAILED'];
 
 export function toSttStatus(value: unknown): SttStatus | null {
   return STATUSES.find((status) => status === value) ?? null;
@@ -17,7 +17,7 @@ export function toSttStatus(value: unknown): SttStatus | null {
 
 /** 任务仍在进行，需要继续轮询 */
 export function isSttActive(status: SttStatus | null): boolean {
-  return status === 'SUBMITTING' || status === 'RUNNING' || status === 'ALIGNING';
+  return status === 'SUBMITTING' || status === 'QUEUED' || status === 'RUNNING' || status === 'ALIGNING';
 }
 
 export function readTranscribeState(value: unknown): TranscribeState | null {

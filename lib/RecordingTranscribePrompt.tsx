@@ -12,7 +12,7 @@ import styles from '@/styles/RecordingTranscribePrompt.module.css';
 
 const POLL_MS = 3000;
 
-type Phase = 'prompt' | 'collapsed' | 'running' | 'empty' | 'hidden';
+type Phase = 'prompt' | 'resume' | 'collapsed' | 'running' | 'empty' | 'hidden';
 
 export interface RecordingTranscribePromptProps {
   /** 录像 shareKey 或 id（与回放页路由一致） */
@@ -24,7 +24,7 @@ export interface RecordingTranscribePromptProps {
 }
 
 function initialPhase(state: TranscribeState): Phase {
-  if (isSttActive(state.status)) return 'running';
+  if (isSttActive(state.status) || state.status === 'FAILED') return 'resume';
   return state.status === 'SUCCEEDED' ? 'empty' : 'prompt';
 }
 
@@ -72,6 +72,7 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
         console.warn('[RecordingTranscribePrompt] poll failed', err);
       }
     };
+    void poll();
     const timer = setInterval(() => void poll(), POLL_MS);
     return () => {
       stopped = true;
@@ -107,7 +108,7 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
 
   if (phase === 'collapsed') {
     return (
-      <button type="button" className={styles.pill} onClick={() => setPhase('prompt')}>
+      <button type="button" className={styles.pill} onClick={() => setPhase(isSttActive(state.status) || state.status === 'FAILED' ? 'resume' : 'prompt')}>
         {t('replay.transcribeOpen')}
       </button>
     );
@@ -124,28 +125,41 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
     );
   }
 
-  if (phase === 'running') {
-    const stage =
-      state.status === 'SUBMITTING'
-        ? t('replay.transcribeStageSubmit')
-        : state.status === 'ALIGNING'
-          ? t('replay.transcribeStageAlign')
-          : t('replay.transcribeStageRecognize');
-    const pct = Math.max(0, Math.min(100, Math.round(state.progress)));
+  if (phase === 'running' && (state.status === 'QUEUED' || state.status === 'SUBMITTING')) {
     return (
-      <div className={styles.card} role="status" aria-live="polite">
-        <div className={styles.cardHead}>
-          <span className={styles.cardTitle}>{t('replay.transcribeRunning')}</span>
-          <span className={styles.pct}>{pct}%</span>
+      <div className={styles.backdrop} role="dialog" aria-modal="true">
+        <div className={styles.dialog}>
+          <h3 className={styles.title}>
+            {state.status === 'QUEUED' ? t('replay.transcribeQueued') : t('replay.transcribeStageSubmit')}
+          </h3>
         </div>
-        <div className={styles.track}>
-          <div className={styles.bar} style={{ width: `${pct}%` }} />
-        </div>
-        <p className={styles.stage}>{stage}</p>
       </div>
     );
   }
 
+  if (phase === 'running') {
+    const stage =
+      state.status === 'ALIGNING'
+        ? t('replay.transcribeStageAlign')
+        : t('replay.transcribeStageRecognize');
+    const pct = Math.max(0, Math.min(100, Math.round(state.progress)));
+    return (
+      <div className={styles.backdrop} role="dialog" aria-modal="true">
+        <div className={styles.dialog}>
+          <div className={styles.cardHead}>
+            <span className={styles.cardTitle}>{t('replay.transcribeRunning')}</span>
+            <span className={styles.pct}>{pct}%</span>
+          </div>
+          <div className={styles.track}>
+            <div className={styles.bar} style={{ width: `${pct}%` }} />
+          </div>
+          <p className={styles.stage}>{stage}</p>
+        </div>
+      </div>
+    );
+  }
+
+  const resuming = phase === 'resume';
   const error = requestError ?? (state.status === 'FAILED' && state.error
     ? t('replay.transcribeFailed', { error: state.error })
     : null);
@@ -153,15 +167,23 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
   return (
     <div className={styles.backdrop} role="dialog" aria-modal="true">
       <div className={styles.dialog}>
-        <h3 className={styles.title}>{t('replay.transcribePromptTitle')}</h3>
-        <p className={styles.desc}>{t('replay.transcribePromptDesc')}</p>
+        <h3 className={styles.title}>
+          {resuming ? t('replay.transcribeResumeTitle') : t('replay.transcribePromptTitle')}
+        </h3>
+        <p className={styles.desc}>
+          {resuming ? t('replay.transcribeResumeDesc') : t('replay.transcribePromptDesc')}
+        </p>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.actions}>
           <button type="button" className={styles.secondaryBtn} onClick={() => setPhase('collapsed')}>
             {t('replay.transcribeLater')}
           </button>
           <button type="button" className={styles.primaryBtn} disabled={starting} onClick={() => void handleStart()}>
-            {starting ? t('replay.transcribeStarting') : t('replay.transcribeStart')}
+            {starting
+              ? t('replay.transcribeStarting')
+              : resuming
+                ? t('replay.transcribeResume')
+                : t('replay.transcribeStart')}
           </button>
         </div>
       </div>
