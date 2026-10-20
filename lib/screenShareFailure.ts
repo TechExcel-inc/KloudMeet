@@ -17,9 +17,15 @@ export interface ScreenShareFailure {
   detail: string;
 }
 
+function nestedError(error: Error): Error | null {
+  const bag: object = error;
+  if (!('cause' in bag)) return null;
+  return bag.cause instanceof Error ? bag.cause : null;
+}
+
 function readError(error: unknown): { name: string; message: string } {
   if (error instanceof Error) {
-    const cause = error.cause instanceof Error ? error.cause : null;
+    const cause = nestedError(error);
     return {
       name: (cause?.name || error.name || '').trim(),
       message: `${error.message || ''} ${cause?.message || ''}`.trim(),
