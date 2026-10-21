@@ -24,6 +24,8 @@ interface SummaryItem {
   title: string;
   content: string;
   timeOffset: string; // HH:mm:ss
+  /** AI 生成时写入；旧数据可能为空 */
+  speaker?: string | null;
   sortOrder: number;
 }
 
@@ -90,6 +92,31 @@ function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   return name.slice(0, 2).toUpperCase();
+}
+
+/** 章节时间窗内发言条数最多的 speakerName；无字幕则空串 */
+function dominantSpeaker(
+  transcripts: Transcript[],
+  startSec: number,
+  endSec: number,
+): string {
+  const counts = new Map<string, number>();
+  for (const row of transcripts) {
+    if (row.offsetSeconds === null || row.offsetSeconds === undefined) continue;
+    if (row.offsetSeconds < startSec || row.offsetSeconds >= endSec) continue;
+    const name = (row.speakerName || '').trim();
+    if (!name || name === 'Speaker 1' || name === 'Unknown') continue;
+    counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  let best = '';
+  let bestCount = 0;
+  for (const [name, count] of counts) {
+    if (count > bestCount) {
+      best = name;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 const COLORS = [
@@ -845,10 +872,13 @@ export default function ReplayPage() {
     const startSec = offsetToSecs(item.timeOffset);
     const nextItem = summaryItems[idx + 1];
     const endSec = nextItem ? offsetToSecs(nextItem.timeOffset) : (recording.durationSeconds ?? startSec + 300);
+    const speaker =
+      (item.speaker || '').trim() || dominantSpeaker(transcripts, startSec, endSec);
     return {
       id: item.id, startSec, endSec,
       timeRange: `${item.timeOffset}-${secsToHMS(endSec)}`,
-      speaker: '', topic: item.title,
+      speaker,
+      topic: item.title,
     };
   });
 

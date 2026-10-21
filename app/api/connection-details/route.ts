@@ -19,7 +19,7 @@ import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
 import { getMeetingRoomCurrentView } from '@/lib/meetingRoomView';
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
-import { recordMeetingJoin } from '@/lib/recordMeetingJoin';
+import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -132,17 +132,22 @@ export async function GET(request: NextRequest) {
       ttl: '2h',
     });
 
-    if (member) {
-      try {
+    try {
+      if (member) {
         await recordMeetingJoin({
           meetingId: meeting.id,
           memberId: member.id,
           displayName: participantName.trim() || member.fullName || member.username,
           host: member.id === meeting.createdByMemberId,
         });
-      } catch (err) {
-        console.error('[connection-details] record join', err);
+      } else {
+        await recordGuestJoin({
+          meetingId: meeting.id,
+          displayName: participantName,
+        });
       }
+    } catch (err) {
+      console.error('[connection-details] record join', err);
     }
 
     // Late joiners: adopt room's current stage without flashing default webcam.

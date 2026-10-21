@@ -175,6 +175,8 @@ model MeetingSummaryItem {
   title      String
   content    String   @db.Text
   timeOffset String
+  /// 章节主讲人显示名；AI 生成时写入，回放卡片头像用其缩写
+  speaker    String?
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   meeting    Meeting  @relation(fields: [meetingId], references: [id], map: "MeetingSummaryItem_meetingId_fkey")

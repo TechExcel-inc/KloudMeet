@@ -198,6 +198,7 @@ export async function POST(
         title: c.title,
         content: c.content,
         timeOffset: secsToHMS(c.startSec),
+        speaker: (c.speaker || '').trim() || null,
         sortOrder: idx,
       })),
     });
