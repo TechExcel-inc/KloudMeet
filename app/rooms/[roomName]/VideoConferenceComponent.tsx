@@ -46,6 +46,7 @@ import {
 import { ConnectionDetails } from '@/lib/types';
 import { parseMeetingRoomView } from '@/lib/meetingRoomViewShared';
 import { persistMeetingRoomView } from '@/lib/meetingRoomViewClient';
+import { persistParticipantLiveDocAi } from '@/lib/participantLiveDocAi';
 import { useI18n, LOCALE_OPTIONS } from '@/lib/i18n';
 import {
   formatChatMessageLinks,
@@ -2239,6 +2240,11 @@ export function VideoConferenceComponent(props: {
 
   const hostIdentity = hostIdentityOverride || hostIdentityFromJoin;
   const isHost = Boolean(hostIdentity) && hostIdentity === room.localParticipant.identity;
+  const hostIdentityRef = React.useRef(hostIdentity);
+  hostIdentityRef.current = hostIdentity;
+  const [participantLiveDocAi, setParticipantLiveDocAi] = React.useState(
+    () => props.connectionDetails.participantLiveDocAi !== false,
+  );
   const [copresenterIdentities, setCopresenterIdentities] = React.useState<string[]>([]);
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
@@ -2574,6 +2580,8 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentities: string[];
     hostDisabledVideoUntilByIdentity: Record<string, number>;
     captionsOn: boolean;
+    /** 普通参会者是否显示文档 AI */
+    participantLiveDocAi: boolean;
     /** 举手队列，按举手先后排序 */
     raisedHands: string[];
     /** identity → 举手时刻（发送端时钟），仅用于主持人重连后按心跳重建队列顺序 */
@@ -2590,9 +2598,14 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentities: [],
     hostDisabledVideoUntilByIdentity: {},
     captionsOn: false,
+    participantLiveDocAi: props.connectionDetails.participantLiveDocAi !== false,
     raisedHands: [],
     raisedHandAtByIdentity: {},
   });
+  if (isHost) {
+    authState.current.participantLiveDocAi =
+      props.connectionDetails.participantLiveDocAi !== false;
+  }
 
   const presenterListsEqual = React.useCallback(
     (a: string[] | null | undefined, b: string[] | null | undefined) => {
@@ -2620,6 +2633,7 @@ export function VideoConferenceComponent(props: {
       hostDisabledVideoIdentities: auth.hostDisabledVideoIdentities,
       hostDisabledVideoUntilByIdentity: auth.hostDisabledVideoUntilByIdentity,
       captionsOn: auth.captionsOn,
+      participantLiveDocAi: auth.participantLiveDocAi,
       raisedHands: auth.raisedHands,
     } as const;
   }, []);
@@ -2713,6 +2727,33 @@ export function VideoConferenceComponent(props: {
     },
     [room, encoder],
   );
+
+  const participantLiveDocSentRef = React.useRef<boolean | null>(null);
+  const participantLiveDocSavedRef = React.useRef<boolean | null>(null);
+  React.useEffect(() => {
+    if (!isHost || !livekitConnected) return;
+    const show = authState.current.participantLiveDocAi;
+    if (participantLiveDocSentRef.current !== show) {
+      participantLiveDocSentRef.current = show;
+      setParticipantLiveDocAi(show);
+      sendMeetingMsg({ type: 'PARTICIPANT_LIVEDOC_AI', show });
+    }
+    if (participantLiveDocSavedRef.current === show) return;
+    const token = connectionDetailsRef.current.participantToken;
+    const rn = connectionDetailsRef.current.roomName;
+    if (!token || !rn) return;
+    void persistParticipantLiveDocAi({
+      roomName: rn,
+      show,
+      livekitToken: token,
+    })
+      .then(() => {
+        participantLiveDocSavedRef.current = show;
+      })
+      .catch((err: unknown) => {
+        console.error('[participantLiveDocAi] persist failed', err);
+      });
+  }, [isHost, livekitConnected, sendMeetingMsg]);
 
   // Mute All / Unmute All handlers (defined after sendMeetingMsg)
   // Only remote participants are affected — the local user (host/co-host) keeps their mic as-is.
@@ -3232,6 +3273,11 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'LIVEDOC_INSTANCE' && typeof msg.livedocInstanceId === 'string') {
           setLivedocInstanceId(msg.livedocInstanceId);
+        } else if (msg.type === 'PARTICIPANT_LIVEDOC_AI' && typeof msg.show === 'boolean') {
+          const hostId = hostIdentityRef.current;
+          if (!hostId || senderIdentity === hostId) {
+            setParticipantLiveDocAi(msg.show);
+          }
         } else if (msg.type === 'CORRECTION') {
           // Correction from host — update to authoritative state
           // But don't override presenter's liveDoc view (they intentionally diverge)
@@ -3282,6 +3328,14 @@ export function VideoConferenceComponent(props: {
           }
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
+          }
+          if (typeof (msg as { participantLiveDocAi?: boolean }).participantLiveDocAi === 'boolean') {
+            const hostId = hostIdentityRef.current;
+            if (!hostId || senderIdentity === hostId) {
+              setParticipantLiveDocAi(
+                (msg as { participantLiveDocAi: boolean }).participantLiveDocAi,
+              );
+            }
           }
           // 举手队列以主持人为准；本地 handRaised 不在此处覆盖，
           // 主持人重连后会通过心跳重新收到本地举手态并补回队列。
@@ -8786,6 +8840,7 @@ export function VideoConferenceComponent(props: {
           onWebcamLayoutChange={setWebcamLayoutMode}
           canToggleLiveDocAnnotation={canBroadcastViewChange}
           canShowOperatorMenus={canBroadcastViewChange}
+          participantLiveDocAi={participantLiveDocAi}
           onPrepareLiveDoc={() => setLivedocHasBeenActivated(true)}
           canEndForAll={isHost || isCohost}
           canRecord={isHost || isCohost}

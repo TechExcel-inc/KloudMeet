@@ -92,6 +92,11 @@ interface KloudMeetToolbarProps {
    * 协作文档菜单、摄像头视图入口、More→AI演讲 可见；随实时身份变化更新
    */
   canShowOperatorMenus?: boolean;
+  /**
+   * 普通参会者是否显示文档 AI。主持人和联席身份始终可见。
+   * 缺省为显示。
+   */
+  participantLiveDocAi?: boolean;
   /** 在不切换当前视图的前提下，后台挂载并初始化 LiveDoc iframe */
   onPrepareLiveDoc?: () => void;
   chatOpen: boolean;
@@ -167,6 +172,7 @@ export function KloudMeetToolbar({
   onWebcamLayoutChange,
   canToggleLiveDocAnnotation = false,
   canShowOperatorMenus = false,
+  participantLiveDocAi = true,
   onPrepareLiveDoc,
   chatOpen,
   onToggleChat,
@@ -809,9 +815,11 @@ export function KloudMeetToolbar({
     return () => window.removeEventListener('message', handleMessage);
   }, [isMobile, clearDesktopToolbarAutoHide]);
 
-  // 失去 host/co-host/presenter 时关闭协作文档 righttab-popup
+  const canOpenLiveDocAi = canShowOperatorMenus || participantLiveDocAi;
+
+  // 普通参会者被隐藏文档 AI，或失去操作者身份且会议不允许时，关掉面板
   useEffect(() => {
-    if (canShowOperatorMenus) return;
+    if (canOpenLiveDocAi) return;
     setLiveDocMenuVisible(false);
     if (!liveDocActionDialogVisible) return;
     const iframe =
@@ -819,7 +827,7 @@ export function KloudMeetToolbar({
       ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
     iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
     setLiveDocActionDialogVisible(false);
-  }, [canShowOperatorMenus, liveDocActionDialogVisible]);
+  }, [canOpenLiveDocAi, liveDocActionDialogVisible]);
 
   useLayoutEffect(() => {
     if (!liveDocMenuVisible) {
@@ -1039,7 +1047,7 @@ export function KloudMeetToolbar({
   };
 
   const handleLiveDocSettingsClick = () => {
-    if (!canShowOperatorMenus) {
+    if (!canOpenLiveDocAi) {
       showInviteToast(t('toolbar.liveDocAiNoPermission'));
       return;
     }
@@ -1394,8 +1402,9 @@ export function KloudMeetToolbar({
     </button>
   );
 
-  /** LiveDoc AI：底栏始终显示；无权限点击仅提示 */
+  /** LiveDoc AI：操作者始终显示；普通参会者由主持人开关决定 */
   const renderLiveDocSettingsButton = (variant: 'desktop' | 'mobile') => {
+    if (!canOpenLiveDocAi) return null;
     const isActive = liveDocMenuVisible || liveDocActionDialogVisible;
     const className =
       variant === 'mobile'
@@ -1504,7 +1513,7 @@ export function KloudMeetToolbar({
       {toastMsg && <div className={styles.toast}>{toastMsg}</div>}
 
       <LiveDocAiPanel
-        open={liveDocMenuVisible}
+        open={liveDocMenuVisible && canOpenLiveDocAi}
         state={liveDocAiBridge.state}
         connected={liveDocAiBridge.connected}
         error={liveDocAiBridge.error}
@@ -1642,7 +1651,7 @@ export function KloudMeetToolbar({
               </button>
             )}
 
-            {/* 5. LiveDoc AI：始终显示 */}
+            {/* 5. LiveDoc AI：普通参会者可被主持人隐藏 */}
             {renderLiveDocSettingsButton('mobile')}
 
             {/* 6. Document PiP */}
@@ -1763,11 +1772,11 @@ export function KloudMeetToolbar({
               {/* 共享屏幕：所有人可见（对齐手机端「非操作者仍单独显示」） */}
               {renderDesktopShareScreenButton()}
 
+              {/* LiveDoc AI：操作者始终可见；普通参会者由主持人开关决定 */}
+              {renderLiveDocSettingsButton('desktop')}
+
               {canSwitchViews && (
                 <>
-                  {/* LiveDoc AI：始终显示 */}
-                  {renderLiveDocSettingsButton('desktop')}
-
                   {/* 标注 / 远程控制：仅 Electron 桌面端 + 有屏幕共享时显示（依赖 electronAPI） */}
                   {isDesktop && hasScreenShare && (
                     <>

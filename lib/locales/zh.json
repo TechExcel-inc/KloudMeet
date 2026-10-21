@@ -236,6 +236,8 @@
   "prejoin.entryRetry": "重试",
   "prejoin.connectError": "无法连接到房间。请确认 LiveKit 服务器是否正在运行？错误：{error}",
   "prejoin.prejoinError": "LiveKit PreJoin 错误：{error}",
+  "prejoin.participantLiveDocShow": "参会者可分享文档 AI",
+  "prejoin.participantLiveDocHide": "参会者只读文档 AI",
   "toolbar.muteMic": "静音",
   "toolbar.unmuteMic": "取消静音",
   "toolbar.micSettings": "麦克风设置",

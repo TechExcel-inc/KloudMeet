@@ -230,6 +230,8 @@
   "prejoin.entryRetry": "다시 시도",
   "prejoin.connectError": "연결할 수 없습니다. 오류: {error}",
   "prejoin.prejoinError": "PreJoin 오류: {error}",
+  "prejoin.participantLiveDocShow": "참가자는 LiveDoc AI 공유 가능",
+  "prejoin.participantLiveDocHide": "참가자는 LiveDoc AI 읽기 전용",
   "toolbar.muteMic": "음소거",
   "toolbar.unmuteMic": "음소거 해제",
   "toolbar.micSettings": "마이크 설정",

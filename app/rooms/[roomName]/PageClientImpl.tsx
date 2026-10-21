@@ -13,6 +13,7 @@ import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
+import { PrejoinParticipantLiveDocSelect } from '@/lib/PrejoinParticipantLiveDocSelect';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
@@ -183,6 +184,8 @@ export function PageClientImpl(props: {
   const personalRoomAutoEnabledRef = React.useRef(false);
   const personalRoomSwitchCountRef = React.useRef(0);
   const [personalRoomSwitching, setPersonalRoomSwitching] = React.useState(false);
+  /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
+  const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -410,6 +413,10 @@ export function PageClientImpl(props: {
   );
 
   const isHost = isMeetingCreator;
+
+  const handleParticipantLiveDocChange = React.useCallback((show: boolean) => {
+    setParticipantLiveDocShow(show);
+  }, []);
 
   const preJoinDefaults = React.useMemo(() => {
     let defaultUsername = '';
@@ -640,6 +647,9 @@ export function PageClientImpl(props: {
         if (props.region) {
           url.searchParams.append('region', props.region);
         }
+        if (isMeetingCreator && !isSameTabRefresh) {
+          url.searchParams.append('participantLiveDocAi', participantLiveDocShow ? '1' : '0');
+        }
         const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
           connectionDetailsFetchInit(),
@@ -706,6 +716,7 @@ export function PageClientImpl(props: {
       props.region,
       t,
       personalRoomSwitching,
+      participantLiveDocShow,
     ],
   );
   const handlePreJoinError = React.useCallback((error: any) => {
@@ -1034,7 +1045,6 @@ export function PageClientImpl(props: {
 
             .kloud-prejoin-share-link-block {
               width: 100%;
-              margin-top: 10px;
             }
             .kloud-prejoin-share-link-label {
               font-size: 0.88rem;
@@ -1046,12 +1056,12 @@ export function PageClientImpl(props: {
               background: linear-gradient(180deg, #f8f9fc 0%, #f3f4f8 100%);
               border: 1px solid #e4e8f0;
               border-radius: 12px;
-              padding: 12px 14px;
+              padding: 7px 14px;
               display: flex;
               align-items: center;
               justify-content: space-between;
               gap: 12px;
-              font-size: 0.95rem;
+              font-size: calc(0.95rem - 2px);
               color: #1f2937;
               width: 100%;
               box-sizing: border-box;
@@ -1430,13 +1440,19 @@ export function PageClientImpl(props: {
                 roomName={effectiveRoomName}
               />
               {isHost && (
-                <PrejoinPersonalRoomCheckbox
-                  active
-                  syncEnabled={personalRoomUrlEnabled}
-                  switching={personalRoomSwitching}
-                  onEnabledChange={handlePersonalRoomEnabledChange}
-                  onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
-                />
+                <div className="kloud-prejoin-host-options">
+                  <PrejoinParticipantLiveDocSelect
+                    show={participantLiveDocShow}
+                    onChange={handleParticipantLiveDocChange}
+                  />
+                  <PrejoinPersonalRoomCheckbox
+                    active
+                    syncEnabled={personalRoomUrlEnabled}
+                    switching={personalRoomSwitching}
+                    onEnabledChange={handlePersonalRoomEnabledChange}
+                    onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
+                  />
+                </div>
               )}
             </KloudPreJoin>
           )}

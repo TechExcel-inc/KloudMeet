@@ -230,6 +230,8 @@
   "prejoin.entryRetry": "再試行",
   "prejoin.connectError": "接続できません。エラー：{error}",
   "prejoin.prejoinError": "PreJoinエラー：{error}",
+  "prejoin.participantLiveDocShow": "参加者は LiveDoc AI を共有できる",
+  "prejoin.participantLiveDocHide": "参加者は LiveDoc AI を閲覧のみ",
   "toolbar.muteMic": "ミュート",
   "toolbar.unmuteMic": "ミュート解除",
   "toolbar.micSettings": "マイク設定",

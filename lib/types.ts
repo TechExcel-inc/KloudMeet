@@ -33,6 +33,11 @@ export type ConnectionDetails = {
    * Absent / undefined for first host open → client defaults to webcam.
    */
   currentView?: 'liveDoc' | 'webcam' | 'shareScreen';
+  /**
+   * 普通参会者是否显示文档 AI。缺省或 true 为显示；false 时普通参会者入会不显示。
+   * 主持人、联席主持人和演示者不受影响。
+   */
+  participantLiveDocAi?: boolean;
   /** PeerTime lesson id already bound to this meeting (if any). */
   livedocInstanceId?: string | null;
 };
