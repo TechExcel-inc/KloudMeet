@@ -11,6 +11,12 @@ const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 // In packaged builds, load the remote server directly (no local Next.js needed).
 // In dev mode, APP_ORIGIN (local Next.js) is used as usual.
 const REMOTE_ORIGIN = 'https://meet.kloud.cn';
+/** 打包版文档请求绕过磁盘缓存，避免主窗口停在旧前端 */
+const REMOTE_NO_CACHE_HEADERS = 'Cache-Control: no-cache\r\nPragma: no-cache\r\n';
+const UPDATE_FEED_FALLBACK = 'https://kloud.cn/kloudmeet-exe';
+const UPDATE_CHECK_FIRST_MS = 5000;
+const UPDATE_CHECK_PERIOD_MS = 4 * 60 * 60 * 1000;
+const UPDATE_CHECK_RETRY_MS = [30 * 1000, 2 * 60 * 1000, 10 * 60 * 1000];
 
 let nextServerProcess;
 /** 用户正在退出应用时置 true，避免误弹「内置服务已退出」 */
@@ -59,16 +65,17 @@ function showFatal(title, detail) {
 
 let mainWindow;
 let overlayWindow;
-/** 对齐主窗口右上角的更新下载进度（仅打包环境使用） */
+/** 主窗口顶部居中的更新下载进度（仅打包环境使用） */
 let updateProgressWindow;
 /** 更新下载完成后的「立即重启」模态窗 */
 let updateReadyPromptWindow;
+/** @type {ReturnType<typeof setInterval> | null} */
+let updateProgressRaiseTimer = null;
 
-const UPDATE_PROGRESS_W = 208;
-const UPDATE_PROGRESS_H = 44;
-const UPDATE_PROGRESS_MARGIN = 10;
-/** 相对内容区顶部下移，避开页面内常见顶栏／右上角按钮 */
-const UPDATE_PROGRESS_TOP_INSET = 44;
+const UPDATE_PROGRESS_W = 360;
+const UPDATE_PROGRESS_H = 84;
+/** 贴在主窗口内容区顶部，避免掉进页面右上角按钮底下 */
+const UPDATE_PROGRESS_TOP_INSET = 12;
 
 /** @type {{ percent: number } | null} */
 let pendingUpdateProgressPayload = null;
@@ -78,6 +85,19 @@ let lastUpdaterProgressRounded = -1;
 
 /** 同一次下载只弹一次安装确认（electron-updater 偶发重复事件） */
 let updateDownloadedDialogShown = false;
+/** @type {'idle' | 'checking' | 'downloading' | 'ready'} */
+let updatePhase = 'idle';
+let updateRetryIndex = 0;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let updateCheckTimer = null;
+let updateCheckInFlight = false;
+/** @type {string | null} */
+let updateAnnouncedVersion = null;
+/** @type {string | null} */
+let updateReadyVersion = null;
+/** 安装包已落盘：退出时要先放开单实例锁，否则新进程会被立刻关掉 */
+let updateInstallPending = false;
+let updateInstallStarted = false;
 
 /**
  * 全屏 annotation overlay 会盖住更新进度条 / 弹窗。
@@ -126,15 +146,61 @@ function layoutUpdateProgressWindow() {
     return;
   }
   const cb = mainWindow.getContentBounds();
+  const width = Math.min(UPDATE_PROGRESS_W, Math.max(260, cb.width - 24));
   updateProgressWindow.setBounds({
-    x: cb.x + cb.width - UPDATE_PROGRESS_W - UPDATE_PROGRESS_MARGIN,
+    x: Math.round(cb.x + (cb.width - width) / 2),
     y: cb.y + UPDATE_PROGRESS_TOP_INSET,
-    width: UPDATE_PROGRESS_W,
+    width,
     height: UPDATE_PROGRESS_H,
   });
 }
 
+function stopUpdateProgressRaiseLoop() {
+  if (!updateProgressRaiseTimer) return;
+  clearInterval(updateProgressRaiseTimer);
+  updateProgressRaiseTimer = null;
+}
+
+/** 只抬层级，不改位置，避免把用户拖开的进度条拽回去 */
+function pinUpdateProgressAbove() {
+  if (overlayHideReasons.has('update-progress')) {
+    try {
+      if (overlayWindow && !overlayWindow.isDestroyed() && overlayWindow.isVisible()) {
+        overlayWindow.hide();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  const w = updateProgressWindow;
+  if (!w || w.isDestroyed()) {
+    stopUpdateProgressRaiseLoop();
+    return;
+  }
+  try {
+    if (!w.isVisible()) w.showInactive();
+  } catch {
+    try {
+      w.show();
+    } catch {
+      /* ignore */
+    }
+  }
+  raiseUpdateProgressWindow();
+}
+
+function keepUpdateProgressVisible() {
+  layoutUpdateProgressWindow();
+  pinUpdateProgressAbove();
+}
+
+function startUpdateProgressRaiseLoop() {
+  if (updateProgressRaiseTimer) return;
+  updateProgressRaiseTimer = setInterval(pinUpdateProgressAbove, 800);
+}
+
 function destroyUpdateProgressWindow() {
+  stopUpdateProgressRaiseLoop();
   if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
     updateProgressWindow.destroy();
   }
@@ -316,8 +382,8 @@ function ensureUpdateProgressWindow() {
   acquireOverlayHide('update-progress');
 
   if (updateProgressWindow && !updateProgressWindow.isDestroyed()) {
-    layoutUpdateProgressWindow();
-    raiseUpdateProgressWindow();
+    keepUpdateProgressVisible();
+    startUpdateProgressRaiseLoop();
     return updateProgressWindow;
   }
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -330,7 +396,8 @@ function ensureUpdateProgressWindow() {
     width: UPDATE_PROGRESS_W,
     height: UPDATE_PROGRESS_H,
     frame: false,
-    transparent: true,
+    transparent: false,
+    backgroundColor: '#0f172a',
     resizable: false,
     movable: true,
     minimizable: false,
@@ -338,9 +405,11 @@ function ensureUpdateProgressWindow() {
     fullscreenable: false,
     skipTaskbar: true,
     show: false,
-    hasShadow: false,
+    hasShadow: true,
     focusable: false,
     alwaysOnTop: true,
+    // Windows 上挂到主窗口，会议页 focus / moveTop 也盖不住进度条
+    parent: process.platform === 'win32' ? mainWindow : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'update-progress-preload.js'),
       contextIsolation: true,
@@ -348,7 +417,13 @@ function ensureUpdateProgressWindow() {
     },
   });
 
+  try {
+    updateProgressWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  } catch {
+    /* ignore */
+  }
   raiseUpdateProgressWindow();
+  startUpdateProgressRaiseLoop();
 
   updateProgressWindow.webContents.once('did-finish-load', () => {
     if (!updateProgressWindow || updateProgressWindow.isDestroyed()) return;
@@ -389,6 +464,224 @@ function ensureUpdateProgressWindow() {
   return updateProgressWindow;
 }
 
+function formatUpdaterArgs(args) {
+  return args
+    .map((item) => {
+      if (item instanceof Error) return item.stack || item.message;
+      if (typeof item === 'string') return item;
+      try {
+        return JSON.stringify(item);
+      } catch {
+        return String(item);
+      }
+    })
+    .join(' ');
+}
+
+function getUpdateFeedUrl() {
+  try {
+    const pkg = require('./package.json');
+    const publish = pkg.build && pkg.build.publish;
+    if (publish && typeof publish.url === 'string' && publish.url.trim()) {
+      return publish.url.trim();
+    }
+  } catch (e) {
+    appendStartupLog(`[updater] read feed: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return UPDATE_FEED_FALLBACK;
+}
+
+function clearUpdateCheckTimer() {
+  if (!updateCheckTimer) return;
+  clearTimeout(updateCheckTimer);
+  updateCheckTimer = null;
+}
+
+function scheduleUpdateCheck(delayMs) {
+  clearUpdateCheckTimer();
+  updateCheckTimer = setTimeout(() => {
+    updateCheckTimer = null;
+    runUpdateCheck();
+  }, delayMs);
+}
+
+function nextUpdateRetryDelay() {
+  const delay = UPDATE_CHECK_RETRY_MS[Math.min(updateRetryIndex, UPDATE_CHECK_RETRY_MS.length - 1)];
+  updateRetryIndex += 1;
+  return delay;
+}
+
+function runUpdateCheck() {
+  if (!app.isPackaged || isAppQuitting) return;
+  if (updateCheckInFlight || updatePhase === 'downloading') return;
+  updateCheckInFlight = true;
+  if (updatePhase !== 'ready') updatePhase = 'checking';
+  appendStartupLog('[updater] checkForUpdates');
+  autoUpdater
+    .checkForUpdates()
+    .catch((err) => {
+      appendStartupLog(
+        `[updater] check rejected: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    })
+    .finally(() => {
+      updateCheckInFlight = false;
+    });
+}
+
+/**
+ * 立刻重启安装。静默退出安装仍交给 autoInstallOnAppQuit（不强制拉起）。
+ */
+function installDownloadedUpdate() {
+  if (updateInstallStarted) return;
+  updateInstallStarted = true;
+  updateInstallPending = true;
+  isAppQuitting = true;
+  clearUpdateCheckTimer();
+  appendStartupLog('[updater] quitAndInstall');
+  try {
+    app.releaseSingleInstanceLock();
+  } catch (e) {
+    appendStartupLog(
+      `[updater] releaseSingleInstanceLock: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  try {
+    autoUpdater.quitAndInstall(false, true);
+  } catch (e) {
+    updateInstallStarted = false;
+    appendStartupLog(`quitAndInstall: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
+function prepareQuitForPendingUpdate() {
+  if (!updateInstallPending) return;
+  isAppQuitting = true;
+  clearUpdateCheckTimer();
+  try {
+    app.releaseSingleInstanceLock();
+  } catch (e) {
+    appendStartupLog(
+      `[updater] releaseSingleInstanceLock: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
+function setupAutoUpdater() {
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.disableDifferentialDownload = true;
+  autoUpdater.logger = {
+    info: (...args) => appendStartupLog(`[updater] ${formatUpdaterArgs(args)}`),
+    warn: (...args) => appendStartupLog(`[updater][warn] ${formatUpdaterArgs(args)}`),
+    error: (...args) => appendStartupLog(`[updater][error] ${formatUpdaterArgs(args)}`),
+    debug: (...args) => appendStartupLog(`[updater][debug] ${formatUpdaterArgs(args)}`),
+  };
+
+  const feedUrl = getUpdateFeedUrl();
+  try {
+    autoUpdater.setFeedURL({ provider: 'generic', url: feedUrl });
+    appendStartupLog(`[updater] feed ${feedUrl}`);
+  } catch (e) {
+    appendStartupLog(`[updater] setFeedURL: ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // 先于 electron-updater 自己的 before-quit，避免新进程抢锁失败后直接退出
+  app.prependListener('before-quit', prepareQuitForPendingUpdate);
+
+  autoUpdater.on('update-not-available', () => {
+    if (updatePhase !== 'ready') updatePhase = 'idle';
+    updateRetryIndex = 0;
+    appendStartupLog('[updater] already latest');
+    scheduleUpdateCheck(UPDATE_CHECK_PERIOD_MS);
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    const version = info && info.version ? String(info.version) : '';
+    updatePhase = 'downloading';
+    clearUpdateCheckTimer();
+    const firstAnnounce = updateAnnouncedVersion !== version;
+    if (firstAnnounce) {
+      updateAnnouncedVersion = version;
+      updateDownloadedDialogShown = false;
+      lastUpdaterProgressRounded = -1;
+    }
+    ensureUpdateProgressWindow();
+    broadcastUpdateDownloadProgress({ percent: 0 });
+    appendStartupLog(`[updater] update-available ${version}`);
+    if (!firstAnnounce) return;
+    showUpdaterMessageBox({
+      type: 'info',
+      title: '发现新版本',
+      message: `Kloud Meet ${version} 已发布，正在后台下载。进度在窗口顶部。`,
+      buttons: ['好的'],
+    })
+      .catch(() => {})
+      .finally(() => {
+        if (updatePhase === 'downloading') ensureUpdateProgressWindow();
+      });
+  });
+
+  autoUpdater.on('download-progress', (p) => {
+    updatePhase = 'downloading';
+    ensureUpdateProgressWindow();
+    broadcastUpdateDownloadProgress({ percent: pctFromUpdaterProgress(p) });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    const version = info && info.version ? String(info.version) : '';
+    updatePhase = 'ready';
+    updateInstallPending = true;
+    updateRetryIndex = 0;
+    appendStartupLog(`[updater] update-downloaded ${version}`);
+    scheduleUpdateCheck(UPDATE_CHECK_PERIOD_MS);
+    if (updateDownloadedDialogShown && updateReadyVersion === version) return;
+    updateDownloadedDialogShown = true;
+    updateReadyVersion = version;
+    acquireOverlayHide('update-ready');
+    destroyUpdateProgressWindow();
+    showUpdateReadyPrompt(version)
+      .then((install) => {
+        if (install) {
+          installDownloadedUpdate();
+          return;
+        }
+        appendStartupLog('[updater] user postponed install; will install on quit');
+      })
+      .catch((e) => {
+        appendStartupLog(`showUpdateReadyPrompt: ${e instanceof Error ? e.message : String(e)}`);
+      });
+  });
+
+  autoUpdater.on('error', (err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    appendStartupLog(`autoUpdater error: ${message}`);
+    if (isAppQuitting) return;
+    if (updatePhase === 'downloading') destroyUpdateProgressWindow();
+    if (updatePhase !== 'ready') updatePhase = 'idle';
+    const delay = nextUpdateRetryDelay();
+    appendStartupLog(`[updater] retry in ${Math.round(delay / 1000)}s`);
+    scheduleUpdateCheck(delay);
+  });
+
+  scheduleUpdateCheck(UPDATE_CHECK_FIRST_MS);
+}
+
+/** 打包版启动时清掉 HTTP 缓存，否则 Chromium 可能一直用上次的页面 */
+async function clearHttpCacheForLatestCode() {
+  const started = Date.now();
+  try {
+    await session.defaultSession.clearCache();
+    appendStartupLog(`[updater] http cache cleared in ${Date.now() - started}ms`);
+  } catch (e) {
+    appendStartupLog(
+      `[updater] clearCache failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
 /** @type {string | null} */
 let pendingDeepLink = null;
 
@@ -406,23 +699,37 @@ function parseKloudMeetDeepLink(rawUrl) {
   }
 }
 
+function getAppPageOrigin() {
+  return app.isPackaged ? REMOTE_ORIGIN : APP_ORIGIN;
+}
+
+function loadMainContents(url) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const remote = typeof url === 'string' && url.startsWith('https://');
+  const pending = remote
+    ? mainWindow.loadURL(url, { extraHeaders: REMOTE_NO_CACHE_HEADERS })
+    : mainWindow.loadURL(url);
+  pending.catch((err) => {
+    appendStartupLog(`loadURL failed ${url}: ${err instanceof Error ? err.message : String(err)}`);
+  });
+}
+
 function navigateMainToDeepLink(rawUrl) {
   const parsed = parseKloudMeetDeepLink(rawUrl);
   if (!parsed) return;
   const pathRoom = encodeURIComponent(parsed.room);
-  const target = `${APP_ORIGIN}/rooms/${pathRoom}${parsed.search}`;
+  const target = `${getAppPageOrigin()}/rooms/${pathRoom}${parsed.search}`;
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-    mainWindow.loadURL(target);
+    loadMainContents(target);
   } else {
     pendingDeepLink = rawUrl;
   }
 }
 
 function getInitialMainWindowUrl() {
-  // In packaged builds, always load the remote server directly.
-  const origin = app.isPackaged ? REMOTE_ORIGIN : APP_ORIGIN;
+  const origin = getAppPageOrigin();
 
   if (pendingDeepLink) {
     const raw = pendingDeepLink;
@@ -710,9 +1017,14 @@ function createWindows() {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
-  const syncUpdateProgressLayout = () => layoutUpdateProgressWindow();
+  const syncUpdateProgressLayout = () => {
+    layoutUpdateProgressWindow();
+    raiseUpdateProgressWindow();
+  };
   mainWindow.on('move', syncUpdateProgressLayout);
   mainWindow.on('resize', syncUpdateProgressLayout);
+  mainWindow.on('focus', syncUpdateProgressLayout);
+  mainWindow.on('restore', syncUpdateProgressLayout);
 
   mainWindow.on('close', () => {
     // 关主窗口 = 退出应用：清掉所有附属窗 + 本地 Next，避免 KloudMeet.exe 残留占 3201
@@ -738,7 +1050,7 @@ function createWindows() {
     overlayWindow = null;
   });
 
-  mainWindow.loadURL(getInitialMainWindowUrl());
+  loadMainContents(getInitialMainWindowUrl());
   overlayWindow.loadURL(`${APP_ORIGIN}/overlay.html`);
 
   mainWindow.webContents.on('did-fail-load', (_e, code, desc, url) => {
@@ -929,6 +1241,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    const cachePromise = app.isPackaged ? clearHttpCacheForLatestCode() : Promise.resolve();
     try {
       if (app.isPackaged) {
         await startPackagedNextServer();
@@ -938,6 +1251,7 @@ if (!gotLock) {
       app.quit();
       return;
     }
+    await cachePromise;
 
     registerKloudMeetProtocol();
 
@@ -949,66 +1263,8 @@ if (!gotLock) {
       return;
     }
 
-    // ── 自动更新 ──────────────────────────────────────────────
-    if (app.isPackaged) {
-      autoUpdater.logger = {
-        info:  (msg) => appendStartupLog(`[updater] ${msg}`),
-        warn:  (msg) => appendStartupLog(`[updater][warn] ${msg}`),
-        error: (msg) => appendStartupLog(`[updater][error] ${msg}`),
-      };
-
-      // NSIS 默认先差分再必要时全量，两阶段各自 0→100%，角标会像跑两遍；关差分只拉整包，进度连续（流量略增）。
-      autoUpdater.disableDifferentialDownload = true;
-
-      autoUpdater.on('update-available', (info) => {
-        updateDownloadedDialogShown = false;
-        // 立刻占住 overlay hide + 弹出进度条，避免点「好的」后全屏 overlay 盖住进度
-        ensureUpdateProgressWindow();
-        broadcastUpdateDownloadProgress({ percent: 0 });
-        appendStartupLog(`[updater] update-available ${info.version}, showing progress chip`);
-        showUpdaterMessageBox({
-          type: 'info',
-          title: '发现新版本',
-          message: `Kloud Meet ${info.version} 已发布，正在后台下载…`,
-          buttons: ['好的'],
-        }).catch(() => {});
-      });
-
-      autoUpdater.on('download-progress', (p) => {
-        ensureUpdateProgressWindow();
-        broadcastUpdateDownloadProgress({ percent: pctFromUpdaterProgress(p) });
-      });
-
-      autoUpdater.on('update-downloaded', (info) => {
-        if (updateDownloadedDialogShown) return;
-        updateDownloadedDialogShown = true;
-        // 先占住 update-ready，再关进度条，避免 overlay 中间闪一下
-        acquireOverlayHide('update-ready');
-        destroyUpdateProgressWindow();
-        appendStartupLog(`[updater] update-downloaded ${info.version}, opening install prompt`);
-        showUpdateReadyPrompt(info.version)
-          .then((install) => {
-            if (install) {
-              try {
-                autoUpdater.quitAndInstall();
-              } catch (e) {
-                appendStartupLog(`quitAndInstall: ${e instanceof Error ? e.message : String(e)}`);
-              }
-            }
-          })
-          .catch((e) => {
-            appendStartupLog(`showUpdateReadyPrompt: ${e instanceof Error ? e.message : String(e)}`);
-          });
-      });
-
-      autoUpdater.on('error', (err) => {
-        appendStartupLog(`autoUpdater error: ${err.message}`);
-        destroyUpdateProgressWindow();
-      });
-
-      // 启动后延迟 5 秒检查，避免影响启动速度
-      setTimeout(() => autoUpdater.checkForUpdates(), 5000);
-    }
+    // ── 自动更新（仅打包版；开发模式连本地 Next，不查安装包） ──
+    setupAutoUpdater();
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindows();
@@ -1022,6 +1278,7 @@ process.on('uncaughtException', (err) => {
 
 app.on('before-quit', () => {
   isAppQuitting = true;
+  clearUpdateCheckTimer();
   destroyAllAuxiliaryWindows();
   killNextServerProcess();
 });
