@@ -35,8 +35,9 @@ export async function POST(request: NextRequest) {
 
     let event;
     try {
-      // livekit-server-sdk receiver verifies the signature and parses the event payload
-      event = await receiver.receive(body, authHeader, true);
+      // Verifies the JWT signature (LIVEKIT_API_KEY/SECRET) and the body hash before parsing.
+      // Never pass skipAuth: attendance and recording state are derived from these events.
+      event = await receiver.receive(body, authHeader);
     } catch (err: unknown) {
       console.error('[webhooks livekit] signature validation failed', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
