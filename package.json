@@ -93,11 +93,33 @@
     },
     "mac": {
       "icon": "build/icon.png",
+      "category": "public.app-category.business",
       "target": [
-        "dmg",
-        "zip"
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
+        }
       ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "x64ArchFiles": "**/node_modules/@nut-tree-fork/**",
+      "notarize": true,
+      "extendInfo": {
+        "NSCameraUsageDescription": "Kloud Meet uses your camera so others in the meeting can see you.",
+        "NSMicrophoneUsageDescription": "Kloud Meet uses your microphone so others in the meeting can hear you.",
+        "NSAppleEventsUsageDescription": "Kloud Meet needs this to let a meeting host control your screen when you approve a remote-control request."
+      }
     },
     "files": [
       "main.js",

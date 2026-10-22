@@ -174,6 +174,28 @@ if (!fs.existsSync(iconIcoSrc) && !fs.existsSync(iconPngSrc)) {
   console.warn('prepare-electron-app: 未找到 build/icon.ico 或 build/icon.png，安装包将使用默认图标');
 }
 
+if (isMacBuild) {
+  // 签名 / 公证用的 hardened-runtime entitlements（仓库内 electron/ 目录，/build 被 gitignore）
+  const entitlementsSrc = path.join(root, 'electron', 'entitlements.mac.plist');
+  if (!fs.existsSync(entitlementsSrc)) {
+    console.error('prepare-electron-app: 缺少 electron/entitlements.mac.plist');
+    process.exit(1);
+  }
+  fs.copyFileSync(entitlementsSrc, path.join(iconDestDir, 'entitlements.mac.plist'));
+
+  // macOS 图标至少 512×512；本机没有 build/icon.png 时用仓库里的桌面图标放大顶上
+  if (!fs.existsSync(iconPngSrc)) {
+    const fallback = path.join(root, 'public', 'images', 'kloud-meet-desktop-icon.png');
+    const dest = path.join(iconDestDir, 'icon.png');
+    try {
+      require('child_process').execFileSync('sips', ['-z', '1024', '1024', fallback, '--out', dest], { stdio: 'ignore' });
+      console.warn('prepare-electron-app: 未找到 build/icon.png，Mac 包临时使用放大的 public/images/kloud-meet-desktop-icon.png（建议提供 1024×1024 原图）');
+    } catch {
+      console.warn('prepare-electron-app: 无法生成 Mac 图标，安装包将使用默认图标');
+    }
+  }
+}
+
 const slimDeps = {};
 for (const name of ENTRY_DEPS) {
   const ver = rootPkg.dependencies?.[name] || rootPkg.devDependencies?.[name];
