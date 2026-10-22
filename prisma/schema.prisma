@@ -347,6 +347,8 @@ model TeamMember {
   lastName            String?
   biography           String?
   personalRoomId      String?                @unique(map: "TeamMember_personalRoomId_key")
+  /// Secret for the private calendar subscription feed; null = feed disabled (prisma/add_calendar_feed.sql)
+  calendarFeedToken   String?                @unique(map: "TeamMember_calendarFeedToken_key") @db.VarChar(64)
   avatarUrl           String?
   emailVerified       Boolean                @default(false)
   emailVerifiedAt     DateTime?

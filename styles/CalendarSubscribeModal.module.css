@@ -1,0 +1,234 @@
+/* Calendar subscription dialog — --km-* tokens (styles/tokens.css), matches ScheduleMeetingModal. */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 72px 16px 16px;
+  overflow-y: auto;
+  background: var(--km-scrim);
+}
+
+.modal {
+  width: 100%;
+  max-width: 560px;
+  border-radius: var(--km-radius-xl);
+  background: var(--km-surface);
+  color: var(--km-text);
+  box-shadow: var(--km-shadow);
+  font-family: var(--km-font);
+}
+
+.modal *,
+.modal *::before,
+.modal *::after {
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 12px 4px 24px;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--km-text-muted);
+  cursor: pointer;
+}
+
+.iconBtn:hover {
+  background: var(--km-hover);
+  color: var(--km-text);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 24px 24px;
+}
+
+.desc,
+.hint,
+.warning {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--km-text-muted);
+}
+
+.hint {
+  font-size: 13px;
+}
+
+.warning {
+  padding: 10px 12px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-warning-bg);
+  color: var(--km-text);
+  font-size: 13px;
+}
+
+.error {
+  padding: 10px 12px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-danger-bg);
+  color: var(--km-danger-text);
+  font-size: 14px;
+}
+
+.skeleton {
+  height: 44px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-hover);
+}
+
+.fieldLabel {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.urlRow {
+  display: flex;
+  gap: 8px;
+}
+
+.urlInput {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-sm);
+  background: var(--km-bg-subtle);
+  color: var(--km-text);
+  font: 13px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.urlInput:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.copied {
+  min-height: 16px;
+  margin-top: -6px;
+  font-size: 12px;
+  color: var(--km-success);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--km-border);
+}
+
+.btnSolid,
+.btnOutline,
+.btnText,
+.btnDanger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--km-radius-pill);
+  font: 700 14px/1 var(--km-font);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.btnSolid {
+  border: 0;
+  background: var(--km-primary);
+  color: var(--km-on-primary);
+}
+
+.btnSolid:hover:not(:disabled) {
+  background: var(--km-primary-hover);
+}
+
+.btnOutline {
+  border: 1px solid var(--km-border);
+  background: transparent;
+  color: var(--km-text);
+}
+
+.btnText {
+  border: 0;
+  background: transparent;
+  color: var(--km-text);
+}
+
+.btnDanger {
+  border: 0;
+  background: transparent;
+  color: var(--km-danger-text);
+}
+
+.btnOutline:hover:not(:disabled),
+.btnText:hover:not(:disabled) {
+  background: var(--km-hover);
+}
+
+.btnDanger:hover:not(:disabled) {
+  background: var(--km-danger-bg);
+}
+
+.btnSolid:disabled,
+.btnText:disabled,
+.btnDanger:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnSolid:focus-visible,
+.btnOutline:focus-visible,
+.btnText:focus-visible,
+.btnDanger:focus-visible,
+.iconBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+@media (max-width: 480px) {
+  .overlay {
+    padding-top: 24px;
+  }
+  .actions > * {
+    flex: 1 1 100%;
+  }
+}

@@ -21,6 +21,32 @@ export function getTimezoneOffsetMinutes(timezone: string, date: Date): number {
   }
 }
 
+/** UTC instant → wall-clock { date: YYYY-MM-DD, time: HH:mm } in `timezone` (for form inputs). */
+export function toDateAndTimeInTimezone(input: Date, timezone: string): { date: string; time: string } {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(input);
+    const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+    return {
+      date: `${map.year}-${map.month}-${map.day}`,
+      time: `${map.hour}:${map.minute}`,
+    };
+  } catch {
+    const iso = input.toISOString();
+    return {
+      date: iso.split('T')[0],
+      time: `${String(input.getHours()).padStart(2, '0')}:${String(input.getMinutes()).padStart(2, '0')}`,
+    };
+  }
+}
+
 /**
  * Wall-clock `date` (YYYY-MM-DD) + `time` (HH:mm) in `timezone` → UTC ISO string.
  * Iterates twice so the offset is taken at the target instant (handles DST edges).

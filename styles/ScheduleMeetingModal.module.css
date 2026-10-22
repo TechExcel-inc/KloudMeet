@@ -731,6 +731,90 @@
   }
 }
 
+/* ───────────── Saved step: add to calendar ───────────── */
+.savedPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-left: 12px;
+}
+
+.savedBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 6px;
+  border-radius: 50%;
+  background: var(--km-success-bg);
+  color: var(--km-success);
+}
+
+.savedMeetingTitle {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--km-text);
+  overflow-wrap: anywhere;
+}
+
+.savedMeetingWhen {
+  font-size: 14px;
+  color: var(--km-text-muted);
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  margin: 4px 0 6px;
+}
+
+.calendarOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-md);
+  background: transparent;
+  color: var(--km-text);
+  font: 600 14px/1.3 var(--km-font);
+  text-decoration: none;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.calendarOption svg {
+  flex: none;
+  color: var(--km-primary);
+}
+
+.calendarOption:hover {
+  background: var(--km-hover);
+}
+
+.calendarOption:focus-visible,
+a.menuItem:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+a.menuItem {
+  text-decoration: none;
+}
+
+@media (max-width: 640px) {
+  .calendarGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .savedPanel {
+    padding-left: 0;
+  }
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }

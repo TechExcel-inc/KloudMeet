@@ -11,7 +11,7 @@ import {
   meetingTimes,
   type CalendarMeeting,
 } from './ics';
-import { zonedDateTimeToUtcIso } from './timezone';
+import { toDateAndTimeInTimezone, zonedDateTimeToUtcIso } from './timezone';
 
 const JOIN = 'https://meet.example.com/rooms/abc-123';
 const NOW = new Date('2026-10-23T08:00:00Z');
@@ -100,6 +100,17 @@ describe('time conversion', () => {
     expect(zonedDateTimeToUtcIso('2026-10-23', '20:00', 'UTC')).toBe('2026-10-23T20:00:00.000Z');
   });
 
+  it('round-trips UTC instants back to wall-clock time in the zone', () => {
+    expect(toDateAndTimeInTimezone(new Date('2026-11-02T14:00:00Z'), 'America/New_York')).toEqual({
+      date: '2026-11-02',
+      time: '09:00',
+    });
+    expect(toDateAndTimeInTimezone(new Date('2026-10-23T16:30:00Z'), 'Asia/Shanghai')).toEqual({
+      date: '2026-10-24',
+      time: '00:30',
+    });
+  });
+
   it('writes DTSTART/DTEND in UTC regardless of the meeting time zone', () => {
     const lines = unfold(buildMeetingIcs(base, { joinUrl: JOIN, now: NOW }));
     expect(lines).toContain('DTSTART:20261102T140000Z');
@@ -184,7 +195,7 @@ describe('buildCalendarDocument', () => {
     expect(lines).toContain('X-WR-CALNAME:Kloud Meet\\, Ada');
     expect(lines).toContain('REFRESH-INTERVAL;VALUE=DURATION:PT60M');
     expect(lines.filter((l) => l === 'BEGIN:VEVENT')).toHaveLength(2);
-    expect(lines.at(-2)).toBe('END:VCALENDAR');
+    expect(lines[lines.length - 2]).toBe('END:VCALENDAR');
   });
 });
 

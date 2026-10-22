@@ -3,6 +3,18 @@ import { generateRoomId } from '@/lib/client-utils';
 import { authFetch, authHeaders } from '@/lib/kloudSession';
 import styles from '../styles/ScheduleMeetingModal.module.css';
 import { useI18n } from './i18n';
+import {
+  getTimezoneOffsetMinutes,
+  toDateAndTimeInTimezone,
+  zonedDateTimeToUtcIso,
+} from '@/lib/calendar/timezone';
+import {
+  calendarMenuItems,
+  inviteCalendarLines,
+  isCalendarEligible,
+  toCalendarMeetingFromClient,
+  type CalendarMenuItem,
+} from '@/lib/calendar/menu';
 
 /** Email / AI assistant / linked-event tabs are enterprise features with no purchase path yet. */
 const SHOW_ENTERPRISE_TABS = false;
@@ -45,73 +57,6 @@ function getUserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-function getTimezoneOffsetMinutes(timezone: string, date: Date): number {
-  try {
-    const parts = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      timeZoneName: 'longOffset',
-      year: 'numeric',
-    }).formatToParts(date);
-    const offsetPart = parts.find((part) => part.type === 'timeZoneName')?.value || 'GMT+00:00';
-    if (offsetPart === 'GMT') return 0;
-    const match = offsetPart.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
-    if (!match) return 0;
-    const sign = match[1] === '-' ? -1 : 1;
-    const hours = Number(match[2] || 0);
-    const minutes = Number(match[3] || 0);
-    return sign * (hours * 60 + minutes);
-  } catch {
-    return 0;
-  }
-}
-
-function toDateAndTimeInTimezone(input: Date, timezone: string): { date: string; time: string } {
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).formatToParts(input);
-    const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
-    return {
-      date: `${map.year}-${map.month}-${map.day}`,
-      time: `${map.hour}:${map.minute}`,
-    };
-  } catch {
-    const iso = input.toISOString();
-    return {
-      date: iso.split('T')[0],
-      time: `${String(input.getHours()).padStart(2, '0')}:${String(input.getMinutes()).padStart(2, '0')}`,
-    };
-  }
-}
-
-function zonedDateTimeToUtcIso(date: string, time: string, timezone: string): string {
-  const match = date.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  const timeMatch = time.match(/^(\d{2}):(\d{2})$/);
-  if (!match || !timeMatch) return new Date(`${date}T${time}:00`).toISOString();
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const hour = Number(timeMatch[1]);
-  const minute = Number(timeMatch[2]);
-
-  const localAsUtc = Date.UTC(year, month - 1, day, hour, minute, 0);
-  let timestamp = localAsUtc;
-
-  for (let i = 0; i < 2; i += 1) {
-    const offsetMinutes = getTimezoneOffsetMinutes(timezone, new Date(timestamp));
-    timestamp = localAsUtc - offsetMinutes * 60_000;
-  }
-
-  return new Date(timestamp).toISOString();
-}
-
 function formatTimezoneLabel(timezone: string): string {
   const offset = getTimezoneOffsetMinutes(timezone, new Date());
   const sign = offset >= 0 ? '+' : '-';
@@ -146,6 +91,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
   const [showInviteMenu, setShowInviteMenu] = useState(false);
   const inviteMenuRef = useRef<HTMLDivElement | null>(null);
+  const [showCalendarMenu, setShowCalendarMenu] = useState(false);
+  const calendarMenuRef = useRef<HTMLDivElement | null>(null);
+  /** Set after a successful create/update: the dialog switches to the "add to calendar" step. */
+  const [savedMeeting, setSavedMeeting] = useState<any>(null);
+  const [savedKind, setSavedKind] = useState<'created' | 'updated'>('created');
 
   const [title, setTitle] = useState(existingMeeting?.title || `${user?.displayName || 'User'}'s Meeting`);
   const [description, setDescription] = useState(existingMeeting?.description || '');
@@ -197,48 +147,81 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   );
 
   useEffect(() => {
-    if (!showInviteMenu) return;
+    if (!showInviteMenu && !showCalendarMenu) return;
     const handleOutside = (event: MouseEvent) => {
       if (!inviteMenuRef.current?.contains(event.target as Node)) {
         setShowInviteMenu(false);
       }
+      if (!calendarMenuRef.current?.contains(event.target as Node)) {
+        setShowCalendarMenu(false);
+      }
+    };
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowInviteMenu(false);
+        setShowCalendarMenu(false);
+      }
     };
     document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
-  }, [showInviteMenu]);
+    document.addEventListener('keydown', handleKey);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleKey);
+    };
+  }, [showInviteMenu, showCalendarMenu]);
 
-  const copyMeetingLink = async () => {
-    if (!existingMeeting?.roomName) return;
-    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
+  const hostDisplayName = (meeting: any): string =>
+    meeting?.createdByMember?.fullName ||
+    meeting?.createdByMember?.username ||
+    user?.displayName ||
+    user?.username ||
+    'Host';
+
+  /** Calendar data for a persisted meeting (the .ics endpoint serves the same values). */
+  const calendarItemsFor = (meeting: any): CalendarMenuItem[] =>
+    isCalendarEligible(meeting)
+      ? calendarMenuItems(
+          toCalendarMeetingFromClient(meeting, { hostName: hostDisplayName(meeting) }),
+          window.location.origin,
+          t,
+        )
+      : [];
+
+  const copyMeetingLink = async (meeting: any = existingMeeting) => {
+    if (!meeting?.roomName) return;
+    const url = `${window.location.origin}/rooms/${meeting.roomName}`;
     await navigator.clipboard.writeText(url);
     setShowInviteMenu(false);
     alert(t('schedule.linkCopied'));
   };
 
-  const copyMeetingInvite = async () => {
-    if (!existingMeeting?.roomName) return;
-    const url = `${window.location.origin}/rooms/${existingMeeting.roomName}`;
-    const hostName =
-      existingMeeting?.createdByMember?.fullName ||
-      existingMeeting?.createdByMember?.username ||
-      user?.displayName ||
-      user?.username ||
-      'Host';
-    const timezoneLabel = formatTimezoneLabel(timezone || existingMeeting?.timezone || getUserTimezone());
+  const copyMeetingInvite = async (meeting: any = existingMeeting) => {
+    if (!meeting?.roomName) return;
+    const url = `${window.location.origin}/rooms/${meeting.roomName}`;
+    const hostName = hostDisplayName(meeting);
+    const timezoneLabel = formatTimezoneLabel(timezone || meeting?.timezone || getUserTimezone());
     const scheduledForForInvite = date && time
-      ? zonedDateTimeToUtcIso(date, time, timezone || existingMeeting?.timezone || getUserTimezone())
-      : existingMeeting?.scheduledFor;
+      ? zonedDateTimeToUtcIso(date, time, timezone || meeting?.timezone || getUserTimezone())
+      : meeting?.scheduledFor;
+    const calendarLines = isCalendarEligible(meeting)
+      ? inviteCalendarLines(
+          toCalendarMeetingFromClient(meeting, { hostName }),
+          window.location.origin,
+          t,
+        )
+      : [];
     const inviteText = [
       `You are invited to a Kloud Meeting`,
       '',
-      `${existingMeeting.title || 'Untitled Meeting'}`,
+      `${meeting.title || 'Untitled Meeting'}`,
       `Host: ${hostName}`,
-      `When: ${formatInviteDateTime(scheduledForForInvite, timezone || existingMeeting?.timezone)}`,
+      `When: ${formatInviteDateTime(scheduledForForInvite, timezone || meeting?.timezone)}`,
       `Time Zone: ${timezoneLabel}`,
-      existingMeeting.durationMinutes ? `Duration: ${existingMeeting.durationMinutes} minutes` : '',
+      meeting.durationMinutes ? `Duration: ${meeting.durationMinutes} minutes` : '',
       description ? `Description: ${description}` : '',
-      `Meeting ID: ${existingMeeting.roomName}`,
+      `Meeting ID: ${meeting.roomName}`,
       `Join meeting: ${url}`,
+      ...calendarLines,
       '',
       'Please join a few minutes early to test your audio and video setup.',
     ]
@@ -318,8 +301,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         return;
       }
 
+      let saved: any = null;
       if (existingMeeting?.roomName) {
-        await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
+        const res = await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
           method: 'PUT',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
@@ -330,8 +314,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             timezone,
           }),
         });
+        if (!res.ok) throw new Error(`Update failed (${res.status})`);
+        const data = await res.json().catch(() => null);
+        saved = { ...existingMeeting, ...(data?.meeting ?? {}) };
       } else {
-        await authFetch('/api/meetings', {
+        const res = await authFetch('/api/meetings', {
           method: 'POST',
           headers: authHeaders({ 'Content-Type': 'application/json' }),
           body: JSON.stringify({
@@ -344,8 +331,16 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             status: 'ACTIVE'
           }),
         });
+        if (!res.ok) throw new Error(`Create failed (${res.status})`);
+        saved = await res.json().catch(() => null);
       }
-      onSave(); 
+      if (saved?.roomName && isCalendarEligible(saved)) {
+        // Stay open on an "add to calendar" step; Done/close then refreshes the list.
+        setSavedKind(existingMeeting?.roomName ? 'updated' : 'created');
+        setSavedMeeting(saved);
+        return;
+      }
+      onSave();
     } catch (error) {
       console.error('Failed to schedule meeting', error);
       alert(t('schedule.scheduleFailed'));
@@ -368,7 +363,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             <button
               type="button"
               className={styles.iconBtn}
-              onClick={onClose}
+              onClick={savedMeeting ? onSave : onClose}
               disabled={isSaving}
               aria-label={t('common.close')}
               title={t('common.close')}
@@ -378,14 +373,77 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </svg>
             </button>
             <h2 id="kloud-schedule-meeting-title" className={styles.title}>
-              {existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}
+              {savedMeeting
+                ? savedKind === 'updated'
+                  ? t('calendar.updatedTitle')
+                  : t('calendar.scheduledTitle')
+                : existingMeeting
+                  ? t('schedule.editMeeting')
+                  : t('schedule.newMeeting')}
             </h2>
+            {savedMeeting ? (
             <div className={styles.headerActions}>
+              <button type="button" className={styles.btnOutline} onClick={() => copyMeetingInvite(savedMeeting)}>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                  <rect x="9" y="9" width="11" height="11" rx="2" />
+                  <path d="M5 15V5a2 2 0 012-2h10" />
+                </svg>
+                <span className={styles.hideNarrow}>{t('schedule.copyInvite')}</span>
+              </button>
+              <button type="button" className={styles.btnSolid} onClick={onSave}>
+                {t('calendar.done')}
+              </button>
+            </div>
+            ) : (
+            <div className={styles.headerActions}>
+              {existingMeeting && calendarItemsFor(existingMeeting).length > 0 && (
+                <div ref={calendarMenuRef} className={styles.menuAnchor}>
+                  <button
+                    className={styles.btnOutline}
+                    onClick={() => {
+                      setShowInviteMenu(false);
+                      setShowCalendarMenu((prev) => !prev);
+                    }}
+                    type="button"
+                    aria-haspopup="menu"
+                    aria-expanded={showCalendarMenu}
+                    aria-label={t('calendar.addToCalendar')}
+                    title={t('calendar.addToCalendar')}
+                  >
+                    <CalendarGlyph size={16} />
+                    <span className={styles.hideNarrow}>{t('calendar.addToCalendar')}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {showCalendarMenu && (
+                    <div className={styles.menu} role="menu">
+                      {calendarItemsFor(existingMeeting).map((item) => (
+                        <a
+                          key={item.key}
+                          role="menuitem"
+                          className={styles.menuItem}
+                          href={item.href}
+                          {...(item.download
+                            ? { download: true }
+                            : { target: '_blank', rel: 'noopener noreferrer' })}
+                          onClick={() => setShowCalendarMenu(false)}
+                        >
+                          {item.label}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {existingMeeting && !isCanceled && (
                 <div ref={inviteMenuRef} className={styles.menuAnchor}>
                   <button
                     className={styles.btnOutline}
-                    onClick={() => setShowInviteMenu((prev) => !prev)}
+                    onClick={() => {
+                      setShowCalendarMenu(false);
+                      setShowInviteMenu((prev) => !prev);
+                    }}
                     type="button"
                     aria-haspopup="menu"
                     aria-expanded={showInviteMenu}
@@ -402,10 +460,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   </button>
                   {showInviteMenu && (
                     <div className={styles.menu} role="menu">
-                      <button type="button" role="menuitem" className={styles.menuItem} onClick={copyMeetingLink}>
+                      <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingLink()}>
                         {t('schedule.copyLink')}
                       </button>
-                      <button type="button" role="menuitem" className={styles.menuItem} onClick={copyMeetingInvite}>
+                      <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingInvite()}>
                         {t('schedule.copyInvite')}
                       </button>
                     </div>
@@ -416,10 +474,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 {isSaving ? t('common.saving') : t('common.save')}
               </button>
             </div>
+            )}
           </div>
           
           {/* Tabs — enterprise tabs stay hidden until there is a paid plan to upgrade to. */}
-          {SHOW_ENTERPRISE_TABS && (
+          {SHOW_ENTERPRISE_TABS && !savedMeeting && (
           <div className={styles.tabContainer}>
             <button 
               className={activeTab === 'general' ? styles.tabActive : styles.tab} 
@@ -449,8 +508,43 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           )}
 
           <div className={styles.bodyScroll}>
+          {/* After save: offer to put the meeting on the user's calendar. */}
+          {savedMeeting && (
+            <div className={styles.content}>
+              <div className={styles.savedPanel}>
+                <span className={styles.savedBadge} aria-hidden="true">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
+                </span>
+                <div className={styles.savedMeetingTitle}>{savedMeeting.title || 'Untitled Meeting'}</div>
+                <div className={styles.savedMeetingWhen}>
+                  {formatInviteDateTime(savedMeeting.scheduledFor, savedMeeting.timezone || undefined)}
+                </div>
+                <div className={styles.sectionLabel}>{t('calendar.addToCalendar')}</div>
+                <div className={styles.calendarGrid}>
+                  {calendarItemsFor(savedMeeting).map((item) => (
+                    <a
+                      key={item.key}
+                      className={styles.calendarOption}
+                      href={item.href}
+                      {...(item.download
+                        ? { download: true }
+                        : { target: '_blank', rel: 'noopener noreferrer' })}
+                    >
+                      {item.download ? <DownloadGlyph size={18} /> : <CalendarGlyph size={18} />}
+                      {item.label}
+                    </a>
+                  ))}
+                </div>
+                <p className={styles.hint}>
+                  {savedKind === 'updated' ? t('calendar.updatedHint') : t('calendar.savedHint')}
+                </p>
+              </div>
+            </div>
+          )}
           {/* Tab Content: General Information */}
-          {activeTab === 'general' && (
+          {!savedMeeting && activeTab === 'general' && (
             <div className={styles.content}>
               {/* Title */}
               <div className={styles.row}>
@@ -678,7 +772,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           )}
 
           {/* Tab Content: Automated Emails */}
-          {activeTab === 'emails' && (
+          {!savedMeeting && activeTab === 'emails' && (
             <div className={styles.content}>
               <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '0.5rem', fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
@@ -749,7 +843,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           )}
 
           {/* Tab Content: AI Assistant */}
-          {activeTab === 'ai' && (
+          {!savedMeeting && activeTab === 'ai' && (
             <div className={styles.content}>
               <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
@@ -811,7 +905,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           )}
 
           {/* Tab Content: Linked Event */}
-          {activeTab === 'linked' && (
+          {!savedMeeting && activeTab === 'linked' && (
             <div className={styles.content} style={{ minHeight: '300px', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
               <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.5rem 1rem', borderRadius: '8px', marginBottom: '2rem', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
@@ -867,6 +961,23 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         />
       )}
     </>
+  );
+}
+
+function CalendarGlyph({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </svg>
+  );
+}
+
+function DownloadGlyph({ size }: { size: number }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+      <path d="M12 4v11M7 10.5l5 5 5-5M5 20h14" />
+    </svg>
   );
 }
 
