@@ -1751,6 +1751,7 @@ export function KloudMeetToolbar({
         onAction={liveDocAiBridge.sendAction}
         onOpenDocument={handleLiveDocDocumentOpen}
         livekitToken={livekitToken}
+        canManage={canRecord}
       />
 
       {!visible && !syncPlayerActive && (

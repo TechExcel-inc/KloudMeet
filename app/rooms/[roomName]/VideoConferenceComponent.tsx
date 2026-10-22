@@ -4416,6 +4416,8 @@ export function VideoConferenceComponent(props: {
   /** 浮窗拖拽中：供 LiveDoc postMessage 守卫使用（须早于 message effect） */
   const isDragging = React.useRef(false);
   const clearFloatingDragListenersRef = React.useRef<() => void>(() => {});
+  /** LiveDoc 当前文件是否为 Excalidraw 白板（来自 iframe 的 onkloudswitchfile.IsWhiteboard） */
+  const [isWhiteboardDoc, setIsWhiteboardDoc] = React.useState(false);
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   // 不再根据 FilePanelVisibleChange 挪动 floating-webcam-panel（右侧已是居中弹窗）
@@ -4427,6 +4429,9 @@ export function VideoConferenceComponent(props: {
         setShowWebcamSidebar(true);
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
+      } else if (data.type === 'onkloudswitchfile') {
+        const file = (e.data as { data?: { IsWhiteboard?: unknown } }).data;
+        setIsWhiteboardDoc(file?.IsWhiteboard === true);
       } else if (data.type === 'onkloudloaded') {
         // ② 文档加载完成：再释放一次，并恢复 iframe 可点
         clearFloatingDragListenersRef.current();
@@ -6615,7 +6620,8 @@ export function VideoConferenceComponent(props: {
                   : webcamLayoutMode === 'spotlight'
                     ? t('toolbar.webcamSpotlight')
                     : t('toolbar.webcamTile');
-            if (!isRecording && !captionsRunning && !viewChipLabel) return null;
+            const showWhiteboardChip = activeView === 'liveDoc' && isWhiteboardDoc;
+            if (!isRecording && !captionsRunning && !viewChipLabel && !showWhiteboardChip) return null;
             const chipsLeft =
               hasScreenShare && activeView !== 'liveDoc' && !isWebcamSidebarCollapsed && !screenShareActive
                 ? 164
@@ -6632,6 +6638,9 @@ export function VideoConferenceComponent(props: {
                 )}
                 {captionsRunning && (
                   <span className="kloud-stage-chip kloud-stage-chip--stt">{t('toolbar.captionsOn')}</span>
+                )}
+                {showWhiteboardChip && (
+                  <span className="kloud-stage-chip kloud-stage-chip--view">{t('liveDocAi.whiteboard')}</span>
                 )}
                 <span className="kloud-stage-chips-spacer" />
                 {viewChipLabel && (

@@ -828,5 +828,8 @@
   "dash.greeting.afternoon": "Good afternoon, {name}",
   "dash.greeting.evening": "Good evening, {name}",
   "dash.prevPage": "Previous page",
-  "dash.nextPage": "Next page"
+  "dash.nextPage": "Next page",
+  "liveDocAi.readOnlyNotice": "Only the host or a co-host can change documents or generate the summary. You can still read the documents list, summary and transcript.",
+  "liveDocAi.whiteboard": "Whiteboard",
+  "liveDocAi.newWhiteboard": "New whiteboard"
 }

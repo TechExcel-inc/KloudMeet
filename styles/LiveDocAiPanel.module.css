@@ -204,6 +204,16 @@
   font-size: 13px;
 }
 
+.readOnlyNotice {
+  margin: 4px 16px 8px;
+  padding: 10px 14px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(139, 135, 255, 0.14);
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .error span {
   flex: 1;
 }

@@ -37,6 +37,11 @@ interface LiveDocAiPanelProps {
   onOpenDocument: (itemId: number) => void;
   /** LiveKit participant JWT，用于拉取本场聊天 */
   livekitToken?: string;
+  /**
+   * LiveDoc 只接受主持人 / 联席主持人（role 5）的 AI 操作；其他人只读：
+   * 可看文档列表、摘要、转写，不显示上传、删除、切换、生成等操作。
+   */
+  canManage?: boolean;
 }
 
 interface MeetingCaption {
@@ -503,6 +508,7 @@ export function LiveDocAiPanel({
   onAction,
   onOpenDocument,
   livekitToken = '',
+  canManage = true,
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
@@ -622,6 +628,7 @@ export function LiveDocAiPanel({
   }, [open]);
 
   const requestOpenDocument = (itemId: number) => {
+    if (!canManage) return;
     if (isLiveDocView) {
       onOpenDocument(itemId);
       return;
@@ -828,6 +835,12 @@ export function LiveDocAiPanel({
           </div>
         )}
 
+        {!canManage && (
+          <div className={styles.readOnlyNotice} role="note">
+            {t('liveDocAi.readOnlyNotice')}
+          </div>
+        )}
+
         {activeTab === 'transcript' ? (
           <main className={styles.body}>
             <div className={styles.transcriptTab}>
@@ -958,11 +971,14 @@ export function LiveDocAiPanel({
                         />
                       </span>
                       <span className={styles.documentName}>{item.title}</span>
-                      <span className={item.isCurrent ? styles.viewing : styles.viewAction}>
-                        {item.isCurrent
-                          ? t('liveDocAi.currentlyViewing')
-                          : t('liveDocAi.viewLiveDoc')}
-                      </span>
+                      {(item.isCurrent || canManage) && (
+                        <span className={item.isCurrent ? styles.viewing : styles.viewAction}>
+                          {item.isCurrent
+                            ? t('liveDocAi.currentlyViewing')
+                            : t('liveDocAi.viewLiveDoc')}
+                        </span>
+                      )}
+                      {canManage && (
                       <div className={styles.menuAnchor}>
                         <button
                           ref={(node) => {
@@ -984,6 +1000,7 @@ export function LiveDocAiPanel({
                           •••
                         </button>
                       </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1001,6 +1018,7 @@ export function LiveDocAiPanel({
                       </span>
                     </div>
                   )}
+                  {canManage && (
                   <div className={styles.footerActions}>
                     <label className={styles.annotation}>
                       <input
@@ -1031,6 +1049,14 @@ export function LiveDocAiPanel({
                       <button type="button" disabled={busy} onClick={() => openPicker('space')}>
                         {t('liveDocAi.uploadFromSpace')}
                       </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => runAction('document.addBlank')}
+                        title={t('liveDocAi.newWhiteboard')}
+                      >
+                        {t('liveDocAi.whiteboard')}
+                      </button>
                       <div className={styles.menuAnchor}>
                         <button
                           ref={uploadMenuBtnRef}
@@ -1049,6 +1075,7 @@ export function LiveDocAiPanel({
                       </div>
                     </div>
                   </div>
+                  )}
                 </footer>
               </div>
             )}
@@ -1106,9 +1133,11 @@ export function LiveDocAiPanel({
                   ) : (
                     <div className={styles.empty}>
                       <span>{t('liveDocAi.noSummary')}</span>
-                      <button type="button" onClick={() => setSummaryOptionsOpen(true)}>
-                        {t('liveDocAi.generateNow')}
-                      </button>
+                      {canManage && (
+                        <button type="button" onClick={() => setSummaryOptionsOpen(true)}>
+                          {t('liveDocAi.generateNow')}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1267,7 +1296,7 @@ export function LiveDocAiPanel({
               runAction('document.addBlank');
             }}
           >
-            {t('liveDocAi.uploadBlankPage')}
+            {t('liveDocAi.newWhiteboard')}
           </button>
           <button
             type="button"
@@ -1286,15 +1315,17 @@ export function LiveDocAiPanel({
           anchorRef={summaryMenuBtnRef}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            onClick={() => {
-              setSummaryMenuOpen(false);
-              setSummaryOptionsOpen(true);
-            }}
-          >
-            {t('liveDocAi.regenerateSummary')}
-          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => {
+                setSummaryMenuOpen(false);
+                setSummaryOptionsOpen(true);
+              }}
+            >
+              {t('liveDocAi.regenerateSummary')}
+            </button>
+          )}
           <button type="button" onClick={copySummary}>
             {t('liveDocAi.copy')}
           </button>

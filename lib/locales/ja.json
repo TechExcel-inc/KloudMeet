@@ -807,5 +807,8 @@
   "dash.greeting.afternoon": "こんにちは、{name} さん",
   "dash.greeting.evening": "こんばんは、{name} さん",
   "dash.prevPage": "前のページ",
-  "dash.nextPage": "次のページ"
+  "dash.nextPage": "次のページ",
+  "liveDocAi.readOnlyNotice": "ドキュメントの変更や要約の生成はホストまたは共同ホストのみ行えます。ドキュメント一覧、要約、文字起こしは閲覧できます。",
+  "liveDocAi.whiteboard": "ホワイトボード",
+  "liveDocAi.newWhiteboard": "新しいホワイトボード"
 }

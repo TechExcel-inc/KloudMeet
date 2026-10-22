@@ -80,10 +80,14 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
     },
   ];
 
+  // Must match lib/KeyboardShortcuts.tsx (Cmd/Ctrl + Shift + A / V); screen share has no shortcut.
+  const mod =
+    typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)
+      ? '⌘'
+      : 'Ctrl';
   const shortcuts = [
-    { keys: ['M'], description: t('help.shortcutMic') },
-    { keys: ['V'], description: t('help.shortcutCam') },
-    { keys: ['S'], description: t('help.shortcutShare') },
+    { keys: [mod, 'Shift', 'A'], description: t('help.shortcutMic') },
+    { keys: [mod, 'Shift', 'V'], description: t('help.shortcutCam') },
     { keys: ['Esc'], description: t('help.shortcutEsc') },
   ];
 

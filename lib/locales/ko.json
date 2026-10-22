@@ -807,5 +807,8 @@
   "dash.greeting.afternoon": "좋은 오후예요, {name}님",
   "dash.greeting.evening": "좋은 저녁이에요, {name}님",
   "dash.prevPage": "이전 페이지",
-  "dash.nextPage": "다음 페이지"
+  "dash.nextPage": "다음 페이지",
+  "liveDocAi.readOnlyNotice": "문서 변경과 요약 생성은 호스트 또는 공동 호스트만 할 수 있습니다. 문서 목록, 요약, 대본은 계속 볼 수 있습니다.",
+  "liveDocAi.whiteboard": "화이트보드",
+  "liveDocAi.newWhiteboard": "새 화이트보드"
 }
