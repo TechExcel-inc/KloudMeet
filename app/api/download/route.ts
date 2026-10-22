@@ -35,7 +35,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Cannot parse latest.yml' }, { status: 500 });
     }
 
-    const fileName = pathMatch[1].trim();
+    // macOS 按芯片分别打包（内置服务带原生模块，无法做 universal）：?arch=arm64|x64 选对应的 dmg
+    let fileName = pathMatch[1].trim();
+    if (os === 'mac') {
+      const arch = request.nextUrl.searchParams.get('arch') === 'x64' ? 'x64' : 'arm64';
+      const dmgs = [...text.matchAll(/^\s*-\s*url:\s*(.+\.dmg)\s*$/gm)].map((m) => m[1].trim());
+      const match = dmgs.find((f) => f.includes(`-${arch}.`)) ?? dmgs[0];
+      if (match) fileName = match;
+    }
     const version = versionMatch ? versionMatch[1].trim() : 'latest';
     const downloadUrl = `${RELEASES_BASE}/${encodeURIComponent(fileName)}`;
 

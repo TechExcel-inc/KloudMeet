@@ -95,25 +95,14 @@
       "icon": "build/icon.png",
       "category": "public.app-category.business",
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "universal"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "universal"
-          ]
-        }
+        "dmg",
+        "zip"
       ],
       "artifactName": "${productName}-${version}-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
-      "x64ArchFiles": "**/node_modules/@nut-tree-fork/**",
       "notarize": true,
       "extendInfo": {
         "NSCameraUsageDescription": "Kloud Meet uses your camera so others in the meeting can see you.",
