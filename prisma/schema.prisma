@@ -70,6 +70,9 @@ model KloudMeetAccount {
   memberships            AccountMembership[]
   ownersAndAdmins        AccountOwnerAndAdmin[]
   meetings               Meeting[]
+  billingSubscription    BillingSubscription?
+  billingSeats           BillingSeat[]
+  billingCredits         BillingCredit[]
 
   @@map("KloudMeetAccount")
 }
@@ -380,4 +383,81 @@ model VerificationCode {
 
   @@index([target, code], map: "VerificationCode_target_code_idx")
   @@map("VerificationCode")
+}
+
+/// 计费：每个账户一行。缺省（无行）= FREE；BILLING_ENABLED 关闭时一律按 LEGACY。
+model BillingSubscription {
+  id                   Int              @id @default(autoincrement())
+  accountId            Int              @unique(map: "BillingSubscription_accountId_key")
+  /// FREE / PRO / TEAM / ENTERPRISE / LEGACY
+  plan                 String           @default("FREE")
+  /// Stripe 订阅状态：active / trialing / past_due / canceled / incomplete / unpaid …
+  status               String           @default("active")
+  /// month / year
+  interval             String?
+  seats                Int              @default(1)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean          @default(false)
+  stripeCustomerId     String?          @unique(map: "BillingSubscription_stripeCustomerId_key")
+  stripeSubscriptionId String?          @unique(map: "BillingSubscription_stripeSubscriptionId_key")
+  /// STRIPE / MANUAL（企业、老客户后台手工开通）
+  source               String           @default("STRIPE")
+  /// 最近一次已应用的 Stripe 事件时间，丢弃乱序到达的旧事件
+  lastStripeEventAt    DateTime?
+  createdAt            DateTime         @default(now())
+  modifiedAt           DateTime?
+  account              KloudMeetAccount @relation(fields: [accountId], references: [id], map: "BillingSubscription_accountId_fkey")
+
+  @@map("BillingSubscription")
+}
+
+/// Team 席位：Owner 自动占第一个席位，管理员分配其余席位。
+model BillingSeat {
+  id                 Int              @id @default(autoincrement())
+  accountId          Int
+  teamMemberId       Int
+  assignedAt         DateTime         @default(now())
+  assignedByMemberId Int?
+  createdAt          DateTime         @default(now())
+  account            KloudMeetAccount @relation(fields: [accountId], references: [id], map: "BillingSeat_accountId_fkey")
+
+  @@unique([accountId, teamMemberId], map: "BillingSeat_accountId_teamMemberId_key")
+  @@index([teamMemberId], map: "BillingSeat_teamMemberId_idx")
+  @@map("BillingSeat")
+}
+
+/// 计量流水。sourceRef 唯一，重复回调不会重复计量。
+model UsageEvent {
+  id           Int      @id @default(autoincrement())
+  /// 无账户的个人免费用户为 NULL，按 teamMemberId 归集
+  accountId    Int?
+  teamMemberId Int?
+  meetingId    Int?
+  /// RECORDING / CAPTIONS（秒）· AI_SUMMARY（次）
+  kind         String
+  quantity     Int
+  occurredAt   DateTime
+  sourceRef    String   @unique(map: "UsageEvent_sourceRef_key")
+  createdAt    DateTime @default(now())
+
+  @@index([accountId, kind, occurredAt], map: "UsageEvent_accountId_kind_occurredAt_idx")
+  @@index([teamMemberId, kind, occurredAt], map: "UsageEvent_teamMemberId_kind_occurredAt_idx")
+  @@map("UsageEvent")
+}
+
+/// 小时包。套餐额度用完后才开始消耗，先到期的先用。
+model BillingCredit {
+  id              Int              @id @default(autoincrement())
+  accountId       Int
+  seconds         Int
+  consumedSeconds Int              @default(0)
+  purchasedAt     DateTime         @default(now())
+  expiresAt       DateTime
+  stripeRef       String           @unique(map: "BillingCredit_stripeRef_key")
+  createdAt       DateTime         @default(now())
+  account         KloudMeetAccount @relation(fields: [accountId], references: [id], map: "BillingCredit_accountId_fkey")
+
+  @@index([accountId, expiresAt], map: "BillingCredit_accountId_expiresAt_idx")
+  @@map("BillingCredit")
 }
