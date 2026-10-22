@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
@@ -25,6 +26,19 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
+
+type MeetingListScope = 'all' | 'hosted';
+
+function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope): string {
+  const qs = new URLSearchParams({
+    page: String(page),
+    pageSize: String(size),
+  });
+  const term = search.trim();
+  if (term) qs.set('search', term);
+  if (scope === 'hosted') qs.set('scope', 'hosted');
+  return qs.toString();
+}
 
 export function DashboardView({
   user,
@@ -68,6 +82,8 @@ export function DashboardView({
   const [deleteLoading, setDeleteLoading] = useState(false);
   // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
+  const [meetingScope, setMeetingScope] = useState<MeetingListScope>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
@@ -113,7 +129,22 @@ export function DashboardView({
   pageRef.current = page;
   const pageSizeRef = useRef(pageSize);
   pageSizeRef.current = pageSize;
+  const meetingScopeRef = useRef(meetingScope);
+  meetingScopeRef.current = meetingScope;
   const meetingsFetchGenRef = useRef(0);
+  const prevScopeRef = useRef(meetingScope);
+  const filterBtnRef = useRef<HTMLButtonElement>(null);
+  const [menuBox, setMenuBox] = useState<{ top: number; right: number } | null>(null);
+
+  const placeFilterMenu = useCallback(() => {
+    const btn = filterBtnRef.current;
+    if (!btn) return;
+    const rect = btn.getBoundingClientRect();
+    setMenuBox({
+      top: rect.bottom + 6,
+      right: Math.max(8, window.innerWidth - rect.right),
+    });
+  }, []);
 
   const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
     const term = searchTerm ?? searchQueryRef.current;
@@ -121,12 +152,8 @@ export function DashboardView({
     const currentPage = pageOverride ?? pageRef.current;
     const gen = ++meetingsFetchGenRef.current;
     setLoadingMeetings(true);
-    const qs = new URLSearchParams({
-      page: String(currentPage),
-      pageSize: String(pageSizeRef.current),
-      ...(term.trim() ? { search: term.trim() } : {}),
-    });
-    fetch(`/api/account/meetings?${qs.toString()}`, {
+    const qs = meetingsQuery(currentPage, pageSizeRef.current, term, meetingScopeRef.current);
+    fetch(`/api/account/meetings?${qs}`, {
       headers: { Authorization: `Bearer ${userToken}` }
     })
       .then(res => res.json())
@@ -166,6 +193,38 @@ export function DashboardView({
     return () => clearTimeout(timer);
   }, [searchQuery, fetchMeetings]);
 
+  useEffect(() => {
+    if (prevScopeRef.current === meetingScope) return;
+    prevScopeRef.current = meetingScope;
+    if (pageRef.current !== 1) {
+      setPage(1);
+      return;
+    }
+    fetchMeetings(searchQueryRef.current, 1);
+  }, [meetingScope, fetchMeetings]);
+
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-meeting-filter="true"]')) setFilterOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterOpen(false);
+    };
+    placeFilterMenu();
+    document.addEventListener('mousedown', onDocMouseDown);
+    document.addEventListener('keydown', onKey);
+    window.addEventListener('resize', placeFilterMenu);
+    window.addEventListener('scroll', placeFilterMenu, true);
+    return () => {
+      document.removeEventListener('mousedown', onDocMouseDown);
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', placeFilterMenu);
+      window.removeEventListener('scroll', placeFilterMenu, true);
+    };
+  }, [filterOpen, placeFilterMenu]);
+
   // Polling fallback to check processing recordings
   useEffect(() => {
     if (!userToken) return;
@@ -185,7 +244,8 @@ export function DashboardView({
       .then(data => {
         if (data.updatedCount > 0) {
           // Re-fetch meetings silently without setting loading state
-            fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
+            const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current);
+            fetch(`/api/account/meetings?${qs}`, {
               headers: { Authorization: `Bearer ${userToken}` }
             })
               .then(res => res.json())
@@ -248,13 +308,8 @@ export function DashboardView({
     };
 
     const intervalId = setInterval(() => {
-      const term = searchQueryRef.current;
-      const qs = new URLSearchParams({
-        page: String(page),
-        pageSize: String(pageSize),
-        ...(term.trim() ? { search: term.trim() } : {}),
-      });
-      fetch(`/api/account/meetings?${qs.toString()}`, {
+      const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current);
+      fetch(`/api/account/meetings?${qs}`, {
         headers: { Authorization: `Bearer ${userToken}` },
       })
         .then((res) => res.json())
@@ -727,12 +782,68 @@ export function DashboardView({
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
-            {/* Filter funnel button */}
-            <button className={styles.filterBtn} title="Filter meetings">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
-              </svg>
-            </button>
+            <div className={styles.filterWrap} data-meeting-filter="true">
+              <button
+                ref={filterBtnRef}
+                type="button"
+                className={`${styles.filterBtn}${meetingScope === 'hosted' ? ` ${styles.filterBtnActive}` : ''}`}
+                title={t('dash.filterMeetings')}
+                aria-label={t('dash.filterMeetings')}
+                aria-haspopup="menu"
+                aria-expanded={filterOpen}
+                onClick={() => setFilterOpen((open) => !open)}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                </svg>
+              </button>
+              {filterOpen && menuBox
+                ? createPortal(
+                <div
+                  className={`${styles.filterMenu} ${styles.filterMenuPortal}`}
+                  role="menu"
+                  aria-label={t('dash.filterShow')}
+                  data-meeting-filter="true"
+                  style={
+                    {
+                      ['--filter-top' as string]: `${menuBox.top}px`,
+                      ['--filter-right' as string]: `${menuBox.right}px`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <div className={styles.filterMenuLabel}>{t('dash.filterShow')}</div>
+                  {([
+                    ['all', 'dash.filterAll', 'dash.filterAllHint'],
+                    ['hosted', 'dash.filterHosted', 'dash.filterHostedHint'],
+                  ] as const).map(([scope, labelKey, hintKey]) => {
+                    const selected = meetingScope === scope;
+                    return (
+                      <button
+                        key={scope}
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={selected}
+                        className={`${styles.filterOption}${selected ? ` ${styles.filterOptionActive}` : ''}`}
+                        onClick={() => {
+                          setMeetingScope(scope);
+                          setFilterOpen(false);
+                        }}
+                      >
+                        <svg className={styles.filterCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden>
+                          <polyline points="5 12 10 17 19 7" />
+                        </svg>
+                        <span className={styles.filterOptionText}>
+                          <span className={styles.filterOptionTitle}>{t(labelKey)}</span>
+                          <span className={styles.filterOptionHint}>{t(hintKey)}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>,
+                document.body,
+              )
+                : null}
+            </div>
             <button
               className={styles.scheduleBtn}
               onClick={() => setShowScheduleModal(true)}

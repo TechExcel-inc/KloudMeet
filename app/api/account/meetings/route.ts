@@ -33,6 +33,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
     const search = searchParams.get('search')?.trim() || '';
+    const scope = searchParams.get('scope') === 'hosted' ? 'hosted' : 'all';
     const skip = (page - 1) * pageSize;
 
     const searchFilter: Prisma.MeetingWhereInput | null = search
@@ -43,17 +44,18 @@ export async function GET(request: NextRequest) {
           ],
         }
       : null;
+    const accessFilter: Prisma.MeetingWhereInput =
+      scope === 'hosted'
+        ? { createdByMemberId: member.id }
+        : {
+            OR: [
+              { createdByMemberId: member.id },
+              { participants: { some: { teamMemberId: member.id } } },
+            ],
+          };
     const whereClause: Prisma.MeetingWhereInput = {
       deletedAt: null,
-      AND: [
-        {
-          OR: [
-            { createdByMemberId: member.id },
-            { participants: { some: { teamMemberId: member.id } } },
-          ],
-        },
-        ...(searchFilter ? [searchFilter] : []),
-      ],
+      AND: [accessFilter, ...(searchFilter ? [searchFilter] : [])],
     };
 
     const [total, meetings] = await Promise.all([

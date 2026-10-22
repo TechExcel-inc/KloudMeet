@@ -2223,6 +2223,98 @@
   color: #5227D3;
 }
 
+.filterBtnActive {
+  background: rgba(82, 39, 211, 0.1);
+  border-color: #5227D3;
+  color: #5227D3;
+}
+
+.filterWrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.filterMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 80;
+  width: 248px;
+  padding: 8px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.filterMenuPortal {
+  position: fixed;
+  top: var(--filter-top);
+  right: var(--filter-right);
+}
+
+.filterMenuLabel {
+  padding: 4px 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+
+.filterOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: #1e293b;
+}
+
+.filterOption:hover {
+  background: #f8fafc;
+}
+
+.filterOptionActive {
+  background: rgba(82, 39, 211, 0.08);
+}
+
+.filterOptionText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.filterOptionTitle {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.filterOptionHint {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  color: #64748b;
+}
+
+.filterCheck {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  color: transparent;
+}
+
+.filterOptionActive .filterCheck {
+  color: #5227D3;
+}
+
 /* ═══════════════════════════════════════════════════
    Figma Meeting List — Cards
    ═══════════════════════════════════════════════════ */
@@ -3328,6 +3420,35 @@
   border-color: rgba(71, 85, 105, 0.62);
   color: #e2e8f0;
   box-shadow: none;
+}
+
+:global(html[data-theme='dark']) .filterBtnActive {
+  background: rgba(99, 102, 241, 0.22) !important;
+  border-color: #818cf8;
+  color: #c7d2fe;
+}
+
+:global(html[data-theme='dark']) .filterMenu {
+  background: #0f172a;
+  border-color: #334155;
+  box-shadow: 0 16px 32px rgba(2, 6, 23, 0.5);
+}
+
+:global(html[data-theme='dark']) .filterOption {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .filterOption:hover,
+:global(html[data-theme='dark']) .filterOptionActive {
+  background: rgba(99, 102, 241, 0.22);
+}
+
+:global(html[data-theme='dark']) .filterOptionHint {
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .filterOptionActive .filterCheck {
+  color: #a5b4fc;
 }
 
 :global(html[data-theme='dark']) .quickJoinInput::placeholder,
