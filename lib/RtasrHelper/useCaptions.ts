@@ -25,6 +25,7 @@ import { FunAsrHelper } from './FunAsrHelper';
 import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
+import { roomAuthHeaders } from '@/lib/roomAuth';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ async function saveTranscript(payload: {
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...roomAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });

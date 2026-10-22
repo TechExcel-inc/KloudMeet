@@ -10,8 +10,10 @@ import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { findPersonalRoomOwner, resolveCanonicalRoomName } from '@/lib/personalRoom';
 
 /**
- * Host / Co-host: remove a participant from the LiveKit room.
- * Body: { identity: string; hostIdentity?: string | null; cohostIdentities?: string[] }
+ * Meeting owner: remove a participant from the LiveKit room.
+ * Body: { identity: string }
+ *
+ * Co-host / transferred-host roles are client-side only, so they are not trusted here.
  */
 export async function POST(
   request: NextRequest,
@@ -27,11 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
-    let body: {
-      identity?: string;
-      hostIdentity?: string | null;
-      cohostIdentities?: string[];
-    };
+    let body: { identity?: string };
     try {
       body = (await request.json()) as typeof body;
     } catch {
@@ -80,21 +78,8 @@ export async function POST(
     }
 
     const ownerMemberId = meeting?.createdByMemberId ?? personalOwner?.id ?? null;
-    const isMeetingOwner = ownerMemberId === member.id;
-    const hostIdentity = typeof body.hostIdentity === 'string' ? body.hostIdentity : null;
-    const cohostIdentities = Array.isArray(body.cohostIdentities)
-      ? body.cohostIdentities.filter((id): id is string => typeof id === 'string')
-      : [];
-    const isClaimedManager =
-      caller.identity === hostIdentity || cohostIdentities.includes(caller.identity);
-
-    if (!isMeetingOwner && !isClaimedManager) {
-      return forbidden('Only the host or co-host can remove participants');
-    }
-
-    // Do not allow removing the LiveKit host via co-host
-    if (hostIdentity && targetIdentity === hostIdentity && caller.identity !== hostIdentity) {
-      return forbidden('Cannot remove the host');
+    if (ownerMemberId !== member.id) {
+      return forbidden('Only the meeting host can remove participants');
     }
 
     const ok = await removeParticipantFromRoom(livekitRoomName, targetIdentity);

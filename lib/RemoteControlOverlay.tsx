@@ -29,8 +29,17 @@ export type RemoteControlRequest = {
 interface RemoteControlOverlayProps {
   isActive: boolean;
   isPresenter: boolean;
+  /** Presenter only: the controller the presenter approved; input from anyone else is dropped. */
+  approvedControllerIdentity?: string | null;
   className?: string;
 }
+
+const MOUSE_EVENT_TYPES = new Set<RemoteControlMessage['type']>([
+  'mousemove',
+  'mousedown',
+  'mouseup',
+  'dblclick',
+]);
 
 /** Simple throttle */
 function throttle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
@@ -84,6 +93,7 @@ function toContentNormalized(
 export function RemoteControlOverlay({
   isActive,
   isPresenter,
+  approvedControllerIdentity = null,
   className,
 }: RemoteControlOverlayProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -173,17 +183,30 @@ export function RemoteControlOverlay({
         }
 
         if (!isPresenter) return;
+        // Only the controller the presenter approved may drive the OS mouse.
+        const senderIdentity = msg.from?.identity;
+        if (!approvedControllerIdentity || senderIdentity !== approvedControllerIdentity) return;
+        if (!MOUSE_EVENT_TYPES.has(data.type)) return;
+        const x = Number(data.x);
+        const y = Number(data.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         if (
           typeof window !== 'undefined' &&
           window.electronAPI?.sendRemoteControlMessage
         ) {
-          window.electronAPI.sendRemoteControlMessage(data);
+          // Forward normalized coords only; never pass through absolute pixels.
+          window.electronAPI.sendRemoteControlMessage({
+            type: data.type,
+            x: Math.max(0, Math.min(1, x)),
+            y: Math.max(0, Math.min(1, y)),
+            button: data.button === 2 ? 2 : 0,
+          });
         }
       } catch (e) {
         console.error('Failed to parse remote control data', e);
       }
     },
-    [isPresenter],
+    [isPresenter, approvedControllerIdentity],
   );
 
   useDataChannel('remote-control', onDataReceived);

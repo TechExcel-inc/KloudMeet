@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireMeetingAccess } from '@/lib/meetingAccess';
 
 // ── Auth helper ──────────────────────────────────────────────
 async function getSession(req: NextRequest) {
@@ -132,6 +133,13 @@ export async function POST(
     const localMeetingId = parseInt(meetingId);
     if (isNaN(localMeetingId)) {
       return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
+    }
+
+    // Only the host or members who attended may spend AI quota / overwrite the summary.
+    const access = await requireMeetingAccess(req, localMeetingId);
+    if (access instanceof NextResponse) return access;
+    if (access.memberId == null) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const meeting = await prisma.meeting.findUnique({

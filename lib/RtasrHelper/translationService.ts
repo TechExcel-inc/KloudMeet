@@ -2,6 +2,7 @@
  * Translation utility functions for STT feature.
  * Using local API proxy to avoid CORS issues and secure API keys.
  */
+import { roomAuthHeaders } from '@/lib/roomAuth';
 
 /**
  * Language code mapping to API format.
@@ -37,6 +38,7 @@ export async function translateText(
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                ...roomAuthHeaders(),
             },
             body: JSON.stringify({
                 text,

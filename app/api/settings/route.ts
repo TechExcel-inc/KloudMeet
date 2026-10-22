@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
 import { NextRequest, NextResponse } from 'next/server';
-import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { isAuthError, requireAccountAdmin, requireSession } from '@/lib/apiAuth';
 
 // All setting keys managed by the System Settings modal
 const SETTING_KEYS = [
@@ -47,7 +47,7 @@ async function loadSettings(keys: string[]) {
 
 const LIVEDOC_SETTING_KEYS = ['livedoc_debug_enabled', 'livedoc_debug_url'] as const;
 
-// GET /api/settings — logged-in users; ?scope=livedoc allowed in development without auth
+// GET /api/settings — account admins; ?scope=livedoc for any logged-in user (no auth in development)
 export async function GET(request: NextRequest) {
   const scope = new URL(request.url).searchParams.get('scope');
 
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const member = await requireSession(request);
+  const member = await requireAccountAdmin(request);
   if (isAuthError(member)) return member;
 
   try {
@@ -95,9 +95,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// PUT /api/settings — Upsert system settings (logged-in users)
+// PUT /api/settings — Upsert system settings (account admins only)
 export async function PUT(request: NextRequest) {
-  const member = await requireSession(request);
+  const member = await requireAccountAdmin(request);
   if (isAuthError(member)) return member;
 
   const body = await request.json();

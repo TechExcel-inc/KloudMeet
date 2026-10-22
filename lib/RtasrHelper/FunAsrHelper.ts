@@ -6,6 +6,7 @@
  */
 
 import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
+import { roomAuthHeaders } from '@/lib/roomAuth';
 
 const TARGET_SAMPLE_RATE = 16000;
 
@@ -55,7 +56,10 @@ export class FunAsrHelper implements CaptionEngine {
 
     try {
       const lang = (this.languageCode || '').trim().toLowerCase();
-      const res = await fetch('/api/transcripts/funasr-token', { method: 'POST' });
+      const res = await fetch('/api/transcripts/funasr-token', {
+        method: 'POST',
+        headers: roomAuthHeaders(),
+      });
       if (gen !== this._gen) return;
       if (!res.ok) throw new Error(`Fun-ASR token failed: ${res.status}`);
       const data: unknown = await res.json();
