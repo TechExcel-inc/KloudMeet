@@ -4,6 +4,7 @@ import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
+import { checkReplayQuota } from '@/lib/billing/limits';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -66,6 +67,10 @@ export async function POST(
     }
 
     // Otherwise, START recording
+    // Billing: refuse to start once the recorder's replay hours are used up (402 BILLING_LIMIT).
+    const quotaError = await checkReplayQuota(teamMemberId);
+    if (quotaError) return quotaError;
+
     if (!S3_ACCESS_KEY || !S3_SECRET || !S3_REGION || !S3_BUCKET) {
       console.error('S3 configuration is missing in .env');
       return NextResponse.json({ error: 'Cloud storage (S3/OSS) configuration is missing in environment variables. LiveKit Cloud requires a cloud storage destination for recordings.' }, { status: 500 });

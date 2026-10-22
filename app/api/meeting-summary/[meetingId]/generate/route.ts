@@ -9,6 +9,8 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { checkAiSummaryQuota } from '@/lib/billing/limits';
+import { meterAiSummary, meterSafely } from '@/lib/billing/usage';
 
 // ── Auth helper ──────────────────────────────────────────────
 async function getSession(req: NextRequest) {
@@ -151,6 +153,10 @@ export async function POST(
       return NextResponse.json({ error: '暂无字幕数据，无法生成摘要' }, { status: 422 });
     }
 
+    // Billing (no-op when disabled): Free includes a few AI summaries per month.
+    const quotaError = await checkAiSummaryQuota(session.teamMemberId);
+    if (quotaError) return quotaError;
+
     // Build prompt
     const meetingName = meeting.title || meeting.roomName || `Meeting #${localMeetingId}`;
     const lines = transcripts
@@ -207,6 +213,8 @@ export async function POST(
       where: { meetingId: localMeetingId },
       orderBy: { sortOrder: 'asc' },
     });
+
+    await meterSafely(`ai:${localMeetingId}`, () => meterAiSummary(session.teamMemberId, localMeetingId));
 
     return NextResponse.json({
       success: true,

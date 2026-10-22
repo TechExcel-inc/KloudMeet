@@ -4,6 +4,7 @@ import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
+import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import {
   authorizeRecordingView,
   ensureShareKey,
@@ -33,6 +34,13 @@ export async function GET(
     const access = await authorizeRecordingView(req, located, id);
     if (isRecordingResponse(access)) return access;
 
+    if (located.status === RECORDING_STATUS_ARCHIVED) {
+      // Free plan keeps only the latest replays; older ones are archived (not deleted) until upgrade.
+      return billingLimitResponse(
+        'replay_retention',
+        'This replay is archived. The Free plan keeps your 3 most recent replays; upgrade to restore it.',
+      );
+    }
     if (located.status !== 'READY') {
       return NextResponse.json(
         { error: `Recording is not ready yet (status: ${located.status})` },

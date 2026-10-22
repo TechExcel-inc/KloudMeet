@@ -2,6 +2,7 @@ import { EgressClient, EncodedFileOutput, S3Upload } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { prisma } from '@/lib/db';
+import { checkReplayQuota } from '@/lib/billing/limits';
 
 export async function GET(req: NextRequest) {
   try {
@@ -21,6 +22,9 @@ export async function GET(req: NextRequest) {
     if (meeting.createdByMemberId !== member.id) {
       return new NextResponse('Only the meeting host can start recording', { status: 403 });
     }
+
+    const quotaError = await checkReplayQuota(member.id);
+    if (quotaError) return quotaError;
 
     const {
       LIVEKIT_API_KEY,

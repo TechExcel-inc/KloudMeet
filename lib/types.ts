@@ -40,4 +40,9 @@ export type ConnectionDetails = {
   participantLiveDocAi?: boolean;
   /** PeerTime lesson id already bound to this meeting (if any). */
   livedocInstanceId?: string | null;
+  /**
+   * Billing: ISO time the host's plan ends this meeting (Free = 40 min).
+   * Absent when billing is off or the plan has no length limit.
+   */
+  meetingEndsAt?: string;
 };

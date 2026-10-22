@@ -8,6 +8,8 @@ import {
   MEETING_STATUS,
   resumeIdleMeeting,
 } from '@/lib/meetingRejoin';
+import { onRecordingReady } from '@/lib/billing/limits';
+import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -71,7 +73,7 @@ export async function POST(request: NextRequest) {
             egressTimeToDate(fileInfo.startedAt) ??
             recording.mediaStartedAt ??
             egressTimeToDate(event.egressInfo.startedAt);
-          await prisma.recording.update({
+          const ready = await prisma.recording.update({
             where: { id: recording.id },
             data: {
               status: 'READY',
@@ -82,6 +84,8 @@ export async function POST(request: NextRequest) {
               durationSeconds: fileInfo.duration ? Math.floor(Number(fileInfo.duration) / 1000000000) : null,
             }
           });
+          // Billing (no-op when disabled): meter rec:<id> seconds, then Free replay retention.
+          await onRecordingReady(ready);
         }
       }
     }
@@ -121,6 +125,10 @@ export async function POST(request: NextRequest) {
         meeting.status !== MEETING_STATUS.IDLE
       ) {
         await markMeetingIdleFromEmptyRoom(meeting.id);
+      }
+      if (meeting) {
+        // Billing (no-op when disabled): caption minutes × 60 → host account, idempotent on cap:<meetingId>.
+        await meterSafely(`cap:${meeting.id}`, () => meterCaptions(meeting));
       }
     }
 
