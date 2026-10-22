@@ -14,6 +14,7 @@ import {
   billingEnabledOr404,
   ensureStripeCustomer,
   resolvePurchaseAccount,
+  stripeConfiguredOr503,
   stripeErrorResponse,
 } from '@/lib/billing/routeHelpers';
 import { billingLimitResponse } from '@/lib/billing/limits';
@@ -34,6 +35,8 @@ export async function POST(request: NextRequest) {
     if (!priceId) {
       return NextResponse.json({ error: 'Hour packs are not available for purchase yet' }, { status: 503 });
     }
+    const notConfigured = stripeConfiguredOr503();
+    if (notConfigured) return notConfigured;
 
     const account = await resolvePurchaseAccount(member);
     if (account instanceof NextResponse) return account;

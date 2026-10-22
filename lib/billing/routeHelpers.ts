@@ -14,6 +14,13 @@ export function billingEnabledOr404(): NextResponse | null {
   return isBillingEnabled() ? null : billingDisabledResponse();
 }
 
+/** Refuse purchases before any write (e.g. a personal account) when Stripe isn't configured. */
+export function stripeConfiguredOr503(): NextResponse | null {
+  return process.env.STRIPE_SECRET_KEY?.trim()
+    ? null
+    : NextResponse.json({ error: 'Payments are not configured yet' }, { status: 503 });
+}
+
 /** Public origin for Stripe return URLs. */
 export function billingBaseUrl(request: NextRequest): string {
   const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();

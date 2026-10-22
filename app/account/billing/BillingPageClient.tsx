@@ -113,6 +113,7 @@ export function BillingPageClient() {
         return;
       }
       setBusy(false);
+      setDialog(null);
       setNotice({ kind: 'error', text: res.error && res.error !== 'network' ? res.error : t('billing.error.generic') });
     },
     [t],
