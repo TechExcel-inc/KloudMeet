@@ -13,3 +13,13 @@ export function isPrismaConnectionError(error: unknown): boolean {
     message.includes('ETIMEDOUT')
   );
 }
+
+/** Unique-constraint violation (P2002), e.g. an idempotency key that already exists. */
+export function isUniqueConstraintError(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === 'P2002',
+  );
+}
