@@ -75,6 +75,7 @@ import {
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
+import prejoinStyles from '@/styles/PreJoin.module.css';
 import {
   PREJOIN_ORIGINAL_ROOM_SESSION_KEY,
   cancelAbandonedInstantMeeting,
@@ -845,484 +846,82 @@ export function PageClientImpl(props: {
   }, [meetingTerminal]);
 
   if (meetingTerminal) {
+    const meetingEnded = meetingInfo.status === 'ENDED';
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#f8f9fb', fontFamily: 'Inter, sans-serif' }}>
-        <div style={{ background: '#fff', padding: '3rem 2.5rem', borderRadius: '16px', boxShadow: '0 8px 35px rgba(17,24,39,0.05)', textAlign: 'center', maxWidth: '440px', width: '90%', border: '1px solid #e5e7eb' }}>
-          <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: meetingInfo.status === 'ENDED' ? '#dcfce7' : '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
-            {meetingInfo.status === 'ENDED' ? (
-              <svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" width="32" height="32"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" width="32" height="32"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            )}
+      <div className={prejoinStyles.page}>
+        <header className={prejoinStyles.toolbar}>
+          <div className={prejoinStyles.toolbarLeft}>
+            <Link href="/" className={prejoinStyles.logoLink}>
+              <Image
+                src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
+                alt="Kloud Meet"
+                width={120}
+                height={36}
+                style={{ display: 'block', transform: 'translateY(4px)' }}
+              />
+            </Link>
           </div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', margin: '0 0 0.5rem' }}>
-            {meetingInfo.status === 'ENDED' ? t('prejoin.meetingConcluded') : t('prejoin.meetingCanceled')}
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '1rem', margin: '0 0 2rem' }}>
-            {meetingInfo.status === 'ENDED'
-              ? t('prejoin.meetingEndedDesc')
-              : t('prejoin.meetingCanceledDesc')}
-          </p>
-          <Link href="/" style={{ display: 'inline-block', padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #7c3aed, #5b21b6)', color: '#fff', borderRadius: '8px', textDecoration: 'none', fontWeight: 600, width: '100%' }}>
-            {t('prejoin.returnDashboard')}
-          </Link>
-        </div>
+        </header>
+        <main className={prejoinStyles.centerMain}>
+          <section className={prejoinStyles.stateCard}>
+            <span
+              className={`${prejoinStyles.stateIcon}${meetingEnded ? '' : ` ${prejoinStyles.stateIconDanger}`}`}
+              aria-hidden="true"
+            >
+              {meetingEnded ? (
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="16" rx="3" />
+                  <path d="M3 10h18M8 3v4M16 3v4M9 15.5l2 2 4-4" />
+                </svg>
+              ) : (
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="16" rx="3" />
+                  <path d="M3 10h18M8 3v4M16 3v4M9.5 14l5 5M14.5 14l-5 5" />
+                </svg>
+              )}
+            </span>
+            <h1 className={prejoinStyles.stateTitle}>
+              {meetingEnded ? t('prejoin.meetingConcluded') : t('prejoin.meetingCanceled')}
+            </h1>
+            <p className={prejoinStyles.stateText}>
+              {meetingEnded ? t('prejoin.meetingEndedDesc') : t('prejoin.meetingCanceledDesc')}
+            </p>
+            <div className={prejoinStyles.stateActions}>
+              <Link href="/" className={prejoinStyles.primaryBtn}>
+                {t('prejoin.returnDashboard')}
+              </Link>
+            </div>
+          </section>
+        </main>
       </div>
     );
   }
+
+  const languageIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width={size} height={size} aria-hidden="true">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    </svg>
+  );
 
   return (
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
         canShowPreJoin && !isSameTabRefresh ? (
         <div
-          className={`kloud-prejoin-wrapper${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
+          className={`${prejoinStyles.page}${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
           style={{
             display: isBot ? 'none' : undefined,
           }}
         >
-          <style>{`
-
-            /* Keep toggle controls purple, but not the dropdown list content. */
-            .kloud-prejoin-wrapper .lk-button-group {
-              background: transparent !important;
-            }
-            .kloud-prejoin-wrapper .lk-button-group > .lk-button,
-            .kloud-prejoin-wrapper .lk-button-group > .lk-button-group-menu > .lk-button-menu {
-              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
-            }
-            .kloud-prejoin-wrapper .lk-button-group > .lk-button:hover,
-            .kloud-prejoin-wrapper .lk-button-group > .lk-button-group-menu > .lk-button-menu:hover {
-              background: linear-gradient(135deg, #5b21b6, #6d28d9) !important;
-            }
-
-            /* ── Device selection popup — polished dropdown style ── */
-            .kloud-prejoin-wrapper .lk-device-menu {
-              background: #ffffff !important;
-              border: 1px solid #cbd5e1 !important;
-              border-radius: 12px !important;
-              box-shadow: 0 18px 36px rgba(15, 23, 42, 0.22) !important;
-              padding: 6px !important;
-              max-height: 280px !important;
-              overflow-y: auto !important;
-              overflow-x: hidden !important;
-              min-width: 300px !important;
-              scrollbar-width: thin;
-              scrollbar-color: #94a3b8 transparent;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu ul,
-            .kloud-prejoin-wrapper .lk-device-menu .lk-list {
-              background: transparent !important;
-              border: none !important;
-              box-shadow: none !important;
-              border-radius: 0 !important;
-              padding: 0 !important;
-              margin: 0 !important;
-              max-height: none !important;
-              overflow: visible !important;
-              list-style: none !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar { width: 6px; }
-            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-track { background: transparent; }
-            .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-thumb {
-              background: #94a3b8;
-              border-radius: 8px;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li {
-              padding: 0 !important;
-              margin: 1px 0 !important;
-              list-style: none !important;
-              border-radius: 8px !important;
-              overflow: hidden !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li button,
-            .kloud-prejoin-wrapper .lk-device-menu button:not([class*="lk-button-group"]),
-            .kloud-prejoin-wrapper .lk-device-menu .lk-button {
-              background: transparent !important;
-              background-image: none !important;
-              color: #1f2937 !important;
-              border-radius: 8px !important;
-              padding: 11px 14px 11px 40px !important;
-              font-size: 0.92rem !important;
-              font-weight: 500 !important;
-              text-align: left !important;
-              width: 100% !important;
-              border: none !important;
-              box-shadow: none !important;
-              cursor: pointer !important;
-              transition: background 0.16s, color 0.16s !important;
-              position: relative !important;
-              white-space: nowrap !important;
-              overflow: hidden !important;
-              text-overflow: ellipsis !important;
-              display: block !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li button:hover {
-              background: #eff3ff !important;
-              color: #1e1b4b !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button,
-            .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"],
-            .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"],
-            .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button,
-            .kloud-prejoin-wrapper .lk-device-menu li button.lk-active {
-              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
-              color: #ffffff !important;
-              font-weight: 700 !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button::before,
-            .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"]::before,
-            .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"]::before,
-            .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button::before,
-            .kloud-prejoin-wrapper .lk-device-menu li button.lk-active::before {
-              content: '';
-              position: absolute !important;
-              left: 15px !important;
-              top: 50% !important;
-              transform: translateY(-50%) rotate(45deg) !important;
-              width: 6px !important;
-              height: 11px !important;
-              border-right: 2px solid #ffffff !important;
-              border-bottom: 2px solid #ffffff !important;
-              display: block !important;
-            }
-
-            .kloud-prejoin-wrapper .lk-device-menu li button:not(.lk-active)::before {
-              content: '' !important;
-              display: none !important;
-            }
-
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu {
-              background: #0b1734 !important;
-              border-color: #374151 !important;
-              box-shadow: 0 24px 46px rgba(2, 6, 23, 0.62) !important;
-              scrollbar-color: #475569 transparent;
-            }
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu::-webkit-scrollbar-thumb {
-              background: #475569;
-            }
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button:not([class*="lk-button-group"]),
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu .lk-button {
-              color: #e5e7eb !important;
-            }
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button:hover {
-              background: #1e293b !important;
-              color: #f8fafc !important;
-            }
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"],
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"],
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button.lk-active {
-              background: linear-gradient(135deg, #6d28d9, #7c3aed) !important;
-              color: #ffffff !important;
-            }
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li[aria-selected="true"] button::before,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu button[aria-selected="true"]::before,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button[data-lk-active="true"]::before,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li.lk-list-item--active button::before,
-            html[data-theme='dark'] .kloud-prejoin-wrapper .lk-device-menu li button.lk-active::before {
-              border-right-color: #ffffff !important;
-              border-bottom-color: #ffffff !important;
-            }
-
-            /* ── Microphone & Camera button group: rounded to match input field ── */
-            .kloud-prejoin-wrapper .lk-button-group {
-              border-radius: 10px !important;
-              overflow: visible !important;
-            }
-            .kloud-prejoin-wrapper .lk-button-group > button:first-child {
-              border-radius: 10px 0 0 10px !important;
-            }
-            .kloud-prejoin-wrapper .lk-button-group > button:last-child,
-            .kloud-prejoin-wrapper .lk-button-group > div:last-child {
-              border-radius: 0 10px 10px 0 !important;
-            }
-            .kloud-prejoin-wrapper .lk-button-group-menu {
-              position: relative;
-              z-index: 5;
-            }
-            .kloud-prejoin-wrapper .lk-device-menu {
-              z-index: 40;
-            }
-
-            .kloud-prejoin-share-link-block {
-              width: 100%;
-            }
-            .kloud-prejoin-share-link-label {
-              font-size: 0.88rem;
-              font-weight: 600;
-              color: #2f3a4d;
-              margin: 0 0 10px;
-            }
-            .kloud-prejoin-share-link-box {
-              background: linear-gradient(180deg, #f8f9fc 0%, #f3f4f8 100%);
-              border: 1px solid #e4e8f0;
-              border-radius: 12px;
-              padding: 7px 14px;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              gap: 12px;
-              font-size: calc(0.95rem - 2px);
-              color: #1f2937;
-              width: 100%;
-              box-sizing: border-box;
-            }
-            .kloud-prejoin-share-link-box button {
-              background: none;
-              border: none;
-              cursor: pointer;
-              color: #4f5b6d;
-              padding: 4px;
-              border-radius: 4px;
-              display: flex;
-              align-items: center;
-              flex-shrink: 0;
-            }
-            .kloud-prejoin-share-link-box button:hover {
-              background: #e7ebf2;
-              color: #111827;
-            }
-            html[data-theme='dark'] .kloud-prejoin-share-link-label {
-              color: #cbd5e1;
-            }
-            html[data-theme='dark'] .kloud-prejoin-share-link-box {
-              background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
-              border-color: #374151;
-              color: #e5e7eb;
-            }
-            html[data-theme='dark'] .kloud-prejoin-share-link-box button {
-              color: #94a3b8;
-            }
-            html[data-theme='dark'] .kloud-prejoin-share-link-box button:hover {
-              background: #374151;
-              color: #e5e7eb;
-            }
-
-            /* Toolbar CSS - EAD-PFM Aesthetic */
-            .kloud-prejoin-toolbar {
-              position: absolute;
-              top: 0;
-              left: 0;
-              width: 100%;
-              height: 72px;
-              padding: 0 2rem;
-              display: flex;
-              align-items: center;
-              justify-content: space-between;
-              z-index: 50;
-            }
-            .kloud-prejoin-logo-toolbar {
-              display: flex;
-              align-items: center;
-              gap: 0.6rem;
-              text-decoration: none;
-              color: #1e1e2e;
-              font-weight: 700;
-              font-size: 1.25rem;
-              font-family: 'Inter', sans-serif;
-            }
-            .ead-toolbar-right {
-              display: flex;
-              align-items: center;
-              gap: 0.75rem;
-            }
-            .ead-btn {
-              height: 38px;
-              background: #fff;
-              border: 1px solid #d1d5db;
-              color: #4b5563;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              cursor: pointer;
-              transition: all 0.15s ease;
-              outline: none;
-              font-family: 'Inter', sans-serif;
-              box-sizing: border-box;
-            }
-            .ead-btn:hover {
-              background: #f9fafb;
-              border-color: #9ca3af;
-              color: #111827;
-            }
-            .ead-icon-btn {
-              width: 38px;
-              border-radius: 50%;
-              padding: 0;
-            }
-            .ead-btn-theme-active {
-              background: #e0e7ff;
-              border-color: #818cf8;
-              color: #3730a3;
-            }
-            .ead-pill-btn {
-              padding: 0 12px;
-              border-radius: 19px;
-              gap: 6px;
-              font-size: 0.85rem;
-              font-weight: 600;
-            }
-            .ead-btn-active {
-              background: #8b5cf6 !important;
-              color: #fff !important;
-              border-color: #f59e0b !important;
-              box-shadow: 0 0 0 1px #f59e0b !important;
-            }
-            .ead-dropdown-container {
-              position: relative;
-            }
-            .ead-dropdown-menu {
-              position: absolute;
-              top: calc(100% + 8px);
-              right: 0;
-              background: #252834;
-              border-radius: 8px;
-              box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-              width: 220px;
-              display: flex;
-              flex-direction: column;
-              border: 1px solid #374151;
-              animation: eadFade 0.15s ease;
-              z-index: 100;
-              overflow: hidden;
-            }
-            @keyframes eadFade {
-              from { opacity: 0; transform: translateY(-8px); }
-              to { opacity: 1; transform: translateY(0); }
-            }
-            .ead-menu-header {
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              padding: 12px 16px;
-              font-size: 0.72rem;
-              font-weight: 700;
-              letter-spacing: 0.08em;
-              color: #9ca3af;
-              text-transform: uppercase;
-              border-bottom: 1px solid #374151;
-              font-family: 'Inter', sans-serif;
-            }
-            .ead-menu-item {
-              background: transparent;
-              border: none;
-              text-align: left;
-              padding: 10px 16px;
-              font-size: 0.9rem;
-              font-weight: 500;
-              color: #d1d5db;
-              cursor: pointer;
-              transition: all 0.1s;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-              font-family: 'Inter', sans-serif;
-            }
-            .ead-menu-item:hover {
-              background: #374151;
-              color: #fff;
-            }
-            .ead-menu-item-active {
-              background: #8b5cf6 !important;
-              color: #fff !important;
-            }
-            .ead-menu-code {
-              margin-left: auto;
-              font-size: 0.8rem;
-              color: #9ca3af;
-              display: flex;
-              align-items: center;
-            }
-            .ead-menu-item-active .ead-menu-code {
-              color: #ddd6fe;
-            }
-
-            html[data-theme='dark'] .kloud-prejoin-logo-toolbar {
-              color: #e5e7eb;
-            }
-            html[data-theme='dark'] .ead-btn {
-              background: #0f172a;
-              border-color: #334155;
-              color: #cbd5e1;
-            }
-            html[data-theme='dark'] .ead-btn:hover {
-              background: #1e293b;
-              border-color: #475569;
-              color: #f8fafc;
-            }
-            html[data-theme='dark'] .ead-btn-theme-active {
-              background: #1e3a8a;
-              border-color: #60a5fa;
-              color: #dbeafe;
-            }
-            html[data-theme='dark'] .ead-pill-btn {
-              color: #e2e8f0;
-            }
-            html[data-theme='dark'] .ead-dropdown-menu {
-              background: #0f172a;
-              border-color: #334155;
-              box-shadow: 0 16px 36px rgba(2,6,23,0.6);
-            }
-            html[data-theme='dark'] .ead-menu-header {
-              color: #94a3b8;
-              border-bottom-color: #334155;
-            }
-            html[data-theme='dark'] .ead-menu-item {
-              color: #cbd5e1;
-            }
-            html[data-theme='dark'] .ead-menu-item:hover {
-              background: #1e293b;
-              color: #f8fafc;
-            }
-
-            /* --- Mobile Adaptation for Toolbar --- */
-            @media (max-width: 768px) {
-              .kloud-prejoin-toolbar {
-                padding: 0 1rem;
-                height: 64px;
-              }
-              .kloud-prejoin-logo-toolbar {
-                font-size: 0; /* Hide Kloud Meet text */
-                gap: 0;
-              }
-              .ead-toolbar-right {
-                gap: 0.4rem;
-              }
-              .ead-btn {
-                height: 36px;
-              }
-              .ead-icon-btn {
-                width: 36px;
-              }
-              .ead-pill-btn {
-                padding: 0 10px;
-                font-size: 0.85rem;
-              }
-              .ead-dropdown-menu {
-                width: 200px;
-                right: -10px; /* Prevent edge overflow */
-              }
-            }
-          `}</style>
-
-          <header className="kloud-prejoin-toolbar">
-            <div className="kloud-prejoin-toolbar-left" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-              <Link href="/" className="ead-btn ead-icon-btn" title="Go Back" style={{ textDecoration: 'none' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                  <path d="M19 12H5M12 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" />
+          <header className={prejoinStyles.toolbar}>
+            <div className={prejoinStyles.toolbarLeft}>
+              <Link href="/" className={prejoinStyles.iconBtn} title={t('common.back')} aria-label={t('common.back')}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" />
                 </svg>
               </Link>
-              <Link href="/" className="kloud-prejoin-logo-toolbar" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', textDecoration: 'none' }}>
+              <Link href="/" className={prejoinStyles.logoLink}>
                 <Image
                   src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
                   alt="Kloud Meet"
@@ -1333,14 +932,16 @@ export function PageClientImpl(props: {
               </Link>
             </div>
 
-            <div className="ead-toolbar-right">
+            <div className={prejoinStyles.toolbarRight}>
               <button
-                className={`ead-btn ead-icon-btn ${theme === 'dark' ? 'ead-btn-theme-active' : ''}`}
+                type="button"
+                className={`${prejoinStyles.iconBtn}${theme === 'dark' ? ` ${prejoinStyles.iconBtnActive}` : ''}`}
                 title={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
+                aria-label={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >
                 {theme === 'dark' ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="20" aria-hidden="true">
                     <circle cx="12" cy="12" r="5"></circle>
                     <line x1="12" y1="1" x2="12" y2="3"></line>
                     <line x1="12" y1="21" x2="12" y2="23"></line>
@@ -1352,60 +953,63 @@ export function PageClientImpl(props: {
                     <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
                   </svg>
                 ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="19" height="19">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="20" aria-hidden="true">
                     <path d="M21 12.79A9 9 0 1111.21 3c0 .28-.01.56-.01.84A7 7 0 0021 12.79z"></path>
                   </svg>
                 )}
               </button>
 
               {/* Help Button */}
-              <button className="ead-btn ead-icon-btn" title={t('nav.help')} onClick={() => { setShowLangMenu(false); setShowHelp(true); }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="20" height="20">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              <button
+                type="button"
+                className={prejoinStyles.iconBtn}
+                title={t('nav.help')}
+                aria-label={t('nav.help')}
+                onClick={() => { setShowLangMenu(false); setShowHelp(true); }}
+              >
+                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9"></circle>
+                  <path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"></path>
                 </svg>
               </button>
 
               {/* Language Pill Button */}
-              <div className="ead-dropdown-container">
+              <div className={prejoinStyles.dropdown}>
                 <button
-                  className={`ead-btn ead-pill-btn ${showLangMenu ? 'ead-btn-active' : ''}`}
+                  type="button"
+                  className={`${prejoinStyles.pillBtn}${showLangMenu ? ` ${prejoinStyles.pillBtnActive}` : ''}`}
                   onClick={() => setShowLangMenu(!showLangMenu)}
+                  aria-haspopup="menu"
+                  aria-expanded={showLangMenu}
+                  aria-label={t('nav.selectLanguage')}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
-                    <circle cx="12" cy="12" r="10" />
-                    <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                  </svg>
+                  {languageIcon(16)}
                   <span>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </button>
                 {showLangMenu && (
-                  <div className="ead-dropdown-menu">
-                    <div className="ead-menu-header">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                      </svg>
+                  <div className={prejoinStyles.menu} role="menu">
+                    <div className={prejoinStyles.menuHeader}>
+                      {languageIcon(14)}
                       {t('nav.selectLanguage')}
                     </div>
                     {LOCALE_OPTIONS.map(opt => (
                       <button
+                        type="button"
+                        role="menuitemradio"
+                        aria-checked={locale === opt.code}
                         key={opt.code}
-                        className={`ead-menu-item ${locale === opt.code ? 'ead-menu-item-active' : ''}`}
+                        className={`${prejoinStyles.menuItem}${locale === opt.code ? ` ${prejoinStyles.menuItemActive}` : ''}`}
                         onClick={() => { setLocale(opt.code); setShowLangMenu(false); }}
                       >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="16" height="16">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-                        </svg>
+                        {languageIcon(16)}
                         {opt.label}
-                        <span className="ead-menu-code">
+                        <span className={prejoinStyles.menuCode}>
                           {opt.shortCode}
                           {locale === opt.code && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ marginLeft: '6px' }}><path d="M20 6L9 17l-5-5" /></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                           )}
                         </span>
                       </button>
@@ -1429,10 +1033,6 @@ export function PageClientImpl(props: {
             </div>
           </header>
 
-          <div className="kloud-prejoin-header">
-            <h2 className="kloud-prejoin-title">{preJoinTitle}</h2>
-            <p className="kloud-prejoin-subtitle">{preJoinSubtitle}</p>
-          </div>
           {!isBot && prejoinReady && (
             <KloudPreJoin
               defaults={preJoinDefaults}
@@ -1445,13 +1045,55 @@ export function PageClientImpl(props: {
               camLabel={t('prejoin.webcam')}
               mediaUnavailableLabel={t('prejoin.mediaRequiresSecureContext')}
               joinButtonDisabled={personalRoomSwitching}
+              title={preJoinTitle}
+              subtitle={preJoinSubtitle}
+              subtitleIsNotice={isHost && isActive}
+              joinFooter={
+                isHost && isActive && !isSameTabRefresh ? (
+                  <button
+                    type="button"
+                    className={prejoinStyles.textLink}
+                    onClick={() => { window.location.href = '/'; }}
+                  >
+                    {t('prejoin.orStartNew')}
+                  </button>
+                ) : null
+              }
+              footer={
+                <>
+                  <PrejoinMeetingShareLink
+                    active={prejoinReady && !isBot}
+                    roomName={effectiveRoomName}
+                  />
+                  <div className={prejoinStyles.desktopRow}>
+                    <button
+                      type="button"
+                      className={prejoinStyles.desktopBtn}
+                      onClick={() => openDesktopEntry('prejoin')}
+                      aria-describedby="kloud-prejoin-desktop-tip"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                        <rect x="2" y="4" width="20" height="13" rx="2" />
+                        <path d="M8 21h8M12 17v4" />
+                      </svg>
+                      {t('toolbar.openDesktop.menuItem')}
+                    </button>
+                    <span
+                      className={prejoinStyles.infoDot}
+                      title={t('toolbar.openDesktop.prejoinTip')}
+                      aria-hidden="true"
+                    >
+                      i
+                    </span>
+                    <span id="kloud-prejoin-desktop-tip" className={prejoinStyles.srOnly}>
+                      {t('toolbar.openDesktop.prejoinTip')}
+                    </span>
+                  </div>
+                </>
+              }
             >
-              <PrejoinMeetingShareLink
-                active={prejoinReady && !isBot}
-                roomName={effectiveRoomName}
-              />
               {isHost && (
-                <div className="kloud-prejoin-host-options">
+                <div className={prejoinStyles.hostOptions}>
                   <PrejoinParticipantLiveDocSelect
                     show={participantLiveDocShow}
                     onChange={handleParticipantLiveDocChange}
@@ -1466,68 +1108,6 @@ export function PageClientImpl(props: {
                 </div>
               )}
             </KloudPreJoin>
-          )}
-          {!isBot && (
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                alignItems: 'center',
-                gap: '0.4rem',
-                maxWidth: '560px',
-                margin: '0.6rem auto 0',
-                zIndex: 2,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => openDesktopEntry('prejoin')}
-                style={{
-                  background: 'transparent',
-                  border: 'none',
-                  color: theme === 'dark' ? '#a5b4fc' : '#5b21b6',
-                  fontWeight: 600,
-                  fontSize: '0.9rem',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: '2px',
-                  padding: 0,
-                }}
-              >
-                {t('toolbar.openDesktop.menuItem')}
-              </button>
-              <span
-                title={t('toolbar.openDesktop.prejoinTip')}
-                aria-label={t('toolbar.openDesktop.prejoinTip')}
-                style={{
-                  width: '16px',
-                  height: '16px',
-                  borderRadius: '50%',
-                  border: theme === 'dark' ? '1px solid #818cf8' : '1px solid #a78bfa',
-                  color: theme === 'dark' ? '#c7d2fe' : '#6d28d9',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  cursor: 'help',
-                  userSelect: 'none',
-                  lineHeight: 1,
-                }}
-              >
-                i
-              </span>
-            </div>
-          )}
-          {isHost && isActive && !isSameTabRefresh && (
-            <div style={{ textAlign: 'center', marginTop: '1.25rem', zIndex: 2 }}>
-              <button
-                onClick={() => { window.location.href = '/'; }}
-                style={{ background: 'transparent', border: 'none', color: '#ff6352', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.9rem', fontFamily: 'Inter, sans-serif' }}
-              >
-                {t('prejoin.orStartNew')}
-              </button>
-            </div>
           )}
         </div>
         ) : (
@@ -1546,6 +1126,7 @@ export function PageClientImpl(props: {
                 ? String(meetingInfo.createdByMemberId)
                 : null
             }
+            meetingTitle={typeof meetingInfo?.title === 'string' ? meetingInfo.title : undefined}
             region={props.region}
             options={{ codec: props.codec, hq: props.hq }}
           />

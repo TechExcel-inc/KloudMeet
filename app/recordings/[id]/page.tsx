@@ -4,10 +4,11 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useI18n } from '@/lib/i18n';
-import { authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
+import { authFetch, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
+import css from '@/styles/Replay.module.css';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -37,9 +38,15 @@ interface Transcript {
   offsetSeconds: number | null;
 }
 
+type RecordingVisibility = 'PRIVATE' | 'PUBLIC';
+
 interface ReplayData {
   recording: {
     id: number;
+    /** 回放链接 key（服务端 ensureShareKey 后返回） */
+    shareKey?: string | null;
+    /** PRIVATE | PUBLIC；旧版服务端可能不返回 */
+    visibility?: string | null;
     fileName: string;
     durationSeconds: number | null;
     streamUrl: string | null;
@@ -67,6 +74,8 @@ interface ReplayData {
     transcripts: Transcript[];
   } | null;
 }
+
+type TFn = (key: string, params?: Record<string, string | number>) => string;
 
 /* ─── Helpers ────────────────────────────────────────────── */
 function fmtTime(secs: number | null | undefined): string {
@@ -119,14 +128,73 @@ function dominantSpeaker(
   return best;
 }
 
+/** Pastel speaker colours; avatar initials use dark text (contrast ≥ 5:1 on every colour). */
 const COLORS = [
-  '#6366f1', '#ec4899', '#14b8a6', '#f59e0b',
-  '#8b5cf6', '#10b981', '#ef4444', '#3b82f6',
+  '#8B87FF', '#FFB877', '#5FC2F0', '#5FD3A6',
+  '#F28FB8', '#C3A6FF', '#F2C94C', '#7FB7FF',
 ];
 function speakerColor(name: string): string {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h);
   return COLORS[Math.abs(h) % COLORS.length];
+}
+
+/** Locale strings still carry a leading emoji (e.g. "📋 Summary"); the redesign shows plain labels. */
+const LEADING_SYMBOLS = /^(?:\p{Extended_Pictographic}|️|‍|\s)+/u;
+function plainLabel(text: string): string {
+  const stripped = text.replace(LEADING_SYMBOLS, '');
+  return stripped || text;
+}
+
+/** t() returns the key itself when a string is missing; fall back to English for keys added in the redesign. */
+function tr(t: TFn, key: string, fallback: string, params?: Record<string, string | number>): string {
+  const value = t(key, params);
+  if (value !== key) return value;
+  let text = fallback;
+  if (params) {
+    for (const [k, v] of Object.entries(params)) text = text.split(`{${k}}`).join(String(v));
+  }
+  return text;
+}
+
+function cx(...names: Array<string | false | null | undefined>): string {
+  return names.filter(Boolean).join(' ');
+}
+
+function Avatar({ name, size }: { name: string; size: number }) {
+  return (
+    <span
+      className={css.avatar}
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        fontSize: Math.round(size * 0.4),
+        background: speakerColor(name),
+      }}
+    >
+      {getInitials(name)}
+    </span>
+  );
+}
+
+function ChevronDown({ className, size = 16 }: { className?: string; size?: number }) {
+  return (
+    <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+}
+
+function ProgressBlock({ pct, text }: { pct: number; text: string }) {
+  return (
+    <div className={css.progress}>
+      <div className={css.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <div className={css.progressBar} style={{ width: `${pct}%` }} />
+      </div>
+      <p className={css.progressText} aria-live="polite">{text}</p>
+    </div>
+  );
 }
 
 /* ─── Chapter Cards + Speaker Timeline types ─────────────── */
@@ -158,10 +226,10 @@ function ChapterCardsCarousel({
   selectedId: number | null;
   onSelect: (ch: ChapterCard) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
+  const scrollRef = useRef<HTMLUListElement>(null);
   const [canLeft, setCanLeft] = useState(false);
   const [canRight, setCanRight] = useState(true);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
 
   const check = () => {
     const el = scrollRef.current;
@@ -177,8 +245,12 @@ function ChapterCardsCarousel({
     const el = scrollRef.current;
     if (!el) return;
     el.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
     check();
-    return () => el.removeEventListener('scroll', check);
+    return () => {
+      el.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
   }, []);
 
   // 自动高亮：基于播放时间
@@ -186,44 +258,53 @@ function ChapterCardsCarousel({
     currentTime >= c.startSec && currentTime < c.endSec ? i : acc, -1);
 
   return (
-    <div style={stx.carouselWrap}>
+    <div className={css.chapters}>
       {canLeft && (
-        <button style={{ ...stx.arrowBtn, left: 6 }} onClick={() => scroll('l')}>‹</button>
+        <button
+          type="button"
+          className={cx(css.scrollArrow, css.scrollArrowLeft)}
+          aria-label={tr(t, 'replay.scrollChaptersLeft', 'Scroll chapters left')}
+          onClick={() => scroll('l')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+        </button>
       )}
-      <div ref={scrollRef} style={stx.carouselTrack}>
+      <ul ref={scrollRef} className={css.chapterTrack} aria-label={tr(t, 'replay.chapters', 'Chapters')}>
         {chapters.map((ch, idx) => {
           const isSelected = ch.id === selectedId;
           const isAuto = idx === autoIdx && selectedId === null;
           const isActive = isSelected || isAuto;
-          const isHovered = idx === hoverIdx;
           return (
-            <div
-              key={ch.id}
-              onClick={() => onSelect(ch)}
-              onMouseEnter={() => setHoverIdx(idx)}
-              onMouseLeave={() => setHoverIdx(null)}
-              style={{
-                ...stx.chapterCard,
-                background: isActive
-                  ? 'rgba(99,102,241,0.22)'
-                  : isHovered ? 'rgba(255,255,255,0.06)' : '#1a2235',
-                borderColor: isActive ? '#6366f1' : 'rgba(255,255,255,0.07)',
-                boxShadow: isActive ? '0 0 0 1.5px rgba(99,102,241,0.5)' : 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ ...stx.cardAvatar, background: speakerColor(ch.speaker) }}>
-                {getInitials(ch.speaker)}
-              </div>
-              <div style={stx.cardName}>{ch.speaker}</div>
-              <div style={stx.cardTimeRange}>{ch.timeRange}</div>
-              <div style={stx.cardTopic} title={ch.topic}>{ch.topic}</div>
-            </div>
+            <li key={ch.id} style={{ display: 'flex' }}>
+              <button
+                type="button"
+                className={cx(css.chapterCard, isActive && css.chapterCardOn)}
+                aria-current={isActive ? 'true' : undefined}
+                title={`${ch.timeRange} · ${ch.topic}`}
+                onClick={() => onSelect(ch)}
+              >
+                <span className={css.chapterCardHead}>
+                  <Avatar name={ch.speaker} size={22} />
+                  <span className={css.chapterSpeaker}>{ch.speaker}</span>
+                </span>
+                <span className={css.chapterTitle}>{ch.topic}</span>
+                <span className={css.chapterTime}>
+                  {fmtTime(ch.startSec)}–{fmtTime(ch.endSec)}
+                </span>
+              </button>
+            </li>
           );
         })}
-      </div>
+      </ul>
       {canRight && (
-        <button style={{ ...stx.arrowBtn, right: 6 }} onClick={() => scroll('r')}>›</button>
+        <button
+          type="button"
+          className={cx(css.scrollArrow, css.scrollArrowRight)}
+          aria-label={tr(t, 'replay.scrollChaptersRight', 'Scroll chapters right')}
+          onClick={() => scroll('r')}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg>
+        </button>
       )}
     </div>
   );
@@ -233,54 +314,62 @@ function ChapterCardsCarousel({
 function SpeakerSegmentTimeline({
   speakers,
   duration,
+  currentTime,
   onSeek,
 }: {
   speakers: SpeakerSegment[];
   duration: number;
+  currentTime: number;
   onSeek: (s: number) => void;
 }) {
+  const { t } = useI18n();
   if (!speakers.length || !duration) return null;
   const pct = (s: number) => `${((s / duration) * 100).toFixed(2)}%`;
+
+  // 发言占比：按各发言人片段时长之和计算（仅展示）
+  const talk = speakers.map((sp) => sp.segments.reduce((sum, [s, e]) => sum + Math.max(0, e - s), 0));
+  const talkAll = talk.reduce((a, b) => a + b, 0);
+  const playhead = Math.max(0, Math.min(100, (currentTime / duration) * 100));
+
   return (
-    <div style={stx.segTimeline}>
-      {speakers.map((sp) => (
-        <div key={sp.name} style={stx.segRow}>
-          <div style={stx.segLabel}>
-            <div style={{ ...stx.segAvatar, background: sp.color }}>{getInitials(sp.name)}</div>
-            <span style={stx.segName}>{sp.name}</span>
+    <section className={cx(css.card, css.speakers)} aria-labelledby="replay-speakers-head">
+      <h2 id="replay-speakers-head" className={css.sectionHead}>
+        {tr(t, 'replay.speakers', 'Speakers')}
+      </h2>
+      {speakers.map((sp, si) => {
+        const share = talkAll > 0 ? Math.round((talk[si] / talkAll) * 100) : 0;
+        return (
+          <div key={sp.name} className={css.lane}>
+            <Avatar name={sp.name} size={24} />
+            <span className={css.laneName} title={sp.name}>{sp.name}</span>
+            <span
+              className={css.laneShare}
+              title={tr(t, 'replay.talkShare', '{name}: {pct}% of talk time', { name: sp.name, pct: share })}
+            >
+              {share}%
+            </span>
+            <div
+              className={css.laneBar}
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                onSeek(((e.clientX - rect.left) / rect.width) * duration);
+              }}
+            >
+              {sp.segments.map(([s, e], i) => (
+                <div
+                  key={i}
+                  className={css.laneSeg}
+                  title={`${sp.name} ${fmtTime(s)} – ${fmtTime(e)}`}
+                  style={{ left: pct(s), width: pct(e - s), background: sp.color }}
+                  onClick={(ev) => { ev.stopPropagation(); onSeek(s); }}
+                />
+              ))}
+              <span className={css.playhead} style={{ left: `${playhead}%` }} aria-hidden="true" />
+            </div>
           </div>
-          <div
-            style={stx.segBar}
-            onClick={(e) => {
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              onSeek(((e.clientX - rect.left) / rect.width) * duration);
-            }}
-          >
-            {sp.segments.map(([s, e], i) => (
-              <div
-                key={i}
-                title={`${fmtTime(s)} – ${fmtTime(e)}  点击跳转`}
-                style={{
-                  position: 'absolute',
-                  left: pct(s),
-                  width: pct(e - s),
-                  top: 0,
-                  height: '100%',
-                  background: sp.color,
-                  borderRadius: 3,
-                  opacity: 0.88,
-                  cursor: 'pointer',
-                  transition: 'opacity 0.15s',
-                }}
-                onClick={(ev) => { ev.stopPropagation(); onSeek(s); }}
-                onMouseEnter={(ev) => { (ev.currentTarget as HTMLElement).style.opacity = '1'; }}
-                onMouseLeave={(ev) => { (ev.currentTarget as HTMLElement).style.opacity = '0.88'; }}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+        );
+      })}
+    </section>
   );
 }
 
@@ -290,7 +379,7 @@ function SpeakerSegmentTimeline({
 function SummaryPanel({
   items,
   currentTime,
-  duration,
+  duration: _duration,
   onSeek,
   meetingId,
   kloudMeetingId,
@@ -327,85 +416,98 @@ function SummaryPanel({
   if (!localItems.length) {
     if (!meetingId) {
       return (
-        <div style={styles.emptyPanel}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-          <p style={{ color: '#94a3b8' }}>{t('replay.noSummaryData')}</p>
+        <div className={css.empty}>
+          <EmptyIcon kind="summary" />
+          <p className={css.emptyText}>{t('replay.noSummaryData')}</p>
         </div>
       );
     }
     return (
-      <div style={styles.emptyPanel}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-        <p style={{ color: '#94a3b8', marginBottom: 8 }}>{t('replay.noSummary')}</p>
-        <p style={{ color: '#475569', fontSize: 12, marginBottom: 16 }}>
+      <div className={css.empty}>
+        <EmptyIcon kind="summary" />
+        <p className={css.emptyTitle}>{t('replay.noSummary')}</p>
+        <p className={css.emptyText}>
           {kloudMeetingId ? t('replay.summaryHint') : t('replay.summaryNoSource')}
         </p>
         {kloudMeetingId ? (
-          <button
-            style={styles.genBtn}
-            disabled={loading}
-            onClick={async () => {
-              setLoading(true);
-              try {
-                const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
-                const token = stored ? (JSON.parse(stored).token || '') : '';
-                const res = await fetch(`/api/meeting-summary/${meetingId}`, {
-                  headers: token ? { Authorization: `Bearer ${token}` } : {},
-                });
-                const data = await res.json();
-                if (data.items?.length) {
-                  setLocalItems(data.items);
-                } else {
-                  alert(t('replay.summaryEmpty'));
+          <div className={css.emptyActions}>
+            <button
+              type="button"
+              className={cx(css.btn, css.btnFill)}
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
+                  const token = stored ? (JSON.parse(stored).token || '') : '';
+                  const res = await fetch(`/api/meeting-summary/${meetingId}`, {
+                    headers: token ? { Authorization: `Bearer ${token}` } : {},
+                  });
+                  const data = await res.json();
+                  if (data.items?.length) {
+                    setLocalItems(data.items);
+                  } else {
+                    alert(t('replay.summaryEmpty'));
+                  }
+                } catch {
+                  alert(t('replay.summaryFailed'));
+                } finally {
+                  setLoading(false);
                 }
-              } catch {
-                alert(t('replay.summaryFailed'));
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            {loading ? t('replay.fetchingSummary') : t('replay.fetchSummary')}
-          </button>
+              }}
+            >
+              {loading ? t('replay.fetchingSummary') : plainLabel(t('replay.fetchSummary'))}
+            </button>
+          </div>
         ) : null}
       </div>
     );
   }
 
   return (
-    <div style={styles.panelScroll}>
+    <div className={css.summaryList}>
       {localItems.map((item, idx) => {
         const isActive = idx === activeIdx;
         const isOpen = expanded === item.id;
+        const bodyId = `replay-summary-body-${item.id}`;
         return (
-          <div
-            key={item.id}
-            style={{
-              ...styles.summaryCard,
-              background: isActive ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-              borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
-            }}
-          >
-            <div
-              style={styles.summaryCardHeader}
+          <div key={item.id} className={cx(css.summaryItem, isActive && css.summaryItemOn)}>
+            <button
+              type="button"
+              className={css.summaryHead}
+              aria-expanded={isOpen}
+              aria-controls={bodyId}
+              aria-current={isActive ? 'true' : undefined}
               onClick={() => {
                 onSeek(offsetToSecs(item.timeOffset));
                 setExpanded(isOpen ? null : item.id);
               }}
             >
-              <span style={styles.chapterTime}>{item.timeOffset}</span>
-              <span style={{ ...styles.chapterTitle, color: isActive ? '#818cf8' : '#e2e8f0' }}>
-                {item.title}
-              </span>
-              <span style={{ color: '#475569', fontSize: 12 }}>{isOpen ? '▲' : '▼'}</span>
-            </div>
+              <span className={css.timeChip}>{item.timeOffset}</span>
+              <span className={css.summaryTitle}>{item.title}</span>
+              <ChevronDown className={cx(css.chevron, isOpen && css.chevronOpen)} />
+            </button>
             {isOpen && (
-              <div style={styles.chapterContent}>{item.content}</div>
+              <p id={bodyId} className={css.summaryBody}>{item.content}</p>
             )}
           </div>
         );
       })}
     </div>
+  );
+}
+
+function EmptyIcon({ kind }: { kind: 'summary' | 'ai' | 'captions' }) {
+  return (
+    <span className={css.emptyIcon} aria-hidden="true">
+      {kind === 'ai' ? (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" /><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" /></svg>
+      ) : kind === 'captions' ? (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M7 15h4M13 15h4M7 11h10" /></svg>
+      ) : (
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01" /></svg>
+      )}
+    </span>
   );
 }
 
@@ -421,11 +523,21 @@ function TranscriptPanel({
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState('');
-  const activeRef = useRef<HTMLDivElement>(null);
+  const [speakerFilter, setSpeakerFilter] = useState<string | null>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  const filtered = search
-    ? transcripts.filter((t) => t.content.toLowerCase().includes(search.toLowerCase()))
-    : transcripts;
+  // 发言人筛选（仅展示层，基于已有字幕）
+  const speakerNames: string[] = [];
+  for (const row of transcripts) {
+    if (!speakerNames.includes(row.speakerName)) speakerNames.push(row.speakerName);
+  }
+  const activeSpeaker = speakerFilter !== null && speakerNames.includes(speakerFilter) ? speakerFilter : null;
+
+  const filtered = transcripts.filter((row) =>
+    (activeSpeaker === null || row.speakerName === activeSpeaker) &&
+    (!search || row.content.toLowerCase().includes(search.toLowerCase())),
+  );
 
   // 当前正在播放的字幕
   const activeId = transcripts.reduce((acc, t) => {
@@ -433,11 +545,15 @@ function TranscriptPanel({
     return acc;
   }, -1);
 
-  // 自动滚动
+  // 自动滚动（只滚动字幕列表本身，等同 block: 'nearest'，不带动整页滚动）
   useEffect(() => {
-    if (activeRef.current) {
-      activeRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    const box = listRef.current;
+    const el = activeRef.current;
+    if (!box || !el) return;
+    const b = box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.top < b.top) box.scrollBy({ top: r.top - b.top - 8, behavior: 'smooth' });
+    else if (r.bottom > b.bottom) box.scrollBy({ top: r.bottom - b.bottom + 8, behavior: 'smooth' });
   }, [activeId]);
 
   // 按说话人分组（连续同一人合并）
@@ -451,71 +567,100 @@ function TranscriptPanel({
     }
   }
 
+  const filtering = Boolean(search) || activeSpeaker !== null;
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 搜索框 */}
-      <div style={styles.searchBox}>
-        <span style={{ color: '#64748b', marginRight: 8 }}>🔍</span>
-        <input
-          style={styles.searchInput}
-          placeholder={t('replay.searchPlaceholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
-        {search && (
-          <button style={styles.clearBtn} onClick={() => setSearch('')}>✕</button>
+    <>
+      <div className={css.transcriptTools}>
+        <label className={css.search}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <span className={css.srOnly}>{t('replay.searchPlaceholder')}</span>
+          <input
+            className={css.searchInput}
+            type="search"
+            placeholder={t('replay.searchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {search && (
+            <button
+              type="button"
+              className={css.clearBtn}
+              aria-label={tr(t, 'replay.clearSearch', 'Clear search')}
+              onClick={() => setSearch('')}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+            </button>
+          )}
+        </label>
+        {speakerNames.length > 1 && (
+          <div className={css.chips} role="group" aria-label={tr(t, 'replay.filterBySpeaker', 'Filter by speaker')}>
+            <button
+              type="button"
+              className={cx(css.chip, activeSpeaker === null && css.chipOn)}
+              aria-pressed={activeSpeaker === null}
+              onClick={() => setSpeakerFilter(null)}
+            >
+              {tr(t, 'replay.allSpeakers', 'All speakers')}
+            </button>
+            {speakerNames.map((name) => (
+              <button
+                key={name}
+                type="button"
+                className={cx(css.chip, activeSpeaker === name && css.chipOn)}
+                aria-pressed={activeSpeaker === name}
+                title={name}
+                onClick={() => setSpeakerFilter(activeSpeaker === name ? null : name)}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
         )}
       </div>
 
       {/* 字幕列表 */}
-      <div style={styles.panelScroll}>
+      <div className={css.transcriptScroll} ref={listRef}>
         {!filtered.length && (
-          <div style={styles.emptyPanel}>
-            <p style={{ color: '#94a3b8' }}>
-              {search ? t('replay.noMatch') : t('replay.noTranscript')}
+          <div className={css.empty}>
+            <p className={css.emptyText}>
+              {filtering ? t('replay.noMatch') : t('replay.noTranscript')}
             </p>
           </div>
         )}
         {groups.map((group, gi) => (
-          <div key={gi} style={{ marginBottom: 16 }}>
-            {/* 说话人头像 + 名字 */}
-            <div style={styles.speakerRow}>
-              <div
-                style={{
-                  ...styles.speakerAvatar,
-                  background: speakerColor(group.speaker),
-                }}
-              >
-                {getInitials(group.speaker)}
+          <div key={gi} className={css.group}>
+            <Avatar name={group.speaker} size={28} />
+            <div className={css.groupBody}>
+              <div className={css.groupHead}>
+                <strong>{group.speaker}</strong>
+                {group.items[0].offsetSeconds !== null && (
+                  <> · {fmtTime(group.items[0].offsetSeconds)}</>
+                )}
               </div>
-              <span style={styles.speakerName}>{group.speaker}</span>
-              {group.items[0].offsetSeconds !== null && (
-                <span style={styles.speakerTime}>{fmtTime(group.items[0].offsetSeconds)}</span>
-              )}
+              {group.items.map((t) => {
+                const isActive = t.id === activeId;
+                const seekable = t.offsetSeconds !== null;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    ref={isActive ? activeRef : null}
+                    className={cx(css.line, seekable && css.lineSeekable, isActive && css.lineOn)}
+                    aria-current={isActive ? 'true' : undefined}
+                    title={seekable ? fmtTime(t.offsetSeconds) : undefined}
+                    disabled={!seekable}
+                    onClick={() => t.offsetSeconds !== null && onSeek(t.offsetSeconds)}
+                  >
+                    {t.content}
+                  </button>
+                );
+              })}
             </div>
-            {/* 逐条字幕气泡 */}
-            {group.items.map((t) => {
-              const isActive = t.id === activeId;
-              return (
-                <div
-                  key={t.id}
-                  ref={isActive ? activeRef : null}
-                  style={{
-                    ...styles.captionBubble,
-                    background: isActive ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.06)',
-                    borderColor: isActive ? '#6366f1' : 'transparent',
-                    cursor: t.offsetSeconds !== null ? 'pointer' : 'default',
-                  }}
-                  onClick={() => t.offsetSeconds !== null && onSeek(t.offsetSeconds)}
-                >
-                  {t.content}
-                </div>
-              );
-            })}
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -530,158 +675,201 @@ function InfoPanel({
   const { t } = useI18n();
   if (!meeting) return null;
   return (
-    <div style={styles.panelScroll}>
-      <div style={styles.infoSection}>
-        <h4 style={styles.infoLabel}>{t('replay.meetingTitle')}</h4>
-        <p style={styles.infoValue}>{meeting.title || meeting.roomName}</p>
-      </div>
-      {meeting.actualStartedAt && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.startTime')}</h4>
-          <p style={styles.infoValue}>{new Date(meeting.actualStartedAt).toLocaleString()}</p>
-        </div>
-      )}
-      {meeting.actualDurationMinutes && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.meetingDuration')}</h4>
-          <p style={styles.infoValue}>{t('replay.minutes', { n: meeting.actualDurationMinutes })}</p>
-        </div>
-      )}
-      {recording.durationSeconds && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.recordingDuration')}</h4>
-          <p style={styles.infoValue}>{fmtTime(recording.durationSeconds)}</p>
-        </div>
-      )}
-      {meeting.createdBy && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.host')}</h4>
-          <p style={styles.infoValue}>{meeting.createdBy.fullName || meeting.createdBy.username}</p>
-        </div>
-      )}
-      <div style={styles.infoSection}>
-        <h4 style={styles.infoLabel}>{t('replay.participants')}({meeting.participants.length})</h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {meeting.participants.map((p) => (
-            <div key={p.id} style={styles.participantRow}>
-              <div
-                style={{
-                  ...styles.speakerAvatar,
-                  background: speakerColor(p.displayName),
-                  width: 32,
-                  height: 32,
-                  fontSize: 12,
-                }}
-              >
-                {getInitials(p.displayName)}
-              </div>
-              <div>
-                <div style={{ color: '#e2e8f0', fontSize: 13 }}>{p.displayName}</div>
-                {p.durationSeconds && (
-                  <div style={{ color: '#64748b', fontSize: 11 }}>{t('replay.online', { time: fmtTime(p.durationSeconds) })}</div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+    <div className={css.scroll}>
+      <dl className={css.infoList}>
+        <dt>{t('replay.meetingTitle')}</dt>
+        <dd>{meeting.title || meeting.roomName}</dd>
+        {meeting.actualStartedAt && (
+          <>
+            <dt>{t('replay.startTime')}</dt>
+            <dd>{new Date(meeting.actualStartedAt).toLocaleString()}</dd>
+          </>
+        )}
+        {Boolean(meeting.actualDurationMinutes) && (
+          <>
+            <dt>{t('replay.meetingDuration')}</dt>
+            <dd>{t('replay.minutes', { n: meeting.actualDurationMinutes ?? 0 })}</dd>
+          </>
+        )}
+        {Boolean(recording.durationSeconds) && (
+          <>
+            <dt>{t('replay.recordingDuration')}</dt>
+            <dd>{fmtTime(recording.durationSeconds)}</dd>
+          </>
+        )}
+        {meeting.createdBy && (
+          <>
+            <dt>{t('replay.host')}</dt>
+            <dd>{meeting.createdBy.fullName || meeting.createdBy.username}</dd>
+          </>
+        )}
+      </dl>
+      <h3 className={css.infoHead}>
+        {t('replay.participants')} ({meeting.participants.length})
+      </h3>
+      <ul className={css.people}>
+        {meeting.participants.map((p) => (
+          <li key={p.id} className={css.person}>
+            <Avatar name={p.displayName} size={30} />
+            <span className={css.personName}>{p.displayName}</span>
+            {Boolean(p.durationSeconds) && (
+              <span className={css.personOnline}>{t('replay.online', { time: fmtTime(p.durationSeconds) })}</span>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
 
-/** 参与者发言进度条 */
-function ParticipantTimeline({
-  transcripts,
-  participants,
-  duration,
-  currentTime,
-  onSeek,
+/** 录制访问权限（私密 / 公开 + 复制链接）—— 仅对可管理该录制的用户展示 */
+function RecordingAccessMenu({
+  shareKey,
+  visibility,
+  onChanged,
+  notify,
 }: {
-  transcripts: Transcript[];
-  participants: Participant[];
-  duration: number;
-  currentTime: number;
-  onSeek: (secs: number) => void;
+  shareKey: string;
+  visibility: RecordingVisibility;
+  onChanged: (next: RecordingVisibility) => void;
+  notify: (text: string) => void;
 }) {
-  if (!duration || !transcripts.length) return null;
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
-  // 聚合：每个发言人的发言时段
-  const speakerMap: Record<string, number[]> = {};
-  for (const t of transcripts) {
-    if (t.offsetSeconds === null) continue;
-    if (!speakerMap[t.speakerName]) speakerMap[t.speakerName] = [];
-    speakerMap[t.speakerName].push(t.offsetSeconds);
-  }
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
-  const speakers = Object.keys(speakerMap).slice(0, 6); // 最多显示6人
+  const pick = async (next: RecordingVisibility) => {
+    if (next === visibility) {
+      setOpen(false);
+      return;
+    }
+    if (next === 'PUBLIC' && !window.confirm(t('dash.recordingMakePublicConfirm'))) return;
+    setOpen(false);
+    setSaving(true);
+    try {
+      const res = await authFetch(`/api/recordings/${encodeURIComponent(shareKey)}`, {
+        method: 'PATCH',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ visibility: next }),
+      });
+      if (!res.ok) {
+        notify(t('dash.recordingVisibilityFailed'));
+        return;
+      }
+      const json = await res.json().catch(() => null);
+      const saved: RecordingVisibility = json?.visibility === 'PUBLIC' || json?.visibility === 'PRIVATE' ? json.visibility : next;
+      onChanged(saved);
+      notify(saved === 'PUBLIC' ? t('dash.recordingNowPublic') : t('dash.recordingNowPrivate'));
+    } catch {
+      notify(t('dash.recordingVisibilityFailed'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyLink = async () => {
+    setOpen(false);
+    const url = `${window.location.origin}${recordingReplayPath(shareKey)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch {
+      const area = document.createElement('textarea');
+      area.value = url;
+      area.setAttribute('readonly', '');
+      area.style.position = 'fixed';
+      area.style.opacity = '0';
+      document.body.appendChild(area);
+      area.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
+      document.body.removeChild(area);
+    }
+    notify(t('dash.recordingLinkCopied'));
+  };
+
+  const options: Array<{ id: RecordingVisibility; label: string; hint: string }> = [
+    { id: 'PRIVATE', label: t('dash.recordingPrivate'), hint: t('dash.recordingPrivateHint') },
+    { id: 'PUBLIC', label: t('dash.recordingPublic'), hint: t('dash.recordingPublicHint') },
+  ];
+  const isPublic = visibility === 'PUBLIC';
 
   return (
-    <div style={styles.timelineContainer}>
-      {speakers.map((name) => {
-        const offsets = speakerMap[name];
-        return (
-          <div key={name} style={styles.timelineRow}>
-            <div style={styles.timelineLabel} title={name}>
-              <div
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: speakerColor(name),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  color: '#fff',
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
+    <div className={css.accessWrap} ref={wrapRef}>
+      <button
+        ref={triggerRef}
+        type="button"
+        className={cx(css.btn, css.btnOutline)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`${t('dash.recordingShare')}: ${isPublic ? t('dash.recordingPublic') : t('dash.recordingPrivate')}`}
+        disabled={saving}
+        onClick={() => setOpen((v) => !v)}
+      >
+        {isPublic ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>
+        )}
+        {isPublic ? t('dash.recordingPublic') : t('dash.recordingPrivate')}
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className={css.menu} role="menu" aria-label={t('dash.recordingShare')}>
+          <div className={css.menuLabel} aria-hidden="true">{t('dash.recordingShare')}</div>
+          {options.map((opt) => {
+            const on = visibility === opt.id;
+            return (
+              <button
+                key={opt.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={on}
+                className={cx(css.menuItem, on && css.menuItemOn)}
+                onClick={() => void pick(opt.id)}
               >
-                {getInitials(name)}
-              </div>
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11 }}>
-                {name}
-              </span>
-            </div>
-            <div style={styles.timelineBar}>
-              {offsets.map((sec, i) => {
-                const left = `${(sec / duration) * 100}%`;
-                return (
-                  <div
-                    key={i}
-                    title={fmtTime(sec)}
-                    style={{
-                      position: 'absolute',
-                      left,
-                      top: 2,
-                      width: 4,
-                      height: 'calc(100% - 4px)',
-                      borderRadius: 2,
-                      background: speakerColor(name),
-                      opacity: 0.85,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => onSeek(sec)}
-                  />
-                );
-              })}
-              {/* 当前播放位置 */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${(currentTime / duration) * 100}%`,
-                  top: 0,
-                  width: 2,
-                  height: '100%',
-                  background: '#818cf8',
-                  opacity: 0.7,
-                  pointerEvents: 'none',
-                }}
-              />
-            </div>
-          </div>
-        );
-      })}
+                <span className={css.menuCheck} aria-hidden="true">
+                  {on && (
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5 9-10" /></svg>
+                  )}
+                </span>
+                <span className={css.menuText}>
+                  <span className={css.menuTitle}>{opt.label}</span>
+                  <span className={css.menuHint}>{opt.hint}</span>
+                </span>
+              </button>
+            );
+          })}
+          <div className={css.menuDivider} role="separator" />
+          <button type="button" role="menuitem" className={css.menuItem} onClick={() => void copyLink()}>
+            <span className={css.menuCheck} aria-hidden="true" style={{ color: 'var(--km-text-muted)' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" /></svg>
+            </span>
+            <span className={css.menuText}>
+              <span className={css.menuTitle} style={{ fontWeight: 500 }}>{t('dash.recordingCopyLink')}</span>
+            </span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -697,7 +885,7 @@ export default function ReplayPage() {
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [playing, setPlaying] = useState(false);
+  const [, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info'>('summary');
   // 为 null 表示未手动选中，高亮跟随播放时间自动
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
@@ -706,12 +894,35 @@ export default function ReplayPage() {
   const [genProgress, setGenProgress] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [sessionOn, setSessionOn] = useState(false);
-
+  const [snack, setSnack] = useState<string | null>(null);
+  const snackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
     setSessionOn(Boolean(getKloudSessionBearer()));
+  }, []);
+
+  // 独立打开的回放页：沿用首页保存的主题（未被其它页面设置时）
+  useEffect(() => {
+    const root = document.documentElement;
+    if (root.hasAttribute('data-theme')) return;
+    try {
+      const stored = window.localStorage.getItem('kloud-theme');
+      if (stored === 'dark' || stored === 'light') root.setAttribute('data-theme', stored);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => () => {
+    if (snackTimer.current) clearTimeout(snackTimer.current);
+  }, []);
+
+  const notify = useCallback((text: string) => {
+    setSnack(text);
+    if (snackTimer.current) clearTimeout(snackTimer.current);
+    snackTimer.current = setTimeout(() => setSnack(null), 2800);
   }, []);
 
   // 加载聚合数据
@@ -775,6 +986,10 @@ export default function ReplayPage() {
     setSelectedChapterId(ch.id);
   }, [seekTo]);
 
+  const handleVisibilityChanged = useCallback((next: RecordingVisibility) => {
+    setData((prev) => (prev ? { ...prev, recording: { ...prev.recording, visibility: next } } : prev));
+  }, []);
+
   // AI 生成会议摘要
   const generateSummary = useCallback(async () => {
     if (!data?.meeting?.id) return;
@@ -827,10 +1042,9 @@ export default function ReplayPage() {
   /* ── Loading ── */
   if (loading) {
     return (
-      <div style={styles.fullCenter}>
-        <div style={styles.spinner} />
-        <p style={{ color: '#94a3b8', marginTop: 16 }}>{t('replay.loading')}</p>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div className={css.centerPage} role="status">
+        <div className={css.spinner} aria-hidden="true" />
+        <p className={css.loadingText}>{t('replay.loading')}</p>
       </div>
     );
   }
@@ -838,12 +1052,14 @@ export default function ReplayPage() {
   /* ── Error ── */
   if (error || !data?.recording.streamUrl) {
     return (
-      <div style={styles.fullCenter}>
-        <div style={{ textAlign: 'center', padding: 40, background: '#1e293b', borderRadius: 16, border: '1px solid #334155', maxWidth: 420 }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>&#x26A0;&#xFE0F;</div>
-          <h2 style={{ color: '#f1f5f9', marginBottom: 8 }}>{t('replay.notReady')}</h2>
-          <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>{error || t('replay.processing')}</p>
-          <Link href="/" style={styles.primaryBtn}>{t('replay.back')}</Link>
+      <div className={css.centerPage}>
+        <div className={css.stateCard}>
+          <span className={css.stateIcon} aria-hidden="true">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l9.5 17h-19z" /><path d="M12 10v4M12 17.5h.01" /></svg>
+          </span>
+          <h1 className={css.stateTitle}>{t('replay.notReady')}</h1>
+          <p className={css.stateText}>{error || t('replay.processing')}</p>
+          <Link href="/" className={cx(css.btn, css.btnFill)}>{t('replay.back')}</Link>
         </div>
       </div>
     );
@@ -860,6 +1076,8 @@ export default function ReplayPage() {
   const sttStatus = recording.transcribe?.status ?? null;
   const unfinished = isSttActive(sttStatus) || sttStatus === 'FAILED';
   const canAskTranscribe = recording.canTranscribe === true || recording.canManage || sessionOn;
+  const shareKey = recording.shareKey || null;
+  const visibility: RecordingVisibility = recording.visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE';
 
   function secsToHMS(s: number): string {
     const h = Math.floor(s / 3600);
@@ -903,73 +1121,83 @@ export default function ReplayPage() {
   const displaySummaryItems = summaryItems;
 
   const tabs = [
-    { key: 'summary', label: t('replay.tabSummary'), count: displaySummaryItems.length },
-    { key: 'transcript', label: t('replay.tabTranscript'), count: transcripts.length },
-    { key: 'info', label: t('replay.tabInfo'), count: null },
+    { key: 'summary', label: plainLabel(t('replay.tabSummary')), count: displaySummaryItems.length },
+    { key: 'transcript', label: plainLabel(t('replay.tabTranscript')), count: transcripts.length },
+    { key: 'info', label: plainLabel(t('replay.tabInfo')), count: null },
   ] as const;
 
+  const onTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, idx: number) => {
+    let next = -1;
+    if (e.key === 'ArrowRight') next = (idx + 1) % tabs.length;
+    else if (e.key === 'ArrowLeft') next = (idx - 1 + tabs.length) % tabs.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = tabs.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    setActiveTab(tabs[next].key);
+    document.getElementById(`replay-tab-${tabs[next].key}`)?.focus();
+  };
+
+  const hostName = meeting?.createdBy ? (meeting.createdBy.fullName || meeting.createdBy.username) : null;
+  const genPct = Math.round(genProgress);
+
   return (
-    <div style={styles.page}>
+    <div className={css.page}>
       {/* ── Header ── */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <Link href="/" style={styles.backBtn}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            {t('replay.back')}
-          </Link>
-          <div style={styles.headerTitle}>
-            <span style={{ color: '#6366f1', marginRight: 6 }}>🎬</span>
-            <span>{meetingTitle}</span>
+      <header className={css.header}>
+        <Link href="/" className={css.iconBtn} aria-label={t('replay.back')} title={t('replay.back')}>
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </Link>
+        <div className={css.headerMain}>
+          <h1 className={css.title} title={meetingTitle}>{meetingTitle}</h1>
+          <div className={css.meta}>
             {meeting?.actualStartedAt && (
-              <span style={styles.headerDate}>
+              <span>
                 {new Date(meeting.actualStartedAt).toLocaleDateString('zh-CN', {
                   year: 'numeric', month: '2-digit', day: '2-digit',
                   hour: '2-digit', minute: '2-digit',
                 })}
               </span>
             )}
+            {Boolean(recording.durationSeconds) && <span>{fmtTime(recording.durationSeconds)}</span>}
+            {hostName && <span>{t('replay.host')} {hostName}</span>}
+            {participants.length > 0 && <span>{t('replay.participants')} {participants.length}</span>}
           </div>
         </div>
-        <div style={styles.headerRight}>
+        <div className={css.headerActions}>
+          {recording.canManage && shareKey && (
+            <RecordingAccessMenu
+              shareKey={shareKey}
+              visibility={visibility}
+              onChanged={handleVisibilityChanged}
+              notify={notify}
+            />
+          )}
           <a
             href={recording.streamUrl!}
             download={recording.fileName}
-            style={styles.downloadBtn}
+            className={cx(css.btn, css.btnFill)}
           >
-            {t('replay.download')}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg>
+            {plainLabel(t('replay.download'))}
           </a>
         </div>
       </header>
 
       {/* ── Main Layout ── */}
-      <div
-        style={{
-          ...styles.mainLayout,
-          ...(hasTranscripts ? {} : { flexDirection: 'column' as const }),
-        }}
-      >
-        {/* Left: Video →（有字幕时）Chapter Cards → Speaker Timeline */}
-        <div
-          style={{
-            ...styles.leftPanel,
-            ...(hasTranscripts ? {} : { borderRight: 'none', flex: 1, minHeight: 0 }),
-          }}
-        >
+      <main className={css.main}>
+        {/* Left: Video →（有字幕时）Speaker Timeline → Chapter Cards */}
+        <section className={cx(css.left, !hasTranscripts && css.leftSolo)}>
           {/* ① 视频播放器（最顶部） */}
-          <div style={styles.videoWrap}>
+          <div className={css.videoWrap}>
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
-              style={{
-                ...styles.video,
-                ...(hasTranscripts
-                  ? {}
-                  : { maxHeight: 'min(88vh, 1200px)', minHeight: '52vh' }),
-              }}
+              playsInline
+              className={cx(css.video, !hasTranscripts && css.videoSolo)}
               onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
               onDurationChange={(e) => setDuration(e.currentTarget.duration)}
               onPlay={() => setPlaying(true)}
@@ -977,148 +1205,151 @@ export default function ReplayPage() {
             />
           </div>
 
-          {hasTranscripts && realChapters.length > 0 && (
-          <ChapterCardsCarousel
-            chapters={realChapters}
-            currentTime={currentTime}
-            selectedId={selectedChapterId}
-            onSelect={handleChapterSelect}
-          />
-          )}
-
           {hasTranscripts && realSpeakerSegments.length > 0 && (
-          <SpeakerSegmentTimeline
-            speakers={realSpeakerSegments}
-            duration={realDuration}
-            onSeek={seekTo}
-          />
+            <SpeakerSegmentTimeline
+              speakers={realSpeakerSegments}
+              duration={realDuration}
+              currentTime={currentTime}
+              onSeek={seekTo}
+            />
           )}
 
-        </div>
+          {hasTranscripts && realChapters.length > 0 && (
+            <ChapterCardsCarousel
+              chapters={realChapters}
+              currentTime={currentTime}
+              selectedId={selectedChapterId}
+              onSelect={handleChapterSelect}
+            />
+          )}
+        </section>
 
         {/* Right: Tab Panel（仅在有字幕时展示） */}
         {hasTranscripts && (
-        <div style={styles.rightPanel}>
-          {/* Tabs */}
-          <div style={styles.tabBar}>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                style={{
-                  ...styles.tabBtn,
-                  ...(activeTab === tab.key ? styles.tabBtnActive : {}),
-                }}
-                onClick={() => setActiveTab(tab.key)}
-              >
-                {tab.label}
-                {tab.count !== null && tab.count > 0 && (
-                  <span style={styles.tabBadge}>{tab.count}</span>
-                )}
-              </button>
-            ))}
-          </div>
+          <aside className={css.aside}>
+            {/* Tabs */}
+            <div className={css.tabList} role="tablist" aria-label={tr(t, 'replay.tabsLabel', 'Replay content')}>
+              {tabs.map((tab, idx) => {
+                const selected = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    id={`replay-tab-${tab.key}`}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`replay-panel-${tab.key}`}
+                    tabIndex={selected ? 0 : -1}
+                    className={cx(css.tab, selected && css.tabOn)}
+                    onClick={() => setActiveTab(tab.key)}
+                    onKeyDown={(e) => onTabKeyDown(e, idx)}
+                  >
+                    {tab.label}
+                    {tab.count !== null && tab.count > 0 && (
+                      <span className={css.tabCount}>{tab.count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* Tab Content */}
-          <div style={styles.tabContent}>
-            {activeTab === 'summary' && (
-              summaryItems.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-                  {/* ── Re-generate toolbar ── */}
-                  {generating ? (
-                    <div style={{ padding: '10px 16px', borderBottom: '1px solid #1e293b', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      <div style={{ width: '100%', height: 4, background: '#1e293b', borderRadius: 99, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${Math.round(genProgress)}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)', borderRadius: 99, transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)', boxShadow: '0 0 6px rgba(129,140,248,0.5)' }} />
-                      </div>
-                      <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
-                        {t('replay.generating', { pct: Math.round(genProgress) })}
-                      </p>
+            {/* Tab Content */}
+            <div
+              className={css.tabPanel}
+              role="tabpanel"
+              id={`replay-panel-${activeTab}`}
+              aria-labelledby={`replay-tab-${activeTab}`}
+            >
+              {activeTab === 'summary' && (
+                summaryItems.length > 0 ? (
+                  <>
+                    {/* ── Summary content ── */}
+                    <div className={css.scroll}>
+                      <SummaryPanel
+                        items={displaySummaryItems}
+                        currentTime={currentTime}
+                        duration={duration}
+                        onSeek={seekTo}
+                        meetingId={meeting?.id ?? 0}
+                        kloudMeetingId={meeting?.kloudMeetingId ?? null}
+                        forceExpandId={selectedChapterId}
+                      />
                     </div>
-                  ) : (
-                    <div style={{ padding: '7px 12px', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
-
-                      <button
-                        onClick={generateSummary}
-                        title={t('replay.regenerateSummary')}
-                        style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', background: 'transparent', border: '1px solid #334155', borderRadius: 6, color: '#94a3b8', fontSize: 12, cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#6366f1'; e.currentTarget.style.color = '#818cf8'; e.currentTarget.style.background = 'rgba(99,102,241,0.08)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#334155'; e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.background = 'transparent'; }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-                          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                        </svg>
-                        {t('replay.regenerateSummary')}
-                      </button>
-                    </div>
-                  )}
-                  {/* ── Summary content ── */}
-                  <div style={{ flex: 1, overflow: 'hidden' }}>
-                    <SummaryPanel
-                      items={displaySummaryItems}
-                      currentTime={currentTime}
-                      duration={duration}
-                      onSeek={seekTo}
-                      meetingId={meeting?.id ?? 0}
-                      kloudMeetingId={meeting?.kloudMeetingId ?? null}
-                      forceExpandId={selectedChapterId}
-                    />
-                  </div>
-                </div>
-
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 32 }}>
-                  {generating ? (
-                    <div style={{ width: '100%', maxWidth: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-                      <div style={{ width: '100%', height: 6, background: '#1e293b', borderRadius: 99, overflow: 'hidden', border: '1px solid #334155' }}>
-                        <div style={{ height: '100%', width: `${Math.round(genProgress)}%`, background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)', borderRadius: 99, transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)', boxShadow: '0 0 8px rgba(129,140,248,0.6)' }} />
-                      </div>
-                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center', lineHeight: 1.5 }}>
-                        {t('replay.generating', { pct: Math.round(genProgress) })}
-                      </p>
-                    </div>
-                  ) : transcripts.length > 0 ? (
-                    <>
-                      <div style={{ fontSize: 48, marginBottom: 4 }}>🤖</div>
-                      <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>{t('replay.noSummaryYet')}</p>
-                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
-                        {t('replay.noSummaryHint', { count: transcripts.length })}
-                      </p>
-                      {generateError && (
-                        <p style={{ color: '#f87171', fontSize: 13 }}>{generateError}</p>
+                    {/* ── Re-generate footer ── */}
+                    <div className={css.panelFooter}>
+                      {generating ? (
+                        <ProgressBlock pct={genPct} text={t('replay.generating', { pct: genPct })} />
+                      ) : (
+                        <>
+                          <span className={css.panelFooterText}>
+                            {generateError ? (
+                              <span className={css.errorText} role="alert">{generateError}</span>
+                            ) : (
+                              t('replay.regenerateSummaryHint')
+                            )}
+                          </span>
+                          <button
+                            type="button"
+                            className={cx(css.btn, css.btnTonal, css.btnSmall)}
+                            onClick={generateSummary}
+                            title={t('replay.regenerateSummary')}
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                            {t('replay.regenerateSummary')}
+                          </button>
+                        </>
                       )}
-                      <button
-                        onClick={generateSummary}
-                        style={{ marginTop: 8, padding: '10px 28px', background: 'linear-gradient(135deg, #6366f1, #818cf8)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', transition: 'transform 0.15s, box-shadow 0.15s', boxShadow: '0 2px 12px rgba(99,102,241,0.4)' }}
-                        onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.5)'; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.4)'; }}
-                      >
-                        {t('replay.generateSummary')}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div style={{ fontSize: 48, marginBottom: 4 }}>📝</div>
-                      <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>{t('replay.noTranscriptForSummary')}</p>
-                      <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>{t('replay.noTranscriptForSummaryHint')}</p>
-                    </>
-                  )}
-                </div>
-              )
-            )}
-            {activeTab === 'transcript' && (
-              <TranscriptPanel
-                transcripts={transcripts}
-                currentTime={currentTime}
-                onSeek={seekTo}
-              />
-            )}
-            {activeTab === 'info' && (
-              <InfoPanel meeting={meeting} recording={recording} />
-            )}
-          </div>
-        </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className={css.empty}>
+                    {generating ? (
+                      <div style={{ width: '100%', maxWidth: 320 }}>
+                        <ProgressBlock pct={genPct} text={t('replay.generating', { pct: genPct })} />
+                      </div>
+                    ) : transcripts.length > 0 ? (
+                      <>
+                        <EmptyIcon kind="ai" />
+                        <p className={css.emptyTitle}>{t('replay.noSummaryYet')}</p>
+                        <p className={css.emptyText}>
+                          {t('replay.noSummaryHint', { count: transcripts.length })}
+                        </p>
+                        {generateError && (
+                          <p className={css.errorText} role="alert">{generateError}</p>
+                        )}
+                        <div className={css.emptyActions}>
+                          <button type="button" className={cx(css.btn, css.btnFill)} onClick={generateSummary}>
+                            {plainLabel(t('replay.generateSummary'))}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <EmptyIcon kind="captions" />
+                        <p className={css.emptyTitle}>{t('replay.noTranscriptForSummary')}</p>
+                        <p className={css.emptyText}>{t('replay.noTranscriptForSummaryHint')}</p>
+                      </>
+                    )}
+                  </div>
+                )
+              )}
+              {activeTab === 'transcript' && (
+                <TranscriptPanel
+                  transcripts={transcripts}
+                  currentTime={currentTime}
+                  onSeek={seekTo}
+                />
+              )}
+              {activeTab === 'info' && (
+                <InfoPanel meeting={meeting} recording={recording} />
+              )}
+            </div>
+          </aside>
         )}
-      </div>
+      </main>
 
       {(canAskTranscribe && meeting && (!hasTranscripts || unfinished)) && (
         <RecordingTranscribePrompt
@@ -1128,424 +1359,9 @@ export default function ReplayPage() {
         />
       )}
 
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: #0f172a; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) {
-          .replay-main { flex-direction: column !important; }
-          .replay-right { width: 100% !important; height: 360px !important; }
-        }
-      `}</style>
+      {snack && (
+        <div className={css.snackbar} role="status" aria-live="polite">{snack}</div>
+      )}
     </div>
   );
 }
-
-/* ─── Styles ─────────────────────────────────────────────── */
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    background: '#0f172a',
-    display: 'flex',
-    flexDirection: 'column',
-    fontFamily: "'Inter', sans-serif",
-    color: '#e2e8f0',
-  },
-  fullCenter: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#0f172a',
-    fontFamily: "'Inter', sans-serif",
-  },
-  spinner: {
-    width: 44,
-    height: 44,
-    border: '3px solid #1e293b',
-    borderTopColor: '#6366f1',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  header: {
-    background: '#1e293b',
-    borderBottom: '1px solid #1e293b',
-    padding: '0 20px',
-    height: 56,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexShrink: 0,
-    boxShadow: '0 1px 0 rgba(255,255,255,0.05)',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-    flex: 1,
-  },
-  backBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    color: '#94a3b8',
-    textDecoration: 'none',
-    fontSize: 13,
-    padding: '5px 10px',
-    borderRadius: 8,
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    flexShrink: 0,
-    transition: 'all 0.15s',
-  },
-  headerTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#f1f5f9',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  headerDate: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: 400,
-    flexShrink: 0,
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 0,
-  },
-  downloadBtn: {
-    background: 'rgba(99,102,241,0.15)',
-    color: '#a5b4fc',
-    border: '1px solid rgba(99,102,241,0.3)',
-    padding: '6px 14px',
-    borderRadius: 8,
-    textDecoration: 'none',
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  primaryBtn: {
-    background: '#6366f1',
-    color: '#fff',
-    padding: '10px 24px',
-    borderRadius: 8,
-    textDecoration: 'none',
-    fontSize: 14,
-    fontWeight: 500,
-  },
-
-  /* Layout */
-  mainLayout: {
-    flex: 1,
-    display: 'flex',
-    overflow: 'hidden',
-  },
-  leftPanel: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    background: '#0b1120',
-    borderRight: '1px solid #1e293b',
-    overflowY: 'auto',   /* 内容超出时可滚动 */
-  },
-  videoWrap: {
-    width: '100%',
-    background: '#000',
-    flexShrink: 0,
-  },
-  video: {
-    width: '100%',
-    display: 'block',
-    maxHeight: '46vh',
-    minHeight: 320,
-    outline: 'none',
-  },
-  chapterBar: {
-    position: 'relative',
-    height: 28,
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
-    flexShrink: 0,
-    cursor: 'pointer',
-  },
-  timeInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '8px 16px',
-    fontSize: 13,
-    borderTop: '1px solid #1e293b',
-    background: '#0f172a',
-    flexShrink: 0,
-  },
-
-  /* Timeline */
-  timelineContainer: {
-    padding: '10px 16px',
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
-    flexShrink: 0,
-  },
-  timelineRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-    height: 22,
-  },
-  timelineLabel: {
-    width: 100,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  timelineBar: {
-    flex: 1,
-    height: 18,
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: 4,
-    position: 'relative',
-    overflow: 'hidden',
-    cursor: 'pointer',
-  },
-
-  /* Right Panel */
-  rightPanel: {
-    width: 360,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    background: '#111827',
-    overflow: 'hidden',
-  },
-  tabBar: {
-    display: 'flex',
-    borderBottom: '1px solid #1e293b',
-    background: '#0f172a',
-    flexShrink: 0,
-  },
-  tabBtn: {
-    flex: 1,
-    padding: '12px 8px',
-    background: 'none',
-    border: 'none',
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: 500,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderBottom: '2px solid transparent',
-    transition: 'color 0.15s, border-color 0.15s',
-    fontFamily: 'inherit',
-  },
-  tabBtnActive: {
-    color: '#818cf8',
-    borderBottom: '2px solid #6366f1',
-  },
-  tabBadge: {
-    background: '#1e293b',
-    color: '#94a3b8',
-    fontSize: 10,
-    padding: '1px 5px',
-    borderRadius: 99,
-  },
-  tabContent: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  panelScroll: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '12px 14px',
-  },
-
-  /* Summary */
-  emptyPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    minHeight: 200,
-    padding: 24,
-    textAlign: 'center',
-  },
-  genBtn: {
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: 10,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  summaryCard: {
-    borderRadius: 8,
-    marginBottom: 8,
-    overflow: 'hidden',
-    transition: 'background 0.2s',
-  },
-  summaryCardHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '10px 12px',
-    cursor: 'pointer',
-    userSelect: 'none',
-  },
-  chapterTime: {
-    color: '#6366f1',
-    fontSize: 11,
-    fontWeight: 600,
-    fontFamily: 'monospace',
-    flexShrink: 0,
-    background: 'rgba(99,102,241,0.12)',
-    padding: '2px 6px',
-    borderRadius: 4,
-  },
-  chapterTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: 500,
-    lineHeight: 1.4,
-  },
-  chapterContent: {
-    padding: '0 12px 12px',
-    fontSize: 12,
-    color: '#94a3b8',
-    lineHeight: 1.6,
-  },
-
-  /* Transcript */
-  searchBox: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '10px 14px',
-    borderBottom: '1px solid #1e293b',
-    flexShrink: 0,
-  },
-  searchInput: {
-    flex: 1,
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid #1e293b',
-    borderRadius: 8,
-    padding: '6px 10px',
-    color: '#e2e8f0',
-    fontSize: 13,
-    outline: 'none',
-    fontFamily: 'inherit',
-  },
-  clearBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#64748b',
-    cursor: 'pointer',
-    marginLeft: 6,
-    fontSize: 14,
-  },
-  speakerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  speakerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#fff',
-    flexShrink: 0,
-  },
-  speakerName: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#cbd5e1',
-  },
-  speakerTime: {
-    fontSize: 11,
-    color: '#475569',
-    marginLeft: 'auto',
-  },
-  captionBubble: {
-    marginLeft: 36,
-    marginBottom: 4,
-    padding: '7px 10px',
-    borderRadius: 8,
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: '#cbd5e1',
-    border: '1px solid',
-    transition: 'all 0.15s',
-  },
-
-  /* Info */
-  infoSection: {
-    marginBottom: 18,
-    paddingBottom: 18,
-    borderBottom: '1px solid #1e293b',
-  },
-  infoLabel: {
-    fontSize: 11,
-    color: '#64748b',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    fontWeight: 600,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#e2e8f0',
-  },
-  participantRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '6px 0',
-  },
-};
-
-/* --- stx: ChapterCardsCarousel + SpeakerSegmentTimeline --- */
-const stx: Record<string, React.CSSProperties> = {
-  carouselWrap: { position: 'relative', height: 155, flexShrink: 0, background: '#111827', borderBottom: '1px solid #1e293b', display: 'flex', alignItems: 'center', overflow: 'hidden' },
-  carouselTrack: { display: 'flex', gap: 10, overflowX: 'auto', padding: '10px 36px', height: '100%', alignItems: 'center', scrollbarWidth: 'none' } as React.CSSProperties,
-  chapterCard: { flexShrink: 0, width: 160, minHeight: 128, borderRadius: 10, border: '1px solid', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '10px 8px 8px', gap: 3, cursor: 'pointer', transition: 'all 0.2s ease' },
-  cardAvatar: { width: 52, height: 52, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: '#fff', flexShrink: 0, marginBottom: 4, boxShadow: '0 3px 10px rgba(0,0,0,0.4)' },
-  cardName: { fontSize: 13, fontWeight: 600, color: '#e2e8f0', textAlign: 'center' },
-  cardTimeRange: { fontSize: 10, color: '#818cf8', fontFamily: 'monospace', cursor: 'pointer', marginTop: 2 },
-  cardTopic: { fontSize: 12, color: '#60a5fa', textAlign: 'center', lineHeight: 1.4, cursor: 'pointer', marginTop: 4, padding: '0 4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' } as React.CSSProperties,
-  arrowBtn: { position: 'absolute', top: '50%', transform: 'translateY(-50%)', zIndex: 10, background: 'rgba(15,23,42,0.90)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0', width: 32, height: 32, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 22, padding: 0 } as React.CSSProperties,
-  segTimeline: { padding: '12px 16px 6px', background: '#f8fafc', borderTop: '1px solid #e2e8f0', flexShrink: 0 },
-  segRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, height: 32 },
-  segLabel: { width: 120, display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0, overflow: 'hidden' },
-  segAvatar: { width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: '#fff', flexShrink: 0 },
-  segName: { fontSize: 12, fontWeight: 500, color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-  segBar: { flex: 1, height: 8, background: 'rgba(0,0,0,0.08)', borderRadius: 6, position: 'relative', cursor: 'pointer', overflow: 'hidden' },
-};

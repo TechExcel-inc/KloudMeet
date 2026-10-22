@@ -13,5 +13,5 @@
 }
 
 .tabs > .tab[aria-pressed='true'] {
-  border-color: var(--lk-accent-bg);
+  border-color: var(--km-primary, var(--lk-accent-bg));
 }

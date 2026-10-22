@@ -16,8 +16,9 @@ export function RecordingIndicator() {
           position: 'top-center',
           className: 'lk-button',
           style: {
-            backgroundColor: 'var(--lk-danger3)',
-            color: 'var(--lk-fg)',
+            backgroundColor: 'var(--km-snackbar, #323232)',
+            color: '#fff',
+            fontFamily: 'var(--km-font, inherit)',
           },
         });
       }
@@ -32,7 +33,7 @@ export function RecordingIndicator() {
         left: '0',
         width: '100%',
         height: '100%',
-        boxShadow: isRecording ? 'var(--lk-danger3) 0px 0px 0px 3px inset' : 'none',
+        boxShadow: isRecording ? 'var(--km-danger, #dc362e) 0px 0px 0px 3px inset' : 'none',
         pointerEvents: 'none',
       }}
     ></div>

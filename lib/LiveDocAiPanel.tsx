@@ -783,6 +783,21 @@ export function LiveDocAiPanel({
       >
         <span className={styles.arrow} aria-hidden />
         <header className={styles.header}>
+          <div className={styles.titleRow}>
+            <h2 id="live-doc-ai-panel-title" className={styles.title}>
+              {t('toolbar.liveDocMenu')}
+            </h2>
+            <button
+              type="button"
+              className={styles.close}
+              onClick={onClose}
+              aria-label={t('common.close')}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
           <nav className={styles.tabs} aria-label={t('toolbar.liveDocMenu')}>
             {(
               [
@@ -795,22 +810,13 @@ export function LiveDocAiPanel({
                 type="button"
                 key={tab}
                 className={`${styles.tab} ${activeTab === tab ? styles.tabActive : ''}`}
+                aria-pressed={activeTab === tab}
                 onClick={() => setActiveTab(tab)}
               >
                 {label}
               </button>
             ))}
           </nav>
-          <button
-            type="button"
-            className={styles.close}
-            onClick={onClose}
-            aria-label={t('common.close')}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-            </svg>
-          </button>
         </header>
 
         {error && (
@@ -832,6 +838,7 @@ export function LiveDocAiPanel({
                     value={transcriptSearch}
                     onChange={(event) => setTranscriptSearch(event.target.value)}
                     placeholder={t('liveDocAi.searchTranscript')}
+                    aria-label={t('liveDocAi.searchTranscript')}
                   />
                 </div>
                 {transcriptCopied && (
@@ -917,6 +924,7 @@ export function LiveDocAiPanel({
                     value={documentSearch}
                     onChange={(event) => setDocumentSearch(event.target.value)}
                     placeholder={t('liveDocAi.searchDocuments')}
+                    aria-label={t('liveDocAi.searchDocuments')}
                   />
                 </div>
                 <div className={styles.documentList}>
@@ -1059,6 +1067,8 @@ export function LiveDocAiPanel({
                       ref={summaryMenuBtnRef}
                       type="button"
                       className={styles.moreButton}
+                      aria-label={t('liveDocAi.more')}
+                      aria-expanded={summaryMenuOpen}
                       onClick={() => {
                         setFileMenuItemId(null);
                         setUploadMenuOpen(false);

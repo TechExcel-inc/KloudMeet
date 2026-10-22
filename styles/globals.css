@@ -145,15 +145,90 @@ h2 a {
 }
 
 /* ═══════════════════════════════════════════════════
-   Camera-off: hide default avatar, show name centered
+   In-meeting stage + participant tiles (2026-10 redesign, Meet-style)
+   Always dark. Tokens come from styles/tokens.css.
    ═══════════════════════════════════════════════════ */
+
+.lk-room-container {
+  font-family: var(--km-font);
+  background-color: var(--km-stage, #17181c);
+}
+
+.lk-room-container .main-meeting-area,
+.lk-room-container .lk-video-conference,
+.lk-room-container .lk-grid-layout-wrapper,
+.lk-room-container .lk-focus-layout-wrapper {
+  background-color: var(--km-stage, #17181c);
+}
+
+/* Webcam grid: 16px stage gutter, 8px gaps between tiles */
+.lk-room-container .lk-grid-layout-wrapper .lk-grid-layout {
+  --lk-grid-gap: 8px;
+  padding: 16px;
+}
+
+/* Tile shell: tile colour, 12px radius, speaking outline colour */
+.lk-room-container .lk-participant-tile {
+  --lk-border-radius: var(--km-radius-md, 12px);
+  --lk-bg2: var(--km-tile, #2e3036);
+  --lk-accent-bg: var(--km-speaking, #8b87ff);
+  --lk-speaking-indicator-width: 3px;
+}
+
+.lk-room-container .lk-grid-layout > .lk-participant-tile,
+.lk-room-container .lk-focus-layout > .lk-participant-tile,
+.lk-room-container .lk-carousel > .lk-participant-tile,
+.lk-room-container .lk-mobile-scroll-grid .lk-participant-tile {
+  background-color: var(--km-tile, #2e3036);
+  border-radius: var(--km-radius-md, 12px);
+}
+
+/* Speaking outline: fades in quickly, fades out after a short hold (LiveKit ::after border) */
+.lk-room-container .lk-participant-tile::after {
+  transition-property: border-width, opacity;
+  transition-timing-function: ease;
+}
+
+/* Tiles fade/scale in, staggered, whenever the layout re-mounts them */
+@keyframes km-tile-in {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Never on screen-share tiles: annotation / remote-control overlays measure that video. */
+.lk-room-container .lk-grid-layout > .lk-participant-tile:not([data-lk-source="screen_share"]),
+.lk-room-container .lk-carousel > .lk-participant-tile:not([data-lk-source="screen_share"]),
+.lk-room-container .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout > .lk-participant-tile:not([data-lk-source="screen_share"]),
+.lk-room-container .lk-mobile-scroll-grid .lk-participant-tile:not([data-lk-source="screen_share"]) {
+  animation: km-tile-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(2) { animation-delay: 45ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(3) { animation-delay: 90ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(4) { animation-delay: 135ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(5) { animation-delay: 180ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(6) { animation-delay: 225ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(7) { animation-delay: 270ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(8) { animation-delay: 315ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(9) { animation-delay: 360ms; }
+.lk-room-container .lk-grid-layout > .lk-participant-tile:nth-child(n + 10) { animation-delay: 400ms; }
+.lk-room-container .lk-carousel > .lk-participant-tile:nth-child(2) { animation-delay: 50ms; }
+.lk-room-container .lk-carousel > .lk-participant-tile:nth-child(3) { animation-delay: 100ms; }
+.lk-room-container .lk-carousel > .lk-participant-tile:nth-child(4) { animation-delay: 150ms; }
+.lk-room-container .lk-carousel > .lk-participant-tile:nth-child(n + 5) { animation-delay: 200ms; }
 
 /* Hide the default SVG avatar figure when camera is off */
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder svg {
   display: none !important;
 }
 
-/* Camera-off: initials by default; login name on hover / focus (selected) */
+/* Camera-off: large round avatar with initials, centred on the tile */
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder {
   display: flex !important;
   align-items: center;
@@ -161,30 +236,142 @@ h2 a {
   overflow: hidden;
   padding: 0 8%;
   box-sizing: border-box;
+  background-color: var(--km-tile, #2e3036);
+  container-type: size;
 }
 
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
   content: attr(data-lk-initials);
-  font-size: clamp(1rem, 4vw, 2rem);
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.90);
-  letter-spacing: 0.05em;
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: clamp(40px, 46%, 128px);
+  height: clamp(36px, 46cqmin, 128px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: rgba(139, 135, 255, 0.22);
+  color: var(--km-on-dark-accent, #c9c8ff);
+  font-family: var(--km-font);
+  font-size: clamp(14px, 2.4vw, 40px);
+  font-size: clamp(14px, 17cqmin, 46px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
-  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
 }
 
-.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:hover .lk-participant-placeholder::after,
-.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:focus-within .lk-participant-placeholder::after,
-.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"][data-lk-selected="true"] .lk-participant-placeholder::after {
+/* Soft expanding voice ring behind the avatar while the person speaks */
+.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  height: clamp(40px, 46%, 128px);
+  height: clamp(36px, 46cqmin, 128px);
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  background: var(--km-speaking, #8b87ff);
+  opacity: 0;
+  transform: translate(-50%, -50%) scale(1);
+  pointer-events: none;
+}
+
+@keyframes km-voice-ring {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.45);
+    opacity: 0;
+  }
+}
+
+@keyframes km-avatar-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
+}
+
+.lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
+  animation: km-voice-ring 1.4s ease-out infinite;
+}
+
+.lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
+  animation: km-avatar-breathe 1.4s ease-in-out infinite;
+}
+
+/* Small strip tiles (share aside / spotlight strip) show no name plate, so the avatar turns
+   into a name pill on hover / focus / selection. Grid & focus tiles show the name bottom-left. */
+.lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:hover .lk-participant-placeholder::after,
+.lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:focus-within .lk-participant-placeholder::after,
+.lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"][data-lk-selected="true"] .lk-participant-placeholder::after {
   content: attr(data-lk-name);
-  font-size: clamp(0.8rem, 2.8vw, 1.35rem);
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  display: block;
+  height: 28px;
+  aspect-ratio: auto;
+  max-width: 100%;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 28px;
+  letter-spacing: 0;
   text-transform: none;
+  text-overflow: ellipsis;
+}
+
+/* Speaking badge: animated 3-bar indicator replaces the mic glyph while someone talks */
+@keyframes km-eq-bars {
+  0%,
+  100% {
+    background-size: 3px 30%, 3px 62%, 3px 42%;
+  }
+  33% {
+    background-size: 3px 62%, 3px 34%, 3px 66%;
+  }
+  66% {
+    background-size: 3px 44%, 3px 66%, 3px 30%;
+  }
+}
+
+.lk-room-container .lk-participant-tile[data-lk-speaking="true"] .kloud-custom-mic-indicator[data-kloud-muted="false"]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-color: var(--km-primary, #5e5ce6);
+  background-image: linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
+  background-repeat: no-repeat;
+  background-position: 30% 50%, 50% 50%, 70% 50%;
+  background-size: 3px 30%, 3px 62%, 3px 42%;
+  animation: km-eq-bars 0.9s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lk-room-container .lk-participant-tile,
+  .lk-room-container .lk-participant-tile::after,
+  .lk-participant-tile .lk-participant-placeholder::before,
+  .lk-participant-tile .lk-participant-placeholder::after,
+  .lk-room-container .kloud-custom-mic-indicator::before {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* Keep a static (non-animated) ring so speaking is still visible */
+  .lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
+    opacity: 0.35;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -744,4 +931,26 @@ html[data-theme='dark'] .kloud-prejoin-participant-livedoc select {
 .lk-participant-tile:hover .lk-participant-name {
   display: block;
   pointer-events: auto;
+}
+
+/* Grid / spotlight / phone tiles: name always visible bottom-left, no background plate */
+.lk-room-container .lk-grid-layout-wrapper .lk-participant-tile .lk-participant-name,
+.lk-room-container .lk-mobile-scroll-grid .lk-participant-tile .lk-participant-name,
+.lk-room-container .sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout > .lk-participant-tile .lk-participant-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #fff;
+  font-family: var(--km-font);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  pointer-events: none;
+}
+
+.lk-room-container .lk-mobile-scroll-grid .lk-participant-tile .lk-participant-name {
+  font-size: 12px;
 }

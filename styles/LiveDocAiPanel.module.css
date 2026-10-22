@@ -12,12 +12,25 @@
   display: flex;
   flex-direction: column;
   overflow: visible;
-  color: #fff;
-  background: rgba(15, 23, 42, 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-panel, #202126);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  font-family: var(--km-font);
+  font-size: 14px;
+  animation: liveDocAiPanelIn 0.24s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes liveDocAiPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .arrow {
@@ -29,66 +42,106 @@
   height: 0;
   border-left: 9px solid transparent;
   border-right: 9px solid transparent;
-  border-top: 9px solid rgba(15, 23, 42, 0.98);
-  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.06));
+  border-top: 9px solid var(--km-panel, #202126);
   pointer-events: none;
 }
 
 .header {
-  min-height: 52px;
   display: flex;
-  align-items: center;
-  padding: 0 12px 0 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0 0 6px;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 14px 14px 0 0;
+  border-radius: 16px 16px 0 0;
   overflow: hidden;
   background: inherit;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 10px 0 24px;
+}
+
+.title {
+  margin: 0;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.3;
 }
 
 .tabs {
   display: flex;
   align-items: center;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px 24px 4px;
 }
 
 .tab {
   min-height: 34px;
   padding: 0 14px;
-  color: rgba(255, 255, 255, 0.65);
+  color: #bdc1c6;
   background: transparent;
-  border: 0;
-  border-radius: 8px;
+  border: 1px solid #3c4043;
+  border-radius: 999px;
   font: inherit;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 .tab:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.06);
 }
 
-.tabActive {
-  color: #fff;
-  background: #5856d6;
+.tabActive,
+.tabActive:hover {
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(139, 135, 255, 0.2);
+  border-color: transparent;
 }
 
 .close {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
   margin-left: auto;
-  padding: 6px;
-  color: rgba(255, 255, 255, 0.75);
-  background: rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  color: #bdc1c6;
+  background: transparent;
   border: 0;
   border-radius: 50%;
   cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .close:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tab:focus-visible,
+.close:focus-visible,
+.moreButton:focus-visible,
+.compactButton:focus-visible,
+.documentRow:focus-visible,
+.dropdown button:focus-visible,
+.uploadActions > button:focus-visible,
+.empty button:focus-visible,
+.confirmDialog button:focus-visible,
+.optionDialog button:focus-visible,
+.switchConfirmActions button:focus-visible,
+.pickerHeaderActions button:focus-visible,
+.pagination button:focus-visible,
+.pickerSelectTrigger:focus-visible,
+.pickerSelectOption:focus-visible {
+  outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+  outline-offset: 2px;
 }
 
 .close svg {
@@ -117,7 +170,9 @@
   gap: 12px;
   padding: 24px;
   box-sizing: border-box;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 14px;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -125,8 +180,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.18);
-  border-top-color: rgba(255, 255, 255, 0.75);
+  border: 2px solid rgba(255, 255, 255, 0.14);
+  border-top-color: var(--km-on-dark-accent, #c9c8ff);
   animation: liveDocAiSpin 0.75s linear infinite;
 }
 
@@ -140,11 +195,13 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px 14px;
-  color: #fecaca;
-  background: rgba(239, 68, 68, 0.16);
-  border-bottom: 1px solid rgba(239, 68, 68, 0.25);
-  font-size: 12px;
+  margin: 4px 16px 8px;
+  padding: 10px 8px 10px 14px;
+  color: #f6aea9;
+  background: rgba(242, 139, 130, 0.12);
+  border: none;
+  border-radius: 12px;
+  font-size: 13px;
 }
 
 .error span {
@@ -152,10 +209,19 @@
 }
 
 .error button {
+  min-height: 30px;
+  padding: 0 12px;
   color: inherit;
   background: transparent;
   border: 0;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
+}
+
+.error button:hover {
+  background: rgba(242, 139, 130, 0.12);
 }
 
 .documentsTab,
@@ -169,7 +235,7 @@
 }
 
 .transcriptToolbar {
-  margin: 10px 14px;
+  margin: 10px 16px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -183,27 +249,28 @@
 }
 
 .searchBox {
-  height: 36px;
-  margin: 10px 14px;
-  padding: 0 11px;
+  height: 40px;
+  margin: 10px 16px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.35);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  color: #9aa0a6;
+  background: var(--km-control, #2e3036);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  transition: border-color 0.15s ease;
 }
 
 .searchBox:focus-within {
-  border-color: rgba(88, 86, 214, 0.75);
+  border-color: rgba(201, 200, 255, 0.55);
 }
 
 .searchBox input {
   min-width: 0;
   flex: 1;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--km-stage-text, #e8eaed);
   background: transparent;
   border: 0;
   outline: 0;
@@ -211,7 +278,7 @@
 }
 
 .searchBox input::placeholder {
-  color: rgba(255, 255, 255, 0.32);
+  color: #80868b;
 }
 
 .documentList,
@@ -226,38 +293,40 @@
 }
 
 .documentRow {
-  min-height: 52px;
-  margin: 0 10px 6px;
-  padding: 7px 10px;
+  min-height: 56px;
+  margin: 0 12px 4px;
+  padding: 10px 8px 10px 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   box-sizing: border-box;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 12px;
   cursor: pointer;
+  transition: background 0.15s ease;
 }
 
 .documentRow:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.05);
 }
 
-.documentRowActive {
-  background: rgba(88, 86, 214, 0.18);
-  border-color: rgba(116, 114, 255, 0.28);
+.documentRowActive,
+.documentRowActive:hover {
+  background: rgba(139, 135, 255, 0.2);
+  border-color: transparent;
 }
 
 .thumbnail {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  color: #b9b8ff;
-  background: rgba(88, 86, 214, 0.18);
-  border-radius: 6px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 10px;
 }
 
 .thumbnail img {
@@ -270,7 +339,8 @@
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--km-stage-text, #e8eaed);
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -278,15 +348,16 @@
 .viewing,
 .viewAction {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .viewing {
-  color: #a7f3d0;
+  color: var(--km-on-dark-accent, #c9c8ff);
 }
 
 .viewAction {
-  color: #aaa8ff;
+  color: var(--km-on-dark-accent, #c9c8ff);
   opacity: 0;
   transition: opacity 0.12s ease;
 }
@@ -311,32 +382,34 @@
 
 .moreButton,
 .compactButton {
-  min-width: 30px;
-  height: 30px;
-  padding: 0 7px;
-  color: rgba(255, 255, 255, 0.72);
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  color: #bdc1c6;
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 999px;
   cursor: pointer;
   letter-spacing: 1px;
+  transition: background 0.15s ease, color 0.15s ease;
 }
 
 .moreButton:hover,
 .compactButton:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .dropdown {
   position: absolute;
   z-index: 50;
-  width: 190px;
-  padding: 6px;
-  background: #1e1e2a;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.4);
+  width: 220px;
+  padding: 8px 0;
+  background: var(--km-menu, #2b2c32);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  font-family: var(--km-font);
   top: auto;
   bottom: calc(100% + 6px);
   left: auto;
@@ -364,49 +437,58 @@
 
 .dropdown button {
   width: 100%;
-  padding: 9px 10px;
-  color: rgba(255, 255, 255, 0.88);
+  min-height: 44px;
+  padding: 0 18px;
+  color: var(--km-stage-text, #e8eaed);
   background: transparent;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   font: inherit;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
 }
 
 .dropdown button:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
 }
 
 .dropdown .danger,
 .danger {
-  color: #f87171;
+  color: #f28b82;
+}
+
+.dropdown .danger:hover {
+  color: #f6aea9;
+  background: rgba(242, 139, 130, 0.1);
 }
 
 .documentFooter {
-  padding: 10px 14px 14px;
+  padding: 12px 16px 16px;
   flex-shrink: 0;
   overflow: visible;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
 }
 
 .uploadProgress {
   position: relative;
-  height: 26px;
-  margin-bottom: 10px;
+  height: 28px;
+  margin-bottom: 12px;
   overflow: hidden;
-  color: #d8d7ff;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 5px;
+  color: var(--km-stage-text, #e8eaed);
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
   font-size: 12px;
-  line-height: 26px;
+  line-height: 28px;
 }
 
 .uploadProgressFill {
   position: absolute;
   inset: 0 auto 0 0;
-  background: rgba(116, 114, 255, 0.52);
+  background: rgba(139, 135, 255, 0.45);
+  transition: width 0.3s ease;
 }
 
 .uploadProgress span {
@@ -430,24 +512,46 @@
 .annotation {
   display: flex;
   align-items: center;
-  gap: 7px;
-  color: rgba(255, 255, 255, 0.82);
-  font-size: 12px;
+  gap: 8px;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.annotation input[type='checkbox'] {
+  background: transparent;
+  border-color: #9aa0a6;
+  color-scheme: dark;
+}
+
+.annotation input[type='checkbox']:checked {
+  background: var(--km-primary, #5e5ce6);
+  border-color: var(--km-primary, #5e5ce6);
 }
 
 .uploadActions > button,
 .empty button,
 .dialogActions button,
 .pickerFooter > button {
-  min-height: 32px;
-  padding: 0 12px;
-  color: #fff;
-  background: rgba(88, 86, 214, 0.82);
-  border: 0;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: transparent;
+  border: 1px solid #3c4043;
+  border-radius: 999px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.uploadActions > button:hover:not(:disabled),
+.empty button:hover:not(:disabled),
+.pickerFooter > button:hover:not(:disabled) {
+  background: rgba(201, 200, 255, 0.08);
+  border-color: #5f6368;
 }
 
 .uploadActions > button:disabled,
@@ -464,8 +568,8 @@
 }
 
 .summaryHeader {
-  min-height: 50px;
-  padding: 0 16px;
+  min-height: 52px;
+  padding: 0 12px 0 24px;
   display: flex;
   align-items: center;
   flex-shrink: 0;
@@ -474,29 +578,37 @@
 .summaryHeader h3 {
   margin: 0;
   flex: 1;
-  font-size: 16px;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .copyNotice {
   margin-right: 8px;
   flex-shrink: 0;
-  color: #a7f3d0;
+  color: var(--km-on-dark-accent, #c9c8ff);
   font-size: 12px;
+  font-weight: 600;
 }
 
 .summaryContent {
-  padding: 0 15px 18px;
+  padding: 0 16px 18px;
 }
 
 .summaryItem {
-  margin-bottom: 12px;
-  padding: 10px;
-  border-radius: 6px;
+  margin-bottom: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  transition: background 0.15s ease;
 }
 
 .summaryItem:hover,
 .summaryItemActive {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.summaryItemActive {
+  box-shadow: inset 3px 0 0 var(--km-speaking, #8b87ff);
 }
 
 .summaryItem > div {
@@ -507,24 +619,27 @@
 }
 
 .summaryItem h4 {
-  margin: 0 0 8px;
-  color: #fff;
+  margin: 0 0 6px;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .summaryItem span {
   flex-shrink: 0;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--km-stage-muted, #9aa0a6);
   font-size: 12px;
 }
 
 .summaryItem p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.66);
-  line-height: 1.55;
+  color: #bdc1c6;
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .transcriptBody {
-  padding: 0 15px 18px;
+  padding: 0 16px 18px;
   display: flex;
   flex-direction: column;
 }
@@ -555,26 +670,26 @@
 }
 
 .speakerLabel {
-  color: rgba(255, 255, 255, 0.82);
+  color: var(--km-stage-text, #e8eaed);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .speakerTime {
   margin-left: auto;
-  color: rgba(255, 255, 255, 0.38);
-  font-size: 11px;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 12px;
 }
 
 .captionBubble {
   margin: 0 0 4px 36px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  color: rgba(255, 255, 255, 0.82);
-  background: rgba(255, 255, 255, 0.06);
-  font-size: 13px;
-  line-height: 1.5;
+  padding: 2px 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--km-stage-text, #e8eaed);
+  background: transparent;
+  font-size: 14px;
+  line-height: 1.6;
   word-break: break-word;
 }
 
@@ -588,34 +703,39 @@
   padding: 18px;
   box-sizing: border-box;
   overflow: hidden;
-  border-radius: 14px;
-  background: rgba(3, 7, 18, 0.72);
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
 }
 
 .confirmDialog,
 .optionDialog,
 .pickerDialog {
   width: min(440px, 100%);
-  padding: 22px;
+  padding: 24px;
   box-sizing: border-box;
-  color: #111827;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.42);
-  /* Room 页 html 为 color-scheme: dark，原生 select 会白字叠白底 */
-  color-scheme: light;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-menu, #2b2c32);
+  border-radius: 16px;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  font-family: var(--km-font);
+  /* 会中始终深色：原生 select / option 跟随深色方案 */
+  color-scheme: dark;
 }
 
 .confirmDialog h3,
 .optionDialog h3,
 .pickerDialog h3 {
   margin: 0 0 12px;
-  font-size: 17px;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .confirmDialog p {
   margin: 0 0 20px;
-  color: #6b7280;
+  color: #bdc1c6;
+  line-height: 1.55;
 }
 
 .confirmDialog > div,
@@ -627,35 +747,47 @@
 
 .confirmDialog button,
 .optionDialog button {
-  min-height: 34px;
-  padding: 0 14px;
-  color: #374151;
-  background: #f3f4f6;
-  border: 0;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: transparent;
+  border: 1px solid #3c4043;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
   cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.confirmDialog button:hover,
+.optionDialog button:hover:not(:disabled) {
+  background: rgba(201, 200, 255, 0.08);
 }
 
 .confirmDialog .primaryButton {
-  color: #fff;
-  background: #5856d6;
+  color: #1f1d6b;
+  background: var(--km-on-dark-accent, #c9c8ff);
+  border-color: transparent;
 }
 
-.confirmDialog .dangerButton {
+.confirmDialog .dangerButton,
+.confirmDialog .dangerButton:hover {
   color: #fff;
-  background: #dc2626;
+  background: var(--km-danger, #dc362e);
+  border-color: transparent;
 }
 
 .switchConfirmDialog {
   width: min(320px, 100%);
-  padding: 22px 20px 18px;
+  padding: 24px 20px 18px;
   box-sizing: border-box;
   text-align: center;
-  color: #f8fafc;
-  background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 14px;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-menu, #2b2c32);
+  border: none;
+  border-radius: 16px;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  font-family: var(--km-font);
 }
 
 .switchConfirmIcon {
@@ -665,10 +797,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #93c5fd;
-  background: rgba(59, 130, 246, 0.14);
-  border: 1px solid rgba(147, 197, 253, 0.22);
-  border-radius: 12px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(139, 135, 255, 0.2);
+  border: none;
+  border-radius: 50%;
 }
 
 .switchConfirmIcon svg {
@@ -681,19 +813,19 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 1.35;
-  color: #f8fafc;
+  color: var(--km-stage-text, #e8eaed);
 }
 
 .switchConfirmDocName {
   margin: 0 0 10px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.35;
-  color: #e2e8f0;
+  color: var(--km-stage-text, #e8eaed);
   background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 8px;
+  border: none;
+  border-radius: 10px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -702,8 +834,8 @@
 .switchConfirmBody {
   margin: 0 0 18px;
   font-size: 13px;
-  line-height: 1.5;
-  color: rgba(226, 232, 240, 0.72);
+  line-height: 1.55;
+  color: #bdc1c6;
 }
 
 .switchConfirmActions {
@@ -713,29 +845,30 @@
 
 .switchConfirmActions button {
   flex: 1;
-  min-height: 36px;
+  min-height: 38px;
   padding: 0 12px;
+  font: inherit;
   font-size: 13px;
-  font-weight: 500;
-  color: #e2e8f0;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  font-weight: 700;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: transparent;
+  border: 1px solid #3c4043;
+  border-radius: 999px;
   cursor: pointer;
 }
 
 .switchConfirmActions button:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(201, 200, 255, 0.08);
 }
 
 .switchConfirmPrimary {
-  color: #0f172a !important;
-  background: #93c5fd !important;
+  color: #1f1d6b !important;
+  background: var(--km-on-dark-accent, #c9c8ff) !important;
   border-color: transparent !important;
 }
 
 .switchConfirmPrimary:hover {
-  background: #bfdbfe !important;
+  background: #dcdbff !important;
 }
 
 .optionDialog {
@@ -745,22 +878,29 @@
 }
 
 .optionDialog label {
+  color: #bdc1c6;
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
 }
 
 .optionDialog select {
-  min-height: 38px;
-  padding: 0 10px;
-  color: #111827;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: #fff;
+  min-height: 40px;
+  padding: 0 12px;
+  color: var(--km-stage-text, #e8eaed);
+  border: 1px solid #3c4043;
+  border-radius: 12px;
+  background: var(--km-control, #2e3036);
+  font: inherit;
+}
+
+.optionDialog select:focus-visible {
+  outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+  outline-offset: 1px;
 }
 
 .optionDialog select option {
-  color: #111827;
-  background: #fff;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-menu, #2b2c32);
 }
 
 .optionGroup {
@@ -769,9 +909,11 @@
   gap: 8px;
 }
 
-.optionGroup .optionActive {
-  color: #fff;
-  background: #5856d6;
+.optionGroup .optionActive,
+.optionGroup .optionActive:hover {
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(139, 135, 255, 0.2);
+  border-color: transparent;
 }
 
 .dialogActions {
@@ -780,9 +922,18 @@
 
 .dialogActions .primaryButton,
 .pickerFooter .primaryButton,
-.pickerHeaderActions .primaryButton {
-  color: #fff;
-  background: #5856d6;
+.pickerHeaderActions .primaryButton,
+.dialogActions .primaryButton:hover:not(:disabled),
+.pickerHeaderActions .primaryButton:hover:not(:disabled) {
+  color: #1f1d6b;
+  background: var(--km-on-dark-accent, #c9c8ff);
+  border-color: transparent;
+}
+
+.dialogActions .primaryButton:disabled,
+.pickerHeaderActions .primaryButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .pickerOverlay {
@@ -794,7 +945,7 @@
   justify-content: center;
   padding: 24px;
   box-sizing: border-box;
-  background: rgba(3, 7, 18, 0.55);
+  background: rgba(0, 0, 0, 0.6);
 }
 
 .pickerDialog {
@@ -804,26 +955,27 @@
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-  color: #111827;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-panel, #202126);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
 }
 
 .pickerHeader {
-  min-height: 58px;
-  padding: 0 18px;
+  min-height: 60px;
+  padding: 0 16px 0 24px;
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid #eceff3;
+  border-bottom: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
 }
 
 .pickerHeader h3 {
   margin: 0;
   flex: 1;
-  font-size: 17px;
-  font-weight: 650;
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .pickerHeaderActions {
@@ -833,19 +985,24 @@
 }
 
 .pickerHeaderActions button {
-  min-height: 34px;
-  padding: 0 14px;
-  color: #374151;
-  background: #f3f4f6;
-  border: 0;
-  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: transparent;
+  border: 1px solid #3c4043;
+  border-radius: 999px;
   font: inherit;
   font-size: 13px;
+  font-weight: 700;
   cursor: pointer;
 }
 
+.pickerHeaderActions button:hover:not(:disabled) {
+  background: rgba(201, 200, 255, 0.08);
+}
+
 .pickerToolbar {
-  padding: 14px 18px 0;
+  padding: 14px 24px 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -868,14 +1025,14 @@
 .pickerSelectTrigger {
   width: 100%;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 14px;
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #111827;
-  background: #f7f8fa;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-control, #2e3036);
+  border: 1px solid transparent;
+  border-radius: 999px;
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -884,14 +1041,13 @@
 }
 
 .pickerSelectTrigger:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
+  background: var(--km-control-hover, #3a3c43);
 }
 
 .pickerSelectTriggerOpen {
-  background: #fff;
-  border-color: #5856d6;
-  box-shadow: 0 0 0 3px rgba(88, 86, 214, 0.15);
+  background: var(--km-control-hover, #3a3c43);
+  border-color: rgba(201, 200, 255, 0.55);
+  box-shadow: 0 0 0 3px rgba(139, 135, 255, 0.16);
 }
 
 .pickerSelectValue,
@@ -904,12 +1060,12 @@
 }
 
 .pickerSelectPlaceholder {
-  color: #9ca3af;
+  color: #9aa0a6;
 }
 
 .pickerSelectChevron {
   flex-shrink: 0;
-  color: #6b7280;
+  color: #9aa0a6;
   font-size: 12px;
 }
 
@@ -923,34 +1079,33 @@
   flex-direction: column;
   max-height: 260px;
   overflow: hidden;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+  background: var(--km-menu, #2b2c32);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
 }
 
 .pickerSelectSearch {
   padding: 8px;
-  border-bottom: 1px solid #f0f1f3;
+  border-bottom: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
 }
 
 .pickerSelectSearch input {
   width: 100%;
   min-height: 34px;
-  padding: 0 10px;
+  padding: 0 12px;
   box-sizing: border-box;
-  color: #111827;
-  background: #f7f8fa;
-  border: 1px solid #e5e7eb;
-  border-radius: 7px;
+  color: var(--km-stage-text, #e8eaed);
+  background: var(--km-control, #2e3036);
+  border: 1px solid transparent;
+  border-radius: 999px;
   outline: 0;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pickerSelectSearch input:focus {
-  border-color: #5856d6;
-  background: #fff;
+  border-color: rgba(201, 200, 255, 0.55);
 }
 
 .pickerSelectOptions {
@@ -962,7 +1117,7 @@
 
 .pickerSelectEmpty {
   padding: 16px 10px;
-  color: #9ca3af;
+  color: #9aa0a6;
   font-size: 12px;
   text-align: center;
 }
@@ -975,10 +1130,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  color: #111827;
+  color: var(--km-stage-text, #e8eaed);
   background: transparent;
   border: 0;
-  border-radius: 7px;
+  border-radius: 8px;
   font: inherit;
   font-size: 13px;
   text-align: left;
@@ -993,50 +1148,46 @@
 }
 
 .pickerSelectOption:hover {
-  background: #f3f4f6;
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .pickerSelectOptionActive {
-  color: #4338ca;
-  background: rgba(88, 86, 214, 0.1);
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(139, 135, 255, 0.2);
 }
 
 .pickerDialog .searchBox {
   width: 220px;
   margin: 0;
   flex-shrink: 0;
-  color: #6b7280;
-  background: #f7f8fa;
-  border-color: #e5e7eb;
-}
-
-.pickerDialog .searchBox input {
-  color: #111827;
 }
 
 .pickerList {
   min-height: 0;
   flex: 1;
-  margin: 14px 18px 0;
+  margin: 14px 24px 0;
   overflow: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
 }
 
 .pickerDialog .empty {
-  color: #6b7280;
+  color: var(--km-stage-muted, #9aa0a6);
   min-height: 160px;
 }
 
 .pickerItem {
-  min-height: 48px;
-  padding: 8px 12px;
+  min-height: 52px;
+  padding: 8px 14px;
   display: flex;
   align-items: center;
-  gap: 10px;
-  border-bottom: 1px solid #f0f1f3;
-  font-size: 13px;
+  gap: 12px;
+  border-bottom: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  font-size: 14px;
   cursor: pointer;
+  transition: background 0.12s ease;
 }
 
 .pickerItem:last-child {
@@ -1044,23 +1195,35 @@
 }
 
 .pickerItem:hover {
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.pickerItemSelected {
-  background: rgba(88, 86, 214, 0.08);
+.pickerItemSelected,
+.pickerItemSelected:hover {
+  background: rgba(139, 135, 255, 0.16);
+}
+
+.pickerItem input[type='checkbox'] {
+  background: transparent;
+  border-color: #9aa0a6;
+  color-scheme: dark;
+}
+
+.pickerItem input[type='checkbox']:checked {
+  background: var(--km-primary, #5e5ce6);
+  border-color: var(--km-primary, #5e5ce6);
 }
 
 .pickerItemIcon {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: rgba(88, 86, 214, 0.08);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 8px;
 }
 
 .pickerItemIcon img {
@@ -1075,23 +1238,23 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #111827;
+  color: var(--km-stage-text, #e8eaed);
 }
 
 .pickerItemDate {
   flex-shrink: 0;
-  color: #9ca3af;
+  color: var(--km-stage-muted, #9aa0a6);
   font-size: 12px;
 }
 
 .pickerFooter {
   margin-top: auto;
-  padding: 12px 18px 16px;
+  padding: 12px 24px 16px;
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #6b7280;
-  font-size: 12px;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 13px;
 }
 
 .pickerFooter > span {
@@ -1105,28 +1268,28 @@
 }
 
 .pagination button {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  border-radius: 5px;
-  background: #fff;
+  color: var(--km-stage-text, #e8eaed);
+  border: 1px solid #3c4043;
+  border-radius: 50%;
+  background: transparent;
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
 }
 
 .pagination button:hover:not(:disabled) {
-  color: #111827;
-  border-color: #9ca3af;
-  background: #f9fafb;
+  color: #fff;
+  border-color: #5f6368;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .pagination button:disabled {
-  color: #9ca3af;
+  color: #5f6368;
   opacity: 0.7;
   cursor: not-allowed;
 }
@@ -1137,19 +1300,23 @@
     right: 8px;
     width: auto !important;
     max-width: none;
-    border-radius: 14px;
+    border-radius: 16px;
   }
 
   .arrow {
     display: none;
   }
 
-  .header {
-    padding-left: 10px;
+  .titleRow {
+    padding-left: 16px;
+  }
+
+  .tabs {
+    padding: 4px 16px;
   }
 
   .tab {
-    padding: 0 10px;
+    padding: 0 12px;
     font-size: 12px;
   }
 
@@ -1175,7 +1342,7 @@
   .nestedOverlay {
     align-items: flex-end;
     padding: 0;
-    border-radius: 14px;
+    border-radius: 16px;
   }
 
   .confirmDialog,
@@ -1183,7 +1350,7 @@
   .switchConfirmDialog {
     width: 100%;
     max-height: 88%;
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px 16px 0 0;
   }
 
   .pickerOverlay {
@@ -1194,7 +1361,7 @@
   .pickerDialog {
     width: 100%;
     height: min(82vh, 620px);
-    border-radius: 14px 14px 0 0;
+    border-radius: 16px 16px 0 0;
   }
 
   .pickerToolbar {
@@ -1208,5 +1375,18 @@
 
   .pickerFooter {
     flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .loadingSpinner,
+  .uploadProgressFill {
+    animation: none;
+    transition: none;
+  }
+
+  .loadingSpinner {
+    animation: liveDocAiSpin 2s linear infinite;
   }
 }

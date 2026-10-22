@@ -226,6 +226,14 @@ export function ChatPanel({
 // ════════════════════════════════════
 // Attendee Panel (participant list with roles)
 // ════════════════════════════════════
+const ATTENDEE_ROLE_LABEL_KEYS: Record<string, string> = {
+  'role-host': 'roleMenu.roleHost',
+  'role-cohost': 'roleMenu.roleCohost',
+  'role-presenter': 'roleMenu.rolePresenter',
+  'role-copresenter': 'roleMenu.roleCopresenter',
+  'role-attendee': 'roleMenu.roleAttendee',
+};
+
 interface AttendeePanelProps {
   hostIdentity: string | null;
   copresenterIdentities: string[];
@@ -346,12 +354,14 @@ export function AttendeePanel({
   return (
     <div className="kloud-attendee-panel">
       <div className="kloud-attendee-header">
-        <span className="kloud-attendee-count">{participants.length} Participant{participants.length !== 1 ? 's' : ''}</span>
+        <span className="kloud-attendee-count">{t('attendee.inMeetingCount', { n: participants.length })}</span>
         {/* Mute All / Unmute All — only for host/co-host/presenter */}
         {canMuteAll && (
           <div className="kloud-attendee-mute-actions">
             <button
+              type="button"
               className={`kloud-mute-all-btn ${muteAllActive ? 'kloud-mute-all-btn--active' : ''}`}
+              aria-pressed={!!muteAllActive}
               onClick={muteAllActive ? onUnmuteAll : onMuteAll}
               title={muteAllActive ? t('toolbar.unmuteAll') : t('toolbar.muteAll')}
             >
@@ -402,11 +412,19 @@ export function AttendeePanel({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search participants..."
+            placeholder={t('attendee.searchParticipants')}
+            aria-label={t('attendee.searchParticipants')}
             className="kloud-attendee-search-input"
           />
           {searchQuery && (
-            <button className="kloud-attendee-search-clear" onClick={() => setSearchQuery('')}>✕</button>
+            <button
+              type="button"
+              className="kloud-attendee-search-clear"
+              onClick={() => setSearchQuery('')}
+              aria-label={t('common.close')}
+            >
+              ✕
+            </button>
           )}
         </div>
       )}
@@ -434,11 +452,13 @@ export function AttendeePanel({
               </div>
               <div className="kloud-attendee-info">
                 <span className="kloud-attendee-name">
-                  {name}{isLocalParticipant ? ' (You)' : ''}
+                  {name}{isLocalParticipant ? ` (${t('chat.you')})` : ''}
                 </span>
                 <div className="kloud-attendee-badges">
                   {roles.map((r) => (
-                    <span key={r.cls} className={`kloud-attendee-role ${r.cls}`}>{r.label}</span>
+                    <span key={r.cls} className={`kloud-attendee-role ${r.cls}`}>
+                      {ATTENDEE_ROLE_LABEL_KEYS[r.cls] ? t(ATTENDEE_ROLE_LABEL_KEYS[r.cls]) : r.label}
+                    </span>
                   ))}
                   {handOrder >= 0 && (
                     <span className="kloud-attendee-hand-chip" title={t('attendee.raisedHands')}>
@@ -461,6 +481,12 @@ export function AttendeePanel({
                 const canManageMic = !!(canMuteAll && !isLocalParticipant && onMuteParticipant);
                 return (
                   <button
+                    type="button"
+                    aria-label={
+                      canManageMic
+                        ? (isHostMicRestricted ? 'Cancel disable (does not turn on mic)' : 'Disable microphone')
+                        : (isHostMicRestricted ? 'Disabled by host' : (isMicMuted ? 'Muted' : 'Mic on'))
+                    }
                     className={`kloud-participant-mic-btn${isMicMuted ? ' muted' : ' active'}${isHostMicRestricted ? ' host-restricted' : ''}${canManageMic ? ' clickable' : ''}`}
                     onClick={canManageMic ? () => onMuteParticipant(p.identity, !isHostMicRestricted) : undefined}
                     title={
@@ -492,6 +518,12 @@ export function AttendeePanel({
                 const canManageCam = !!(canMuteAll && !isLocalParticipant && onDisableParticipantVideo);
                 return (
                   <button
+                    type="button"
+                    aria-label={
+                      canManageCam
+                        ? (isHostVideoRestricted ? 'Cancel disable (does not turn on camera)' : 'Disable camera')
+                        : (isHostVideoRestricted ? 'Disabled by host' : (isCamDisabled ? 'Camera off' : 'Camera on'))
+                    }
                     className={`kloud-participant-cam-btn${isCamDisabled ? ' disabled' : ' active'}${isHostVideoRestricted ? ' host-restricted' : ''}${canManageCam ? ' clickable' : ''}`}
                     onClick={canManageCam ? () => onDisableParticipantVideo(p.identity, !isHostVideoRestricted) : undefined}
                     title={
@@ -538,7 +570,7 @@ export function AttendeePanel({
           );
         })}
         {filtered.length === 0 && searchQuery && (
-          <div className="kloud-attendee-empty">No participants match &quot;{searchQuery}&quot;</div>
+          <div className="kloud-attendee-empty">{t('attendee.noMatch', { query: searchQuery })}</div>
         )}
       </div>
 
@@ -550,86 +582,104 @@ export function AttendeePanel({
 // CSS Styles (injected via <style>)
 // ════════════════════════════════════
 export const chatAndAttendeeStyles = `
+  /* ════════════════════════════════════════════════════════════
+     In-meeting side panels (2026-10 redesign) — always dark.
+     Chat, People & Attendees, role ⋯ menu, confirm dialogs.
+     ════════════════════════════════════════════════════════════ */
+
   /* Chat Panel */
   .kloud-chat-panel {
     display: flex;
     flex-direction: column;
     height: 100%;
     position: relative;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: var(--km-font);
   }
   .kloud-chat-messages {
     flex: 1;
     overflow-y: auto;
-    padding: 8px 12px;
+    padding: 8px 20px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
   }
   .kloud-chat-empty {
-    color: rgba(255,255,255,0.35);
-    font-size: 13px;
+    color: var(--km-stage-muted, #9aa0a6);
+    font-size: 14px;
+    line-height: 1.5;
     text-align: center;
-    padding: 32px 0;
+    padding: 40px 12px;
   }
   .kloud-chat-entry {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
+    animation: kloud-chat-entry-in 0.2s ease-out both;
+  }
+  @keyframes kloud-chat-entry-in {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: none; }
   }
   .kloud-chat-entry.local .kloud-chat-text {
-    background: rgba(59, 130, 246, 0.3);
-    border: 1px solid rgba(59, 130, 246, 0.2);
+    background: rgba(139, 135, 255, 0.2);
+    border: 1px solid transparent;
+    border-radius: 16px 4px 16px 16px;
     align-self: flex-end;
   }
   .kloud-chat-entry.remote .kloud-chat-text {
-    background: rgba(255,255,255,0.08);
-    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid transparent;
+    border-radius: 4px 16px 16px 16px;
     align-self: flex-start;
   }
   .kloud-chat-meta {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 4px;
+    align-items: baseline;
+    gap: 8px;
+    padding: 0 2px;
   }
   .kloud-chat-entry.local .kloud-chat-meta {
     justify-content: flex-end;
   }
   .kloud-chat-sender {
-    color: rgba(255,255,255,0.6);
-    font-size: 11px;
-    font-weight: 600;
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 13px;
+    font-weight: 700;
   }
   .kloud-chat-time {
-    color: rgba(255,255,255,0.3);
-    font-size: 10px;
+    color: var(--km-stage-muted, #9aa0a6);
+    font-size: 12px;
   }
   .kloud-chat-text {
-    color: #fff;
-    font-size: 13px;
-    line-height: 1.4;
-    padding: 6px 10px;
-    border-radius: 10px;
-    max-width: 85%;
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 14px;
+    line-height: 1.6;
+    padding: 8px 12px;
+    max-width: 88%;
     word-break: break-word;
   }
   .kloud-chat-doc-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    max-width: 90%;
-    padding: 8px 10px;
+    gap: 12px;
+    max-width: 92%;
+    padding: 10px 12px;
     border-radius: 12px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.08);
-    color: #fff;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.06);
+    color: var(--km-stage-text, #e8eaed);
+    font-family: inherit;
     text-align: left;
     cursor: default;
+    transition: border-color 0.15s ease, background 0.15s ease;
   }
   .kloud-chat-entry.local .kloud-chat-doc-card {
     align-self: flex-end;
-    background: rgba(59, 130, 246, 0.28);
-    border-color: rgba(59, 130, 246, 0.28);
+    background: rgba(139, 135, 255, 0.16);
+    border-color: rgba(139, 135, 255, 0.24);
   }
   .kloud-chat-entry.remote .kloud-chat-doc-card {
     align-self: flex-start;
@@ -638,8 +688,12 @@ export const chatAndAttendeeStyles = `
     cursor: pointer;
   }
   .kloud-chat-doc-card.clickable:hover {
-    border-color: rgba(96, 165, 250, 0.55);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+    border-color: rgba(201, 200, 255, 0.5);
+    background: rgba(139, 135, 255, 0.2);
+  }
+  .kloud-chat-doc-card:focus-visible {
+    outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+    outline-offset: 2px;
   }
   .kloud-chat-doc-card:disabled {
     opacity: 0.75;
@@ -649,10 +703,11 @@ export const chatAndAttendeeStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    background: rgba(255,255,255,0.1);
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(139, 135, 255, 0.22);
+    color: var(--km-on-dark-accent, #c9c8ff);
     flex-shrink: 0;
   }
   .kloud-chat-doc-body {
@@ -662,56 +717,58 @@ export const chatAndAttendeeStyles = `
     min-width: 0;
   }
   .kloud-chat-doc-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .kloud-chat-doc-status {
-    font-size: 11px;
-    color: rgba(255,255,255,0.55);
+    font-size: 12px;
+    color: var(--km-on-dark-accent, #c9c8ff);
+  }
+  .kloud-chat-doc-card:disabled .kloud-chat-doc-status {
+    color: var(--km-stage-muted, #9aa0a6);
   }
   .kloud-chat-form {
-    padding: 10px 12px 12px;
-    border-top: 1px solid rgba(255,255,255,0.08);
-    background: linear-gradient(180deg, rgba(15, 23, 42, 0.68), rgba(15, 23, 42, 0.92));
+    padding: 12px 16px 16px;
+    border-top: none;
+    background: transparent;
   }
   .kloud-chat-input-shell {
     position: relative;
     display: flex;
     align-items: flex-end;
-    min-height: 54px;
-    padding: 10px 44px 10px 40px;
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.13);
-    border-radius: 18px;
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.05),
-      0 10px 26px rgba(0,0,0,0.18);
+    min-height: 48px;
+    padding: 12px 48px 12px 48px;
+    background: var(--km-control, #2e3036);
+    border: 1px solid transparent;
+    border-radius: 24px;
+    box-shadow: none;
     transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   }
   .kloud-chat-attach {
     position: absolute;
-    left: 8px;
-    bottom: 8px;
+    left: 9px;
+    bottom: 9px;
     width: 30px;
     height: 30px;
     border: none;
-    border-radius: 15px;
-    background: rgba(255,255,255,0.08);
-    color: rgba(255,255,255,0.85);
+    border-radius: 50%;
+    background: transparent;
+    color: #bdc1c6;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.15s, opacity 0.15s;
+    transition: background 0.15s, color 0.15s, opacity 0.15s;
   }
   .kloud-chat-file-input {
     display: none;
   }
   .kloud-chat-attach:hover:not(:disabled) {
-    background: rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
   }
   .kloud-chat-attach:disabled {
     opacity: 0.45;
@@ -721,7 +778,7 @@ export const chatAndAttendeeStyles = `
     width: 14px;
     height: 14px;
     border: 2px solid rgba(255,255,255,0.25);
-    border-top-color: #fff;
+    border-top-color: var(--km-on-dark-accent, #c9c8ff);
     border-radius: 50%;
     animation: kloud-chat-spin 0.7s linear infinite;
   }
@@ -729,22 +786,20 @@ export const chatAndAttendeeStyles = `
     to { transform: rotate(360deg); }
   }
   .kloud-chat-input-shell:focus-within {
-    background: rgba(255,255,255,0.13);
-    border-color: rgba(59, 130, 246, 0.55);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.07),
-      0 0 0 3px rgba(59, 130, 246, 0.14),
-      0 12px 30px rgba(0,0,0,0.22);
+    background: var(--km-control-hover, #3a3c43);
+    border-color: rgba(201, 200, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(139, 135, 255, 0.16);
   }
   .kloud-chat-input {
     flex: 1;
-    min-height: 24px;
+    min-height: 22px;
     max-height: 132px;
     background: transparent;
     border: none;
-    color: #fff;
+    color: var(--km-stage-text, #e8eaed);
     padding: 0;
-    font-size: 13px;
+    font-family: inherit;
+    font-size: 14px;
     line-height: 1.55;
     outline: none;
     overflow-y: auto;
@@ -753,35 +808,40 @@ export const chatAndAttendeeStyles = `
     scrollbar-color: rgba(255,255,255,0.22) transparent;
   }
   .kloud-chat-input::placeholder {
-    color: rgba(255,255,255,0.36);
+    color: #80868b;
   }
   .kloud-chat-send {
     position: absolute;
-    right: 8px;
-    bottom: 8px;
-    background: linear-gradient(135deg, #22c55e, #16a34a);
+    right: 9px;
+    bottom: 9px;
+    background: var(--km-on-dark-accent, #c9c8ff);
     border: none;
-    color: #fff;
+    color: #1f1d6b;
     width: 30px;
     height: 30px;
-    border-radius: 15px;
+    border-radius: 50%;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 8px 18px rgba(22, 163, 74, 0.32);
-    transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s, background 0.15s;
+    box-shadow: none;
+    transition: transform 0.15s, opacity 0.15s, background 0.15s, color 0.15s;
     flex-shrink: 0;
   }
   .kloud-chat-send:hover:not(:disabled) {
-    background: linear-gradient(135deg, #16a34a, #15803d);
-    box-shadow: 0 10px 22px rgba(22, 163, 74, 0.4);
+    background: #dcdbff;
     transform: translateY(-1px);
   }
   .kloud-chat-send:disabled {
-    opacity: 0.42;
+    background: rgba(255,255,255,0.08);
+    color: #9aa0a6;
+    opacity: 1;
     cursor: not-allowed;
-    box-shadow: none;
+  }
+  .kloud-chat-attach:focus-visible,
+  .kloud-chat-send:focus-visible {
+    outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+    outline-offset: 2px;
   }
 
   /* Attendee Panel */
@@ -790,85 +850,101 @@ export const chatAndAttendeeStyles = `
     flex-direction: column;
     height: 100%;
     position: relative;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: var(--km-font);
   }
   .kloud-attendee-header {
-    padding: 4px 12px;
+    padding: 4px 16px 12px 20px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-wrap: wrap;
     gap: 8px;
   }
   .kloud-attendee-count {
-    color: rgba(255,255,255,0.4);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
+    color: var(--km-stage-muted, #9aa0a6);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
   .kloud-attendee-mute-actions {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     flex-shrink: 0;
   }
   .kloud-mute-all-btn {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid rgba(255,255,255,0.12);
-    background: rgba(255,255,255,0.07);
-    color: rgba(255,255,255,0.75);
-    font-size: 11px;
-    font-weight: 600;
+    gap: 6px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid #3c4043;
+    background: transparent;
+    color: var(--km-on-dark-accent, #c9c8ff);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
   }
   .kloud-mute-all-btn:hover {
-    background: rgba(255,255,255,0.13);
-    border-color: rgba(255,255,255,0.22);
+    background: rgba(201, 200, 255, 0.08);
+    border-color: #5f6368;
     color: #fff;
   }
   .kloud-mute-all-btn--active {
-    background: rgba(234, 88, 12, 0.18) !important;
-    border-color: rgba(234, 88, 12, 0.4) !important;
-    color: #fb923c !important;
+    background: rgba(139, 135, 255, 0.2) !important;
+    border-color: transparent !important;
+    color: var(--km-on-dark-accent, #c9c8ff) !important;
   }
   .kloud-mute-all-btn--active:hover {
-    background: rgba(234, 88, 12, 0.28) !important;
+    background: rgba(139, 135, 255, 0.3) !important;
   }
   .kloud-attendee-list {
     flex: 1;
     overflow-y: auto;
-    padding: 4px 8px;
+    padding: 0 8px 16px;
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 0;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
   }
   .kloud-attendee-row {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px;
-    border-radius: 10px;
+    gap: 12px;
+    min-height: 52px;
+    padding: 6px 4px 6px 12px;
+    border-radius: 12px;
     transition: background 0.15s;
   }
-  .kloud-attendee-row:hover {
-    background: rgba(255,255,255,0.05);
+  .kloud-attendee-row:hover,
+  .kloud-attendee-row:focus-within {
+    background: rgba(255,255,255,0.04);
   }
   .kloud-attendee-avatar {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #3b82f6, #6366f1);
-    color: #fff;
-    font-size: 11px;
+    background: rgba(139, 135, 255, 0.22);
+    color: var(--km-on-dark-accent, #c9c8ff);
+    font-size: 14px;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    text-transform: uppercase;
   }
+  .kloud-attendee-row:nth-child(6n+2) .kloud-attendee-avatar { background: #ffd0b0; color: #7a3e0a; }
+  .kloud-attendee-row:nth-child(6n+3) .kloud-attendee-avatar { background: #bfe0ff; color: #0b4a75; }
+  .kloud-attendee-row:nth-child(6n+4) .kloud-attendee-avatar { background: #bdebd3; color: #135b33; }
+  .kloud-attendee-row:nth-child(6n+5) .kloud-attendee-avatar { background: #ffd0df; color: #7d1c45; }
+  .kloud-attendee-row:nth-child(6n+6) .kloud-attendee-avatar { background: #ffe9a3; color: #6b5200; }
   .kloud-attendee-info {
     flex: 1;
     display: flex;
@@ -877,80 +953,89 @@ export const chatAndAttendeeStyles = `
     min-width: 0;
   }
   .kloud-attendee-name {
-    color: #fff;
-    font-size: 13px;
-    font-weight: 500;
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 14px;
+    font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .kloud-attendee-badges {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 6px;
     flex-wrap: wrap;
   }
   .kloud-attendee-role {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.2px;
-    padding: 1px 6px;
-    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0;
+    padding: 0;
+    border-radius: 0;
     width: fit-content;
+    background: transparent;
+  }
+  .kloud-attendee-role + .kloud-attendee-role::before {
+    content: '·';
+    margin-right: 6px;
+    color: var(--km-stage-muted, #9aa0a6);
   }
   .role-host {
-    color: #fbbf24;
-    background: rgba(251, 191, 36, 0.15);
+    color: var(--km-on-dark-accent, #c9c8ff);
+    background: transparent;
   }
   .role-cohost {
-    color: #a78bfa;
-    background: rgba(167, 139, 250, 0.15);
+    color: var(--km-on-dark-accent, #c9c8ff);
+    background: transparent;
   }
   .role-presenter {
-    color: #34d399;
-    background: rgba(52, 211, 153, 0.15);
+    color: #a8dab5;
+    background: transparent;
   }
   .role-copresenter {
-    color: #38bdf8;
-    background: rgba(56, 189, 248, 0.15);
+    color: #a8c7fa;
+    background: transparent;
   }
   .role-attendee {
-    color: rgba(255,255,255,0.4);
-    background: rgba(255,255,255,0.05);
+    color: var(--km-stage-muted, #9aa0a6);
+    background: transparent;
   }
 
-  /* Raised-hand summary bar (count + Lower All; individual lowering lives in the row ⋯ menu) */
+  /* Raised-hand summary card (count + Lower All; individual lowering lives in the row ⋯ menu) */
   .kloud-hand-queue {
-    margin: 2px 8px 6px;
-    padding: 5px 8px;
-    border-radius: 8px;
-    border: 1px solid rgba(245, 158, 11, 0.28);
-    background: rgba(245, 158, 11, 0.08);
+    margin: 0 12px 12px;
+    padding: 8px 8px 8px 16px;
+    border-radius: 12px;
+    border: 1px solid #3c4043;
+    background: #2a2b31;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
   }
   .kloud-hand-queue-title {
-    color: #fbbf24;
-    font-size: 11px;
+    color: #bdc1c6;
+    font-size: 13px;
     font-weight: 700;
-    letter-spacing: 0.3px;
   }
   .kloud-lower-all-btn {
-    padding: 3px 8px;
-    border-radius: 6px;
-    border: 1px solid rgba(245, 158, 11, 0.4);
-    background: rgba(245, 158, 11, 0.14);
-    color: #fbbf24;
-    font-size: 10px;
-    font-weight: 600;
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid #3c4043;
+    background: transparent;
+    color: var(--km-on-dark-accent, #c9c8ff);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
     white-space: nowrap;
     flex-shrink: 0;
   }
   .kloud-lower-all-btn:hover {
-    background: rgba(245, 158, 11, 0.26);
+    background: rgba(201, 200, 255, 0.08);
+    border-color: #5f6368;
     color: #fff;
   }
 
@@ -958,12 +1043,12 @@ export const chatAndAttendeeStyles = `
   .kloud-attendee-hand-chip {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: rgba(245, 158, 11, 0.16);
-    color: #fbbf24;
-    font-size: 9px;
+    gap: 3px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--km-on-dark-accent, #c9c8ff);
+    color: #1f1d6b;
+    font-size: 11px;
     font-weight: 700;
   }
 
@@ -972,18 +1057,18 @@ export const chatAndAttendeeStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.35);
-    color: #ef4444;
+    background: rgba(242, 139, 130, 0.14);
+    border: none;
+    color: #f28b82;
     flex-shrink: 0;
     animation: kloud-mic-muted-pulse 2.4s ease-in-out infinite;
   }
   @keyframes kloud-mic-muted-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.3); }
-    50% { box-shadow: 0 0 0 4px rgba(239, 68, 68, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(242, 139, 130, 0.3); }
+    50% { box-shadow: 0 0 0 4px rgba(242, 139, 130, 0); }
   }
 
   /* Per-participant mic toggle button */
@@ -991,18 +1076,19 @@ export const chatAndAttendeeStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     border: 1px solid transparent;
     background: transparent;
     flex-shrink: 0;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
     opacity: 0;
     cursor: default;
   }
   /* Show mic button when hovering the row */
-  .kloud-attendee-row:hover .kloud-participant-mic-btn {
+  .kloud-attendee-row:hover .kloud-participant-mic-btn,
+  .kloud-attendee-row:focus-within .kloud-participant-mic-btn {
     opacity: 1;
   }
   .kloud-participant-mic-btn.host-restricted {
@@ -1011,57 +1097,52 @@ export const chatAndAttendeeStyles = `
   /* Voluntary mute — gray (not host-restricted) */
   .kloud-participant-mic-btn.muted:not(.host-restricted) {
     opacity: 1;
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.1);
+    color: #9aa0a6;
+    background: transparent;
+    border-color: transparent;
   }
   /* Active (unmuted) state */
   .kloud-participant-mic-btn.active:not(.host-restricted) {
-    color: #22c55e;
-    background: rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.1);
+    color: #81c995;
+    background: transparent;
+    border-color: transparent;
   }
   /* Clickable (operator) states */
   .kloud-participant-mic-btn.clickable {
     cursor: pointer;
   }
   .kloud-participant-mic-btn.clickable.muted:not(.host-restricted) {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.75);
+    background: transparent;
+    border-color: transparent;
+    color: #bdc1c6;
   }
   .kloud-participant-mic-btn.clickable.muted:not(.host-restricted):hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.9);
-    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
   .kloud-participant-mic-btn.clickable.active:not(.host-restricted):hover {
-    background: rgba(34, 197, 94, 0.12);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: #4ade80;
-    transform: scale(1.1);
+    background: rgba(129, 201, 149, 0.12);
+    color: #a8dab5;
   }
   .kloud-participant-mic-btn.host-restricted,
   .kloud-participant-mic-btn.host-restricted.muted,
   .kloud-participant-mic-btn.clickable.host-restricted,
   .kloud-participant-mic-btn.clickable.host-restricted.muted {
     opacity: 1;
-    color: #ff2020 !important;
-    background: rgba(255, 32, 32, 0.12);
-    border-color: rgba(255, 32, 32, 0.35);
+    color: #f28b82 !important;
+    background: rgba(242, 139, 130, 0.12);
+    border-color: transparent;
   }
   .kloud-participant-mic-btn.clickable.host-restricted:hover,
   .kloud-participant-mic-btn.clickable.host-restricted.muted:hover {
-    background: rgba(34, 197, 94, 0.14);
-    border-color: rgba(34, 197, 94, 0.35);
-    color: #86efac !important;
+    background: rgba(129, 201, 149, 0.14);
+    color: #a8dab5 !important;
   }
 
   .kloud-participant-media-actions {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 0;
     flex-shrink: 0;
   }
 
@@ -1069,17 +1150,18 @@ export const chatAndAttendeeStyles = `
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 26px;
-    height: 26px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     border: 1px solid transparent;
     background: transparent;
     flex-shrink: 0;
-    transition: all 0.15s ease;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
     opacity: 0;
     cursor: default;
   }
-  .kloud-attendee-row:hover .kloud-participant-cam-btn {
+  .kloud-attendee-row:hover .kloud-participant-cam-btn,
+  .kloud-attendee-row:focus-within .kloud-participant-cam-btn {
     opacity: 1;
   }
   .kloud-participant-cam-btn.host-restricted {
@@ -1087,49 +1169,60 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-participant-cam-btn.disabled:not(.host-restricted) {
     opacity: 1;
-    color: rgba(255, 255, 255, 0.75);
-    background: rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.1);
+    color: #9aa0a6;
+    background: transparent;
+    border-color: transparent;
   }
   .kloud-participant-cam-btn.host-restricted,
   .kloud-participant-cam-btn.host-restricted.disabled,
   .kloud-participant-cam-btn.clickable.host-restricted,
   .kloud-participant-cam-btn.clickable.host-restricted.disabled {
-    color: #ff2020 !important;
-    background: rgba(255, 32, 32, 0.12);
-    border-color: rgba(255, 32, 32, 0.35);
+    color: #f28b82 !important;
+    background: rgba(242, 139, 130, 0.12);
+    border-color: transparent;
     opacity: 1;
   }
   .kloud-participant-cam-btn.active:not(.host-restricted) {
-    color: #22c55e;
-    background: rgba(0, 0, 0, 0.45);
-    border-color: rgba(255, 255, 255, 0.1);
+    color: #81c995;
+    background: transparent;
+    border-color: transparent;
   }
   .kloud-participant-cam-btn.clickable {
     cursor: pointer;
   }
   .kloud-participant-cam-btn.clickable.disabled:not(.host-restricted) {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.75);
+    background: transparent;
+    border-color: transparent;
+    color: #bdc1c6;
   }
   .kloud-participant-cam-btn.clickable.disabled:not(.host-restricted):hover {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.2);
-    color: rgba(255, 255, 255, 0.9);
-    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
   .kloud-participant-cam-btn.clickable.host-restricted:hover,
   .kloud-participant-cam-btn.clickable.host-restricted.disabled:hover {
-    background: rgba(34, 197, 94, 0.14);
-    border-color: rgba(34, 197, 94, 0.35);
-    color: #86efac !important;
+    background: rgba(129, 201, 149, 0.14);
+    color: #a8dab5 !important;
   }
   .kloud-participant-cam-btn.clickable.active:not(.host-restricted):hover {
-    background: rgba(34, 197, 94, 0.12);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: #4ade80;
-    transform: scale(1.1);
+    background: rgba(129, 201, 149, 0.12);
+    color: #a8dab5;
+  }
+  .kloud-participant-mic-btn.clickable:focus-visible,
+  .kloud-participant-cam-btn.clickable:focus-visible,
+  .kloud-role-icon-btn:focus-visible,
+  .kloud-mute-all-btn:focus-visible,
+  .kloud-lower-all-btn:focus-visible,
+  .kloud-more-dropdown-item:focus-visible,
+  .kloud-confirm-cancel:focus-visible,
+  .kloud-confirm-proceed:focus-visible,
+  .kloud-host-picker-item:focus-visible,
+  .kloud-host-picker-close:focus-visible,
+  .kloud-host-picker-back:focus-visible,
+  .kloud-attendee-search-clear:focus-visible {
+    outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+    outline-offset: 2px;
+    opacity: 1;
   }
 
   /* Action buttons */
@@ -1141,31 +1234,29 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-role-icon-btn {
     position: relative;
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(0, 0, 0, 0.45);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.15s;
-    color: rgba(255,255,255,0.5);
+    transition: background 0.15s, color 0.15s;
+    color: #bdc1c6;
     box-sizing: border-box;
   }
   .kloud-role-icon-btn:hover {
-    background: rgba(0, 0, 0, 0.62);
-    border-color: rgba(255,255,255,0.2);
-    color: rgba(255,255,255,0.85);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
   }
   .kloud-role-icon-btn.checked {
-    background: rgba(34, 197, 94, 0.12);
-    border-color: rgba(34, 197, 94, 0.3);
-    color: #4ade80;
+    background: rgba(139, 135, 255, 0.2);
+    color: var(--km-on-dark-accent, #c9c8ff);
   }
   .kloud-role-icon-btn.checked:hover {
-    background: rgba(34, 197, 94, 0.2);
+    background: rgba(139, 135, 255, 0.3);
   }
   .kloud-check-badge {
     position: absolute;
@@ -1182,17 +1273,17 @@ export const chatAndAttendeeStyles = `
   .kloud-more-dropdown {
     position: absolute;
     right: 0;
-    top: 32px;
+    top: 40px;
     width: max-content;
-    min-width: max-content;
-    background: rgba(15, 23, 42, 0.98);
-    backdrop-filter: blur(16px);
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 10px;
-    padding: 4px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    min-width: 230px;
+    background: var(--km-menu, #2b2c32);
+    border: none;
+    border-radius: 12px;
+    padding: 8px 0;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.35);
     z-index: 100;
-    animation: kloud-dropdown-in 0.12s ease-out;
+    font-family: var(--km-font);
+    animation: kloud-dropdown-in 0.14s ease-out;
   }
   @keyframes kloud-dropdown-in {
     from { opacity: 0; transform: translateY(-4px); }
@@ -1201,14 +1292,16 @@ export const chatAndAttendeeStyles = `
   .kloud-more-dropdown-item {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 14px;
     width: 100%;
-    padding: 8px 10px;
+    min-height: 44px;
+    padding: 0 18px;
     border: none;
-    border-radius: 6px;
+    border-radius: 0;
     background: transparent;
-    color: #fff;
-    font-size: 13px;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: inherit;
+    font-size: 14px;
     font-weight: 500;
     cursor: pointer;
     transition: background 0.12s;
@@ -1217,26 +1310,31 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-more-dropdown-item:hover {
     background: rgba(255,255,255,0.08);
+    color: #fff;
   }
   .kloud-more-dropdown-item.active {
-    color: #4ade80;
+    color: var(--km-on-dark-accent, #c9c8ff);
   }
   .kloud-more-dropdown-item.active svg {
-    color: #4ade80;
+    color: var(--km-on-dark-accent, #c9c8ff);
   }
   .kloud-more-dropdown-item.danger {
-    color: #f87171;
+    color: #f28b82;
+  }
+  .kloud-more-dropdown-item.danger:not(:first-child) {
+    margin-top: 6px;
+    box-shadow: 0 -1px 0 rgba(255,255,255,0.08);
   }
   .kloud-more-dropdown-item.danger:hover {
-    background: rgba(239, 68, 68, 0.12);
-    color: #fca5a5;
+    background: rgba(242, 139, 130, 0.1);
+    color: #f6aea9;
   }
   .kloud-more-dropdown-item.danger svg {
     color: inherit;
   }
   .kloud-more-dropdown-item svg {
     flex-shrink: 0;
-    color: rgba(255,255,255,0.6);
+    color: #bdc1c6;
   }
 
   /* Confirmation dialog */
@@ -1252,12 +1350,14 @@ export const chatAndAttendeeStyles = `
     border-radius: inherit;
   }
   .kloud-confirm-dialog {
-    background: rgba(20, 25, 40, 0.98);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    padding: 20px;
-    max-width: 280px;
+    background: var(--km-menu, #2b2c32);
+    border: none;
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 300px;
     text-align: center;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: var(--km-font);
     box-shadow: 0 12px 40px rgba(0,0,0,0.5);
     animation: kloud-dialog-in 0.15s ease-out;
   }
@@ -1273,16 +1373,16 @@ export const chatAndAttendeeStyles = `
     margin-bottom: 12px;
   }
   .kloud-confirm-title {
-    color: #fff;
-    font-size: 15px;
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 16px;
     font-weight: 600;
     margin: 0 0 8px;
   }
   .kloud-confirm-text {
-    color: rgba(255,255,255,0.6);
-    font-size: 12px;
-    line-height: 1.5;
-    margin: 0 0 16px;
+    color: #bdc1c6;
+    font-size: 13px;
+    line-height: 1.55;
+    margin: 0 0 20px;
   }
   .kloud-confirm-text strong {
     color: #fff;
@@ -1292,85 +1392,108 @@ export const chatAndAttendeeStyles = `
     gap: 8px;
     justify-content: center;
   }
+  .kloud-chat-panel .kloud-confirm-actions {
+    justify-content: flex-end;
+  }
   .kloud-confirm-cancel {
-    padding: 6px 16px;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: transparent;
-    color: rgba(255,255,255,0.7);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.12s;
-  }
-  .kloud-confirm-cancel:hover {
-    background: rgba(255,255,255,0.08);
-    color: #fff;
-  }
-  .kloud-confirm-proceed {
-    padding: 6px 16px;
-    border-radius: 8px;
+    height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
     border: none;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #fff;
-    font-size: 13px;
+    background: transparent;
+    color: var(--km-on-dark-accent, #c9c8ff);
+    font-family: inherit;
+    font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 0.12s;
-    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    transition: background 0.12s;
+  }
+  .kloud-confirm-cancel:hover {
+    background: rgba(201, 200, 255, 0.08);
+  }
+  .kloud-confirm-proceed {
+    height: 36px;
+    padding: 0 18px;
+    border-radius: 999px;
+    border: none;
+    background: var(--km-on-dark-accent, #c9c8ff);
+    color: #1f1d6b;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.12s;
+    box-shadow: none;
   }
   .kloud-confirm-proceed:hover {
-    background: linear-gradient(135deg, #d97706, #b45309);
+    background: #dcdbff;
   }
 
   /* Search bar */
   .kloud-attendee-search {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin: 4px 12px 8px;
-    padding: 6px 10px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    color: rgba(255,255,255,0.4);
+    gap: 8px;
+    margin: 0 16px 12px;
+    height: 40px;
+    padding: 0 14px;
+    background: var(--km-control, #2e3036);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #9aa0a6;
+    transition: border-color 0.15s;
+  }
+  .kloud-attendee-search:focus-within {
+    border-color: rgba(201, 200, 255, 0.55);
   }
   .kloud-attendee-search-input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
-    color: #fff;
-    font-size: 12px;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: inherit;
+    font-size: 14px;
     outline: none;
   }
   .kloud-attendee-search-input::placeholder {
-    color: rgba(255,255,255,0.3);
+    color: #80868b;
   }
   .kloud-attendee-search-clear {
     background: transparent;
     border: none;
-    color: rgba(255,255,255,0.4);
+    color: #9aa0a6;
     cursor: pointer;
     font-size: 12px;
-    padding: 0 2px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    padding: 0;
+  }
+  .kloud-attendee-search-clear:hover {
+    background: rgba(255,255,255,0.08);
+    color: #fff;
   }
   .kloud-attendee-empty {
-    color: rgba(255,255,255,0.3);
-    font-size: 12px;
+    color: var(--km-stage-muted, #9aa0a6);
+    font-size: 13px;
     text-align: center;
-    padding: 16px 8px;
+    padding: 20px 8px;
   }
 
   /* Host Transfer Picker */
   .kloud-host-picker {
-    background: rgba(20, 25, 40, 0.98);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    padding: 16px;
-    width: 300px;
-    max-height: 420px;
+    background: var(--km-menu, #2b2c32);
+    border: none;
+    border-radius: 16px;
+    padding: 20px;
+    width: 320px;
+    max-width: calc(100vw - 32px);
+    max-height: 440px;
     display: flex;
     flex-direction: column;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: var(--km-font);
     box-shadow: 0 16px 48px rgba(0,0,0,0.6);
     animation: kloud-dialog-in 0.15s ease-out;
   }
@@ -1382,36 +1505,36 @@ export const chatAndAttendeeStyles = `
   }
   .kloud-host-picker-title {
     flex: 1;
-    color: #fff;
-    font-size: 15px;
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 18px;
     font-weight: 600;
     margin: 0;
   }
   .kloud-host-picker-close {
-    background: rgba(255,255,255,0.08);
+    background: transparent;
     border: none;
-    width: 26px;
-    height: 26px;
-    border-radius: 13px;
-    color: rgba(255,255,255,0.6);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #bdc1c6;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 13px;
+    font-size: 14px;
     flex-shrink: 0;
   }
   .kloud-host-picker-close:hover {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.08);
     color: #fff;
   }
   .kloud-host-picker-back {
-    background: rgba(255,255,255,0.08);
+    background: transparent;
     border: none;
-    width: 26px;
-    height: 26px;
-    border-radius: 13px;
-    color: rgba(255,255,255,0.6);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: #bdc1c6;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1419,36 +1542,42 @@ export const chatAndAttendeeStyles = `
     flex-shrink: 0;
   }
   .kloud-host-picker-back:hover {
-    background: rgba(255,255,255,0.15);
+    background: rgba(255,255,255,0.08);
     color: #fff;
   }
   .kloud-host-picker-desc {
-    color: rgba(255,255,255,0.45);
-    font-size: 12px;
-    line-height: 1.4;
-    margin: 0 0 10px;
+    color: #9aa0a6;
+    font-size: 13px;
+    line-height: 1.5;
+    margin: 0 0 12px;
   }
   .kloud-host-picker-search {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
+    gap: 8px;
+    height: 40px;
+    padding: 0 14px;
+    background: var(--km-control, #2e3036);
+    border: 1px solid transparent;
+    border-radius: 999px;
     margin-bottom: 8px;
-    color: rgba(255,255,255,0.4);
+    color: #9aa0a6;
+  }
+  .kloud-host-picker-search:focus-within {
+    border-color: rgba(201, 200, 255, 0.55);
   }
   .kloud-host-picker-search-input {
     flex: 1;
+    min-width: 0;
     background: transparent;
     border: none;
-    color: #fff;
-    font-size: 12px;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: inherit;
+    font-size: 14px;
     outline: none;
   }
   .kloud-host-picker-search-input::placeholder {
-    color: rgba(255,255,255,0.3);
+    color: #80868b;
   }
   .kloud-host-picker-list {
     flex: 1;
@@ -1457,16 +1586,19 @@ export const chatAndAttendeeStyles = `
     flex-direction: column;
     gap: 2px;
     max-height: 280px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.18) transparent;
   }
   .kloud-host-picker-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px;
-    border-radius: 10px;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: 12px;
     border: none;
     background: transparent;
-    color: #fff;
+    color: var(--km-stage-text, #e8eaed);
+    font-family: inherit;
     cursor: pointer;
     transition: background 0.12s;
     text-align: left;
@@ -1496,5 +1628,18 @@ export const chatAndAttendeeStyles = `
     position: static;
     top: auto;
     right: auto;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .kloud-chat-entry,
+    .kloud-more-dropdown,
+    .kloud-confirm-dialog,
+    .kloud-host-picker,
+    .kloud-force-muted-badge {
+      animation: none !important;
+    }
+    .kloud-chat-send:hover:not(:disabled) {
+      transform: none;
+    }
   }
 `;

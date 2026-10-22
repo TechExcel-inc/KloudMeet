@@ -1,0 +1,89 @@
+/* Kloud Meet design tokens (2026-10 redesign).
+   Pre-meeting pages: Google Meet–style light surfaces by default, dark when html[data-theme='dark'].
+   In-meeting surfaces are always dark. Brand colour is blue-violet. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+:root {
+  --km-font: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  /* Brand */
+  --km-primary: #5e5ce6;
+  --km-primary-hover: #4f4dd8;
+  --km-primary-grad: linear-gradient(135deg, #6a5cf4, #4d6cf5);
+  --km-primary-shadow: 0 6px 18px rgba(94, 92, 230, 0.35);
+  --km-on-primary: #ffffff;
+  --km-tonal: #eeedff;
+  --km-on-tonal: #3f3cc9;
+  --km-focus-ring: 0 0 0 3px rgba(94, 92, 230, 0.35);
+
+  /* Neutrals (pre-meeting, light) */
+  --km-bg: #ffffff;
+  --km-bg-subtle: #f4f5fa;
+  --km-surface: #ffffff;
+  --km-text: #1f1f1f;
+  --km-text-muted: #5f6368;
+  --km-border: #dadce0;
+  --km-hover: rgba(60, 64, 67, 0.08);
+  --km-shadow: 0 1px 2px rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  --km-scrim: rgba(32, 33, 36, 0.5);
+
+  /* Status */
+  --km-danger: #dc362e;
+  --km-danger-text: #b3261e;
+  --km-danger-bg: #fce8e6;
+  --km-success: #146c2e;
+  --km-success-bg: #e6f4ea;
+  --km-warning: #9a5b00;
+  --km-warning-bg: #fef3e0;
+
+  /* In-meeting (always dark, Meet-like) */
+  --km-stage: #17181c;
+  --km-stage-2: #202124;
+  --km-tile: #2e3036;
+  --km-control: #2e3036;
+  --km-control-hover: #3a3c43;
+  --km-panel: #202126;
+  --km-menu: #2b2c32;
+  --km-stage-text: #e8eaed;
+  --km-stage-muted: #9aa0a6;
+  --km-stage-border: rgba(255, 255, 255, 0.08);
+  --km-speaking: #8b87ff;
+  --km-on-dark-accent: #c9c8ff;
+  --km-snackbar: #323232;
+
+  /* Shape */
+  --km-radius-sm: 8px;
+  --km-radius-md: 12px;
+  --km-radius-lg: 16px;
+  --km-radius-xl: 28px;
+  --km-radius-pill: 999px;
+}
+
+html[data-theme='dark'] {
+  --km-primary: #7c79ff;
+  --km-primary-hover: #8b87ff;
+  --km-tonal: rgba(139, 135, 255, 0.16);
+  --km-on-tonal: #c9c8ff;
+  --km-focus-ring: 0 0 0 3px rgba(124, 121, 255, 0.45);
+  --km-bg: #131418;
+  --km-bg-subtle: #1c1d22;
+  --km-surface: #202126;
+  --km-text: #e8eaed;
+  --km-text-muted: #9aa0a6;
+  --km-border: #3c4043;
+  --km-hover: rgba(232, 234, 237, 0.08);
+  --km-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.35);
+  --km-scrim: rgba(0, 0, 0, 0.6);
+  --km-danger-text: #f2b8b5;
+  --km-danger-bg: rgba(220, 54, 46, 0.18);
+  --km-success: #6dd58c;
+  --km-success-bg: rgba(109, 213, 140, 0.14);
+  --km-warning: #ffd59a;
+  --km-warning-bg: rgba(255, 190, 90, 0.14);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --km-motion: 0;
+  }
+}

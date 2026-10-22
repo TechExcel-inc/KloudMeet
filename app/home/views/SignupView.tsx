@@ -1,20 +1,10 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { generateRoomId } from '@/lib/client-utils';
-import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
-import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
-import { MyProfileModal } from '@/lib/MyProfileModal';
+import React, { useCallback, useState } from 'react';
 import { useI18n } from '@/lib/i18n';
-import { HelpModal } from '@/lib/HelpModal';
-import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
-import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
-import { authFetch, authHeaders } from '@/lib/kloudSession';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
-import { KloudLogo } from '../components/KloudLogo';
-import { TopToolbar } from '../components/TopToolbar';
+import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
 
 export function SignupView({
   onBack,
@@ -28,6 +18,7 @@ export function SignupView({
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
+  const tx = useTx();
   const [step, setStep] = useState<SignupStep>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -41,28 +32,9 @@ export function SignupView({
   const [countdown, setCountdown] = useState(0);
   const [devCode, setDevCode] = useState<string | null>(null);
 
-  /* ── Step indicator ── */
+  /* ── Step progress (progress bar + "Step N of 3") ── */
   const stepIndex = step === 'email' ? 0 : step === 'verify' ? 1 : 2;
-  const StepIndicator = () => (
-    <div className={styles.signupSteps}>
-      {[0, 1, 2].map((i) => (
-        <React.Fragment key={i}>
-          <div
-            className={
-              i < stepIndex
-                ? styles.signupStepDotDone
-                : i === stepIndex
-                  ? styles.signupStepDotActive
-                  : styles.signupStepDot
-            }
-          />
-          {i < 2 && (
-            <div className={i < stepIndex ? styles.signupStepLineDone : styles.signupStepLine} />
-          )}
-        </React.Fragment>
-      ))}
-    </div>
-  );
+  const stepText = tx('signup.stepOf', 'Step {n} of {total}', { n: stepIndex + 1, total: 3 });
 
   /* ── Start countdown timer ── */
   const startCountdown = useCallback(() => {
@@ -184,203 +156,189 @@ export function SignupView({
     else onBack();
   };
 
+  const subtitle =
+    step === 'email'
+      ? tx('signup.subtitle', 'Create your Kloud account to host meetings and keep replays.')
+      : step === 'verify'
+        ? t('signup.codeSentTo', { email })
+        : t('signup.creatingFor', { email });
+
+  const primaryCls = `${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`;
+  const textCls = `${styles.btn} ${styles.btnSm} ${styles.btnText}`;
+
   return (
-    <div className={styles.anonWrapper}>
-      <TopToolbar onBack={handleBack} onOpenHelp={onOpenHelp} hideAvatar />
-      
-      <div className={styles.authContainer}>
-        <div className={styles.authCard}>
-          <h1 className={styles.loginTitle}>
-            {step === 'verify' ? t('signup.verifyEmail') : t('signup.title')}
-          </h1>
+    <AuthShell
+      onBack={handleBack}
+      onOpenHelp={onOpenHelp}
+      title={step === 'verify' ? t('signup.verifyEmail') : t('signup.title')}
+      subtitle={subtitle}
+      stepText={stepText}
+      progress={(stepIndex + 1) / 3}
+    >
+      {/* ── Step 1: Email ── */}
+      {step === 'email' && (
+        <>
+          <AuthField
+            label={t('signup.emailAddress')}
+            invalid={!!error}
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(''); }}
+            onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
+            autoFocus
+          />
+          <FormError message={error} />
 
-          <StepIndicator />
+          <div className={styles.ssoDivider}>{t('signup.orSignUpWith')}</div>
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
+            onClick={() => window.location.href = '/api/auth/google'}
+          >
+            <GoogleIcon />
+            Google
+          </button>
 
-          {error && <div className={styles.errorBanner}>⚠ {error}</div>}
+          <div className={styles.authActions}>
+            <span className={styles.authActionsNote}>{t('signup.alreadyHaveAccount')}</span>
+            <button type="button" className={textCls} onClick={onBack}>
+              {t('nav.signIn')}
+            </button>
+            <button
+              type="button"
+              className={primaryCls}
+              disabled={loading}
+              aria-busy={loading}
+              onClick={handleEmailNext}
+            >
+              {loading ? (
+                <>
+                  <Spinner />
+                  {t('signup.sendingCode')}
+                </>
+              ) : t('common.next')}
+            </button>
+          </div>
+        </>
+      )}
 
-          {/* ── Step 1: Email ── */}
-          {step === 'email' && (
-            <>
-              <label className={styles.fieldLabel}>{t('signup.emailAddress')}</label>
-              <input
-                className={error ? styles.fieldInputError : styles.fieldInput}
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
-                autoFocus
-              />
+      {/* ── Step 2: Verify ── */}
+      {step === 'verify' && (
+        <>
+          <AuthField
+            label={t('forgot.enter6Digit')}
+            invalid={!!error}
+            inputClassName={styles.verifyCodeInput}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
+            maxLength={6}
+            value={verificationCode}
+            onChange={(e) => {
+              setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+              setError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
+            autoFocus
+          />
 
-              <button
-                type="button"
-                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
-                disabled={loading}
-                onClick={handleEmailNext}
-              >
-                {loading ? (
-                  <>
-                    <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12a9 9 0 11-6.219-8.56"></path>
-                    </svg>
-                    {t('signup.sendingCode')}
-                  </>
-                ) : t('common.next')}
+          <div className={styles.resendRow} aria-live="polite">
+            {countdown > 0 ? (
+              <span>{t('signup.resendIn', { seconds: String(countdown) })}</span>
+            ) : (
+              <button type="button" className={styles.linkBtn} onClick={() => sendCode()}>
+                {t('signup.resendCode')}
               </button>
+            )}
+          </div>
 
-              <div className={styles.ssoDivider}>{t('signup.orSignUpWith')}</div>
-              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-                <button type="button" className={styles.anonLink} style={{ flex: 1 }} onClick={() => window.location.href = '/api/auth/google'}>Google</button>
-              </div>
-
-              <div className={styles.registerRow} style={{ marginTop: '1rem' }}>
-                <span>{t('signup.alreadyHaveAccount')}</span>
-                <button type="button" className={styles.linkBtn} onClick={onBack}>
-                  {t('nav.signIn')}
-                </button>
-              </div>
-            </>
+          {devCode && (
+           <div className={styles.devHint}>{t('signup.devCode', { code: devCode })}</div>
           )}
 
-          {/* ── Step 2: Verify ── */}
-          {step === 'verify' && (
-            <>
-              <div className={styles.verifyIcon}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="28" height="28">
-                  <path d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <p className={styles.signupSubtext}>
-                {t('signup.codeSentTo', { email })}
-              </p>
+          <FormError message={error} />
 
-              <input
-                className={styles.verifyCodeInput}
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="000000"
-                maxLength={6}
-                value={verificationCode}
-                onChange={(e) => {
-                  setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  setError('');
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
-                autoFocus
-              />
+          <div className={styles.authActions}>
+            <button type="button" className={textCls} onClick={handleBack}>
+              {t('common.back')}
+            </button>
+            <button
+              type="button"
+              className={primaryCls}
+              disabled={verificationCode.length !== 6}
+              onClick={handleVerifyNext}
+            >
+              {t('signup.continue')}
+            </button>
+          </div>
+        </>
+      )}
 
-              {devCode && (
-               <div className={styles.devHint}>{t('signup.devCode', { code: devCode })}</div>
-              )}
+      {/* ── Step 3: Create account ── */}
+      {step === 'create' && (
+        <>
+          <AuthField
+            label={t('signup.loginName')}
+            type="text"
+            autoComplete="username"
+            placeholder={t('signup.loginNameHint')}
+            maxLength={20}
+            value={username}
+            onChange={(e) => { setUsername(e.target.value); setError(''); }}
+            hint={t('signup.cannotAllDigits')}
+            autoFocus
+          />
 
-              <button
-                type="button"
-                className={verificationCode.length === 6 ? styles.loginSubmit : styles.loginSubmitLoading}
-                disabled={verificationCode.length !== 6}
-                onClick={handleVerifyNext}
-              >
-                {t('signup.continue')}
-              </button>
+          <AuthField
+            label={t('signup.passwordLabel')}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder={t('signup.passwordHint')}
+            maxLength={30}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(''); }}
+            passwordToggle={{ shown: showPassword, onToggle: () => setShowPassword(!showPassword) }}
+          />
 
-              <div className={styles.resendRow}>
-                {countdown > 0 ? (
-                  <span>{t('signup.resendIn', { seconds: String(countdown) })}</span>
-                ) : (
-                  <button type="button" className={styles.linkBtn} onClick={() => sendCode()}>
-                    {t('signup.resendCode')}
-                  </button>
-                )}
-              </div>
-            </>
-          )}
+          <AuthField
+            label={t('signup.confirmPassword')}
+            type={showConfirm ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder={t('signup.confirmPasswordHint')}
+            maxLength={30}
+            value={confirmPassword}
+            onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+            passwordToggle={{ shown: showConfirm, onToggle: () => setShowConfirm(!showConfirm) }}
+          />
 
-          {/* ── Step 3: Create account ── */}
-          {step === 'create' && (
-            <>
-              <p className={styles.signupSubtext}>
-                {t('signup.creatingFor', { email })}
-              </p>
+          <FormError message={error} />
 
-              <label className={styles.fieldLabel}>{t('signup.loginName')}</label>
-              <input
-                className={styles.fieldInput}
-                type="text"
-                placeholder={t('signup.loginNameHint')}
-                maxLength={20}
-                value={username}
-                onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                autoFocus
-              />
-              <p className={styles.fieldHint}>{t('signup.cannotAllDigits')}</p>
+          <p className={styles.termsNotice}>{t('signup.termsNotice')}</p>
 
-              <label className={styles.fieldLabel}>{t('signup.passwordLabel')}</label>
-              <div className={styles.passwordWrap}>
-                <input
-                  className={styles.fieldInput}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={t('signup.passwordHint')}
-                  maxLength={30}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  style={{ paddingRight: '2.5rem' }}
-                />
-                <button
-                  type="button"
-                  className={styles.passwordToggle}
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{ top: 'calc(50% - 8px)' }}
-                >
-                  {showPassword ? '🙈' : '👁'}
-                </button>
-              </div>
-
-              <label className={styles.fieldLabel}>{t('signup.confirmPassword')}</label>
-              <div className={styles.passwordWrap}>
-                <input
-                  className={styles.fieldInput}
-                  type={showConfirm ? 'text' : 'password'}
-                  placeholder={t('signup.confirmPasswordHint')}
-                  maxLength={30}
-                  value={confirmPassword}
-                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
-                  style={{ paddingRight: '2.5rem' }}
-                />
-                <button
-                  type="button"
-                  className={styles.passwordToggle}
-                  onClick={() => setShowConfirm(!showConfirm)}
-                  style={{ top: 'calc(50% - 8px)' }}
-                >
-                  {showConfirm ? '🙈' : '👁'}
-                </button>
-              </div>
-
-              <button
-                type="button"
-                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
-                disabled={loading}
-                onClick={handleCreate}
-                style={{ marginTop: '0.5rem' }}
-              >
-                {loading ? (
-                  <>
-                    <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12a9 9 0 11-6.219-8.56"></path>
-                    </svg>
-                    {t('signup.creatingAccount')}
-                  </>
-                ) : t('signup.title')}
-              </button>
-
-              <p style={{ fontSize: '0.78rem', color: '#9ca3af', textAlign: 'center', marginTop: '0.75rem' }}>
-                {t('signup.termsNotice')}
-              </p>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+          <div className={styles.authActions}>
+            <button type="button" className={textCls} onClick={handleBack}>
+              {t('common.back')}
+            </button>
+            <button
+              type="button"
+              className={primaryCls}
+              disabled={loading}
+              aria-busy={loading}
+              onClick={handleCreate}
+            >
+              {loading ? (
+                <>
+                  <Spinner />
+                  {t('signup.creatingAccount')}
+                </>
+              ) : t('signup.title')}
+            </button>
+          </div>
+        </>
+      )}
+    </AuthShell>
   );
 }
-

@@ -198,7 +198,17 @@ export function HomeContent() {
 
   useEffect(() => {
     if (!authInitialized || user) return;
-    if (safeReplayNext(searchParams.get('next'))) setView('login');
+    if (safeReplayNext(searchParams.get('next'))) {
+      setView('login');
+      return;
+    }
+    // Deep links from the marketing site (kloudmeet.com): ?signup=1 / ?signin=1
+    if (searchParams.get('signup') === '1') {
+      setSignupSource('anonymous');
+      setView('signup');
+    } else if (searchParams.get('signin') === '1') {
+      setView('login');
+    }
   }, [authInitialized, user, searchParams]);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import styles from '../styles/PreJoin.module.css';
 import { useI18n } from './i18n';
 
 export interface PrejoinParticipantLiveDocSelectProps {
@@ -17,8 +18,10 @@ export function PrejoinParticipantLiveDocSelect({
   const { t } = useI18n();
 
   return (
-    <label className="kloud-prejoin-participant-livedoc">
+    <label className={styles.optionRow}>
+      <span>LiveDoc AI</span>
       <select
+        className={styles.select}
         value={show ? 'show' : 'hide'}
         onChange={(event) => onChange(event.target.value === 'show')}
       >

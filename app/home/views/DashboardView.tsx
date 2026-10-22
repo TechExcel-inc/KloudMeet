@@ -2,7 +2,6 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
@@ -25,6 +24,7 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
+import { useTx } from '../components/ui';
 
 type MeetingListScope = 'all' | 'hosted';
 
@@ -55,6 +55,7 @@ export function DashboardView({
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
+  const tx = useTx();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -594,7 +595,7 @@ export function DashboardView({
     }
 
     if (!roomId) {
-      toast.show('Please enter a valid meeting code');
+      toast.show(t('anon.enterValidCode'));
       return;
     }
     
@@ -615,7 +616,7 @@ export function DashboardView({
       const data = await res.json();
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
       if (data.status === 'ENDED' && !data.isPersonalRoom) {
-        setWarningMessage('This meeting has already ended and is no longer available.');
+        setWarningMessage(t('anon.meetingEnded'));
         setIsJoining(false);
         return;
       }
@@ -637,7 +638,7 @@ export function DashboardView({
           return;
         } else {
           // 3. Past Start Date (But Not Started)
-          toast.show('The scheduled start time has passed. We are waiting for the Host to begin.');
+          toast.show(t('anon.pastStartTime'));
           router.push(`/rooms/${roomId}`);
           return;
         }
@@ -647,7 +648,7 @@ export function DashboardView({
       router.push(`/rooms/${roomId}`);
     } catch(e) {
       console.error(e);
-      setWarningMessage('An error occurred connecting to the API. Please try again.');
+      setWarningMessage(t('anon.apiError'));
       setIsJoining(false);
     }
   };
@@ -681,6 +682,62 @@ export function DashboardView({
     return acc;
   }, {});
 
+
+  /* ── Display helpers (presentation only) ── */
+  const greetingHour = new Date(currentTime).getHours();
+  const greeting =
+    greetingHour < 12
+      ? tx('dash.greeting.morning', 'Good morning, {name}', { name: user.displayName })
+      : greetingHour < 18
+        ? tx('dash.greeting.afternoon', 'Good afternoon, {name}', { name: user.displayName })
+        : tx('dash.greeting.evening', 'Good evening, {name}', { name: user.displayName });
+  const replayLabel = t('dash.replay').replace(/^[^\p{L}\p{N}]+/u, '').trim() || t('dash.replay');
+  const hasJoinCode = joinCode.trim().length > 0;
+  const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
+
+  const copyIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
+    </svg>
+  );
+  const videoIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+      <rect x="3" y="6" width="12" height="12" rx="3" />
+      <path d="M15 10l6-3v10l-6-3z" />
+    </svg>
+  );
+  const playIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="currentColor" width={size} height={size} aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+  );
+  const linkIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width={size} height={size} aria-hidden="true">
+      <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+    </svg>
+  );
+  const chatIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
+      <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+    </svg>
+  );
+  const trashIcon = (size: number) => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </svg>
+  );
+
+  const renderInviteMenu = (m: any, alignLeft?: boolean) =>
+    inviteMenuRoomName === m.roomName ? (
+      <div className={`${styles.dropdownMenu} ${styles.inviteMenu}${alignLeft ? ` ${styles.inviteMenuLeft}` : ''}`} role="menu">
+        <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
+          Copy Link
+        </button>
+        <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
+          Copy Invite
+        </button>
+      </div>
+    ) : null;
+
   return (
     <div className={styles.anonWrapper}>
       <TopToolbar 
@@ -691,110 +748,141 @@ export function DashboardView({
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}
         hideAvatar={false} 
+        showClock
       />
 
-      <div className={styles.dashboardTopTaglineWrap}>
-        <p className={styles.dashboardTopTagline}>{t('dash.meetingListTagline')}</p>
-      </div>
+      <div className={styles.dashMain}>
+        {/* ── Greeting + actions ── */}
+        <section className={styles.dashHero}>
+          <div>
+            <h1 className={styles.dashGreeting}>{greeting}</h1>
+            <p className={styles.dashboardTopTagline}>{t('dash.meetingListTagline')}</p>
+          </div>
 
-      <div className={styles.dashStickyTop}>
-
-        {/* ── QuickActions Glassmorphism Bar ── */}
-        <div className={styles.quickActionsBar}>
-          <div className={styles.quickActionsInner}>
-            {/* Join input group */}
-            <div className={styles.quickJoinGroup}>
-              <input
-                className={styles.quickJoinInput}
-                placeholder={t('anon.enterMeetingCode')}
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
-              />
-              <button
-                className={styles.quickJoinBtn}
-                onClick={handleJoinMeeting}
-                disabled={!joinCode.trim()}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                  <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                {t('dash.joinMeeting')}
-              </button>
-            </div>
-            {/* Divider */}
-            <div className={styles.quickDivider} />
-            <div className={styles.quickActionsSecondary}>
-              {/* {personalRoomId && (
-                <button
-                  type="button"
-                  className={styles.quickPersonalRoomBtn}
-                  onClick={handleMyRoomClick}
-                  title={`${t('dash.myRoom')}: ${personalRoomId}`}
-                >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" strokeLinecap="round" strokeLinejoin="round" />
-                    <polyline points="9 22 9 12 15 12 15 22" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                  {t('dash.myRoom')}
-                </button>
-              )} */}
-              <button
-                type="button"
-                className={styles.quickNewBtn}
-                onClick={handleNewMeeting}
-                disabled={isCreatingMeeting}
-                aria-busy={isCreatingMeeting}
-                style={
-                  isCreatingMeeting
-                    ? { opacity: 0.7, cursor: 'not-allowed', pointerEvents: 'none' }
-                    : undefined
-                }
-              >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden>
-                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
+          <div className={styles.quickActionsBar}>
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnFill}`}
+              onClick={handleNewMeeting}
+              disabled={isCreatingMeeting}
+              aria-busy={isCreatingMeeting}
+            >
+              {videoIcon(20)}
               {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
             </button>
+            {/* {personalRoomId && (
+              <button
+                type="button"
+                className={`${styles.btn} ${styles.btnOutline}`}
+                onClick={handleMyRoomClick}
+                title={`${t('dash.myRoom')}: ${personalRoomId}`}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 10l9-7 9 7v10a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1z" /></svg>
+                {t('dash.myRoom')}
+              </button>
+            )} */}
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnOutline}`}
+              onClick={() => setShowScheduleModal(true)}
+              title={t('dash.scheduleMeeting')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <rect x="3" y="5" width="18" height="16" rx="3" />
+                <path d="M3 10h18M8 3v4M16 3v4" />
+              </svg>
+              {t('dash.scheduleMeeting')}
+            </button>
+            <span className={styles.quickDivider} aria-hidden="true" />
+            <div className={styles.quickJoinGroup}>
+              <label className={`${styles.codeField} ${styles.quickCodeField}${warningMessage ? ` ${styles.codeFieldError}` : ''}`}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="2" y="6" width="20" height="12" rx="2.5" />
+                  <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10" />
+                </svg>
+                <span className={styles.srOnly}>{t('anon.enterMeetingCode')}</span>
+                <input
+                  placeholder={t('anon.enterMeetingCode')}
+                  value={joinCode}
+                  autoComplete="off"
+                  aria-invalid={!!warningMessage}
+                  aria-describedby={warningMessage ? 'dash-join-error' : undefined}
+                  onChange={(e) => {
+                    setJoinCode(e.target.value);
+                    if (warningMessage) setWarningMessage(null);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
+                />
+              </label>
+              <button
+                type="button"
+                className={`${styles.btn} ${hasJoinCode ? styles.btnFill : styles.btnTonal} ${styles.quickJoinBtn}`}
+                onClick={handleJoinMeeting}
+                disabled={!joinCode.trim()}
+                aria-busy={isJoining}
+              >
+                {isJoining ? t('common.joining') : t('dash.joinMeeting')}
+              </button>
             </div>
           </div>
-        </div>
 
-        {/* ── Meeting List Header ── */}
-        <div className={styles.meetingListHeader}>
-          {/* Title */}
-          <div className={styles.meetingListTitleRow}>
-            <h1 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h1>
-          </div>
-
-          {/* Search + Schedule */}
-          <div className={styles.meetingListActions}>
-            <div className={styles.meetingSearchWrapper}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className={styles.meetingSearchIcon}>
-                <circle cx="11" cy="11" r="8" />
-                <path d="m21 21-4.35-4.35" />
+          {/* Join errors — inline instead of a blocking dialog */}
+          {warningMessage && (
+            <div className={styles.anonAlert} role="alert" id="dash-join-error">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"></circle>
+                <path d="M12 8v5M12 16h.01"></path>
               </svg>
+              <span className={styles.anonAlertText}>{warningMessage}</span>
+              <button
+                type="button"
+                className={`${styles.iconBtn} ${styles.anonAlertClose}`}
+                onClick={() => setWarningMessage(null)}
+                aria-label={t('common.close')}
+                title={t('common.close')}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                  <path d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Meeting list ── */}
+        <section className={styles.meetingListSection}>
+          <div className={styles.meetingListHeader}>
+            <h2 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h2>
+
+            <label className={styles.meetingSearchWrapper}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="17" height="17" className={styles.meetingSearchIcon} aria-hidden="true">
+                <circle cx="11" cy="11" r="7" />
+                <path d="M20 20l-3.5-3.5" />
+              </svg>
+              <span className={styles.srOnly}>{t('dash.searchMeetings')}</span>
               <input
+                type="search"
                 className={styles.meetingSearchInput}
                 placeholder={t('dash.searchMeetings')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </label>
+
             <div className={styles.filterWrap} data-meeting-filter="true">
               <button
                 ref={filterBtnRef}
                 type="button"
-                className={`${styles.filterBtn}${meetingScope === 'hosted' ? ` ${styles.filterBtnActive}` : ''}`}
+                className={`${styles.btn} ${styles.btnOutline} ${styles.filterBtn}${meetingScope === 'hosted' ? ` ${styles.filterBtnActive}` : ''}`}
                 title={t('dash.filterMeetings')}
-                aria-label={t('dash.filterMeetings')}
                 aria-haspopup="menu"
                 aria-expanded={filterOpen}
                 onClick={() => setFilterOpen((open) => !open)}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                  <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true">
+                  <path d="M3 5h18l-7 8v6l-4 2v-8z" />
                 </svg>
+                {meetingScope === 'hosted' ? t('dash.filterHosted') : t('dash.filterAll')}
               </button>
               {filterOpen && menuBox
                 ? createPortal(
@@ -843,565 +931,466 @@ export function DashboardView({
               )
                 : null}
             </div>
-            <button
-              className={styles.scheduleBtn}
-              onClick={() => setShowScheduleModal(true)}
-              title={t('dash.scheduleMeeting')}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-            </button>
           </div>
 
-        </div>
-      </div>
-      <div className={styles.dashContainer}>
+          {loadingMeetings ? (
+            <div className={styles.meetingLoadingState} role="status">
+              <div className={styles.meetingLoadingSpinner} aria-hidden="true" />
+              <p className={styles.meetingLoadingTitle}>{t('dash.loadingMeetings')}</p>
+            </div>
+          ) : Object.keys(groupedMeetings).length === 0 ? (
+            <div className={styles.meetingEmptyState}>
+              <span className={styles.meetingEmptyIcon} aria-hidden="true">
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="16" rx="3" />
+                  <path d="M3 10h18M8 3v4M16 3v4" />
+                </svg>
+              </span>
+              <p className={styles.meetingEmptyTitle}>{t('dash.noMeetings')}</p>
+              <p className={styles.meetingEmptyText}>{t('dash.emptyMeetingsHint')}</p>
+            </div>
+          ) : (
+            <div className={styles.meetingCardsList}>
+              {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => (
+                <div key={dateLabel} className={styles.meetingDateGroup}>
+                  <h3 className={styles.meetingDateLabel}>{dateLabel}</h3>
 
-        {/* ── Meeting Cards ── */}
-        {loadingMeetings ? (
-          <div className={styles.meetingLoadingState}>
-            <div className={styles.meetingLoadingSpinner} />
-            <p className={styles.meetingLoadingTitle}>{t('dash.loadingMeetings')}</p>
-          </div>
-        ) : Object.keys(groupedMeetings).length === 0 ? (
-          <div className={styles.meetingEmptyState}>
-            <Image
-              src="/images/kloud-header-logo.svg"
-              alt="Kloud Meet"
-              className={styles.meetingEmptyLogo}
-              width={120}
-              height={36}
-              style={{ display: 'block', transform: 'translateY(4px)' }}
-            />
-            <p className={styles.meetingEmptyTitle}>{t('dash.noMeetings')}</p>
-            <p className={styles.meetingEmptyText}>{t('dash.emptyMeetingsHint')}</p>
-          </div>
-        ) : (
-          <div className={styles.meetingCardsList}>
-            {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => (
-              <div key={dateLabel} className={styles.meetingDateGroup}>
-                {/* Date header */}
-                <div className={styles.meetingDateHeader}>
-                  <h2 className={styles.meetingDateLabel}>{dateLabel}</h2>
-                  <div className={styles.meetingDateLine} />
-                </div>
+                  <div className={styles.meetingCardsGroup}>
+                    {(meetings as any[]).map((m, i) => {
+                      const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+                      const recording = m.recordings?.find((r: any) => r.status === 'READY');
+                      const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+                      const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
+                      const isHost = m.createdByMemberId === user.id;
+                      const isLive = m.isActive;
+                      const cardMenuOpen = inviteMenuRoomName === m.roomName;
+                      const timeText = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+                      const canJoinOrStart = !isLive && m.status !== 'ENDED' && m.status !== 'CANCELED';
+                      const startLabel = isHost && !m.isActive;
 
-                {/* Cards */}
-                <div className={styles.meetingCardsGroup}>
-                  {(meetings as any[]).map((m, i) => {
-                    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
-                    const recording = m.recordings?.find((r: any) => r.status === 'READY');
-                    const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-                    const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
-                    const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
-                    const isHost = m.createdByMemberId === user.id;
-                    const isLive = m.isActive;
-                    const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
-                    const cardMenuOpen = inviteMenuRoomName === m.roomName;
+                      const statusClass = isLive
+                        ? styles.statusInProgress
+                        : m.status === 'ENDED' ? styles.statusFinished
+                        : m.status === 'CANCELED' ? styles.statusCanceled
+                        : diffMs < 0 && m.scheduledFor ? styles.statusPastDue
+                        : m.scheduledFor ? styles.statusScheduled
+                        : styles.statusFinished;
+                      const statusLabel = isLive
+                        ? t('dash.statusInProgress')
+                        : m.status === 'ENDED' ? t('dash.statusFinished')
+                        : m.status === 'CANCELED' ? t('dash.statusCanceled')
+                        : diffMs < 0 && m.scheduledFor ? t('dash.statusPastDue')
+                        : m.scheduledFor ? t('dash.statusScheduled')
+                        : t('dash.statusCreated');
 
-                    return (
-                      <div
-                        key={m.id || i}
-                        className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
-                          cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''
-                        }`}
-                        onDoubleClick={() => {
-                          if (isHost) setEditingMeeting(m);
-                        }}
-                      >
-                        {/* Live badge */}
-                        {isLive && (
-                          <div className={styles.liveBadge}>
-                            <span className={styles.liveDot} />
-                            Live Now
-                          </div>
-                        )}
+                      const elapsedMin =
+                        isLive && m.actualStartedAt
+                          ? Math.max(0, Math.floor((currentTime - new Date(m.actualStartedAt).getTime()) / 60000))
+                          : null;
+                      const durationText =
+                        elapsedMin !== null
+                          ? t('dash.ongoing', { n: elapsedMin })
+                          : m.durationMinutes
+                            ? t('dash.mins', { n: m.durationMinutes })
+                            : '';
+                      const showCountdown =
+                        canJoinOrStart && !!m.scheduledFor && diffMs > 0 && diffMs <= 60 * 60 * 1000;
+                      const countdownText = showCountdown
+                        ? t('dash.startsIn', { time: t('dash.mins', { n: Math.max(1, Math.ceil(diffMs / 60000)) }) })
+                        : '';
+                      const openReplay = () => {
+                        const key = recording.shareKey as string | undefined;
+                        window.open(key ? recordingReplayPath(key) : `/recordings/${recording.id}`, '_blank');
+                      };
+                      const onJoinOrStart = () => {
+                        if (isHost) {
+                          handleStartMeetingClick(m);
+                        } else {
+                          router.push(`/rooms/${m.roomName}`);
+                        }
+                      };
+                      const copyCode = (e: React.MouseEvent) => {
+                        e.stopPropagation();
+                        navigator.clipboard?.writeText(m.roomName);
+                        toast.show('Meeting code copied');
+                      };
 
-                        <div className={styles.meetingCardContent}>
-                          {/* Time column — desktop only */}
+                      return (
+                        <article
+                          key={m.id || i}
+                          className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
+                            cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''
+                          }`}
+                          onDoubleClick={() => {
+                            if (isHost) setEditingMeeting(m);
+                          }}
+                        >
+                          {/* Time + duration */}
                           <div className={styles.meetingCardTime}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ color: '#94a3b8', flexShrink: 0 }}>
-                              <circle cx="12" cy="12" r="10"/>
-                              <polyline points="12 6 12 12 16 14"/>
-                            </svg>
-                            <span>{d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}</span>
+                            <div className={styles.meetingCardClock}>{timeText}</div>
+                            {durationText && <div className={styles.meetingCardDuration}>{durationText}</div>}
                           </div>
 
-                          {/* Info column */}
+                          {/* Title, status, meta */}
                           <div className={styles.meetingCardInfo}>
-                            {/* Title row — includes mobile "..." button on right */}
-                            <div className={styles.mobileCardTitleRow}>
-                              <h3 className={styles.meetingCardTitle}>{m.title || m.roomName || 'Untitled Meeting'}</h3>
-                              {/* Mobile-only three-dot menu */}
-                              <button className={styles.mobileMenuBtn} onClick={(e) => e.stopPropagation()}>
-                                <span>•••</span>
-                              </button>
+                            <div className={styles.meetingCardTitleRow}>
+                              <h4 className={styles.meetingCardTitle}>{m.title || m.roomName || t('dash.untitledMeeting')}</h4>
+                              <span className={`${styles.statusBadge} ${statusClass}`}>
+                                {isLive && <span className={styles.liveDot} aria-hidden="true" />}
+                                {statusLabel}
+                              </span>
+                              {countdownText && <span className={styles.meetingCountdown}>{countdownText}</span>}
                             </div>
 
                             <div className={styles.meetingCardMeta}>
-                              {/* Mobile: time + duration on same line */}
-                              <span className={styles.mobileTimeLine}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-                                  <circle cx="12" cy="12" r="10"/>
-                                  <polyline points="12 6 12 12 16 14"/>
-                                </svg>
-                                {d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
-                                {m.durationMinutes ? `\u00a0•\u00a0${m.durationMinutes} min` : ''}
-                              </span>
-
-                              {/* Desktop: duration + participants */}
-                              {m.durationMinutes && <span className={styles.desktopMeta}>{m.durationMinutes} min</span>}
+                              <span>{t('dash.by', { name: m.createdByMember?.username || t('common.unknown') })}</span>
                               {m._count?.participants > 0 && (
-                                <span className={`${styles.meetingCardMetaItem} ${styles.desktopMeta}`}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <span className={styles.meetingCardMetaItem} title={t('dash.attendees')}>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                                   {m._count.participants}
                                 </span>
                               )}
-
-                              {/* Mobile: attendees + host on same line */}
-                              {m._count?.participants > 0 && (
-                                <span className={styles.mobileMetaLine}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                  {m._count.participants}{'\u00a0\u00a0'}Host: {m.createdByMember?.username || 'Unknown'}
-                                </span>
-                              )}
-
-                              {/* Desktop: host */}
-                              <span className={styles.desktopMeta}>Host: {m.createdByMember?.username || 'Unknown'}</span>
-
-                              {/* Code — desktop inline */}
                               {m.roomName && (
                                 <button
-                                  className={`${styles.meetingCodeBtn} ${styles.desktopMeta}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard?.writeText(m.roomName);
-                                    toast.show('Meeting code copied');
-                                  }}
+                                  type="button"
+                                  className={styles.meetingCodeBtn}
+                                  onClick={copyCode}
+                                  title="Copy meeting code"
                                 >
                                   {m.roomName}
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-                                </button>
-                              )}
-
-                              {/* Code — mobile full line */}
-                              {m.roomName && (
-                                <button
-                                  className={styles.mobileCodeLine}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    navigator.clipboard?.writeText(m.roomName);
-                                    toast.show('Meeting code copied');
-                                  }}
-                                >
-                                  Code: {m.roomName}
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                  {copyIcon(13)}
                                 </button>
                               )}
                             </div>
                           </div>
 
-                          {/* Action area — right side of card */}
-                          <div className={styles.meetingCardActions}>
-
-                            {/* ── Always-visible: Join Now for live meetings ── */}
-                            {isLive && (
-                              <button
-                                className={styles.joinNowBtn}
-                                onClick={() => router.push(`/rooms/${m.roomName}`)}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
-                                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                                Join Now
-                              </button>
-                            )}
-
-                            {/* ── Recording pill (always visible if available) ── */}
-                            {recording && (
-                              <button
-                                className={styles.playRecordingBtn}
-                                onClick={() => {
-                                  const key = recording.shareKey as string | undefined;
-                                  window.open(key ? recordingReplayPath(key) : `/recordings/${recording.id}`, '_blank');
-                                }}
-                                title={t('dash.replayTitle')}
-                              >
-                                <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
-                                {t('dash.replay')}
-                              </button>
-                            )}
-                            {recording && (
-                              <span
-                                className={
-                                  recording.visibility === 'PUBLIC'
-                                    ? styles.recordingPublicBadge
-                                    : styles.recordingPrivateBadge
-                                }
-                              >
-                                {recording.visibility === 'PUBLIC'
-                                  ? t('dash.recordingPublic')
-                                  : t('dash.recordingPrivate')}
-                              </span>
-                            )}
-                            {processingRecording && (
-                              <div className={styles.recordingProcessing}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                {t('common.processing')}
-                              </div>
-                            )}
-
-                            {/* ── Status badge (hidden on hover to make room for actions) ── */}
-                            {!isLive && (
-                              <span className={`${styles.statusBadge} ${styles.statusBadgeHideable} ${
-                                m.status === 'ENDED' ? styles.statusFinished
-                                : m.status === 'CANCELED' ? styles.statusCanceled
-                                : diffMs < 0 && m.scheduledFor ? styles.statusPastDue
-                                : m.scheduledFor ? styles.statusScheduled
-                                : styles.statusFinished
-                              }`}>
-                                {m.status === 'ENDED' ? 'Finished'
-                                  : m.status === 'CANCELED' ? 'Canceled'
-                                  : diffMs < 0 && m.scheduledFor ? 'Past Due'
-                                  : m.scheduledFor ? 'Scheduled'
-                                  : 'Created'}
-                              </span>
-                            )}
-
-                            {/* ── Hover action bar: slides in from right on card hover ── */}
-                            <div className={styles.meetingHoverActions}>
-                              {/* Join / Start */}
-                              {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
+                          {/* Replay + access */}
+                          {(recording || processingRecording) && (
+                            <div className={styles.meetingReplay}>
+                              {recording && (
                                 <button
-                                  className={isHost && !m.isActive && m.scheduledFor ? styles.startActionBtn : styles.cardJoinBtn}
-                                  onClick={() => {
-                                    if (isHost) {
-                                      handleStartMeetingClick(m);
-                                    } else {
-                                      router.push(`/rooms/${m.roomName}`);
-                                    }
-                                  }}
+                                  type="button"
+                                  className={`${styles.btn} ${styles.btnXs} ${styles.btnTonal}`}
+                                  onClick={openReplay}
+                                  title={t('dash.replayTitle')}
                                 >
-                                  {isHost && !m.isActive ? (
-                                    <>
-                                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
-                                      Start
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                      Join
-                                    </>
-                                  )}
+                                  {playIcon(13)}
+                                  {replayLabel}
                                 </button>
                               )}
-
-                              {/* Copy link */}
-                              {m.roomName && (
-                                <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
-                                  <button
-                                    title="Copy meeting invite"
-                                    className={styles.iconBtn}
-                                    onClick={() =>
-                                      setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
-                                    }
-                                  >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  </button>
-                                  {inviteMenuRoomName === m.roomName && (
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        top: 'calc(100% + 8px)',
-                                        right: 0,
-                                        minWidth: '170px',
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: '8px',
-                                        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.15)',
-                                        zIndex: 60,
-                                        padding: '6px',
-                                      }}
-                                    >
-                                      <button
-                                        type="button"
-                                        className={styles.dropdownItem}
-                                        onClick={() => copyMeetingLink(m)}
-                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                      >
-                                        Copy Link
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={styles.dropdownItem}
-                                        onClick={() => copyMeetingInvite(m)}
-                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                      >
-                                        Copy Invite
-                                      </button>
-                                    </div>
+                              {recording && (
+                                <span
+                                  className={
+                                    recording.visibility === 'PUBLIC'
+                                      ? styles.recordingPublicBadge
+                                      : styles.recordingPrivateBadge
+                                  }
+                                  title={
+                                    recording.visibility === 'PUBLIC'
+                                      ? t('dash.recordingPublicHint')
+                                      : t('dash.recordingPrivateHint')
+                                  }
+                                >
+                                  {recording.visibility === 'PUBLIC' ? (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /></svg>
+                                  ) : (
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>
                                   )}
+                                  {recording.visibility === 'PUBLIC'
+                                    ? t('dash.recordingPublic')
+                                    : t('dash.recordingPrivate')}
+                                </span>
+                              )}
+                              {processingRecording && (
+                                <div className={styles.recordingProcessing}>
+                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                  {t('common.processing')}
                                 </div>
                               )}
-
-                              {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
-                              {recording && m.status === 'ENDED' && (
-                                <button
-                                  title={t('dash.replaySummaryTitle')}
-                                  className={styles.iconBtn}
-                                  style={{ color: '#818cf8' }}
-                                  onClick={() => {
-                                    const key = recording.shareKey as string | undefined;
-                                    window.open(key ? recordingReplayPath(key) : `/recordings/${recording.id}`, '_blank');
-                                  }}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <polyline points="10 8 16 12 10 16"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {m.status === 'ENDED' && (
-                                <button
-                                  title={t('chatHistory.open')}
-                                  className={styles.iconBtn}
-                                  onClick={() => router.push(`/meeting/${m.id}/chat`)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {/* Edit */}
-                              {isHost && (
-                                <button
-                                  title="Edit meeting"
-                                  className={styles.iconBtn}
-                                  onClick={() => setEditingMeeting(m)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {/* Delete */}
-                              {isHost && !m.isActive && (
-                                <button
-                                  title="Delete meeting"
-                                  className={styles.iconBtnDanger}
-                                  onClick={() => setDeletingMeeting(m)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
                             </div>
-                          </div>
+                          )}
 
-                          {/* ── Mobile-only bottom action bar ── */}
-                          <div className={styles.meetingCardMobileActions}>
-                            {/* Join / Start button */}
-                            {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
+                          {/* ── Desktop actions ── */}
+                          <div className={styles.meetingCardActions}>
+                            {isLive && (
                               <button
-                                className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
-                                onClick={() => {
-                                  if (isHost) {
-                                    handleStartMeetingClick(m);
-                                  } else {
-                                    router.push(`/rooms/${m.roomName}`);
-                                  }
-                                }}
+                                type="button"
+                                className={`${styles.btn} ${styles.btnXs} ${styles.btnFill} ${styles.btnFlat}`}
+                                onClick={() => router.push(`/rooms/${m.roomName}`)}
                               >
-                                {isHost && !m.isActive ? (
+                                {videoIcon(15)}
+                                {t('common.join')}
+                              </button>
+                            )}
+
+                            {canJoinOrStart && (
+                              <button
+                                type="button"
+                                className={`${styles.btn} ${styles.btnXs} ${styles.btnOutline}`}
+                                onClick={onJoinOrStart}
+                              >
+                                {startLabel ? (
                                   <>
-                                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z" /></svg>
-                                    Start
+                                    {playIcon(13)}
+                                    {t('dash.startMeeting')}
                                   </>
                                 ) : (
                                   <>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                      <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    Join
+                                    {videoIcon(14)}
+                                    {t('common.join')}
                                   </>
                                 )}
                               </button>
                             )}
-                            {/* Copy link */}
+
                             {m.roomName && (
-                              <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
+                              <div data-invite-menu-anchor="true" className={styles.anchor}>
                                 <button
-                                  className={styles.mobileCopyBtn}
+                                  type="button"
+                                  title="Copy meeting invite"
+                                  aria-label="Copy meeting invite"
+                                  aria-haspopup="menu"
+                                  aria-expanded={cardMenuOpen}
+                                  className={styles.iconBtn}
                                   onClick={() =>
                                     setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
                                   }
                                 >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                  Invite
+                                  {linkIcon(18)}
                                 </button>
-                                {inviteMenuRoomName === m.roomName && (
-                                  <div
-                                    style={{
-                                      position: 'absolute',
-                                      top: 'calc(100% + 8px)',
-                                      left: 0,
-                                      minWidth: '160px',
-                                      background: '#fff',
-                                      border: '1px solid #e5e7eb',
-                                      borderRadius: '8px',
-                                      boxShadow: '0 10px 24px rgba(15, 23, 42, 0.15)',
-                                      zIndex: 60,
-                                      padding: '6px',
-                                    }}
-                                  >
-                                    <button
-                                      type="button"
-                                      className={styles.dropdownItem}
-                                      onClick={() => copyMeetingLink(m)}
-                                      style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                    >
-                                      Copy Link
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className={styles.dropdownItem}
-                                      onClick={() => copyMeetingInvite(m)}
-                                      style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                    >
-                                      Copy Invite
-                                    </button>
-                                  </div>
-                                )}
+                                {renderInviteMenu(m)}
                               </div>
                             )}
-                            {m.status === 'ENDED' && (
+
+                            {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
+                            {recording && m.status === 'ENDED' && (
                               <button
-                                className={styles.mobileCopyBtn}
-                                onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                                type="button"
+                                title={t('dash.replaySummaryTitle')}
+                                aria-label={t('dash.replaySummaryTitle')}
+                                className={styles.iconBtn}
+                                onClick={openReplay}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                  <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
+                                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                  <polyline points="10 8 16 12 10 16"/>
                                 </svg>
-                                {t('chatHistory.shortTitle')}
                               </button>
                             )}
-                            {/* Delete */}
+
+                            {m.status === 'ENDED' && (
+                              <button
+                                type="button"
+                                title={t('chatHistory.open')}
+                                aria-label={t('chatHistory.open')}
+                                className={styles.iconBtn}
+                                onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                              >
+                                {chatIcon(18)}
+                              </button>
+                            )}
+
+                            {isHost && (
+                              <button
+                                type="button"
+                                title={t('dash.editMeeting')}
+                                aria-label={t('dash.editMeeting')}
+                                className={styles.iconBtn}
+                                onClick={() => setEditingMeeting(m)}
+                              >
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+                                  <path d="M4 20h4L19 9a2.1 2.1 0 00-3-3L5 17z" />
+                                </svg>
+                              </button>
+                            )}
+
                             {isHost && !m.isActive && (
                               <button
-                                className={styles.mobileDeleteBtn}
+                                type="button"
+                                title={t('dash.deleteMeeting')}
+                                aria-label={t('dash.deleteMeeting')}
+                                className={styles.iconBtnDanger}
                                 onClick={() => setDeletingMeeting(m)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                  <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
-                                </svg>
-                                Delete
+                                {trashIcon(18)}
                               </button>
                             )}
                           </div>
 
-                        </div>
-                      </div>
-                    );
-                  })}
+                          {/* ── Mobile-only action bar ── */}
+                          <div className={styles.meetingCardMobileActions}>
+                            {isLive && (
+                              <button
+                                type="button"
+                                className={styles.mobileJoinBtn}
+                                onClick={() => router.push(`/rooms/${m.roomName}`)}
+                              >
+                                {videoIcon(14)}
+                                {t('common.join')}
+                              </button>
+                            )}
+                            {canJoinOrStart && (
+                              <button
+                                type="button"
+                                className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
+                                onClick={onJoinOrStart}
+                              >
+                                {startLabel ? (
+                                  <>
+                                    {playIcon(14)}
+                                    {t('common.start')}
+                                  </>
+                                ) : (
+                                  <>
+                                    {videoIcon(14)}
+                                    {t('common.join')}
+                                  </>
+                                )}
+                              </button>
+                            )}
+                            {m.roomName && (
+                              <div data-invite-menu-anchor="true" className={styles.anchor}>
+                                <button
+                                  type="button"
+                                  className={styles.mobileCopyBtn}
+                                  aria-haspopup="menu"
+                                  aria-expanded={cardMenuOpen}
+                                  onClick={() =>
+                                    setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                  }
+                                >
+                                  {linkIcon(14)}
+                                  Invite
+                                </button>
+                                {renderInviteMenu(m, true)}
+                              </div>
+                            )}
+                            {m.status === 'ENDED' && (
+                              <button
+                                type="button"
+                                className={styles.mobileCopyBtn}
+                                onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                              >
+                                {chatIcon(14)}
+                                {t('chatHistory.shortTitle')}
+                              </button>
+                            )}
+                            {isHost && !m.isActive && (
+                              <button
+                                type="button"
+                                className={styles.mobileDeleteBtn}
+                                onClick={() => setDeletingMeeting(m)}
+                              >
+                                {trashIcon(14)}
+                                {t('common.delete')}
+                              </button>
+                            )}
+                          </div>
+                        </article>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Pagination */}
+              <div className={styles.paginationFooter}>
+                <div className={styles.paginationLeft}>
+                  <select
+                    className={styles.pageSizeSelect}
+                    value={pageSize}
+                    aria-label={t('dash.page', { n: pageSize })}
+                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  >
+                    <option value={15}>{t('dash.page', { n: 15 })}</option>
+                    <option value={25}>{t('dash.page', { n: 25 })}</option>
+                    <option value={50}>{t('dash.page', { n: 50 })}</option>
+                    <option value={100}>{t('dash.page', { n: 100 })}</option>
+                  </select>
+                  <span className={styles.totalFiles}>{totalMeetings} {t('dash.totalRecords')}</span>
+                </div>
+                <div className={styles.paginationRight}>
+                  <button
+                    type="button"
+                    className={styles.pageArrow}
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    aria-label={tx('dash.prevPage', 'Previous page')}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+                  </button>
+                  {(() => {
+                    const pages = [];
+                    for (let i = 1; i <= Math.min(4, totalPages); i++) {
+                      pages.push(
+                        <button
+                          key={i}
+                          type="button"
+                          className={page === i ? styles.pageNumActive : styles.pageNum}
+                          aria-current={page === i ? 'page' : undefined}
+                          onClick={() => setPage(i)}
+                        >
+                          {i}
+                        </button>
+                      );
+                    }
+                    return pages;
+                  })()}
+                  <button
+                    type="button"
+                    className={styles.pageArrow}
+                    disabled={page >= Math.ceil(totalMeetings / pageSize)}
+                    onClick={() => setPage(p => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))}
+                    aria-label={tx('dash.nextPage', 'Next page')}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+                  </button>
                 </div>
               </div>
-            ))}
-
-            {/* Pagination */}
-            <div className={styles.paginationFooter}>
-              <div className={styles.paginationLeft}>
-                <select
-                  className={styles.pageSizeSelect}
-                  value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
-                >
-                  <option value={15}>15 / Page</option>
-                  <option value={25}>25 / Page</option>
-                  <option value={50}>50 / Page</option>
-                  <option value={100}>100 / Page</option>
-                </select>
-                <span className={styles.totalFiles}>{totalMeetings} {t('dash.totalRecords')}</span>
-              </div>
-              <div className={styles.paginationRight}>
-                <button className={styles.pageArrow} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>&lt;</button>
-                {(() => {
-                  const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
-                  const pages = [];
-                  for (let i = 1; i <= Math.min(4, totalPages); i++) {
-                    pages.push(
-                      <button key={i} className={page === i ? styles.pageNumActive : styles.pageNum} onClick={() => setPage(i)}>{i}</button>
-                    );
-                  }
-                  return pages;
-                })()}
-                <button className={styles.pageArrow} disabled={page >= Math.ceil(totalMeetings / pageSize)} onClick={() => setPage(p => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))}>&gt;</button>
-              </div>
             </div>
-          </div>
-        )}
-
-      </div>{/* end dashContainer */}
+          )}
+        </section>
+      </div>{/* end dashMain */}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
-          <div className={styles.dashModalContent}>
-            <h3>Scheduled Meeting</h3>
-            <p style={{ marginTop: '1rem', color: '#4b5563', lineHeight: '1.5' }}>
-              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
+          <div className={styles.dashModalContent} role="dialog" aria-modal="true" aria-labelledby="dash-scheduled-title">
+            <h2 id="dash-scheduled-title" className={styles.dialogTitle}>{t('anon.scheduledMeeting')}</h2>
+            <p className={styles.dialogText}>
+              {t('anon.hostedBy', { title: scheduledModalData.title || scheduledModalData.roomName, host: scheduledModalData.createdByMember?.fullName || 'Host' })}
             </p>
             {(() => {
               const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
               return diffMs > 60 * 60 * 1000 ? (
-                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  <p style={{ color: '#64748b' }}>Scheduled for: <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
-                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>This meeting is more than an hour away. Please check back closer to the start time.</p>
+                <div className={styles.dialogInfo}>
+                  <p className={`${styles.dialogText} ${styles.dialogTextMuted}`}>{t('anon.scheduledFor')} <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
+                  <p className={styles.dialogText} style={{ marginTop: 6 }}>{t('anon.moreThanHour')}</p>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
-                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
-                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5227D3', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                <div className={styles.dialogCountdown}>
+                  <div className={styles.dialogCountdownLabel}>{t('anon.startingIn')}</div>
+                  <div className={styles.dialogCountdownValue}>{countdown}</div>
                 </div>
               );
             })()}
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
+            <div className={styles.dialogActions}>
               <button 
+                type="button"
                 onClick={() => setScheduledModalData(null)} 
-                className={styles.dashSignOut} 
-                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
               >
-                Close
+                {t('common.close')}
               </button>
               {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
                 <button 
+                  type="button"
                   onClick={() => {
                     setScheduledModalData(null);
                     router.push(`/rooms/${scheduledModalData.roomName}`);
                   }} 
-                  className={styles.dashJoinBtn} 
-                  style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
+                  className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
                 >
-                  {scheduledModalData.createdByMemberId === user.id ? 'Start Meeting' : 'Join Anyway'}
+                  {scheduledModalData.createdByMemberId === user.id ? t('dash.startMeetingBtn') : t('anon.joinAnyway')}
                 </button>
               )}
             </div>
@@ -1446,23 +1435,22 @@ export function DashboardView({
 
       {earlyStartMeeting && (
         <div className={styles.dashModalOverlay}>
-          <div className={styles.dashModalContent}>
-            <h3 style={{ marginTop: 0, color: '#111827', fontSize: '1.25rem' }}>Start Meeting Outside Window?</h3>
-            <p style={{ color: '#4b5563', lineHeight: '1.5', fontSize: '0.95rem' }}>
-              This meeting is scheduled to begin at <strong>{new Date(earlyStartMeeting.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong>. The current time is outside the standard 15-minute starting window.
-              <br /><br />
-              Are you sure you want to start this meeting right now?
+          <div className={styles.dashModalContent} role="dialog" aria-modal="true" aria-labelledby="dash-early-title">
+            <h2 id="dash-early-title" className={styles.dialogTitle}>{t('dash.earlyStart.title')}</h2>
+            <p className={styles.dialogText}>
+              {t('dash.earlyStart.message', { time: new Date(earlyStartMeeting.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) })}
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
+            <p className={styles.dialogText}>{t('dash.earlyStart.confirm')}</p>
+            <div className={styles.dialogActions}>
               <button 
+                type="button"
                 onClick={() => setEarlyStartMeeting(null)}
-                style={{
-                  padding: '9px 18px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
-                }}
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button 
+                type="button"
                 onClick={() => {
                   const m = earlyStartMeeting;
                   setEarlyStartMeeting(null);
@@ -1473,11 +1461,9 @@ export function DashboardView({
                     });
                   }
                 }}
-                style={{
-                  padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#db2777', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
-                }}
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
               >
-                Yes, Start Meeting
+                {t('dash.earlyStart.yes')}
               </button>
             </div>
           </div>
@@ -1489,7 +1475,7 @@ export function DashboardView({
           onClose={() => setShowSettingsModal(false)}
           onSave={() => {
             setShowSettingsModal(false);
-            toast.show('System Settings saved globally!');
+            toast.show(t('dash.settingsSaved'));
           }}
         />
       )}
@@ -1516,63 +1502,31 @@ export function DashboardView({
         />
       )}
 
-      {/* ── Warning Message Overlay ── */}
-      {warningMessage && (
-        <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
-          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
-            <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
-              </svg>
-            </div>
-            <h3 style={{ fontSize: '1.25rem', color: '#1e293b', marginBottom: '1rem' }}>Warning</h3>
-            <p style={{ color: '#4b5563', lineHeight: '1.5', marginBottom: '2rem' }}>
-              {warningMessage}
-            </p>
-            <button 
-              onClick={() => setWarningMessage(null)} 
-              className={styles.dashSignOut} 
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Delete Confirmation Modal ── */}
+      {/* ── Delete Confirmation Dialog ── */}
       {deletingMeeting && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
-          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
-            <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
-                <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </div>
-            <h3 style={{ fontSize: '1.2rem', color: '#1e293b', marginBottom: '0.5rem' }}>Delete Meeting?</h3>
-            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: 1.5 }}>
-              <strong>{deletingMeeting.title || deletingMeeting.roomName}</strong> will be permanently deleted.
+          <div className={styles.dashModalContent} role="alertdialog" aria-modal="true" aria-labelledby="dash-delete-title">
+            <h2 id="dash-delete-title" className={styles.dialogTitle}>{t('dash.deleteMeetingConfirm')}</h2>
+            <p className={styles.dialogText}>
+              {t('dash.willBeDeleted', { name: deletingMeeting.title || deletingMeeting.roomName })}
             </p>
-            <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <div className={styles.dialogActions}>
               <button
+                type="button"
                 onClick={() => setDeletingMeeting(null)}
-                className={styles.dashSignOut}
-                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
                 disabled={deleteLoading}
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
+                type="button"
                 onClick={() => handleDeleteMeeting(deletingMeeting.roomName)}
-                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#ef4444', color: '#fff', border: 'none', fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1 }}
+                className={`${styles.btn} ${styles.btnSm} ${styles.btnDanger}`}
                 disabled={deleteLoading}
+                aria-busy={deleteLoading}
               >
-                {deleteLoading ? 'Deleting...' : 'Delete'}
+                {deleteLoading ? t('common.deleting') : t('common.delete')}
               </button>
             </div>
           </div>

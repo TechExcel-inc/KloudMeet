@@ -1,3 +1,6 @@
+/* Transcribe prompt on the recording replay page. Uses pre-meeting tokens (styles/tokens.css):
+   light by default, dark under html[data-theme='dark']. */
+
 .backdrop {
   position: fixed;
   inset: 0;
@@ -6,63 +9,81 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(2, 6, 23, 0.6);
+  background: var(--km-scrim);
+  font-family: var(--km-font);
   animation: fadeIn 0.18s ease-out;
 }
 
 .dialog {
-  width: min(420px, 100%);
+  width: min(440px, 100%);
   padding: 24px;
-  border-radius: 14px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
-  color: #e2e8f0;
+  border-radius: var(--km-radius-xl);
+  background: var(--km-surface);
+  box-shadow: var(--km-shadow);
+  color: var(--km-text);
+  font-family: var(--km-font);
 }
 
 .title {
   margin: 0 0 10px;
-  font-size: 16px;
-  font-weight: 600;
-  color: #f1f5f9;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: var(--km-text);
 }
 
 .desc {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
-  color: #94a3b8;
+  color: var(--km-text-muted);
 }
 
 .error {
-  margin: 12px 0 0;
-  font-size: 12px;
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-danger-bg);
+  font-size: 13px;
   line-height: 1.5;
-  color: #f87171;
+  color: var(--km-danger-text);
   word-break: break-word;
 }
 
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 24px;
 }
 
 .primaryBtn,
 .secondaryBtn {
-  padding: 8px 18px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
+  height: 40px;
+  padding: 0 20px;
+  border-radius: var(--km-radius-pill);
+  font: 700 14px/1 var(--km-font);
   cursor: pointer;
+  transition: background-color 0.15s, box-shadow 0.15s;
+}
+
+.primaryBtn:focus-visible,
+.secondaryBtn:focus-visible,
+.textBtn:focus-visible,
+.pill:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
 }
 
 .primaryBtn {
   border: none;
-  color: #fff;
-  background: linear-gradient(135deg, #6366f1, #818cf8);
+  color: var(--km-on-primary);
+  background: var(--km-primary-grad);
+}
+
+.primaryBtn:hover:not(:disabled) {
+  box-shadow: var(--km-primary-shadow);
 }
 
 .primaryBtn:disabled {
@@ -71,14 +92,13 @@
 }
 
 .secondaryBtn {
-  border: 1px solid #334155;
-  color: #94a3b8;
+  border: none;
+  color: var(--km-primary);
   background: transparent;
 }
 
 .secondaryBtn:hover {
-  color: #e2e8f0;
-  border-color: #475569;
+  background: var(--km-hover);
 }
 
 .card {
@@ -86,13 +106,14 @@
   right: 20px;
   bottom: 20px;
   z-index: 1000;
-  width: min(320px, calc(100vw - 40px));
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: #1e293b;
-  border: 1px solid #334155;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
-  color: #e2e8f0;
+  width: min(340px, calc(100vw - 32px));
+  padding: 16px;
+  border-radius: var(--km-radius-md);
+  background: var(--km-surface);
+  border: 1px solid var(--km-border);
+  box-shadow: var(--km-shadow);
+  color: var(--km-text);
+  font-family: var(--km-font);
   animation: fadeIn 0.18s ease-out;
 }
 
@@ -100,57 +121,62 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .cardTitle {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
 }
 
 .pct {
-  font-size: 12px;
-  font-family: monospace;
-  color: #818cf8;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--km-primary);
+  font-variant-numeric: tabular-nums;
 }
 
 .track {
   height: 6px;
-  border-radius: 99px;
+  border-radius: var(--km-radius-pill);
   overflow: hidden;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--km-tonal);
 }
 
 .bar {
   height: 100%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc);
-  box-shadow: 0 0 8px rgba(129, 140, 248, 0.6);
+  border-radius: var(--km-radius-pill);
+  background: var(--km-primary-grad);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .stage {
-  margin: 8px 0 0;
-  font-size: 12px;
-  color: #94a3b8;
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--km-text-muted);
 }
 
 .cardText {
   margin: 0 0 10px;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.5;
-  color: #cbd5e1;
+  color: var(--km-text);
 }
 
 .textBtn {
-  padding: 0;
+  padding: 6px 10px;
+  margin-left: -10px;
   border: none;
+  border-radius: var(--km-radius-pill);
   background: none;
-  color: #818cf8;
-  font-size: 12px;
-  font-family: inherit;
+  color: var(--km-primary);
+  font: 700 13px var(--km-font);
   cursor: pointer;
+}
+
+.textBtn:hover {
+  background: var(--km-hover);
 }
 
 .pill {
@@ -158,21 +184,31 @@
   right: 20px;
   bottom: 20px;
   z-index: 1000;
-  padding: 8px 16px;
-  border-radius: 99px;
-  border: 1px solid rgba(99, 102, 241, 0.4);
-  background: rgba(30, 41, 59, 0.95);
-  color: #a5b4fc;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: var(--km-radius-pill);
+  border: none;
+  /* tonal is translucent in dark mode; layer it over the surface so the floating pill stays opaque */
+  background: linear-gradient(var(--km-tonal), var(--km-tonal)), var(--km-surface);
+  color: var(--km-on-tonal);
+  font: 700 14px var(--km-font);
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: var(--km-shadow);
 }
 
 .pill:hover {
-  border-color: #6366f1;
-  color: #c7d2fe;
+  filter: brightness(0.97);
+}
+
+@media (max-width: 600px) {
+  .card,
+  .pill {
+    right: 16px;
+    bottom: 16px;
+  }
 }
 
 @keyframes fadeIn {
@@ -183,5 +219,16 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop,
+  .card {
+    animation: none;
+  }
+
+  .bar {
+    transition: none;
   }
 }

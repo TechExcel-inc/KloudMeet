@@ -17,6 +17,34 @@ import {
 import styles from '../styles/LiveDocView.module.css';
 
 const IFRAME_LOAD_TIMEOUT_MS = 60_000;
+
+/* In-meeting surfaces are always dark (2026-10 redesign); the document itself stays white. */
+const darkStageStyle: React.CSSProperties = {
+  background: 'var(--km-stage, #17181c)',
+  fontFamily: 'var(--km-font)',
+};
+const darkTitleStyle: React.CSSProperties = { color: 'var(--km-stage-text, #e8eaed)' };
+const darkDetailStyle: React.CSSProperties = { color: 'var(--km-stage-muted, #9aa0a6)' };
+const retryButtonStyle: React.CSSProperties = {
+  minHeight: 40,
+  padding: '0 20px',
+  borderRadius: 999,
+  background: 'var(--km-on-dark-accent, #c9c8ff)',
+  color: '#1f1d6b',
+  fontFamily: 'inherit',
+  fontWeight: 700,
+};
+const loadingDotStyle: React.CSSProperties = {
+  width: 28,
+  height: 28,
+  margin: '0 auto 14px',
+  borderRadius: '50%',
+  border: '2px solid rgba(255, 255, 255, 0.14)',
+  borderTopColor: 'var(--km-on-dark-accent, #c9c8ff)',
+  animation: 'km-livedoc-spin 0.8s linear infinite',
+};
+const spinnerKeyframes = `@keyframes km-livedoc-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .km-livedoc-spinner { animation-duration: 2.4s !important; } }`;
 /** 首次加载失败后最多自动重载次数 */
 const MAX_IFRAME_RELOADS = 3;
 
@@ -204,10 +232,10 @@ export function LiveDocView({
 
   if (isHost && hostInitError) {
     return (
-      <div className={styles.container}>
-        <div className={styles.message}>
-          <p className={styles.messageTitle}>{t('livedoc.errorTitle')}</p>
-          <p className={styles.messageDetail}>{hostInitError}</p>
+      <div className={styles.container} style={darkStageStyle}>
+        <div className={styles.message} role="alert">
+          <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.errorTitle')}</p>
+          <p className={styles.messageDetail} style={darkDetailStyle}>{hostInitError}</p>
         </div>
       </div>
     );
@@ -215,16 +243,20 @@ export function LiveDocView({
 
   if (!livedocInstanceId) {
     return (
-      <div className={styles.container}>
-        <div className={styles.message}>
-          <p className={styles.messageTitle}>
+      <div className={styles.container} style={darkStageStyle}>
+        <div className={styles.message} role="status">
+          <style>{spinnerKeyframes}</style>
+          <div className="km-livedoc-spinner" style={loadingDotStyle} aria-hidden />
+          <p className={styles.messageTitle} style={darkTitleStyle}>
             {isHost && hostInitInProgress
               ? t('livedoc.creating')
               : isHost
                 ? t('livedoc.preparing')
                 : t('livedoc.waitingHost')}
           </p>
-          <p className={styles.messageDetail}>{t('livedoc.room', { room: meetingRoomName })}</p>
+          <p className={styles.messageDetail} style={darkDetailStyle}>
+            {t('livedoc.room', { room: meetingRoomName })}
+          </p>
         </div>
       </div>
     );
@@ -232,9 +264,11 @@ export function LiveDocView({
 
   if (tokenLoading || settingsLoading) {
     return (
-      <div className={styles.container}>
-        <div className={styles.message}>
-          <p className={styles.messageTitle}>{t('livedoc.fetchingToken')}</p>
+      <div className={styles.container} style={darkStageStyle}>
+        <div className={styles.message} role="status">
+          <style>{spinnerKeyframes}</style>
+          <div className="km-livedoc-spinner" style={loadingDotStyle} aria-hidden />
+          <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.fetchingToken')}</p>
         </div>
       </div>
     );
@@ -242,10 +276,12 @@ export function LiveDocView({
 
   if (tokenError || !userToken) {
     return (
-      <div className={styles.container}>
-        <div className={styles.message}>
-          <p className={styles.messageTitle}>{t('livedoc.loadFailed')}</p>
-          <p className={styles.messageDetail}>{tokenError ?? t('livedoc.missingToken')}</p>
+      <div className={styles.container} style={darkStageStyle}>
+        <div className={styles.message} role="alert">
+          <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.loadFailed')}</p>
+          <p className={styles.messageDetail} style={darkDetailStyle}>
+            {tokenError ?? t('livedoc.missingToken')}
+          </p>
         </div>
       </div>
     );
@@ -253,11 +289,16 @@ export function LiveDocView({
 
   if (loadTimedOut) {
     return (
-      <div className={styles.container}>
-        <div className={styles.message}>
-          <p className={styles.messageTitle}>{t('livedoc.loadFailed')}</p>
-          <p className={styles.messageDetail}>{t('livedoc.loadTimeout')}</p>
-          <button type="button" className={styles.retryButton} onClick={handleManualReload}>
+      <div className={styles.container} style={darkStageStyle}>
+        <div className={styles.message} role="alert">
+          <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.loadFailed')}</p>
+          <p className={styles.messageDetail} style={darkDetailStyle}>{t('livedoc.loadTimeout')}</p>
+          <button
+            type="button"
+            className={styles.retryButton}
+            style={retryButtonStyle}
+            onClick={handleManualReload}
+          >
             {t('livedoc.retry')}
           </button>
         </div>
@@ -279,7 +320,7 @@ export function LiveDocView({
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 
   return (
-    <div className={styles.container}>
+    <div className={styles.container} style={darkStageStyle}>
       <iframe
         ref={iframeRef}
         key={`${livedocInstanceId}-${baseUrl}-${iframeReloadKey}`}
@@ -291,9 +332,11 @@ export function LiveDocView({
         sandbox="allow-scripts allow-forms allow-popups allow-pointer-lock allow-same-origin allow-modals"
       />
       {!pluginLoaded && (
-        <div className={styles.loadingOverlay}>
-          <div className={styles.message}>
-            <p className={styles.messageTitle}>{t('livedoc.loading')}</p>
+        <div className={styles.loadingOverlay} style={darkStageStyle}>
+          <div className={styles.message} role="status">
+            <style>{spinnerKeyframes}</style>
+            <div className="km-livedoc-spinner" style={loadingDotStyle} aria-hidden />
+            <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.loading')}</p>
           </div>
         </div>
       )}

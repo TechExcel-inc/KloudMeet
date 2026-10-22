@@ -461,11 +461,11 @@ export function MobileVideoLayout() {
       // 展开后允许滚动
       display: 'grid',
       gridTemplateColumns: `repeat(${cols}, 1fr)`,
-      gap: '6px',
-      padding: '6px',
+      gap: '8px',
+      padding: '8px',
       overflowY: 'auto',
       height: '100%',
-      background: '#0a0a0a',
+      background: 'var(--km-stage)',
       boxSizing: 'border-box',
     }
     : {
@@ -473,11 +473,11 @@ export function MobileVideoLayout() {
       display: 'grid',
       gridTemplateColumns: `repeat(${cols}, 1fr)`,
       gridAutoRows: '1fr',
-      gap: '6px',
-      padding: '6px',
+      gap: '8px',
+      padding: '8px',
       height: '100%',
       overflow: 'hidden',
-      background: '#0a0a0a',
+      background: 'var(--km-stage)',
       boxSizing: 'border-box',
     };
 
@@ -502,7 +502,7 @@ export function MobileVideoLayout() {
     <div
       className="lk-mobile-scroll-grid"
       onPointerDown={handleMobileGridBlankTap}
-      style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: '#0a0a0a' }}
+      style={{ flex: 1, height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column', background: 'var(--km-stage)' }}
     >
       <div ref={gridRef} style={gridStyle}>
         {visibleTracks.map((track, i) => (
@@ -512,7 +512,7 @@ export function MobileVideoLayout() {
               borderRadius: '12px',
               overflow: 'hidden',
               position: 'relative',
-              background: '#1e1e2e',
+              background: 'var(--km-tile)',
               minHeight: 0,
             }}
           >
@@ -526,13 +526,14 @@ export function MobileVideoLayout() {
         {/* More 按钮 —— 占据一个格子 */}
         {isOver && !expanded && (
           <button
+            type="button"
             onClick={() => setExpanded(true)}
+            aria-expanded={false}
             style={{
               borderRadius: '12px',
               border: 'none',
-              background: 'rgba(99, 102, 241, 0.25)',
-              backdropFilter: 'blur(8px)',
-              color: '#fff',
+              background: 'rgba(139, 135, 255, 0.18)',
+              color: 'var(--km-on-dark-accent)',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
@@ -540,8 +541,8 @@ export function MobileVideoLayout() {
               gap: '6px',
               cursor: 'pointer',
               fontSize: '0.85rem',
-              fontWeight: 600,
-              fontFamily: 'Inter, sans-serif',
+              fontWeight: 700,
+              fontFamily: 'var(--km-font)',
               minHeight: 0,
             }}
           >
@@ -556,17 +557,20 @@ export function MobileVideoLayout() {
       {/* 展开后收起按钮 */}
       {isOver && expanded && (
         <button
+          type="button"
           onClick={() => setExpanded(false)}
+          aria-expanded={true}
           style={{
             flexShrink: 0,
-            background: 'rgba(30,30,46,0.95)',
+            background: 'var(--km-panel)',
             border: 'none',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-            color: 'rgba(255,255,255,0.6)',
-            padding: '10px',
+            borderTop: '1px solid var(--km-stage-border)',
+            color: '#bdc1c6',
+            padding: '12px',
             fontSize: '0.8rem',
+            fontWeight: 600,
             cursor: 'pointer',
-            fontFamily: 'Inter, sans-serif',
+            fontFamily: 'var(--km-font)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -636,6 +640,9 @@ export function LiveDocWebcamSidebarTile({
           <ParticipantTileRoleMoreMenu identity={participant.identity} placement="inline" />
         </div>
       </div>
+      <span className="webcam-sidebar-tile-name">
+        {name || participant.identity || ''}
+      </span>
     </div>
   );
 }

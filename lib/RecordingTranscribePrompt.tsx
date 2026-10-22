@@ -127,9 +127,9 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
 
   if (phase === 'running' && (state.status === 'QUEUED' || state.status === 'SUBMITTING')) {
     return (
-      <div className={styles.backdrop} role="dialog" aria-modal="true">
+      <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title">
         <div className={styles.dialog}>
-          <h3 className={styles.title}>
+          <h3 id="recording-transcribe-title" className={styles.title} aria-live="polite">
             {state.status === 'QUEUED' ? t('replay.transcribeQueued') : t('replay.transcribeStageSubmit')}
           </h3>
         </div>
@@ -144,16 +144,16 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
         : t('replay.transcribeStageRecognize');
     const pct = Math.max(0, Math.min(100, Math.round(state.progress)));
     return (
-      <div className={styles.backdrop} role="dialog" aria-modal="true">
+      <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title">
         <div className={styles.dialog}>
           <div className={styles.cardHead}>
-            <span className={styles.cardTitle}>{t('replay.transcribeRunning')}</span>
+            <span id="recording-transcribe-title" className={styles.cardTitle}>{t('replay.transcribeRunning')}</span>
             <span className={styles.pct}>{pct}%</span>
           </div>
-          <div className={styles.track}>
+          <div className={styles.track} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-labelledby="recording-transcribe-title">
             <div className={styles.bar} style={{ width: `${pct}%` }} />
           </div>
-          <p className={styles.stage}>{stage}</p>
+          <p className={styles.stage} aria-live="polite">{stage}</p>
         </div>
       </div>
     );
@@ -165,15 +165,15 @@ export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: Rec
     : null);
 
   return (
-    <div className={styles.backdrop} role="dialog" aria-modal="true">
+    <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title" aria-describedby="recording-transcribe-desc">
       <div className={styles.dialog}>
-        <h3 className={styles.title}>
+        <h3 id="recording-transcribe-title" className={styles.title}>
           {resuming ? t('replay.transcribeResumeTitle') : t('replay.transcribePromptTitle')}
         </h3>
-        <p className={styles.desc}>
+        <p id="recording-transcribe-desc" className={styles.desc}>
           {resuming ? t('replay.transcribeResumeDesc') : t('replay.transcribePromptDesc')}
         </p>
-        {error && <p className={styles.error}>{error}</p>}
+        {error && <p className={styles.error} role="alert">{error}</p>}
         <div className={styles.actions}>
           <button type="button" className={styles.secondaryBtn} onClick={() => setPhase('collapsed')}>
             {t('replay.transcribeLater')}

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import styles from '../styles/PreJoin.module.css';
 import { useI18n } from './i18n';
 import { authHeaders, getKloudSessionBearer } from './kloudSession';
 import { writePrejoinPersonalRoomEnabled } from './prejoinPersonalRoom';
@@ -72,7 +73,8 @@ export function PrejoinPersonalRoomCheckbox({
 
   return (
     <label
-      className={`kloud-prejoin-personal-room-checkbox${switching ? ' kloud-prejoin-personal-room-checkbox--disabled' : ''}`}
+      className={`${styles.checkRow}${switching ? ` ${styles.checkRowDisabled}` : ''}`}
+      aria-busy={switching || undefined}
     >
       <input
         type="checkbox"
@@ -80,7 +82,10 @@ export function PrejoinPersonalRoomCheckbox({
         disabled={switching}
         onChange={(e) => handleChange(e.target.checked)}
       />
-      <span>{t('profile.supportPersonalRoom')}</span>
+      <span className={styles.checkText}>
+        {t('profile.supportPersonalRoom')}{' '}
+        <span className={styles.checkMeta}>{personalRoomId}</span>
+      </span>
     </label>
   );
 }

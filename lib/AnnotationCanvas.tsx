@@ -2,6 +2,7 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useRoomContext, useDataChannel } from '@livekit/components-react';
+import { useI18n } from '@/lib/i18n';
 
 declare global {
   interface Window {
@@ -36,6 +37,15 @@ export type DrawMessage = {
 
 const LINE_WIDTHS = [3, 6, 12];
 const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#ec4899', '#ffffff'];
+/** i18n keys for COLORS, same order (toolbar swatch labels) */
+const COLOR_LABEL_KEYS = [
+  'annotation.colorRed',
+  'annotation.colorBlue',
+  'annotation.colorGreen',
+  'annotation.colorYellow',
+  'annotation.colorPink',
+  'annotation.colorWhite',
+];
 
 interface AnnotationCanvasProps {
   isDrawingMode: boolean;
@@ -55,6 +65,7 @@ export function AnnotationCanvas({
 }: AnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const room = useRoomContext();
+  const { t } = useI18n();
   const [isDrawing, setIsDrawing] = useState(false);
   const [color, setColor] = useState('#ef4444');
   const [lineWidthIdx, setLineWidthIdx] = useState(0);
@@ -239,83 +250,124 @@ export function AnnotationCanvas({
 
       {isDrawingMode && (
         <div
+          className="kloud-anno-bar"
+          role="toolbar"
+          aria-label={t('annotation.toolbar')}
           style={{
             position: 'absolute',
-            top: 20,
+            top: 14,
             left: '50%',
             transform: 'translateX(-50%)',
             zIndex: 1001,
             display: 'flex',
             alignItems: 'center',
-            gap: 10,
-            background: 'rgba(10, 15, 30, 0.92)',
+            flexWrap: 'wrap',
+            justifyContent: 'center',
+            gap: 8,
+            maxWidth: 'calc(100% - 24px)',
+            boxSizing: 'border-box',
+            background: 'rgba(30, 31, 36, 0.95)',
             backdropFilter: 'blur(12px)',
             WebkitBackdropFilter: 'blur(12px)',
-            padding: '8px 14px',
-            borderRadius: '28px',
-            border: '1px solid rgba(255,255,255,0.12)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
+            padding: '8px 12px',
+            borderRadius: 999,
+            border: '1px solid rgba(255,255,255,0.1)',
+            boxShadow: '0 10px 28px rgba(0,0,0,0.45)',
+            fontFamily: 'var(--km-font)',
             userSelect: 'none',
             pointerEvents: 'auto',
           }}
         >
-          {COLORS.map((c) => (
-            <div
+          <style>{`
+            .kloud-anno-bar button {
+              appearance: none;
+              -webkit-appearance: none;
+              margin: 0;
+              font: inherit;
+            }
+            .kloud-anno-bar button:focus-visible {
+              outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+              outline-offset: 2px;
+            }
+            .kloud-anno-bar .kloud-anno-width:hover {
+              background: rgba(255, 255, 255, 0.1);
+            }
+            .kloud-anno-bar .kloud-anno-clear {
+              color: rgba(248, 113, 113, 0.85);
+              background: transparent;
+            }
+            .kloud-anno-bar .kloud-anno-clear:hover {
+              color: #f87171;
+              background: rgba(248, 113, 113, 0.12);
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .kloud-anno-bar button {
+                transition: none !important;
+              }
+            }
+          `}</style>
+          {COLORS.map((c, i) => (
+            <button
+              type="button"
               key={c}
               onClick={() => setColor(c)}
-              title={c}
+              title={t(COLOR_LABEL_KEYS[i])}
+              aria-label={t(COLOR_LABEL_KEYS[i])}
+              aria-pressed={color === c}
               style={{
                 width: 22,
                 height: 22,
+                padding: 0,
                 borderRadius: '50%',
                 background: c,
                 cursor: 'pointer',
-                border: color === c ? '2.5px solid white' : '2px solid rgba(255,255,255,0.15)',
-                boxShadow:
-                  color === c
-                    ? `0 0 0 2px rgba(255,255,255,0.3), 0 0 10px ${c}99`
-                    : 'none',
-                transition: 'all 0.18s ease',
+                border: color === c ? '2.5px solid #fff' : '2px solid rgba(255,255,255,0.15)',
+                boxShadow: color === c ? `0 0 0 2px rgba(255,255,255,0.25), 0 0 10px ${c}99` : 'none',
+                transition: 'transform 0.15s ease, box-shadow 0.15s ease',
                 transform: color === c ? 'scale(1.2)' : 'scale(1)',
                 flexShrink: 0,
               }}
             />
           ))}
 
-          <div
+          <span
+            aria-hidden
             style={{
               width: 1,
               height: 22,
               background: 'rgba(255,255,255,0.15)',
-              margin: '0 2px',
               flexShrink: 0,
             }}
           />
 
           {LINE_WIDTHS.map((w, i) => (
-            <div
+            <button
+              type="button"
               key={w}
+              className="kloud-anno-width"
               onClick={() => setLineWidthIdx(i)}
-              title={`Line width: ${w}px`}
+              title={t('annotation.lineWidth', { px: w })}
+              aria-label={t('annotation.lineWidth', { px: w })}
+              aria-pressed={lineWidthIdx === i}
               style={{
                 width: 28,
                 height: 28,
+                padding: 0,
                 borderRadius: '50%',
-                display: 'flex',
+                display: 'inline-flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                background: lineWidthIdx === i ? 'rgba(255,255,255,0.18)' : 'transparent',
-                border:
-                  lineWidthIdx === i
-                    ? '1.5px solid rgba(255,255,255,0.4)'
-                    : '1.5px solid transparent',
-                transition: 'all 0.15s ease',
+                background: lineWidthIdx === i ? 'rgba(255,255,255,0.16)' : 'transparent',
+                border: 'none',
+                transition: 'background 0.15s ease',
                 flexShrink: 0,
               }}
             >
-              <div
+              <span
+                aria-hidden
                 style={{
+                  display: 'block',
                   width: 6 + i * 3,
                   height: 6 + i * 3,
                   borderRadius: '50%',
@@ -323,42 +375,37 @@ export function AnnotationCanvas({
                   opacity: 0.9,
                 }}
               />
-            </div>
+            </button>
           ))}
 
-          <div
+          <span
+            aria-hidden
             style={{
               width: 1,
               height: 22,
               background: 'rgba(255,255,255,0.15)',
-              margin: '0 2px',
               flexShrink: 0,
             }}
           />
 
           <button
+            type="button"
+            className="kloud-anno-clear"
             onClick={clearCanvas}
-            title="Clear all annotations"
+            title={t('annotation.clearAll')}
+            aria-label={t('annotation.clearAll')}
             style={{
-              background: 'transparent',
+              width: 32,
+              height: 32,
+              padding: 0,
               border: 'none',
-              color: 'rgba(248, 113, 113, 0.8)',
               cursor: 'pointer',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: 4,
-              borderRadius: 8,
-              transition: 'all 0.15s ease',
+              borderRadius: '50%',
+              transition: 'background 0.15s ease, color 0.15s ease',
               flexShrink: 0,
-            }}
-            onMouseOver={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = '#f87171';
-              (e.currentTarget as HTMLButtonElement).style.background = 'rgba(248,113,113,0.12)';
-            }}
-            onMouseOut={(e) => {
-              (e.currentTarget as HTMLButtonElement).style.color = 'rgba(248, 113, 113, 0.8)';
-              (e.currentTarget as HTMLButtonElement).style.background = 'transparent';
             }}
           >
             <svg
@@ -367,7 +414,10 @@ export function AnnotationCanvas({
               height="18"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.2"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
             >
               <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2M10 11v6M14 11v6" />
             </svg>

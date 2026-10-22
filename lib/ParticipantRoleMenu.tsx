@@ -75,6 +75,15 @@ function getRoles(
   return roles;
 }
 
+/** i18n key for each role badge class (labels in getRoles stay as English fallbacks) */
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  'role-host': 'roleMenu.roleHost',
+  'role-cohost': 'roleMenu.roleCohost',
+  'role-presenter': 'roleMenu.rolePresenter',
+  'role-copresenter': 'roleMenu.roleCopresenter',
+  'role-attendee': 'roleMenu.roleAttendee',
+};
+
 /** canLowerParticipantHand — 本地用户能否放下该参会者举起的手 */
 function canLowerParticipantHand(
   identity: string,
@@ -116,6 +125,7 @@ export function ParticipantRoleMenuProvider({
   const [pickerSearch, setPickerSearch] = useState('');
   const [confirmHostId, setConfirmHostId] = useState<string | null>(null);
   const participants = useParticipants();
+  const { t } = useI18n();
 
   const closeMenu = useCallback(() => {
     setOpenMenuIdentity(null);
@@ -235,18 +245,27 @@ export function ParticipantRoleMenuProvider({
             setConfirmHostId(null);
           }}
         >
-          <div className="kloud-host-picker" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="kloud-host-picker"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('roleMenu.transferHost')}
+            onClick={(e) => e.stopPropagation()}
+          >
             {!confirmHostId ? (
               <>
                 <div className="kloud-host-picker-header">
-                  <h3 className="kloud-host-picker-title">Transfer Host</h3>
-                  <button className="kloud-host-picker-close" onClick={() => setShowHostPicker(false)}>
+                  <h3 className="kloud-host-picker-title">{t('roleMenu.transferHost')}</h3>
+                  <button
+                    type="button"
+                    className="kloud-host-picker-close"
+                    onClick={() => setShowHostPicker(false)}
+                    aria-label={t('common.close')}
+                  >
                     ✕
                   </button>
                 </div>
-                <p className="kloud-host-picker-desc">
-                  Select a participant to become the new Host. You will become Co-host.
-                </p>
+                <p className="kloud-host-picker-desc">{t('roleMenu.transferHostDesc')}</p>
                 {participants.length >= 5 && (
                   <div className="kloud-host-picker-search">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
@@ -257,7 +276,8 @@ export function ParticipantRoleMenuProvider({
                       type="text"
                       value={pickerSearch}
                       onChange={(e) => setPickerSearch(e.target.value)}
-                      placeholder="Search..."
+                      placeholder={t('roleMenu.search')}
+                      aria-label={t('roleMenu.search')}
                       className="kloud-host-picker-search-input"
                       autoFocus
                     />
@@ -270,6 +290,7 @@ export function ParticipantRoleMenuProvider({
                     const roles = getRoles(p.identity, config);
                     return (
                       <button
+                        type="button"
                         key={p.identity}
                         className="kloud-host-picker-item"
                         onClick={() => setConfirmHostId(p.identity)}
@@ -280,7 +301,7 @@ export function ParticipantRoleMenuProvider({
                           <div className="kloud-attendee-badges">
                             {roles.map((r) => (
                               <span key={r.cls} className={`kloud-attendee-role ${r.cls}`}>
-                                {r.label}
+                                {ROLE_LABEL_KEYS[r.cls] ? t(ROLE_LABEL_KEYS[r.cls]) : r.label}
                               </span>
                             ))}
                           </div>
@@ -300,7 +321,7 @@ export function ParticipantRoleMenuProvider({
                     );
                   })}
                   {hostCandidates.length === 0 && (
-                    <div className="kloud-attendee-empty">No participants found</div>
+                    <div className="kloud-attendee-empty">{t('roleMenu.noParticipantsFound')}</div>
                   )}
                 </div>
               </>
@@ -308,13 +329,20 @@ export function ParticipantRoleMenuProvider({
               confirmParticipant && (
                 <>
                   <div className="kloud-host-picker-header">
-                    <button className="kloud-host-picker-back" onClick={() => setConfirmHostId(null)}>
+                    <button
+                      type="button"
+                      className="kloud-host-picker-back"
+                      onClick={() => setConfirmHostId(null)}
+                      aria-label={t('nav.goBack')}
+                    >
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
                         <polyline points="15 18 9 12 15 6" />
                       </svg>
                     </button>
-                    <h3 className="kloud-host-picker-title">Confirm Transfer</h3>
+                    <h3 className="kloud-host-picker-title">{t('roleMenu.confirmTransfer')}</h3>
                     <button
+                      type="button"
+                      aria-label={t('common.close')}
                       className="kloud-host-picker-close"
                       onClick={() => {
                         setShowHostPicker(false);
@@ -331,14 +359,19 @@ export function ParticipantRoleMenuProvider({
                       </svg>
                     </div>
                     <p className="kloud-confirm-text">
-                      <strong>{confirmParticipant.name || confirmParticipant.identity}</strong> will become the new
-                      Host. You will be automatically demoted to Co-host.
+                      <strong>{confirmParticipant.name || confirmParticipant.identity}</strong>{' '}
+                      {t('roleMenu.transferConfirmBody')}
                     </p>
                     <div className="kloud-confirm-actions">
-                      <button className="kloud-confirm-cancel" onClick={() => setConfirmHostId(null)}>
-                        Cancel
+                      <button
+                        type="button"
+                        className="kloud-confirm-cancel"
+                        onClick={() => setConfirmHostId(null)}
+                      >
+                        {t('common.cancel')}
                       </button>
                       <button
+                        type="button"
                         className="kloud-confirm-proceed"
                         onClick={() => {
                           config.onSetHost?.(confirmHostId);
@@ -346,7 +379,7 @@ export function ParticipantRoleMenuProvider({
                           setShowHostPicker(false);
                         }}
                       >
-                        Transfer Host
+                        {t('roleMenu.transferHost')}
                       </button>
                     </div>
                   </div>
@@ -404,9 +437,11 @@ function ParticipantRoleDropdownContent({
   if (!canManageRoles && !showLowerHand) return null;
 
   return (
-    <div className="kloud-more-dropdown" onMouseDown={(e) => e.stopPropagation()}>
+    <div className="kloud-more-dropdown" role="menu" onMouseDown={(e) => e.stopPropagation()}>
       {showLowerHand && (
         <button
+          type="button"
+          role="menuitem"
           className="kloud-more-dropdown-item"
           onClick={() => {
             onLowerHand?.(identity);
@@ -421,6 +456,8 @@ function ParticipantRoleDropdownContent({
       )}
       {canManageRoles && isThisHost && isLocalParticipant && (
         <button
+          type="button"
+          role="menuitem"
           className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
           onClick={() => {
             if (isThisCopresenter) {
@@ -437,12 +474,14 @@ function ParticipantRoleDropdownContent({
             <line x1="12" y1="18" x2="12" y2="23" />
             <line x1="8" y1="23" x2="16" y2="23" />
           </svg>
-          {isThisCopresenter ? 'Stop Co-Presenting' : 'Co-Present'}
+          {isThisCopresenter ? t('roleMenu.stopCoPresenting') : t('roleMenu.coPresent')}
         </button>
       )}
       {canManageRoles && !isThisHost && (
         <>
           <button
+            type="button"
+            role="menuitem"
             className={`kloud-more-dropdown-item${isThisCopresenter ? ' active' : ''}`}
             onClick={() => {
               if (isThisCopresenter) {
@@ -459,9 +498,11 @@ function ParticipantRoleDropdownContent({
               <line x1="12" y1="18" x2="12" y2="23" />
               <line x1="8" y1="23" x2="16" y2="23" />
             </svg>
-            {isThisCopresenter ? 'Remove Co-Presenter' : 'Make Co-Presenter'}
+            {isThisCopresenter ? t('roleMenu.removeCopresenter') : t('roleMenu.makeCopresenter')}
           </button>
           <button
+            type="button"
+            role="menuitem"
             className={`kloud-more-dropdown-item${isThisCohost ? ' active' : ''}`}
             onClick={() => {
               if (isThisCohost) {
@@ -475,12 +516,14 @@ function ParticipantRoleDropdownContent({
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16">
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
-            {isThisCohost ? 'Remove Co-host' : 'Make Co-host'}
+            {isThisCohost ? t('roleMenu.removeCohost') : t('roleMenu.makeCohost')}
           </button>
         </>
       )}
       {canManageRoles && isThisHost && (
         <button
+          type="button"
+          role="menuitem"
           className="kloud-more-dropdown-item"
           onClick={() => {
             openHostPicker();
@@ -491,11 +534,13 @@ function ParticipantRoleDropdownContent({
             <circle cx="8.5" cy="7" r="4" />
             <polyline points="17 11 19 13 23 9" />
           </svg>
-          Transfer Host
+          {t('roleMenu.transferHost')}
         </button>
       )}
       {canRemoveFromMeeting && (
         <button
+          type="button"
+          role="menuitem"
           className="kloud-more-dropdown-item danger"
           onClick={() => {
             onRemoveFromMeeting?.(identity);
@@ -508,7 +553,7 @@ function ParticipantRoleDropdownContent({
             <line x1="17" y1="8" x2="22" y2="13" />
             <line x1="22" y1="8" x2="17" y2="13" />
           </svg>
-          Remove from meeting
+          {t('roleMenu.removeFromMeeting')}
         </button>
       )}
     </div>
@@ -575,6 +620,7 @@ export function ParticipantTileRoleMoreMenu({
 }) {
   const ctx = useContext(ParticipantRoleMenuContext);
   const anchorRef = React.useRef<HTMLDivElement>(null);
+  const { t } = useI18n();
 
   if (!ctx || !shouldShowRoleMenu(identity, ctx)) return null;
 
@@ -590,7 +636,10 @@ export function ParticipantTileRoleMoreMenu({
       <button
         type="button"
         className={`kloud-role-icon-btn kloud-tile-more-menu-btn${isOpen ? ' open' : ''}`}
-        title="More options"
+        title={t('toolbar.moreOptions')}
+        aria-label={t('toolbar.moreOptions')}
+        aria-haspopup="menu"
+        aria-expanded={isOpen}
         onClick={() => {
           if (anchorRef.current) {
             ctx.toggleMenu(identity, anchorRef.current);
@@ -618,12 +667,21 @@ export function ParticipantAttendeeRowMoreMenu({
   onClose: () => void;
 }) {
   const ctx = useContext(ParticipantRoleMenuContext);
+  const { t } = useI18n();
   if (!ctx || !shouldShowRoleMenu(identity, ctx)) return null;
 
   return (
     <div className="kloud-attendee-actions">
       <div className="kloud-more-menu-anchor" onMouseDown={(e) => e.stopPropagation()}>
-        <button type="button" className="kloud-role-icon-btn" onClick={onToggle} title="More options">
+        <button
+          type="button"
+          className="kloud-role-icon-btn"
+          onClick={onToggle}
+          title={t('toolbar.moreOptions')}
+          aria-label={t('toolbar.moreOptions')}
+          aria-haspopup="menu"
+          aria-expanded={isOpen}
+        >
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
             <circle cx="5" cy="12" r="2" />
             <circle cx="12" cy="12" r="2" />

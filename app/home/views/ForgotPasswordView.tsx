@@ -1,20 +1,9 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { generateRoomId } from '@/lib/client-utils';
-import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
-import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
-import { MyProfileModal } from '@/lib/MyProfileModal';
+import React, { useState } from 'react';
 import { useI18n } from '@/lib/i18n';
-import { HelpModal } from '@/lib/HelpModal';
-import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
-import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
-import { authFetch, authHeaders } from '@/lib/kloudSession';
 import styles from '../../../styles/Home.module.css';
-import type { AuthUser, SignupStep } from '../types';
-import { KloudLogo } from '../components/KloudLogo';
-import { TopToolbar } from '../components/TopToolbar';
+import { AuthField, AuthShell, FormError, Spinner, useTx } from '../components/ui';
 
 export function ForgotPasswordView({
   onBack,
@@ -26,6 +15,7 @@ export function ForgotPasswordView({
   toast: { show: (t: string) => void };
 }) {
   const { t } = useI18n();
+  const tx = useTx();
   const [step, setStep] = useState<'email' | 'verify' | 'reset'>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -113,116 +103,132 @@ export function ForgotPasswordView({
     }
   };
 
+  /* Step-aware back (toolbar back arrow + in-card Back button) */
+  const handleBack = () => {
+    if (step === 'reset') setStep('verify');
+    else if (step === 'verify') { setStep('email'); setVerificationCode(''); }
+    else onBack();
+  };
+
+  const subtitle =
+    step === 'email'
+      ? t('forgot.description')
+      : step === 'verify'
+        ? t('forgot.codeSentTo', { email })
+        : tx('forgot.chooseNew', 'Choose a new password.');
+
+  const backBtn = (
+    <button type="button" className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`} onClick={handleBack}>
+      {t('common.back')}
+    </button>
+  );
+
   return (
-    <div className={styles.anonWrapper}>
-      <TopToolbar onBack={() => {
-        if (step === 'reset') setStep('verify');
-        else if (step === 'verify') { setStep('email'); setVerificationCode(''); }
-        else onBack();
-      }} hideAvatar />
-      <div className={styles.authContainer}>
-        <div className={styles.authCard}>
-          <h1 className={styles.loginTitle}>{t('forgot.title')}</h1>
-          {error && <div className={styles.errorBanner}>⚠ {error}</div>}
+    <AuthShell onBack={handleBack} onOpenHelp={onOpenHelp} title={t('forgot.title')} subtitle={subtitle}>
+      {step === 'email' && (
+        <>
+          <AuthField
+            label={t('forgot.emailOrPhone')}
+            invalid={!!error}
+            type="text"
+            autoComplete="username"
+            placeholder="you@example.com or +123"
+            value={email}
+            onChange={(e) => { setEmail(e.target.value); setError(''); }}
+            onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
+            autoFocus
+          />
+          <FormError message={error} />
+          <div className={styles.authActions}>
+            {backBtn}
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
+              disabled={loading}
+              aria-busy={loading}
+              onClick={handleEmailNext}
+            >
+              {loading && <Spinner />}
+              {loading ? t('signup.sendingCode') : t('common.next')}
+            </button>
+          </div>
+        </>
+      )}
 
-          {step === 'email' && (
-            <>
-              <p className={styles.signupSubtext}>{t('forgot.description')}</p>
-              <label className={styles.fieldLabel}>{t('forgot.emailOrPhone')}</label>
-              <input
-                className={error ? styles.fieldInputError : styles.fieldInput}
-                type="text"
-                placeholder="you@example.com or +123"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); setError(''); }}
-                onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
-                autoFocus
-              />
-              <button
-                type="button"
-                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
-                disabled={loading}
-                onClick={handleEmailNext}
-              >
-                {loading ? t('signup.sendingCode') : t('common.next')}
-              </button>
-            </>
-          )}
+      {step === 'verify' && (
+        <>
+          <AuthField
+            label={t('forgot.enter6Digit')}
+            invalid={!!error}
+            inputClassName={styles.verifyCodeInput}
+            type="text"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
+            maxLength={6}
+            value={verificationCode}
+            onChange={(e) => {
+              setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
+              setError('');
+            }}
+            onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
+            autoFocus
+          />
+          {devCode && <div className={styles.devHint}>{t('forgot.devCode', { code: devCode })}</div>}
+          <FormError message={error} />
+          <div className={styles.authActions}>
+            {backBtn}
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
+              disabled={verificationCode.length !== 6}
+              onClick={handleVerifyNext}
+            >
+              {t('forgot.verifyCode')}
+            </button>
+          </div>
+        </>
+      )}
 
-          {step === 'verify' && (
-            <>
-              <p className={styles.signupSubtext}>{t('forgot.codeSentTo', { email })}</p>
-              <input
-                className={styles.verifyCodeInput}
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="000000"
-                maxLength={6}
-                value={verificationCode}
-                onChange={(e) => {
-                  setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  setError('');
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
-                autoFocus
-              />
-              {devCode && <div className={styles.devHint}>{t('forgot.devCode', { code: devCode })}</div>}
-              <button
-                type="button"
-                className={verificationCode.length === 6 ? styles.loginSubmit : styles.loginSubmitLoading}
-                disabled={verificationCode.length !== 6}
-                onClick={handleVerifyNext}
-              >
-                {t('forgot.verifyCode')}
-              </button>
-            </>
-          )}
-
-          {step === 'reset' && (
-            <>
-              <label className={styles.fieldLabel}>{t('forgot.newPassword')}</label>
-              <div className={styles.passwordWrap}>
-                <input
-                  className={styles.fieldInput}
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder={t('signup.passwordHint')}
-                  maxLength={30}
-                  value={password}
-                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                  style={{ paddingRight: '2.5rem' }}
-                />
-                <button type="button" className={styles.passwordToggle} onClick={() => setShowPassword(!showPassword)}>{showPassword ? '🙈' : '👁'}</button>
-              </div>
-
-              <label className={styles.fieldLabel}>{t('forgot.confirmNewPassword')}</label>
-              <div className={styles.passwordWrap}>
-                <input
-                  className={styles.fieldInput}
-                  type={showConfirm ? 'text' : 'password'}
-                  placeholder={t('signup.confirmPasswordHint')}
-                  maxLength={30}
-                  value={confirmPassword}
-                  onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
-                  style={{ paddingRight: '2.5rem' }}
-                />
-                <button type="button" className={styles.passwordToggle} onClick={() => setShowConfirm(!showConfirm)}>{showConfirm ? '🙈' : '👁'}</button>
-              </div>
-
-              <button
-                type="button"
-                className={loading ? styles.loginSubmitLoading : styles.loginSubmit}
-                disabled={loading}
-                onClick={handleReset}
-                style={{ marginTop: '0.5rem' }}
-              >
-                {loading ? t('forgot.resetting') : t('forgot.resetPassword')}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+      {step === 'reset' && (
+        <>
+          <AuthField
+            label={t('forgot.newPassword')}
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder={t('signup.passwordHint')}
+            maxLength={30}
+            value={password}
+            onChange={(e) => { setPassword(e.target.value); setError(''); }}
+            passwordToggle={{ shown: showPassword, onToggle: () => setShowPassword(!showPassword) }}
+            autoFocus
+          />
+          <AuthField
+            label={t('forgot.confirmNewPassword')}
+            type={showConfirm ? 'text' : 'password'}
+            autoComplete="new-password"
+            placeholder={t('signup.confirmPasswordHint')}
+            maxLength={30}
+            value={confirmPassword}
+            onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+            passwordToggle={{ shown: showConfirm, onToggle: () => setShowConfirm(!showConfirm) }}
+          />
+          <FormError message={error} />
+          <div className={styles.authActions}>
+            {backBtn}
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
+              disabled={loading}
+              aria-busy={loading}
+              onClick={handleReset}
+            >
+              {loading && <Spinner />}
+              {loading ? t('forgot.resetting') : t('forgot.resetPassword')}
+            </button>
+          </div>
+        </>
+      )}
+    </AuthShell>
   );
 }
-

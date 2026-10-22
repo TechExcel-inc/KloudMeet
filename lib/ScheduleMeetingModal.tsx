@@ -138,6 +138,11 @@ function formatInviteDateTime(scheduledFor?: string, timezone?: string): string 
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const { t } = useI18n();
+  /** Translation with an English fallback for keys not yet added to the locale files. */
+  const tf = (key: string, fallback: string) => {
+    const value = t(key);
+    return value === key ? fallback : value;
+  };
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
   const [showInviteMenu, setShowInviteMenu] = useState(false);
   const inviteMenuRef = useRef<HTMLDivElement | null>(null);
@@ -352,86 +357,64 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   return (
     <>
       <div className={styles.overlay}>
-        <div className={styles.modal}>
+        <div
+          className={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="kloud-schedule-meeting-title"
+        >
           {/* Header */}
           <div className={styles.header}>
-            <h2 className={styles.title}>{existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}</h2>
+            <button
+              type="button"
+              className={styles.iconBtn}
+              onClick={onClose}
+              disabled={isSaving}
+              aria-label={t('common.close')}
+              title={t('common.close')}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+            <h2 id="kloud-schedule-meeting-title" className={styles.title}>
+              {existingMeeting ? t('schedule.editMeeting') : t('schedule.newMeeting')}
+            </h2>
             <div className={styles.headerActions}>
               {existingMeeting && !isCanceled && (
-                <div ref={inviteMenuRef} style={{ position: 'relative' }}>
+                <div ref={inviteMenuRef} className={styles.menuAnchor}>
                   <button
                     className={styles.btnOutline}
                     onClick={() => setShowInviteMenu((prev) => !prev)}
                     type="button"
-                    style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                    aria-haspopup="menu"
+                    aria-expanded={showInviteMenu}
+                    aria-label={t('schedule.copyInvite')}
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"></path>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+                      <rect x="9" y="9" width="11" height="11" rx="2" />
+                      <path d="M5 15V5a2 2 0 012-2h10" />
                     </svg>
-                    {t('schedule.copyInvite')}
+                    <span className={styles.hideNarrow}>{t('schedule.copyInvite')}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
                   </button>
                   {showInviteMenu && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: 'calc(100% + 8px)',
-                        right: 0,
-                        minWidth: '180px',
-                        background: '#fff',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 10px 25px rgba(15, 23, 42, 0.15)',
-                        zIndex: 30,
-                        padding: '6px',
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={copyMeetingLink}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          border: 'none',
-                          background: 'transparent',
-                          borderRadius: '6px',
-                          padding: '8px 10px',
-                          color: '#1f2937',
-                          cursor: 'pointer',
-                        }}
-                      >
+                    <div className={styles.menu} role="menu">
+                      <button type="button" role="menuitem" className={styles.menuItem} onClick={copyMeetingLink}>
                         {t('schedule.copyLink')}
                       </button>
-                      <button
-                        type="button"
-                        onClick={copyMeetingInvite}
-                        style={{
-                          width: '100%',
-                          textAlign: 'left',
-                          border: 'none',
-                          background: 'transparent',
-                          borderRadius: '6px',
-                          padding: '8px 10px',
-                          color: '#1f2937',
-                          cursor: 'pointer',
-                        }}
-                      >
+                      <button type="button" role="menuitem" className={styles.menuItem} onClick={copyMeetingInvite}>
                         {t('schedule.copyInvite')}
                       </button>
                     </div>
                   )}
                 </div>
               )}
-              {existingMeeting && !isFinished && !isCanceled && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleCancelMeeting} disabled={isSaving}>{t('common.cancel')}</button>
-              )}
-              {existingMeeting && (
-                <button className={styles.btnOutline} style={{ color: '#ef4444', borderColor: '#fca5a5' }} onClick={handleDeleteMeeting} disabled={isSaving}>{t('common.delete')}</button>
-              )}
-              <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
+              <button type="button" className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
                 {isSaving ? t('common.saving') : t('common.save')}
               </button>
-              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>{t('common.close')}</button>
             </div>
           </div>
           
@@ -469,181 +452,226 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           {/* Tab Content: General Information */}
           {activeTab === 'general' && (
             <div className={styles.content}>
+              {/* Title */}
+              <div className={styles.row}>
+                <span className={styles.rowIcon} aria-hidden="true" />
+                <input
+                  type="text"
+                  className={styles.titleInput}
+                  placeholder={t('schedule.titlePlaceholder')}
+                  aria-label={t('schedule.title')}
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                />
+              </div>
+
               {existingMeeting && (
-                <>
-                  <div className={styles.formRow}>
-                    <label className={styles.label}>{t('schedule.status')}</label>
-                    <div className={styles.inputWrapper} style={{ paddingTop: '0.4rem' }}>
-                      <div style={{ display: 'inline-block', padding: '4px 12px', borderRadius: '16px', fontSize: '0.85rem', fontWeight: 600, 
-                        background: existingMeeting.status === 'ENDED' ? '#dcfce7' : 
-                                    existingMeeting.status === 'CANCELED' ? '#fee2e2' : 
-                                    existingMeeting.status === 'PAST_DUE' ? '#ffedd5' : 
-                                    existingMeeting.status === 'ACTIVE' ? '#e0e7ff' : '#f1f5f9',
-                        color: existingMeeting.status === 'ENDED' ? '#166534' : 
-                               existingMeeting.status === 'CANCELED' ? '#991b1b' : 
-                               existingMeeting.status === 'PAST_DUE' ? '#9a3412' : 
-                               existingMeeting.status === 'ACTIVE' ? '#3730a3' : '#475569'
-                      }}>
-                        {existingMeeting.status === 'ENDED' ? 'Finished' : 
-                         existingMeeting.status === 'PAST_DUE' ? 'Past Due' : 
-                         existingMeeting.status === 'ACTIVE' ? (new Date(existingMeeting.startedAt) > new Date(existingMeeting.createdAt) ? 'In Progress' : 'Scheduled') : 
-                         existingMeeting.status || 'Scheduled'}
-                      </div>
-                    </div>
+                <div className={styles.row}>
+                  <span className={styles.rowIcon} aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                      <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />
+                    </svg>
+                  </span>
+                  <div className={styles.metaLine}>
+                    <span className={styles.metaLabel}>{t('schedule.meetingId')}</span>
+                    <span className={styles.meetingId}>{existingMeeting.roomName}</span>
+                    <span className={styles.srOnly}>{t('schedule.status')}:</span>
+                    <span
+                      className={`${styles.statusChip} ${
+                        existingMeeting.status === 'ENDED' ? styles.statusEnded :
+                        existingMeeting.status === 'CANCELED' ? styles.statusCanceled :
+                        existingMeeting.status === 'PAST_DUE' ? styles.statusPastDue :
+                        existingMeeting.status === 'ACTIVE' ? styles.statusActive : styles.statusNeutral
+                      }`}
+                    >
+                      {existingMeeting.status === 'ENDED' ? 'Finished' : 
+                       existingMeeting.status === 'PAST_DUE' ? 'Past Due' : 
+                       existingMeeting.status === 'ACTIVE' ? (new Date(existingMeeting.startedAt) > new Date(existingMeeting.createdAt) ? 'In Progress' : 'Scheduled') : 
+                       existingMeeting.status || 'Scheduled'}
+                    </span>
                   </div>
-                  <div className={styles.formRow}>
-                    <label className={styles.label}>{t('schedule.meetingId')}</label>
-                    <div className={styles.inputWrapper}>
-                      <input 
-                        type="text" 
-                        className={styles.input} 
-                        value={existingMeeting.roomName}
-                        readOnly
-                        style={{ background: '#f8fafc', color: '#64748b', cursor: 'not-allowed', fontFamily: 'monospace' }}
-                      />
-                    </div>
-                  </div>
-                </>
+                </div>
               )}
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.title')}</label>
-                <div className={styles.inputWrapper}>
-                  <input 
-                    type="text" 
-                    className={styles.input} 
-                    placeholder={t('schedule.titlePlaceholder')} 
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                  />
-                </div>
-              </div>
 
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.description')}</label>
-                <div className={styles.inputWrapper}>
-                  <textarea 
-                    className={styles.textarea} 
-                    placeholder={t('schedule.descPlaceholder')} 
-                    rows={4} 
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.setTime')}</label>
-                <div className={`${styles.inputWrapper} ${styles.timeRow}`}>
-                  <input 
-                    type="date" 
-                    className={`${styles.input} ${styles.timeInput}`} 
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
-                    disabled={isReadOnly}
-                  />
-                  <input 
-                    type="time" 
-                    className={`${styles.input} ${styles.timeInput}`} 
-                    value={time}
-                    onChange={(e) => setTime(e.target.value)}
-                    disabled={isReadOnly}
-                  />
-                  <select 
-                    className={`${styles.input} ${styles.select} ${styles.timeInput}`}
-                    value={durationStr}
-                    onChange={(e) => setDurationStr(e.target.value)}
-                    disabled={isReadOnly}
-                  >
-                    <option value="15min">15min</option>
-                    <option value="30min">30min</option>
-                    <option value="45min">45min</option>
-                    <option value="60min">60min</option>
-                    <option value="90min(1.5h)">90min(1.5h)</option>
-                    <option value="120min(2h)">120min(2h)</option>
-                    <option value="180min(3h)">180min(3h)</option>
-                    <option value="240min(4h)">240min(4h)</option>
-                    <option value="300min(5h)">300min(5h)</option>
-                    <option value="360min(6h)">360min(6h)</option>
-                    <option value="420min(7h)">420min(7h)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.timeZone')}</label>
-                <div className={styles.inputWrapper}>
-                  <select
-                    className={`${styles.input} ${styles.select}`}
-                    value={timezone}
-                    onChange={(e) => setTimezone(e.target.value)}
-                    disabled={isReadOnly}
-                  >
-                    {timezoneOptions.map((tz) => (
-                      <option key={tz} value={tz}>
-                        {formatTimezoneLabel(tz)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.accessOption')}</label>
-                <div className={styles.inputWrapper} style={{ display: 'flex', gap: '2.5rem', flexWrap: 'wrap', paddingTop: '0.6rem' }}>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: recording?.shareKey ? 'pointer' : 'default' }}>
-                    <input
-                      type="radio"
-                      name="access"
-                      value="public"
-                      className={styles.radio}
-                      checked={recordingVisibility === 'PUBLIC'}
-                      onChange={() => setRecordingVisibility('PUBLIC')}
-                      disabled={!recording?.shareKey}
+              {/* Time */}
+              <div className={styles.row}>
+                <span className={styles.rowIcon} aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7v5l3 2" />
+                  </svg>
+                </span>
+                <div className={styles.stack}>
+                  <span className={styles.srOnly}>{t('schedule.setTime')}</span>
+                  <div className={styles.timeRow}>
+                    <input 
+                      type="date" 
+                      className={`${styles.input} ${styles.timeInput}`} 
+                      aria-label={tf('schedule.date', 'Date')}
+                      value={date}
+                      onChange={(e) => setDate(e.target.value)}
+                      disabled={isReadOnly}
                     />
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.public')}</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.publicDesc')}</div>
-                    </div>
-                  </label>
-                  <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: recording?.shareKey ? 'pointer' : 'default' }}>
-                    <input
-                      type="radio"
-                      name="access"
-                      value="private"
-                      className={styles.radio}
-                      checked={recordingVisibility === 'PRIVATE'}
-                      onChange={() => setRecordingVisibility('PRIVATE')}
-                      disabled={!recording?.shareKey}
+                    <input 
+                      type="time" 
+                      className={`${styles.input} ${styles.timeInput}`} 
+                      aria-label={tf('schedule.startTime', 'Start time')}
+                      value={time}
+                      onChange={(e) => setTime(e.target.value)}
+                      disabled={isReadOnly}
                     />
-                    <div>
-                      <div style={{ fontWeight: 600, color: '#111827', fontSize: '0.95rem' }}>{t('schedule.private')}</div>
-                      <div style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: '0.2rem' }}>{t('schedule.privateDesc')}</div>
-                    </div>
+                    <select 
+                      className={`${styles.input} ${styles.select} ${styles.timeInput}`}
+                      aria-label={tf('schedule.duration', 'Duration')}
+                      value={durationStr}
+                      onChange={(e) => setDurationStr(e.target.value)}
+                      disabled={isReadOnly}
+                    >
+                      <option value="15min">15min</option>
+                      <option value="30min">30min</option>
+                      <option value="45min">45min</option>
+                      <option value="60min">60min</option>
+                      <option value="90min(1.5h)">90min(1.5h)</option>
+                      <option value="120min(2h)">120min(2h)</option>
+                      <option value="180min(3h)">180min(3h)</option>
+                      <option value="240min(4h)">240min(4h)</option>
+                      <option value="300min(5h)">300min(5h)</option>
+                      <option value="360min(6h)">360min(6h)</option>
+                      <option value="420min(7h)">420min(7h)</option>
+                    </select>
+                  </div>
+                  <label className={styles.inlineField}>
+                    <span className={styles.inlineLabel}>{t('schedule.timeZone')}</span>
+                    <select
+                      className={`${styles.input} ${styles.select} ${styles.inputCompact}`}
+                      value={timezone}
+                      onChange={(e) => setTimezone(e.target.value)}
+                      disabled={isReadOnly}
+                    >
+                      {timezoneOptions.map((tz) => (
+                        <option key={tz} value={tz}>
+                          {formatTimezoneLabel(tz)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className={styles.row}>
+                <span className={styles.rowIcon} aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <path d="M4 6h16M4 10h16M4 14h10M4 18h7" />
+                  </svg>
+                </span>
+                <textarea 
+                  className={styles.textarea} 
+                  placeholder={t('schedule.descPlaceholder')} 
+                  aria-label={t('schedule.description')}
+                  rows={4} 
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
+              </div>
+
+              {/* Access option (recording visibility) */}
+              <div className={styles.row}>
+                <span className={styles.rowIcon} aria-hidden="true">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                    <path d="M8 11V8a4 4 0 018 0v3" />
+                  </svg>
+                </span>
+                <div className={styles.stack}>
+                  <span className={styles.sectionLabel} id="kloud-schedule-access-label">
+                    {t('schedule.accessOption')}{' '}
+                    <span className={styles.sectionLabelMeta}>· {t('schedule.recordings')}</span>
+                  </span>
+                  <div className={styles.optionGrid} role="radiogroup" aria-labelledby="kloud-schedule-access-label">
+                    <label
+                      className={`${styles.optionCard}${recordingVisibility === 'PUBLIC' ? ` ${styles.optionCardOn}` : ''}${!recording?.shareKey ? ` ${styles.optionCardDisabled}` : ''}`}
+                    >
+                      <span className={styles.optionHead}>
+                        <input
+                          type="radio"
+                          name="access"
+                          value="public"
+                          className={styles.radio}
+                          checked={recordingVisibility === 'PUBLIC'}
+                          onChange={() => setRecordingVisibility('PUBLIC')}
+                          disabled={!recording?.shareKey}
+                        />
+                        {t('schedule.public')}
+                      </span>
+                      <span className={styles.optionDesc}>{t('schedule.publicDesc')}</span>
+                    </label>
+                    <label
+                      className={`${styles.optionCard}${recordingVisibility === 'PRIVATE' ? ` ${styles.optionCardOn}` : ''}${!recording?.shareKey ? ` ${styles.optionCardDisabled}` : ''}`}
+                    >
+                      <span className={styles.optionHead}>
+                        <input
+                          type="radio"
+                          name="access"
+                          value="private"
+                          className={styles.radio}
+                          checked={recordingVisibility === 'PRIVATE'}
+                          onChange={() => setRecordingVisibility('PRIVATE')}
+                          disabled={!recording?.shareKey}
+                        />
+                        {t('schedule.private')}
+                      </span>
+                      <span className={styles.optionDesc}>{t('schedule.privateDesc')}</span>
+                    </label>
+                  </div>
+                  {!recording?.shareKey && (
+                    <span className={styles.hint}>
+                      {tf('schedule.accessNeedsRecording', 'You can change this once a recording is ready.')}
+                    </span>
+                  )}
                 </div>
               </div>
 
               {isFinished && existingMeeting?.recordings && existingMeeting.recordings.length > 0 && (
-                <div className={styles.formRow}>
-                  <label className={styles.label}>{t('schedule.recordings')}</label>
-                  <div className={styles.inputWrapper} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className={styles.row}>
+                  <span className={styles.rowIcon} aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="6" width="12" height="12" rx="3" />
+                      <path d="M15 10l6-3v10l-6-3z" />
+                    </svg>
+                  </span>
+                  <div className={styles.stack}>
+                    <span className={styles.srOnly}>{t('schedule.recordings')}</span>
                     {existingMeeting.recordings.map((r: any) => (
-                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f8fafc', padding: '12px 16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" width="18" height="18">
-                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                      <div key={r.id} className={styles.recordingCard}>
+                        <span className={styles.recordingThumb} aria-hidden="true">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M8 5v14l11-7z" />
                           </svg>
-                          <div>
-                            <div style={{ fontWeight: 600, color: '#1e293b', fontSize: '0.9rem' }}>{t('schedule.meetingRecording')}</div>
-                            <div style={{ color: '#64748b', fontSize: '0.8rem' }}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
-                          </div>
+                        </span>
+                        <div className={styles.recordingText}>
+                          <div className={styles.recordingTitle}>{t('schedule.meetingRecording')}</div>
+                          <div className={styles.recordingMeta}>{r.durationSeconds ? `${Math.floor(r.durationSeconds / 60)} mins ${r.durationSeconds % 60} secs` : 'Processing...'}</div>
                         </div>
                         {r.status === 'READY' && r.shareKey && (
-                          <a href={`/recordings/${encodeURIComponent(r.shareKey)}`} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: '#4f46e5', fontWeight: 600, textDecoration: 'none' }}>{t('common.view')}</a>
+                          <a href={`/recordings/${encodeURIComponent(r.shareKey)}`} target="_blank" rel="noreferrer" className={styles.btnOutlineSmall}>{t('common.view')}</a>
                         )}
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {existingMeeting && (
+                <div className={styles.dangerZone}>
+                  {!isFinished && !isCanceled && (
+                    <button type="button" className={styles.btnDanger} onClick={handleCancelMeeting} disabled={isSaving}>
+                      {tf('schedule.cancelMeeting', 'Cancel meeting')}
+                    </button>
+                  )}
+                  <button type="button" className={styles.btnDanger} onClick={handleDeleteMeeting} disabled={isSaving}>
+                    {t('dash.deleteMeeting')}
+                  </button>
                 </div>
               )}
             </div>
