@@ -1036,12 +1036,6 @@ export function KloudMeetToolbar({
     [clampChatBubbleRect, desktopAnchorBubbleKind, getCurrentChatBubbleRect],
   );
 
-  const showComingSoon = (feature: string) => {
-    setToastMsg(t('toolbar.comingSoon', { feature }));
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-  };
-
   const handleShareScreenClick = () => {
     onShareScreen();
   };
@@ -1728,9 +1722,16 @@ export function KloudMeetToolbar({
               </div>
 
               <div className={styles.controlGroup}>
-                <button className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title={t('toolbar.speakerSettings')} onClick={() => showComingSoon(t('toolbar.speakerSettings'))}>
-                  <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
-                </button>
+                {/* Speaker icon opens the same output-device menu as the chevron. */}
+                {canEnumerateDevices ? (
+                  <MediaDeviceMenu kind="audiooutput" className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title={t('toolbar.speakerSettings')}>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+                  </MediaDeviceMenu>
+                ) : (
+                  <span className={`${styles.controlBtn} ${styles.controlBtnSpeaker}`} title={t('toolbar.speakerSettings')}>
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+                  </span>
+                )}
                 {canEnumerateDevices ? (
                   <MediaDeviceMenu kind="audiooutput" className={styles.chevron} title={t('toolbar.speakerSettings')}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 15l-6-6-6 6" /></svg>
@@ -2413,12 +2414,6 @@ function ActiveSheetContent({
 
   useEffect(() => () => clearLangCloseTimer(), []);
 
-  const showComingSoon = (feature: string) => {
-    setToastMsg(t('toolbar.comingSoon', { feature }));
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-  };
-
   const handleSelectLocale = (code: Locale) => {
     setLocale(code);
     setLangOpen(false);
@@ -2681,45 +2676,10 @@ function ActiveSheetContent({
 
       {canRecord && activeSheet === 'recording' && (
         <>
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.pauseRecording')); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-            {t('toolbar.pauseRecording')}
-          </button>
           <button className={styles.actionSheetItem} style={{ color: '#ef4444' }} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
             {t('toolbar.stopRecording')}
           </button>
-
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
-
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.liveTranscript')); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
-            {t('toolbar.liveTranscript')}
-          </button>
-
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingSettings')}</div>
-
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.cloudRecordingMode')); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
-            {t('toolbar.cloudRecordingMode')}
-          </button>
-
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
-              {t('toolbar.syncTranscript')}
-            </div>
-            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
-          </label>
-
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.localPermissions')}</div>
-
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {t('toolbar.onlyHostRecord')}
-            </div>
-            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
-          </label>
         </>
       )}
 

@@ -2048,7 +2048,7 @@ export function VideoConferenceComponent(props: {
     // Mobile browsers can't do screen share — show a warning toast
     if (isToolbarMobile) {
       const toastEl = document.createElement('div');
-      toastEl.textContent = '请使用 Kloud Meet App 进行屏幕共享';
+      toastEl.textContent = t('toolbar.mobileShareUnsupported');
       toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
       document.body.appendChild(toastEl);
       setTimeout(() => toastEl.remove(), 3000);
@@ -2098,6 +2098,7 @@ export function VideoConferenceComponent(props: {
     beginLocalScreenShareView,
     endLocalScreenShareView,
     showScreenShareFailureToast,
+    t,
   ]);
 
 

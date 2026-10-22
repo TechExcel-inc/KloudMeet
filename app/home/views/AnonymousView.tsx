@@ -15,8 +15,8 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
-import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
 import { roomPath } from '@/lib/roomUrl';
+import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
 
 export function AnonymousView({
   onSignIn,
@@ -167,25 +167,6 @@ export function AnonymousView({
             {t('nav.signIn')}
           </button>
         </div>
-
-        <div className={styles.recentSection}>
-          <h3 className={styles.recentTitle}>{t('anon.recentMeetings')}</h3>
-          {MOCK_RECENT.map((m, i) => (
-            <div
-              key={i}
-              className={styles.recentCard}
-              onClick={() => toast.show(t('anon.replaySoon'))}
-            >
-              <div style={{ minWidth: '85px' }}>
-                <div className={styles.recentCardDate}>{m.date}</div>
-                <div className={styles.recentCardTime}>{m.start}</div>
-              </div>
-              <div className={styles.recentCardName} style={{ flex: 1, textAlign: 'center' }}>{m.host}</div>
-              <div className={styles.recentCardTime} style={{ minWidth: '85px', textAlign: 'right' }}>{m.end}</div>
-            </div>
-          ))}
-        </div>
-
       </div>
 
       <div className={styles.registerRow} style={{ marginTop: 'auto', marginBottom: '1rem', width: '100%', textAlign: 'center' }}>
@@ -215,6 +196,7 @@ export function AnonymousView({
           </svg>
         </a>
 
+        {MAC_APP_AVAILABLE && (
         <a
           href="/api/download?os=mac"
           className={styles.downloadBtn}
@@ -233,6 +215,7 @@ export function AnonymousView({
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </a>
+        )}
       </div>
 
       {/* Warning Message Overlay */}

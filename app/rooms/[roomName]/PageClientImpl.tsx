@@ -660,8 +660,10 @@ export function PageClientImpl(props: {
           return;
         }
         if (!connectionDetailsResp.ok) {
-          throw new Error(
-            `Server error ${connectionDetailsResp.status}: ${await connectionDetailsResp.text()}`,
+          const detail = await connectionDetailsResp.text();
+          throw Object.assign(
+            new Error(`Server error ${connectionDetailsResp.status}: ${detail}`),
+            { status: connectionDetailsResp.status },
           );
         }
         const connectionDetailsData = await connectionDetailsResp.json();
@@ -692,7 +694,6 @@ export function PageClientImpl(props: {
           setEffectiveRoomName(joinedRoomName);
         }
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
         console.error('[PageClientImpl] Failed to get connection details:', error);
         if (isSameTabRefresh) {
           setIsSameTabRefresh(false);
@@ -703,7 +704,17 @@ export function PageClientImpl(props: {
             /* ignore */
           }
         }
-        alert(`${t('prejoin.connectError', { error: message })}`);
+        // Plain-language message for the person joining; the raw server text stays in the console.
+        const status = (error as { status?: unknown } | null)?.status;
+        const userMessage =
+          status === 404
+            ? t('prejoin.errorNotFound')
+            : status === 403
+              ? t('prejoin.errorEnded')
+              : typeof status === 'number'
+                ? t('prejoin.connectError', { error: String(status) })
+                : t('prejoin.errorNetwork');
+        alert(userMessage);
       }
     },
     [

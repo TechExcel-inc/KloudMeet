@@ -15,7 +15,7 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
-import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
+import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
 
 export function LoginView({
   onBack,
@@ -175,6 +175,7 @@ export function LoginView({
           </svg>
         </a>
 
+        {MAC_APP_AVAILABLE && (
         <a
           href="/api/download?os=mac"
           className={styles.downloadBtn}
@@ -193,6 +194,7 @@ export function LoginView({
             <line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
         </a>
+        )}
       </div>
     </div>
   );
