@@ -8,6 +8,7 @@ import { ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff, Volume2 } fro
 import styles from '../styles/PreJoin.module.css';
 import { useI18n } from './i18n';
 import { saveAudioOutputDeviceId, loadAudioOutputDeviceId } from './audioOutputChoice';
+import { markGettingStarted } from './gettingStarted';
 import { classifyDeviceError, type DeviceIssue } from './deviceIssue';
 
 export interface KloudPreJoinProps {
@@ -305,6 +306,7 @@ export function KloudPreJoin({
     e.preventDefault();
     if (!isValid) return;
     saveAudioOutputDeviceId(outputDeviceId);
+    if (canUseMediaDevices) markGettingStarted('devices');
     onSubmit({
       username,
       videoEnabled: canUseMediaDevices ? videoEnabled : false,

@@ -33,6 +33,7 @@ import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
+import { markGettingStarted } from '@/lib/gettingStarted';
 import {
   isToolbarMobileUserAgent,
   postKloudShowFilePanelToIframe,
@@ -688,6 +689,7 @@ export function VideoConferenceComponent(props: {
         }
       }
       setActiveView(view);
+      if (view === 'liveDoc') markGettingStarted('liveDoc');
       if (canBroadcastViewChangeRef.current) {
         broadcastViewChangeRef.current?.(view);
       }
@@ -5094,6 +5096,7 @@ export function VideoConferenceComponent(props: {
     sendMeetingMsg({ type: newState ? 'CAPTIONS_ON' : 'CAPTIONS_OFF' });
     // 本地也执行
     setCaptionsOpen(newState);
+    if (newState) markGettingStarted('captions');
   }, [captionsRunning, setCaptionsOpen, sendMeetingMsg]);
 
   // Chat messages — always listening (even when panel is closed)
