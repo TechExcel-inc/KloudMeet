@@ -381,9 +381,11 @@ model VerificationCode {
   type      String
   expiresAt DateTime
   used      Boolean  @default(false)
+  attempts  Int      @default(0)
   createdAt DateTime @default(now())
 
   @@index([target, code], map: "VerificationCode_target_code_idx")
+  @@index([target, type, createdAt], map: "VerificationCode_target_type_createdAt_idx")
   @@map("VerificationCode")
 }
 

@@ -2,92 +2,87 @@ import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
+import { isValidPassword, isValidUsername, normalizeEmail } from '@/lib/authPolicy';
+import { checkCode, codeErrorMessage } from '@/lib/verificationCodes';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, phone, username, password, verificationCode, firstName, lastName } = body;
+    const body = await request.json().catch(() => ({}));
+    const { phone, password, verificationCode, firstName, lastName } = body ?? {};
+    const username = typeof body?.username === 'string' ? body.username.trim() : '';
 
-    // Determine target (email or phone)
-    const target = (email || phone || '').trim();
-    if (!target) {
-      return NextResponse.json({ error: 'Email or phone required' }, { status: 400 });
+    if (phone && !body?.email) {
+      return NextResponse.json(
+        { error: 'Phone sign-up is not available yet. Please use your email address.' },
+        { status: 400 },
+      );
     }
-    if (!username || !username.trim()) {
-      return NextResponse.json({ error: 'Username required' }, { status: 400 });
+    const email = normalizeEmail(body?.email);
+    if (!email) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
     }
-    if (!password) {
-      return NextResponse.json({ error: 'Password required' }, { status: 400 });
+    if (!isValidUsername(username)) {
+      return NextResponse.json(
+        { error: 'Login name: 2-20 letters and numbers, not all digits' },
+        { status: 400 },
+      );
     }
-
-    const isPhone = target.startsWith('+');
-
-    // Verify the verification code
-    const codeType = isPhone ? 'SIGNUP_SMS' : 'SIGNUP_EMAIL';
-    const vc = await prisma.verificationCode.findFirst({
-      where: {
-        target,
-        code: (verificationCode || '').trim(),
-        type: codeType,
-        used: false,
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (!vc) {
-      return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 400 });
+    if (!isValidPassword(password)) {
+      return NextResponse.json(
+        { error: 'Password: 8-64 characters with at least one letter and one number' },
+        { status: 400 },
+      );
     }
 
-    // Check uniqueness
-    if (isPhone) {
-      const existing = await prisma.teamMember.findFirst({ where: { phone: target } });
-      if (existing) {
-        return NextResponse.json({ error: 'Phone already registered' }, { status: 400 });
-      }
-    } else {
-      const existing = await prisma.teamMember.findFirst({ where: { email: target } });
-      if (existing) {
-        return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
-      }
+    // Check uniqueness before using up the code, so a taken name doesn't cost a new email.
+    const existing = await prisma.teamMember.findFirst({ where: { email }, select: { id: true } });
+    if (existing) {
+      return NextResponse.json(
+        { error: 'This email is already registered. Sign in or reset your password.', code: 'EMAIL_TAKEN' },
+        { status: 400 },
+      );
     }
-
-    const existingUsername = await prisma.teamMember.findFirst({ where: { username: username.trim() } });
+    const existingUsername = await prisma.teamMember.findFirst({ where: { username }, select: { id: true } });
     if (existingUsername) {
       return NextResponse.json({ error: 'Username already taken' }, { status: 400 });
     }
 
-    // Hash password
+    const verified = await checkCode(email, 'signup', verificationCode, { consume: true });
+    if (!verified.ok) {
+      return NextResponse.json({ error: codeErrorMessage(verified), code: 'BAD_CODE' }, { status: 400 });
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
 
     // Compute full name
-    const fName = firstName?.trim() || '';
-    const lName = lastName?.trim() || '';
-    const fullName = (fName + ' ' + lName).trim() || username.trim();
+    const fName = typeof firstName === 'string' ? firstName.trim() : '';
+    const lName = typeof lastName === 'string' ? lastName.trim() : '';
+    const fullName = (fName + ' ' + lName).trim() || username;
 
-    // Create TeamMember
     const now = new Date();
-    const member = await prisma.teamMember.create({
-      data: {
-        email: isPhone ? null : (email?.trim() || null),
-        username: username.trim(),
-        phone: isPhone ? target : (phone?.trim() || null),
-        passwordHash,
-        fullName,
-        firstName: fName || null,
-        lastName: lName || null,
-        emailVerified: !isPhone,
-        emailVerifiedAt: !isPhone ? now : null,
-        phoneVerified: isPhone,
-        phoneVerifiedAt: isPhone ? now : null,
-        status: 'ACTIVE',
-        createdBy: 'signup',
-      },
-    });
-
-    // Mark verification code as used
-    await prisma.verificationCode.update({
-      where: { id: vc.id },
-      data: { used: true },
-    });
+    let member;
+    try {
+      member = await prisma.teamMember.create({
+        data: {
+          email,
+          username,
+          passwordHash,
+          fullName,
+          firstName: fName || null,
+          lastName: lName || null,
+          emailVerified: true,
+          emailVerifiedAt: now,
+          status: 'ACTIVE',
+          createdBy: 'signup',
+        },
+      });
+    } catch (e) {
+      // Lost a race with another sign-up for the same email or username.
+      if ((e as { code?: string })?.code === 'P2002') {
+        return NextResponse.json({ error: 'This email or username was just taken. Please try another.' }, { status: 400 });
+      }
+      throw e;
+    }
 
     // Create session
     const token = crypto.randomBytes(32).toString('hex');

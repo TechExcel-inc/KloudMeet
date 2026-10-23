@@ -1,27 +1,49 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import {
+  GOOGLE_STATE_COOKIE,
+  appOrigin,
+  decodeGoogleState,
+  googleRedirectUri,
+  googleStateCookieOptions,
+  stateMatches,
+  usernameBaseFromEmail,
+} from '@/lib/googleOAuth';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3201';
-  const redirectUri = `${origin}/api/auth/google/callback`;
+  const origin = appOrigin(request);
+  const redirectUri = googleRedirectUri(origin);
+  const saved = decodeGoogleState(request.cookies.get(GOOGLE_STATE_COOKIE)?.value);
+
+  // Every exit clears the one-time state cookie.
+  const finish = (path: string) => {
+    const response = NextResponse.redirect(new URL(path, origin));
+    response.cookies.set(GOOGLE_STATE_COOKIE, '', googleStateCookieOptions(origin, 0));
+    return response;
+  };
+  const fail = (message: string) => finish(`/?error=${encodeURIComponent(message)}`);
 
   if (error) {
-    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(error)}`, origin));
+    // The user closed or declined the Google consent screen.
+    return error === 'access_denied' ? finish('/?signin=1') : fail(`Google sign-in failed: ${error}`);
   }
   if (!code) {
-    return NextResponse.redirect(new URL('/?error=No+code+provided', origin));
+    return fail('Google sign-in failed. Please try again.');
+  }
+  if (!saved || !stateMatches(saved.state, searchParams.get('state'))) {
+    return fail('Google sign-in expired. Please try again.');
   }
 
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
 
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL('/?error=Google+OAuth+not+configured', origin));
+    return fail('Google sign-in is not available yet');
   }
 
   try {
@@ -40,8 +62,8 @@ export async function GET(request: NextRequest) {
 
     const tokenData = await tokenRes.json();
     if (!tokenRes.ok) {
-      console.error('[google callback] token error', tokenData);
-      return NextResponse.redirect(new URL('/?error=Failed+to+exchange+token', origin));
+      console.error('[google callback] token error', tokenData?.error, tokenData?.error_description);
+      return fail('Google sign-in failed. Please try again.');
     }
 
     const { access_token } = tokenData;
@@ -53,38 +75,44 @@ export async function GET(request: NextRequest) {
 
     const profileData = await profileRes.json();
     if (!profileRes.ok) {
-      console.error('[google callback] profile error', profileData);
-      return NextResponse.redirect(new URL('/?error=Failed+to+fetch+profile', origin));
+      console.error('[google callback] profile error', profileData?.error);
+      return fail('Could not read your Google profile. Please try again.');
     }
 
-    const { id: googleId, email, name, given_name, family_name, picture } = profileData;
+    const { id: googleId, name, given_name, family_name, picture } = profileData;
+    const email = typeof profileData.email === 'string' ? profileData.email.trim() : '';
 
-    if (!email) {
-      return NextResponse.redirect(new URL('/?error=Google+account+must+have+an+email', origin));
+    if (!googleId || !email) {
+      return fail('Your Google account must have an email address');
+    }
+    // Linking or creating by email is only safe when Google has verified the address.
+    if (profileData.verified_email !== true) {
+      return fail('Please verify your Google email address first');
     }
 
-    // 3. Find or Create TeamMember
-    let member = await prisma.teamMember.findFirst({
-      where: {
-        OR: [
-          { googleId },
-          { email }
-        ]
-      }
-    });
+    // 3. Find or create TeamMember (Google ID first, then the verified email)
+    let member =
+      (await prisma.teamMember.findUnique({ where: { googleId: String(googleId) } })) ??
+      (await prisma.teamMember.findUnique({ where: { email } }));
 
     if (member) {
-      // Update googleId if matched by email
       if (!member.googleId) {
         member = await prisma.teamMember.update({
           where: { id: member.id },
-          data: { googleId }
+          data: {
+            googleId: String(googleId),
+            emailVerified: true,
+            emailVerifiedAt: member.emailVerifiedAt ?? new Date(),
+            avatarUrl: member.avatarUrl || picture || null,
+          },
         });
+      } else if (member.googleId !== String(googleId)) {
+        console.warn('[google callback] email already linked to another Google account', member.id);
+        return fail('This email is already linked to a different Google account');
       }
     } else {
-      // Create new user
-      // Generate a distinct username from email
-      const baseUsername = email.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+      // Create new user with a distinct username derived from the email
+      const baseUsername = usernameBaseFromEmail(email);
       let username = baseUsername;
       let counter = 1;
       while (await prisma.teamMember.findUnique({ where: { username } })) {
@@ -94,25 +122,27 @@ export async function GET(request: NextRequest) {
 
       member = await prisma.teamMember.create({
         data: {
-          googleId,
+          googleId: String(googleId),
           email,
           username,
-          fullName: name || null,
+          fullName: name || username,
           firstName: given_name || null,
           lastName: family_name || null,
           avatarUrl: picture || null,
           emailVerified: true,
+          emailVerifiedAt: new Date(),
           passwordHash: crypto.randomBytes(32).toString('hex'), // Impossible to guess dummy password
           status: 'ACTIVE',
-        }
+          createdBy: 'google',
+        },
       });
     }
 
     if (member.status !== 'ACTIVE') {
-      return NextResponse.redirect(new URL('/?error=Account+is+suspended', origin));
+      return fail('Account is suspended');
     }
 
-    // 4. Create Session
+    // 4. Create session
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     await prisma.session.create({
@@ -125,11 +155,12 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // 5. Redirect back to homepage with session token
-    return NextResponse.redirect(new URL(`/?sso_token=${token}`, origin));
-
-  } catch (error) {
-    console.error('[google callback] unhandled error', error);
-    return NextResponse.redirect(new URL('/?error=Internal+server+error', origin));
+    // 5. Back to the app; the home page stores the session and follows `next`.
+    const params = new URLSearchParams({ sso_token: token });
+    if (saved.next) params.set('next', saved.next);
+    return finish(`/?${params.toString()}`);
+  } catch (err) {
+    console.error('[google callback] unhandled error', err);
+    return fail('Google sign-in failed. Please try again.');
   }
 }

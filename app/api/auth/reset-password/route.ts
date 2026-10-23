@@ -1,65 +1,63 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
+import { isValidPassword, normalizeEmail } from '@/lib/authPolicy';
+import { checkCode, codeErrorMessage } from '@/lib/verificationCodes';
 
+/**
+ * POST /api/auth/reset-password { email, code, password }
+ * Sets a new password and signs the account out everywhere (all existing sessions end).
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, phone, code, password } = body;
+    const body = await request.json().catch(() => ({}));
+    const { phone, code, password } = body ?? {};
 
-    const target = (email || phone || '').trim();
-    if (!target) {
-      return NextResponse.json({ error: 'Email or phone required' }, { status: 400 });
+    if (phone && !body?.email) {
+      return NextResponse.json(
+        { error: 'Phone reset is not available yet. Please use your email address.' },
+        { status: 400 },
+      );
+    }
+    const email = normalizeEmail(body?.email);
+    if (!email) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
     }
     if (!code) {
       return NextResponse.json({ error: 'Verification code required' }, { status: 400 });
     }
-    if (!password) {
-      return NextResponse.json({ error: 'New password required' }, { status: 400 });
+    if (!isValidPassword(password)) {
+      return NextResponse.json(
+        { error: 'Password: 8-64 characters with at least one letter and one number' },
+        { status: 400 },
+      );
     }
 
-    const isPhone = target.startsWith('+');
-    const codeType = isPhone ? 'RESET_SMS' : 'RESET_EMAIL';
-
-    // Verify the reset code
-    const vc = await prisma.verificationCode.findFirst({
-      where: {
-        target,
-        code: code.trim(),
-        type: codeType,
-        used: false,
-        expiresAt: { gt: new Date() },
-      },
-    });
-    if (!vc) {
-      return NextResponse.json({ error: 'Invalid or expired verification code' }, { status: 400 });
+    const verified = await checkCode(email, 'reset', code, { consume: true });
+    if (!verified.ok) {
+      return NextResponse.json({ error: codeErrorMessage(verified), code: 'BAD_CODE' }, { status: 400 });
     }
 
-    // Find the user
-    const member = isPhone
-      ? await prisma.teamMember.findFirst({ where: { phone: target } })
-      : await prisma.teamMember.findFirst({ where: { email: target } });
-
+    const member = await prisma.teamMember.findFirst({ where: { email }, select: { id: true } });
     if (!member) {
-      return NextResponse.json({ error: 'Account not found' }, { status: 400 });
+      // Codes are only issued for existing accounts; the account was removed since.
+      return NextResponse.json({ error: codeErrorMessage({ attemptsLeft: 0 }) }, { status: 400 });
     }
 
-    // Update password
     const passwordHash = await bcrypt.hash(password, 10);
-    await prisma.teamMember.update({
-      where: { id: member.id },
-      data: {
-        passwordHash,
-        modifiedAt: new Date(),
-        modifiedBy: 'reset-password',
-      },
-    });
-
-    // Mark code as used
-    await prisma.verificationCode.update({
-      where: { id: vc.id },
-      data: { used: true },
-    });
+    await prisma.$transaction([
+      prisma.teamMember.update({
+        where: { id: member.id },
+        data: {
+          passwordHash,
+          // Receiving the code proves the mailbox belongs to this account.
+          emailVerified: true,
+          modifiedAt: new Date(),
+          modifiedBy: 'reset-password',
+        },
+      }),
+      prisma.session.deleteMany({ where: { teamMemberId: member.id } }),
+    ]);
 
     return NextResponse.json({ message: 'Password reset successfully' });
   } catch (error) {

@@ -1,9 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useI18n } from '@/lib/i18n';
 import styles from '../../../styles/Home.module.css';
 import { AuthField, AuthShell, FormError, Spinner, useTx } from '../components/ui';
+import { isValidPassword, normalizeEmail } from '@/lib/authPolicy';
+import { verifyEmailCode } from '@/lib/verifyEmailCode';
 
 export function ForgotPasswordView({
   onBack,
@@ -26,25 +28,44 @@ export function ForgotPasswordView({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [devCode, setDevCode] = useState<string | null>(null);
+  const [countdown, setCountdown] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCountdown = useCallback((seconds = 60) => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setCountdown(seconds);
+    timerRef.current = setInterval(() => {
+      setCountdown((c) => {
+        if (c <= 1) {
+          if (timerRef.current) clearInterval(timerRef.current);
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+  }, []);
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current); }, []);
 
   const sendCode = async () => {
-    const addr = email.trim();
-    if (!addr) { setError(t('forgot.pleaseEnterEmail')); return false; }
+    if (!email.trim()) { setError(t('forgot.pleaseEnterEmail')); return false; }
+    const addr = normalizeEmail(email);
+    if (!addr) { setError(t('signup.invalidEmail')); return false; }
     setLoading(true);
     setError('');
     try {
-      const isPhone = addr.startsWith('+');
       const res = await fetch('/api/auth/send-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ target: addr, type: isPhone ? 1 : 0, intent: 'reset' }),
+        body: JSON.stringify({ target: addr, intent: 'reset' }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || t('signup.failedSendCode'));
+        if (res.status === 429 && typeof data.retryAfter === 'number') startCountdown(data.retryAfter);
         return false;
       }
       if (data.code) setDevCode(data.code);
+      startCountdown();
       return true;
     } catch {
       setError(t('login.networkError'));
@@ -59,16 +80,27 @@ export function ForgotPasswordView({
     if (ok) setStep('verify');
   };
 
-  const handleVerifyNext = () => {
+  const handleVerifyNext = async () => {
     if (verificationCode.length !== 6) { setError(t('forgot.enter6Digit')); return; }
     setError('');
-    setStep('reset');
+    setLoading(true);
+    try {
+      const problem = await verifyEmailCode(email.trim(), verificationCode, 'reset', t('forgot.resetFailed'));
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      setStep('reset');
+    } catch {
+      setError(t('login.networkError'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleReset = async () => {
     setError('');
-    const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
-    if (!passwordRe.test(password)) {
+    if (!isValidPassword(password)) {
       setError(t('signup.passwordError'));
       return;
     }
@@ -79,12 +111,11 @@ export function ForgotPasswordView({
 
     setLoading(true);
     try {
-      const isPhone = email.trim().startsWith('+');
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          [isPhone ? 'phone' : 'email']: email.trim(),
+          email: email.trim(),
           code: verificationCode.trim(),
           password,
         }),
@@ -92,6 +123,10 @@ export function ForgotPasswordView({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || t('forgot.resetFailed'));
+        if (data.code === 'BAD_CODE') {
+          setVerificationCode('');
+          setStep('verify');
+        }
         return;
       }
       toast.show(t('forgot.resetSuccess'));
@@ -128,11 +163,11 @@ export function ForgotPasswordView({
       {step === 'email' && (
         <>
           <AuthField
-            label={t('forgot.emailOrPhone')}
+            label={t('signup.emailAddress')}
             invalid={!!error}
-            type="text"
-            autoComplete="username"
-            placeholder="you@example.com or +123"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
             value={email}
             onChange={(e) => { setEmail(e.target.value); setError(''); }}
             onKeyDown={(e) => e.key === 'Enter' && handleEmailNext()}
@@ -174,6 +209,15 @@ export function ForgotPasswordView({
             onKeyDown={(e) => e.key === 'Enter' && handleVerifyNext()}
             autoFocus
           />
+          <div className={styles.resendRow} aria-live="polite">
+            {countdown > 0 ? (
+              <span>{t('signup.resendIn', { seconds: String(countdown) })}</span>
+            ) : (
+              <button type="button" className={styles.linkBtn} disabled={loading} onClick={() => sendCode()}>
+                {t('signup.resendCode')}
+              </button>
+            )}
+          </div>
           {devCode && <div className={styles.devHint}>{t('forgot.devCode', { code: devCode })}</div>}
           <FormError message={error} />
           <div className={styles.authActions}>
@@ -181,9 +225,11 @@ export function ForgotPasswordView({
             <button
               type="button"
               className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
-              disabled={verificationCode.length !== 6}
+              disabled={verificationCode.length !== 6 || loading}
+              aria-busy={loading}
               onClick={handleVerifyNext}
             >
+              {loading && <Spinner />}
               {t('forgot.verifyCode')}
             </button>
           </div>
@@ -197,7 +243,7 @@ export function ForgotPasswordView({
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder={t('signup.passwordHint')}
-            maxLength={30}
+            maxLength={64}
             value={password}
             onChange={(e) => { setPassword(e.target.value); setError(''); }}
             passwordToggle={{ shown: showPassword, onToggle: () => setShowPassword(!showPassword) }}
@@ -208,7 +254,7 @@ export function ForgotPasswordView({
             type={showConfirm ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder={t('signup.confirmPasswordHint')}
-            maxLength={30}
+            maxLength={64}
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
             passwordToggle={{ shown: showConfirm, onToggle: () => setShowConfirm(!showConfirm) }}

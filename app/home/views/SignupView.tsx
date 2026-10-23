@@ -5,6 +5,9 @@ import { useI18n } from '@/lib/i18n';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
+import { googleSignInHref } from '@/lib/googleSignInHref';
+import { isValidPassword } from '@/lib/authPolicy';
+import { verifyEmailCode } from '@/lib/verifyEmailCode';
 
 export function SignupView({
   onBack,
@@ -87,13 +90,25 @@ export function SignupView({
   };
 
   /* ── Step 2: Verify ── */
-  const handleVerifyNext = () => {
+  const handleVerifyNext = async () => {
     if (verificationCode.length !== 6) {
       setError(t('signup.enterCode'));
       return;
     }
     setError('');
-    setStep('create');
+    setLoading(true);
+    try {
+      const problem = await verifyEmailCode(email.trim(), verificationCode, 'signup', t('signup.signupFailed'));
+      if (problem) {
+        setError(problem);
+        return;
+      }
+      setStep('create');
+    } catch {
+      setError(t('login.networkError'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   /* ── Step 3: Create account ── */
@@ -104,8 +119,7 @@ export function SignupView({
       setError(t('signup.loginNameError'));
       return;
     }
-    const passwordRe = /^(?![0-9]+$)(?![a-zA-Z]+$)[0-9A-Za-z]{8,30}$/;
-    if (!passwordRe.test(password)) {
+    if (!isValidPassword(password)) {
       setError(t('signup.passwordError'));
       return;
     }
@@ -129,6 +143,11 @@ export function SignupView({
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || t('signup.signupFailed'));
+        // The code expired or was burned meanwhile: send the user back to get a new one.
+        if (data.code === 'BAD_CODE') {
+          setVerificationCode('');
+          setStep('verify');
+        }
         return;
       }
       const user: AuthUser = {
@@ -195,7 +214,7 @@ export function SignupView({
           <button
             type="button"
             className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
-            onClick={() => window.location.href = '/api/auth/google'}
+            onClick={() => window.location.href = googleSignInHref()}
           >
             <GoogleIcon />
             Google
@@ -268,9 +287,11 @@ export function SignupView({
             <button
               type="button"
               className={primaryCls}
-              disabled={verificationCode.length !== 6}
+              disabled={verificationCode.length !== 6 || loading}
+              aria-busy={loading}
               onClick={handleVerifyNext}
             >
+              {loading && <Spinner />}
               {t('signup.continue')}
             </button>
           </div>
@@ -297,7 +318,7 @@ export function SignupView({
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder={t('signup.passwordHint')}
-            maxLength={30}
+            maxLength={64}
             value={password}
             onChange={(e) => { setPassword(e.target.value); setError(''); }}
             passwordToggle={{ shown: showPassword, onToggle: () => setShowPassword(!showPassword) }}
@@ -308,7 +329,7 @@ export function SignupView({
             type={showConfirm ? 'text' : 'password'}
             autoComplete="new-password"
             placeholder={t('signup.confirmPasswordHint')}
-            maxLength={30}
+            maxLength={64}
             value={confirmPassword}
             onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
             passwordToggle={{ shown: showConfirm, onToggle: () => setShowConfirm(!showConfirm) }}

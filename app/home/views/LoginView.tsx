@@ -6,6 +6,7 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser } from '../types';
 import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
 import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
+import { googleSignInHref } from '@/lib/googleSignInHref';
 
 export function LoginView({
   onBack,
@@ -153,7 +154,7 @@ export function LoginView({
       <button
         type="button"
         className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
-        onClick={() => window.location.href = '/api/auth/google'}
+        onClick={() => window.location.href = googleSignInHref()}
       >
         <GoogleIcon />
         Google

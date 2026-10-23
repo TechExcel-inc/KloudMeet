@@ -1,94 +1,71 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { sendEmailVerification } from '@/lib/brevo';
+import { codePurpose, normalizeEmail } from '@/lib/authPolicy';
+import { clientIp, rateLimited } from '@/lib/rateLimit';
+import { discardCode, issueCode, issueErrorMessage } from '@/lib/verificationCodes';
 
-const CODE_LENGTH = 6;
-const CODE_EXPIRY_MINUTES = 10;
+const PHONE_UNAVAILABLE = 'Phone sign-in is not available yet. Please use your email address.';
 
-function generateCode(): string {
-  let code = '';
-  for (let i = 0; i < CODE_LENGTH; i++) {
-    code += Math.floor(Math.random() * 10).toString();
-  }
-  return code;
-}
-
+/**
+ * POST /api/auth/send-code { target: email, intent: "signup" | "reset" }
+ * Emails a 6-digit code. For "reset" the response is the same whether or not the account
+ * exists, so this endpoint cannot be used to look up who has an account.
+ */
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { target, type, intent } = body;
-    // type: 0 = email, 1 = phone/SMS
-    // intent: "signup" (default) or "reset"
+    const body = await request.json().catch(() => ({}));
+    const rawTarget = typeof body?.target === 'string' ? body.target.trim() : '';
+    const purpose = codePurpose(body?.intent);
 
-    const decodedTarget = decodeURIComponent((target || '').trim());
-    if (!decodedTarget) {
-      return NextResponse.json({ error: 'Target (email or phone) required' }, { status: 400 });
+    if (!rawTarget) {
+      return NextResponse.json({ error: 'Please enter your email address' }, { status: 400 });
+    }
+    if (rawTarget.startsWith('+') || body?.type === 1) {
+      return NextResponse.json({ error: PHONE_UNAVAILABLE }, { status: 400 });
+    }
+    const email = normalizeEmail(rawTarget);
+    if (!email) {
+      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
+    }
+    if (rateLimited(`send-code:ip:${clientIp(request)}`, 20, 60 * 60 * 1000)) {
+      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
     }
 
-    const isPhone = decodedTarget.startsWith('+');
-    const isReset = intent === 'reset';
-
-    // Determine code type
-    let codeType: string;
-    if (type === 1 || isPhone) {
-      codeType = isReset ? 'RESET_SMS' : 'SIGNUP_SMS';
-    } else {
-      codeType = isReset ? 'RESET_EMAIL' : 'SIGNUP_EMAIL';
+    const existing = await prisma.teamMember.findFirst({ where: { email }, select: { id: true } });
+    if (purpose === 'signup' && existing) {
+      return NextResponse.json(
+        { error: 'This email is already registered. Sign in or reset your password.', code: 'EMAIL_TAKEN' },
+        { status: 400 },
+      );
+    }
+    if (purpose === 'reset' && !existing) {
+      // Same answer as a real send (no email goes out).
+      return NextResponse.json({ message: 'Verification code sent' });
     }
 
-    // For signup, check that target is not already registered
-    if (!isReset) {
-      if (isPhone) {
-        const existing = await prisma.teamMember.findFirst({ where: { phone: decodedTarget } });
-        if (existing) {
-          return NextResponse.json({ error: 'Phone already registered' }, { status: 400 });
-        }
-      } else {
-        const existing = await prisma.teamMember.findFirst({ where: { email: decodedTarget } });
-        if (existing) {
-          return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
-        }
-      }
+    const issued = await issueCode(email, purpose);
+    if (!issued.ok) {
+      return NextResponse.json(
+        { error: issueErrorMessage(issued), retryAfter: issued.retryAfterSeconds },
+        { status: 429, headers: { 'Retry-After': String(issued.retryAfterSeconds) } },
+      );
     }
 
-    // For reset, verify target exists
-    if (isReset) {
-      const existing = isPhone
-        ? await prisma.teamMember.findFirst({ where: { phone: decodedTarget } })
-        : await prisma.teamMember.findFirst({ where: { email: decodedTarget } });
-      if (!existing) {
-        return NextResponse.json({ error: 'Account not found' }, { status: 400 });
-      }
-    }
-
-    // Generate and store code
-    const code = generateCode();
-    await prisma.verificationCode.create({
-      data: {
-        target: decodedTarget,
-        code,
-        type: codeType,
-        expiresAt: new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000),
-        used: false,
-      },
-    });
-
-    // Send the actual verification email via Brevo
-    if (!isPhone) {
-      const emailResult = await sendEmailVerification(decodedTarget, code);
-      if (!emailResult.success) {
-        console.error('Failed to send email:', emailResult.error);
-        return NextResponse.json({ error: 'Mail delivery failed. Please try again.' }, { status: 500 });
-      }
-    } else {
-      // In production, integrate with SMS service here
-      console.log(`[send-code] SMS code for ${decodedTarget}: ${code}`);
+    const sent = await sendEmailVerification(email, issued.code, purpose);
+    if (!sent.success) {
+      console.error('[send-code] email delivery failed:', sent.error);
+      await discardCode(issued.id);
+      return NextResponse.json(
+        { error: "We couldn't send the email right now. Please try again in a minute." },
+        { status: 502 },
+      );
     }
 
     return NextResponse.json({
       message: 'Verification code sent',
       // Include code in development mode for testing
-      ...(process.env.NODE_ENV === 'development' ? { code } : {}),
+      ...(process.env.NODE_ENV === 'development' ? { code: issued.code } : {}),
     });
   } catch (error) {
     console.error('[send-code]', error);
