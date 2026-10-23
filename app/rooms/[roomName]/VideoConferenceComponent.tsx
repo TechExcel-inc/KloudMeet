@@ -37,6 +37,7 @@ import {
   isToolbarMobileUserAgent,
   postKloudShowFilePanelToIframe,
   postLivedocRoleToIframe,
+  setLivedocOtherPresenter,
   useToolbarIsMobile,
 } from '@/lib/useToolbarIsMobile';
 import {
@@ -2388,6 +2389,14 @@ export function VideoConferenceComponent(props: {
       window.clearTimeout(t2);
     };
   }, [livedocEmbedRole]);
+
+  /** Another participant is presenting: the LiveDoc plugin then syncs their pointer / zoom, not the host's */
+  const otherPresenterActive = [...copresenterIdentities, autoPresenterIdentity].some(
+    (id) => !!id && id !== room.localParticipant.identity,
+  );
+  React.useEffect(() => {
+    setLivedocOtherPresenter(otherPresenterActive);
+  }, [otherPresenterActive]);
 
   const localIdentity = room.localParticipant.identity;
   const isLocalMicRestricted =

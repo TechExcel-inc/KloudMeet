@@ -20,9 +20,8 @@ export function postKloudShowFilePanelToIframe(show: 0 | 1): void {
   iframe?.contentWindow?.postMessage({ type: 'Kloud-ShowFilePanel', Show: show }, '*');
 }
 
-/** 向所有 LiveDoc iframe 同步 SkyMeet 身份（批注工具条权限）；不改 URL，避免重载。 */
-export function postLivedocRoleToIframe(role: string): void {
-  if (typeof document === 'undefined' || !role) return;
+function postToLivedocIframes(message: Record<string, unknown>): void {
+  if (typeof document === 'undefined') return;
   const iframes = document.querySelectorAll<HTMLIFrameElement>(
     'iframe#sharedIframePlayer, iframe[title="LiveDoc"]',
   );
@@ -31,8 +30,27 @@ export function postLivedocRoleToIframe(role: string): void {
     const cw = iframe.contentWindow;
     if (!cw || seen.has(cw)) return;
     seen.add(cw);
-    cw.postMessage({ type: 'onRoleChanged', role }, '*');
+    cw.postMessage(message, '*');
   });
+}
+
+/**
+ * Someone other than me is presenting (assigned presenter or screen sharer). The LiveDoc plugin
+ * then stops sending a host's pointer / zoom, so attendees follow the presenter.
+ */
+let livedocOtherPresenter = false;
+
+export function setLivedocOtherPresenter(active: boolean): void {
+  livedocOtherPresenter = active;
+  postToLivedocIframes({ type: 'onPresenterChanged', otherPresenter: active });
+}
+
+/** 向所有 LiveDoc iframe 同步 SkyMeet 身份（批注工具条权限）；不改 URL，避免重载。 */
+export function postLivedocRoleToIframe(role: string): void {
+  if (!role) return;
+  postToLivedocIframes({ type: 'onRoleChanged', role });
+  // Re-sent with the role so a freshly loaded plugin also learns who is presenting
+  postToLivedocIframes({ type: 'onPresenterChanged', otherPresenter: livedocOtherPresenter });
 }
 
 /** 与 KloudMeetToolbar 一致的移动设备 UA 判定（用于 Chat/Attendees 桌面气泡 vs 侧栏浮层）。 */
