@@ -51,7 +51,9 @@ export function MeetingPipSuggestPrompt({
     origCx: number;
     origY: number;
     moved: boolean;
+    action: 'enable' | 'collapse' | null;
   } | null>(null);
+  const stopDragRef = useRef<(() => void) | null>(null);
 
   const showFull = !collapsed;
   const badge = Math.max(1, attendeeCount);
@@ -91,12 +93,18 @@ export function MeetingPipSuggestPrompt({
     return () => window.removeEventListener('resize', fit);
   }, [pos, showFull]);
 
+  useEffect(() => () => stopDragRef.current?.(), []);
+
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     if (!(e.target instanceof Element)) return;
-    if (e.target.closest('button')) return;
+    e.preventDefault();
+    const button = e.target.closest('button');
+    const raw = button?.dataset.action;
+    const action = raw === 'enable' || raw === 'collapse' ? raw : null;
     const el = e.currentTarget;
     const rect = el.getBoundingClientRect();
+    stopDragRef.current?.();
     dragRef.current = {
       pointer: e.pointerId,
       startX: e.clientX,
@@ -104,40 +112,56 @@ export function MeetingPipSuggestPrompt({
       origCx: pos?.cx ?? rect.left + rect.width / 2,
       origY: pos?.y ?? rect.top,
       moved: false,
+      action,
     };
-    el.setPointerCapture(e.pointerId);
-  };
 
-  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || e.pointerId !== drag.pointer) return;
-    const dx = e.clientX - drag.startX;
-    const dy = e.clientY - drag.startY;
-    if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-    drag.moved = true;
-    if (!dragging) setDragging(true);
-    const el = rootRef.current;
-    const w = el?.offsetWidth ?? 0;
-    const h = el?.offsetHeight ?? 0;
-    const half = w / 2;
-    setPos({
-      cx: clamp(drag.origCx + dx, MARGIN + half, Math.max(MARGIN + half, window.innerWidth - MARGIN - half)),
-      y: clamp(drag.origY + dy, MARGIN, Math.max(MARGIN, window.innerHeight - h - MARGIN)),
-    });
-  };
+    const onMove = (ev: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || ev.pointerId !== drag.pointer) return;
+      const dx = ev.clientX - drag.startX;
+      const dy = ev.clientY - drag.startY;
+      if (!drag.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
+      if (!drag.moved) setDragging(true);
+      drag.moved = true;
+      const node = rootRef.current;
+      const w = node?.offsetWidth ?? 0;
+      const h = node?.offsetHeight ?? 0;
+      const half = w / 2;
+      setPos({
+        cx: clamp(drag.origCx + dx, MARGIN + half, Math.max(MARGIN + half, window.innerWidth - MARGIN - half)),
+        y: clamp(drag.origY + dy, MARGIN, Math.max(MARGIN, window.innerHeight - h - MARGIN)),
+      });
+    };
 
-  const endDrag = (e: React.PointerEvent<HTMLDivElement>, expand: boolean) => {
-    const drag = dragRef.current;
-    if (!drag || e.pointerId !== drag.pointer) return;
-    const wasDrag = drag.moved;
-    dragRef.current = null;
-    setDragging(false);
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // already released
-    }
-    if (expand && collapsed && !wasDrag) setCollapsed(false);
+    const onUp = (ev: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag || ev.pointerId !== drag.pointer) return;
+      stop();
+      if (drag.moved) return;
+      if (drag.action === 'enable') {
+        onEnable();
+        return;
+      }
+      if (drag.action === 'collapse') {
+        setCollapsed(true);
+        return;
+      }
+      if (collapsed) setCollapsed(false);
+    };
+
+    const stop = () => {
+      dragRef.current = null;
+      setDragging(false);
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      if (stopDragRef.current === stop) stopDragRef.current = null;
+    };
+
+    stopDragRef.current = stop;
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
   };
 
   if (!visible) return null;
@@ -160,9 +184,6 @@ export function MeetingPipSuggestPrompt({
           : undefined
       }
       onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={(e) => endDrag(e, true)}
-      onPointerCancel={(e) => endDrag(e, false)}
     >
       {showFull ? (
         <div className={styles.bar}>
@@ -170,13 +191,13 @@ export function MeetingPipSuggestPrompt({
             <DockGlyph />
             <span className={styles.badge}>{badge}</span>
           </div>
-          <button type="button" className={styles.enableBtn} onClick={onEnable}>
+          <button type="button" className={styles.enableBtn} data-action="enable">
             {t('meeting.pipSuggestEnable')}
           </button>
           <button
             type="button"
             className={styles.chevron}
-            onClick={() => setCollapsed(true)}
+            data-action="collapse"
             aria-label={t('meeting.pipSuggestCollapse')}
             title={t('meeting.pipSuggestCollapse')}
           >
