@@ -1044,196 +1044,394 @@ a.dropdownItem:focus-visible {
   background: var(--km-primary);
 }
 
-/* Illustration parts (decorative, text-free so they work in every locale) */
-.illDoc {
+/* Carousel product scenes (decorative; images are generated portraits) */
+.artDoc,
+.artReplay,
+.artCaption {
   position: relative;
-  width: 230px;
-  padding: 18px;
-  border-radius: 16px;
+}
+
+.artDoc img,
+.artReplay img,
+.artCaption img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 1 · Meet on the document */
+.artDoc {
+  width: 288px;
+  height: 214px;
+}
+
+.docCard {
+  position: absolute;
+  left: 0;
+  top: 22px;
+  width: 214px;
+  height: 168px;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border-radius: 14px;
   background: #fff;
-  box-shadow: 0 18px 40px rgba(60, 50, 180, 0.3);
+  box-shadow: 0 20px 44px rgba(40, 30, 140, 0.32);
 }
 
-.illAvatars {
-  position: absolute;
-  top: -14px;
-  right: 14px;
-  display: flex;
-}
-
-.illAvatar {
-  width: 28px;
-  height: 28px;
-  margin-left: -10px;
-  border-radius: 50%;
-  border: 3px solid #fff;
-}
-
-.illAvatar:first-child {
-  margin-left: 0;
-}
-
-.illEyebrow {
-  width: 46%;
-  height: 7px;
-  border-radius: 4px;
-  background: #5e5ce6;
-  opacity: 0.85;
-}
-
-.illHeading {
-  width: 62%;
-  height: 12px;
-  margin-top: 10px;
-  border-radius: 6px;
-  background: #1f1f1f;
-}
-
-.illLine {
-  height: 7px;
-  margin-top: 8px;
-  border-radius: 4px;
-  background: #e8eaed;
-}
-
-.illLineAccent {
-  background: #d9d7ff;
-}
-
-.illCursor {
-  position: absolute;
-  right: 40px;
-  bottom: 18px;
-}
-
-.illPlayer {
-  width: 240px;
-  border-radius: 16px;
-  background: #17181c;
-  box-shadow: 0 18px 40px rgba(30, 20, 120, 0.4);
-  overflow: hidden;
-}
-
-.illPlayerVideo {
-  height: 120px;
+.docTop {
   display: flex;
   align-items: center;
-  justify-content: center;
-  background: linear-gradient(150deg, #3b3f8f, #2e3036);
+  gap: 4px;
 }
 
-.illPlayBtn {
-  width: 46px;
-  height: 46px;
+.docDot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
+  background: #e3e2f5;
+}
+
+.docPage {
+  width: 30px;
+  height: 8px;
+  margin-left: auto;
+  border-radius: 4px;
+  background: #eceafd;
+}
+
+.docTitle {
+  width: 62%;
+  height: 9px;
+  margin-top: 12px;
+  border-radius: 5px;
+  background: #1f1d3a;
+}
+
+.docSub {
+  width: 40%;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 3px;
+  background: #d9d8ee;
+}
+
+.docChart {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+  height: 70px;
+  margin-top: 14px;
+  padding-bottom: 2px;
+  border-bottom: 2px solid #eceafd;
+}
+
+.docChart > span {
+  flex: 1;
+  border-radius: 5px 5px 2px 2px;
+  background: linear-gradient(180deg, #a5a2ff, #6a5cf4);
+  opacity: 0.55;
+}
+
+.docChart > .docBarHot {
+  opacity: 1;
+  background: linear-gradient(180deg, #8b87ff, #4d6cf5);
+}
+
+.docInk {
+  position: absolute;
+  left: 16px;
+  top: 64px;
+  width: 182px;
+  height: 92px;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.docInk path {
+  fill: none;
+  stroke: #ec4899;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-dasharray: 260;
+  stroke-dashoffset: 260;
+  animation: inkDraw 1.1s 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.docInk .docInkSoft {
+  stroke: rgba(236, 72, 153, 0.35);
+  stroke-width: 6;
+}
+
+@keyframes inkDraw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.docCursor {
+  position: absolute;
+  left: 150px;
+  top: 58px;
+  display: flex;
+  align-items: flex-start;
+  animation: cursorBob 3s ease-in-out infinite;
+}
+
+.docCursorTag {
+  margin: 12px 0 0 -3px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: #5e5ce6;
+  color: #fff;
+  font: 700 10px/1.4 var(--km-font);
+}
+
+@keyframes cursorBob {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-6px, 4px); }
+}
+
+.camStack {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cam {
+  display: block;
+  width: 72px;
+  height: 56px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 2px solid #fff;
+  box-shadow: 0 10px 24px rgba(30, 20, 110, 0.35);
+}
+
+.camSpeaking {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.35), 0 10px 24px rgba(30, 20, 110, 0.35);
+}
+
+/* 2 · Replays with a timeline */
+.artReplay {
+  width: 240px;
+}
+
+.replayVideo {
+  position: relative;
+  height: 132px;
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(40, 30, 140, 0.32);
+}
+
+.replayVideo::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 55%, rgba(10, 8, 30, 0.55));
+}
+
+.replayPlay {
+  position: absolute;
+  left: 50%;
+  top: 46%;
+  z-index: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.illPlayerBody {
-  padding: 14px;
-  background: #fff;
-}
-
-.illTrack {
-  position: relative;
-  height: 10px;
-  border-radius: 5px;
-  background: #f1f3f4;
-}
-
-.illSeg {
-  position: absolute;
-  top: 2px;
-  height: 6px;
-  border-radius: 3px;
-}
-
-.illPlayhead {
-  position: absolute;
-  top: -4px;
-  bottom: -4px;
-  left: 8%;
-  width: 3px;
-  border-radius: 2px;
-  background: #1f1f1f;
-  animation: playhead 5s linear infinite;
-}
-
-@keyframes playhead {
-  from { left: 8%; }
-  to { left: 90%; }
-}
-
-.illPills {
-  display: flex;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.illPill {
-  width: 54px;
-  height: 18px;
-  border-radius: 999px;
-  background: #f1f3f4;
-}
-
-.illPillOn {
-  background: #eeedff;
-}
-
-.illTile {
-  position: relative;
-  width: 240px;
-  height: 170px;
-  border-radius: 16px;
-  background: linear-gradient(160deg, #6b3f6f, #2e3036);
-  box-shadow: 0 18px 40px rgba(30, 20, 120, 0.4);
-}
-
-.illFace {
-  position: absolute;
-  top: 34px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 58px;
-  height: 58px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: #ffb877;
-  color: #4a2600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  transform: translate(-50%, -50%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
 }
 
-.illCaption {
+.replayBar {
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: 12px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.72);
+  bottom: 10px;
+  z-index: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.35);
 }
 
-.illCaptionLine {
-  height: 7px;
+.replayFill {
+  display: block;
+  width: 42%;
+  height: 100%;
+  border-radius: 2px;
+  background: #fff;
+  animation: replayProgress 5s linear infinite;
+}
+
+@keyframes replayProgress {
+  from { width: 18%; }
+  to { width: 82%; }
+}
+
+.replayPanel {
+  margin-top: 8px;
+  padding: 11px 12px;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 14px 32px rgba(40, 30, 140, 0.26);
+}
+
+.replayRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.replayRow + .replayRow {
+  margin-top: 7px;
+}
+
+.replayRow img {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.replayTrack {
+  position: relative;
+  flex: 1;
+  height: 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.92);
+  background: #f0effb;
 }
 
-.illCaptionLine + .illCaptionLine {
-  margin-top: 6px;
-  width: 72%;
-  background: #c9c8ff;
-  animation: blink 1.2s ease-in-out infinite;
+.replayTrack > span {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 4px;
 }
 
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+.replayAi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding: 7px 9px;
+  border-radius: 9px;
+  background: #f3f2ff;
+}
+
+.replaySpark {
+  flex: none;
+  color: #6a5cf4;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.replayLines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.replayLines > span {
+  height: 5px;
+  border-radius: 3px;
+  background: #c9c6fb;
+}
+
+.replayLines > span + span {
+  width: 70%;
+  background: #dedcfd;
+}
+
+/* 3 · Captions that translate */
+.artCaption {
+  width: 264px;
+}
+
+.capTile {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+  border-radius: 14px;
+  border: 2px solid #34d399;
+  box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.25), 0 18px 40px rgba(40, 30, 140, 0.32);
+}
+
+.capName {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: rgba(10, 8, 30, 0.6);
+  color: #fff;
+  font: 700 10.5px/1.3 var(--km-font);
+}
+
+.capMic {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.3);
+}
+
+.capBubble {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: -26px 8px 0;
+  padding: 12px 14px 11px;
+  border-radius: 12px;
+  background: rgba(22, 20, 48, 0.92);
+  box-shadow: 0 14px 30px rgba(10, 8, 40, 0.35);
+  font-family: var(--km-font);
+}
+
+.capLang {
+  position: absolute;
+  right: 10px;
+  top: -10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: #5e5ce6;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.5;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.capSrc {
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.capDst {
+  color: #c7c4ff;
+  font-size: 12px;
+  line-height: 1.4;
+  animation: capIn 0.6s 0.5s both;
+}
+
+@keyframes capIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* ── Auth pages (sign in / sign up / forgot password) ──────────────────── */
@@ -2598,10 +2796,10 @@ a.dropdownItem:focus-visible {
     height: 40px;
   }
 
-  .illDoc,
-  .illPlayer,
-  .illTile {
-    transform: scale(0.78);
+  .artDoc,
+  .artReplay,
+  .artCaption {
+    transform: scale(0.7);
   }
 
   .authContainer {
@@ -2730,9 +2928,15 @@ a.dropdownItem:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .docInk path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
   .carouselSlide,
-  .illPlayhead,
-  .illCaptionLine + .illCaptionLine,
+  .docCursor,
+  .replayFill,
+  .capDst,
   .liveDot,
   .conflictStatusText::before,
   .dashModalContent,

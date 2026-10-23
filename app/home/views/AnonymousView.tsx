@@ -12,61 +12,96 @@ import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
 const SLIDE_COUNT = 3;
 const SLIDE_INTERVAL_MS = 5000;
 
-/* Decorative, text-free illustrations for the carousel (work in every locale). */
+/* Decorative product scenes for the carousel. People are generated portraits (same as the marketing site);
+   the caption sample shows English → Japanese on purpose (overseas demos never translate into Chinese). */
+const FACE = (name: string) => `/images/people/${name}-face.jpg`;
+
 function SlideArt({ index }: { index: number }) {
   if (index === 0) {
     return (
-      <div className={styles.illDoc}>
-        <div className={styles.illAvatars}>
-          <span className={styles.illAvatar} style={{ background: '#8B87FF' }} />
-          <span className={styles.illAvatar} style={{ background: '#FFB877' }} />
-          <span className={styles.illAvatar} style={{ background: '#5FD3A6' }} />
+      <div className={styles.artDoc}>
+        <div className={styles.docCard}>
+          <div className={styles.docTop}>
+            <span className={styles.docDot} />
+            <span className={styles.docDot} />
+            <span className={styles.docDot} />
+            <span className={styles.docPage} />
+          </div>
+          <div className={styles.docTitle} />
+          <div className={styles.docSub} />
+          <div className={styles.docChart}>
+            <span style={{ height: '34%' }} />
+            <span style={{ height: '52%' }} />
+            <span style={{ height: '44%' }} />
+            <span className={styles.docBarHot} style={{ height: '86%' }} />
+            <span style={{ height: '66%' }} />
+          </div>
+          <svg className={styles.docInk} viewBox="0 0 180 90" aria-hidden="true">
+            <path d="M104 14c16-6 32 2 33 20 1 22-14 44-31 42-15-2-20-26-15-42 3-11 9-17 15-19" />
+            <path className={styles.docInkSoft} d="M18 84c26-3 52-3 78-1" />
+          </svg>
+          <span className={styles.docCursor}>
+            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 3l14 7-6 2-2 6z" fill="#5E5CE6" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+            <span className={styles.docCursorTag}>Lily</span>
+          </span>
         </div>
-        <div className={styles.illEyebrow} />
-        <div className={styles.illHeading} />
-        <div className={styles.illLine} style={{ width: '90%', marginTop: 12 }} />
-        <div className={styles.illLine} style={{ width: '70%' }} />
-        <div className={`${styles.illLine} ${styles.illLineAccent}`} style={{ width: '80%' }} />
-        <svg className={styles.illCursor} width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 3l14 7-6 2-2 6z" fill="#5E5CE6" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
-        </svg>
+        <div className={styles.camStack}>
+          <span className={`${styles.cam} ${styles.camSpeaking}`}><img src={FACE('lily')} alt="" /></span>
+          <span className={styles.cam}><img src={FACE('mark')} alt="" /></span>
+          <span className={styles.cam}><img src={FACE('ana')} alt="" /></span>
+        </div>
       </div>
     );
   }
   if (index === 1) {
     return (
-      <div className={styles.illPlayer}>
-        <div className={styles.illPlayerVideo}>
-          <span className={styles.illPlayBtn}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="#1F1F1F" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+      <div className={styles.artReplay}>
+        <div className={styles.replayVideo}>
+          <img src="/images/people/sarah-tile.jpg" alt="" />
+          <span className={styles.replayPlay}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1F1D3A" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
           </span>
+          <span className={styles.replayBar}><span className={styles.replayFill} /></span>
         </div>
-        <div className={styles.illPlayerBody}>
-          <div className={styles.illTrack}>
-            <span className={styles.illSeg} style={{ left: '4%', width: '30%', background: '#8B87FF' }} />
-            <span className={styles.illSeg} style={{ left: '38%', width: '18%', background: '#FFB877' }} />
-            <span className={styles.illSeg} style={{ left: '60%', width: '32%', background: '#8B87FF' }} />
-            <span className={styles.illPlayhead} />
+        <div className={styles.replayPanel}>
+          <div className={styles.replayRow}>
+            <img src={FACE('sarah')} alt="" />
+            <span className={styles.replayTrack}>
+              <span style={{ left: '2%', width: '26%', background: '#8B87FF' }} />
+              <span style={{ left: '46%', width: '20%', background: '#8B87FF' }} />
+              <span style={{ left: '78%', width: '18%', background: '#8B87FF' }} />
+            </span>
           </div>
-          <div className={styles.illPills}>
-            <span className={`${styles.illPill} ${styles.illPillOn}`} />
-            <span className={styles.illPill} />
+          <div className={styles.replayRow}>
+            <img src={FACE('lucas')} alt="" />
+            <span className={styles.replayTrack}>
+              <span style={{ left: '30%', width: '14%', background: '#FFB877' }} />
+              <span style={{ left: '68%', width: '8%', background: '#FFB877' }} />
+            </span>
+          </div>
+          <div className={styles.replayAi}>
+            <span className={styles.replaySpark} aria-hidden="true">✦</span>
+            <span className={styles.replayLines}><span /><span /></span>
           </div>
         </div>
       </div>
     );
   }
   return (
-    <div className={styles.illTile}>
-      <span className={styles.illFace}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21c0-4 4-6 8-6s8 2 8 6" />
-        </svg>
-      </span>
-      <div className={styles.illCaption}>
-        <div className={styles.illCaptionLine} />
-        <div className={styles.illCaptionLine} />
+    <div className={styles.artCaption}>
+      <div className={styles.capTile}>
+        <img src="/images/people/lucas-tile.jpg" alt="" />
+        <span className={styles.capName}>
+          <span className={styles.capMic} />
+          Lucas
+        </span>
+      </div>
+      <div className={styles.capBubble}>
+        <span className={styles.capLang}>EN → 日本語</span>
+        <span className={styles.capSrc}>Let&apos;s review the launch plan.</span>
+        <span className={styles.capDst}>ローンチ計画を確認しましょう。</span>
       </div>
     </div>
   );
