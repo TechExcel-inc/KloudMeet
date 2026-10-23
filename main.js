@@ -11,7 +11,24 @@ const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
 // In packaged builds, load the remote server directly (no local Next.js needed).
 // In dev mode, APP_ORIGIN (local Next.js) is used as usual.
-const REMOTE_ORIGIN = 'https://meet.kloud.cn';
+const REMOTE_ORIGIN = testOriginOverride() || 'https://meet.kloud.cn';
+
+/**
+ * Test builds: KLOUDMEET_APP_ORIGIN=http://localhost:3210 points the packaged app at a local or
+ * staging server (https, or http on localhost only). Unset in normal use.
+ */
+function testOriginOverride() {
+  const raw = process.env.KLOUDMEET_APP_ORIGIN;
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    const local = u.hostname === 'localhost' || u.hostname === '127.0.0.1';
+    if (u.protocol === 'https:' || (u.protocol === 'http:' && local)) return u.origin;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 /** 打包版文档请求绕过磁盘缓存，避免主窗口停在旧前端 */
 const REMOTE_NO_CACHE_HEADERS = 'Cache-Control: no-cache\r\nPragma: no-cache\r\n';
 const UPDATE_FEED_FALLBACK = 'https://kloud.cn/kloudmeet-exe';
