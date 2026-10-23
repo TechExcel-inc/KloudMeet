@@ -49,11 +49,25 @@ export function applyBalancedGrid(grid: HTMLElement): void {
   }
 }
 
-/** Gives a tile its person's colour (used by the camera-off background and avatar). */
+/** One letter for the camera-off avatar, like Google Meet ("ying huang" → "Y"). */
+export function tileInitial(name: string): string {
+  const first = Array.from(name.trim())[0];
+  return first ? first.toLocaleUpperCase() : '';
+}
+
+/**
+ * Gives a tile its person's colour (camera-off background and avatar) and the single letter
+ * the avatar shows.
+ */
 export function applyTileHue(tile: HTMLElement, key: string): void {
   if (!key) return;
   const hue = String(tileHue(key));
   if (tile.style.getPropertyValue('--km-tile-hue') !== hue) {
     tile.style.setProperty('--km-tile-hue', hue);
+  }
+  const placeholder = tile.querySelector<HTMLElement>('.lk-participant-placeholder');
+  const initial = tileInitial(key);
+  if (placeholder && initial && placeholder.getAttribute('data-km-initial') !== initial) {
+    placeholder.setAttribute('data-km-initial', initial);
   }
 }

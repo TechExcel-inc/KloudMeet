@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rowPlan, tileHue } from './tileLayout';
+import { rowPlan, tileHue, tileInitial } from './tileLayout';
 
 describe('rowPlan', () => {
   it('keeps small meetings on one row', () => {
@@ -26,5 +26,14 @@ describe('rowPlan', () => {
 describe('tileHue', () => {
   it('is stable for the same person', () => {
     expect(tileHue('Angela')).toBe(tileHue('Angela'));
+  });
+});
+
+describe('tileInitial', () => {
+  it('shows one letter, upper-cased', () => {
+    expect(tileInitial('ying huang')).toBe('Y');
+    expect(tileInitial('  Kloud Solution')).toBe('K');
+    expect(tileInitial('黄莹')).toBe('黄');
+    expect(tileInitial('')).toBe('');
   });
 });

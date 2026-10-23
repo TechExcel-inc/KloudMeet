@@ -354,12 +354,27 @@
 }
 
 /* ---------- Round 48px controls ---------- */
+/* Device pill: a dark track holding the round button and its device-menu chevron */
 .split {
   display: inline-flex;
   align-items: center;
+  padding: 4px;
   border-radius: 999px;
-  background: var(--km-control, #2e3036);
+  background: #1c1d22;
   flex-shrink: 0;
+}
+
+/* On: neutral grey, clearly lighter than the track */
+.split .roundBtn {
+  width: 44px;
+  height: 44px;
+  background: #3c4043;
+  color: #fff;
+}
+
+.split .roundBtn:hover {
+  background: #4a4e53;
+  color: #fff;
 }
 
 .roundBtn {
@@ -409,18 +424,17 @@
   cursor: default;
 }
 
-/* Off: red + morph circle → rounded square */
+/* Off: light red with a dark red glyph (Google Meet style) — reads as "off", not as an alarm */
 .roundBtnOff,
 .split .roundBtnOff {
-  background: var(--km-danger, #dc362e);
-  color: #fff;
-  border-radius: 16px;
+  background: #f9dedc;
+  color: #8c1d18;
 }
 
 .roundBtnOff:hover,
 .split .roundBtnOff:hover {
-  background: #c5302a;
-  color: #fff;
+  background: #f5cbc8;
+  color: #8c1d18;
 }
 
 /* Forced off by host: same red, plus a soft pulse to tell it apart */
@@ -450,7 +464,7 @@
   align-items: center;
   justify-content: center;
   width: 26px;
-  height: 48px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: 999px;

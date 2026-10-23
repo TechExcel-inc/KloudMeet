@@ -275,7 +275,9 @@ h2 a {
   height: clamp(36px, 46cqmin, 128px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
-  background: hsl(var(--km-tile-hue, 248) 46% 34%);
+  /* Avatar: more saturated and a step lighter than the tile around it, so the circle reads */
+  background: hsl(var(--km-tile-hue, 248) 55% 42%);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   color: #ffffff;
   font-family: var(--km-font);
   font-size: clamp(14px, 2.4vw, 40px);
@@ -286,6 +288,17 @@ h2 a {
   overflow: hidden;
   white-space: nowrap;
   text-align: center;
+}
+
+/* One letter, like Google Meet, once lib/tileLayout.ts has set it */
+.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder[data-km-initial]::after {
+  content: attr(data-km-initial);
+}
+
+/* Camera off is already obvious from the avatar: hide the camera-off glyph on the tile
+   (it stays while the host has disabled that camera, so "cancel disable" is reachable). */
+.lk-participant-tile .kloud-custom-cam-indicator[data-kloud-video-disabled="true"][data-kloud-host-restricted="false"] {
+  display: none !important;
 }
 
 /* Soft expanding voice ring behind the avatar while the person speaks */

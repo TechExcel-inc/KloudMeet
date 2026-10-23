@@ -11,6 +11,7 @@ import { notFound } from 'next/navigation';
 import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
+import { MeetingTopBar } from '@/lib/MeetingTopBar';
 
 const NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
@@ -63,6 +64,16 @@ export default function DevTilesPage() {
         >
           Viewing as: {host ? 'host' : 'attendee'}
         </button>
+      </div>
+      <div style={{ position: 'relative', height: 56, flex: 'none' }}>
+        <MeetingTopBar
+          meetingTitle="Weekly product review"
+          modeLabel={view === 'liveDoc' ? 'LiveDoc' : view === 'shareScreen' ? 'Screen share' : 'Video · Grid'}
+          isRecording={host}
+          recordingLabel="Recording"
+          captionsOn
+          captionsLabel="Captions on"
+        />
       </div>
       <div className="lk-grid-layout-wrapper" style={{ flex: 1, minHeight: 0, height: 0, paddingBottom: 88 }}>
         <div className="lk-grid-layout" ref={gridRef} key={count}>

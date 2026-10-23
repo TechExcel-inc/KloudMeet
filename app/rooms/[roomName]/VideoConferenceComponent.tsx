@@ -174,6 +174,10 @@ const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 import { applyTileHue } from '@/lib/tileLayout';
+import { MeetingTopBar } from '@/lib/MeetingTopBar';
+
+/** Height of the desktop top bar (styles/MeetingTopBar.module.css). */
+const MEETING_TOP_BAR_HEIGHT = 56;
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -370,6 +374,8 @@ export function VideoConferenceComponent(props: {
   const [surfaceDetected, setSurfaceDetected] = React.useState(false);
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
+  /** Desktop web: clock | name | mode bar above the stage (phones keep their own header). */
+  const showMeetingTopBar = !isToolbarMobile && !isRecorderBot;
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
   const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
   const [canPlaybackAudio, setCanPlaybackAudio] = React.useState(() =>
@@ -6262,6 +6268,27 @@ export function VideoConferenceComponent(props: {
           </div>
         )}
 
+        {/* Desktop top bar: clock | meeting name | current mode · recording / captions */}
+        {showMeetingTopBar && (
+          <MeetingTopBar
+            meetingTitle={props.meetingTitle}
+            modeLabel={
+              activeView === 'liveDoc'
+                ? t('toolbar.liveDoc')
+                : hasScreenShare || activeView === 'shareScreen'
+                  ? t('toolbar.shareScreen')
+                  : webcamLayoutMode === 'spotlight'
+                    ? t('toolbar.webcamSpotlight')
+                    : t('toolbar.webcamTile')
+            }
+            modeDetail={activeView === 'liveDoc' && isWhiteboardDoc ? t('liveDocAi.whiteboard') : undefined}
+            isRecording={isRecording}
+            recordingLabel={t('toolbar.recording')}
+            captionsOn={captionsRunning}
+            captionsLabel={t('meeting.captionsRunning')}
+          />
+        )}
+
         {/* View content area */}
         <div
           className={`main-meeting-area${
@@ -6269,14 +6296,10 @@ export function VideoConferenceComponent(props: {
             ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc)
               ? ' kloud-mobile-webcam-view'
               : ''
-          }${
-            !isToolbarMobile && !isRecorderBot && activeView !== 'liveDoc' && !hasScreenShare
-              ? ' kloud-stage--chips'
-              : ''
           }`}
           style={{
             position: 'absolute',
-            top: 0,
+            top: showMeetingTopBar ? MEETING_TOP_BAR_HEIGHT : 0,
             left: 0,
             right: 0,
             bottom:
@@ -6610,46 +6633,6 @@ export function VideoConferenceComponent(props: {
               </button>
             )}
           </div>
-
-          {/* Stage status chips (desktop): Recording / Speech to Text top-left, current view top-right */}
-          {!isToolbarMobile && !isRecorderBot && (() => {
-            const viewChipLabel =
-              activeView === 'liveDoc'
-                ? null
-                : hasScreenShare
-                  ? t('toolbar.shareScreen')
-                  : webcamLayoutMode === 'spotlight'
-                    ? t('toolbar.webcamSpotlight')
-                    : t('toolbar.webcamTile');
-            const showWhiteboardChip = activeView === 'liveDoc' && isWhiteboardDoc;
-            if (!isRecording && !captionsRunning && !viewChipLabel && !showWhiteboardChip) return null;
-            const chipsLeft =
-              hasScreenShare && activeView !== 'liveDoc' && !isWebcamSidebarCollapsed && !screenShareActive
-                ? 164
-                : shouldDisplayLiveDoc && showWebcamSidebar
-                  ? 192
-                  : 16;
-            return (
-              <div className="kloud-stage-chips" style={{ left: chipsLeft }} aria-live="polite">
-                {isRecording && (
-                  <span className="kloud-stage-chip kloud-stage-chip--rec">
-                    <span className="kloud-stage-recdot" aria-hidden />
-                    {t('toolbar.recording')}
-                  </span>
-                )}
-                {captionsRunning && (
-                  <span className="kloud-stage-chip kloud-stage-chip--stt">{t('toolbar.captionsOn')}</span>
-                )}
-                {showWhiteboardChip && (
-                  <span className="kloud-stage-chip kloud-stage-chip--view">{t('liveDocAi.whiteboard')}</span>
-                )}
-                <span className="kloud-stage-chips-spacer" />
-                {viewChipLabel && (
-                  <span className="kloud-stage-chip kloud-stage-chip--view">{viewChipLabel}</span>
-                )}
-              </div>
-            );
-          })()}
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
           {floatingWebcamPanelVisible &&
@@ -8976,71 +8959,6 @@ export function VideoConferenceComponent(props: {
               border-radius: 50%;
             }
 
-            /* ── Stage status chips (Recording / Speech to Text) + current-view chip ── */
-            .kloud-stage-chips {
-              position: absolute;
-              top: 12px;
-              right: 16px;
-              z-index: 340;
-              display: flex;
-              align-items: center;
-              gap: 8px;
-              pointer-events: none;
-              font-family: var(--km-font);
-            }
-            .kloud-stage-chips-spacer {
-              flex: 1;
-            }
-            .kloud-stage-chip {
-              display: inline-flex;
-              align-items: center;
-              gap: 7px;
-              height: 32px;
-              padding: 0 12px;
-              border-radius: 999px;
-              background: rgba(46, 48, 54, 0.92);
-              color: var(--km-stage-text);
-              font-size: 12px;
-              font-weight: 700;
-              line-height: 1;
-              white-space: nowrap;
-              backdrop-filter: blur(8px);
-              box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-              animation: km-chip-in 0.3s ease both;
-            }
-            .kloud-stage-chip--rec {
-              color: #f6aea9;
-            }
-            .kloud-stage-chip--stt {
-              color: var(--km-on-dark-accent);
-            }
-            .kloud-stage-chip--view {
-              background: rgba(58, 57, 110, 0.92);
-              color: var(--km-on-dark-accent);
-            }
-            .kloud-stage-recdot {
-              width: 9px;
-              height: 9px;
-              border-radius: 50%;
-              background: #f28b82;
-              animation: km-rec-dot 1.6s infinite;
-            }
-            @keyframes km-rec-dot {
-              0%, 100% { opacity: 1; }
-              50% { opacity: 0.35; }
-            }
-            @keyframes km-chip-in {
-              from { opacity: 0; transform: translateY(-4px); }
-              to { opacity: 1; transform: none; }
-            }
-            /* Reserve the chip row above the webcam tiles so chips never cover a face */
-            .kloud-stage--chips .lk-grid-layout-wrapper .lk-grid-layout {
-              padding-top: 56px;
-            }
-            .kloud-stage--chips .sky-meet-video-wrapper.webcam-spotlight .lk-video-conference-inner {
-              padding-top: 40px !important;
-            }
-
             /* ── Collapse / expand webcams tab on the stage edge ── */
             .webcam-collapse-toggle:hover {
               background: var(--km-control-hover) !important;
@@ -9051,8 +8969,6 @@ export function VideoConferenceComponent(props: {
               .webcam-sidebar-tile,
               .webcam-sidebar-avatar-initials,
               .chat-overlay-panel,
-              .kloud-stage-chip,
-              .kloud-stage-recdot,
               .kloud-tile-hand-badge,
               .webcam-collapse-toggle,
               .floating-webcam-panel,

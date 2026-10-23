@@ -590,6 +590,7 @@
   "attendee.lowerAllHands": "全員下ろす",
   "toolbar.captions": "字幕",
   "toolbar.captionsOn": "音声認識 - 有効",
+  "meeting.captionsRunning": "字幕オン",
   "toolbar.captionsOff": "音声認識 - 有効にする",
   "toolbar.ccHide": "字幕 - 非表示",
   "toolbar.ccShow": "字幕 - 表示",

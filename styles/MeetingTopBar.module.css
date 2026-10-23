@@ -1,0 +1,127 @@
+/* Desktop meeting top bar (lib/MeetingTopBar.tsx). Height must match MEETING_TOP_BAR_HEIGHT. */
+.bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 56px;
+  z-index: 340;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 20px;
+  box-sizing: border-box;
+  background: var(--km-stage, #17181c);
+  color: var(--km-stage-text, #e8eaed);
+  font-family: var(--km-font);
+}
+
+.left {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.clock {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.24);
+  flex-shrink: 0;
+}
+
+.name {
+  min-width: 0;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #1c1d22;
+  color: #bdc1c6;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.modeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a5a3ff;
+}
+
+.modeDetail {
+  color: #9aa0a6;
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.chipRec {
+  background: rgba(220, 54, 46, 0.16);
+  color: #f2b8b5;
+}
+
+.chipCaptions {
+  background: rgba(124, 121, 255, 0.16);
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.recDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f28b82;
+  animation: recBlink 1.6s ease-in-out infinite;
+}
+
+@keyframes recBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recDot {
+    animation: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .name {
+    max-width: 180px;
+  }
+}
