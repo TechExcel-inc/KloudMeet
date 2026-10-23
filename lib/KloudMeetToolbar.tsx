@@ -53,7 +53,7 @@ function roomNameFromLocation(): string {
 }
 
 /** 会议内「复制邀请」正文（与首页会议卡片的 Copy Invite 结构类似） */
-function buildInMeetingInviteClipboardText(isDesktop: boolean): string {
+export function buildInMeetingInviteClipboardText(isDesktop: boolean): string {
   const roomName = roomNameFromLocation();
   const link = buildInviteLinkForClipboard(isDesktop);
   return [

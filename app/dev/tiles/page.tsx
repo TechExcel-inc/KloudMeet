@@ -12,6 +12,9 @@ import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
+import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
+import { RoomContext } from '@livekit/components-react';
+import { Room } from 'livekit-client';
 
 const NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
@@ -33,6 +36,8 @@ export default function DevTilesPage() {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   const gridRef = React.useRef<HTMLDivElement | null>(null);
+  // Never connected: only gives the solo card a room with no one else in it.
+  const [devRoom] = React.useState(() => new Room());
 
   React.useLayoutEffect(() => {
     const grid = gridRef.current;
@@ -44,7 +49,7 @@ export default function DevTilesPage() {
   }, [count]);
 
   return (
-    <div className="lk-room-container" style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--km-stage, #17181c)' }}>
+    <div className="lk-room-container" style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--km-stage, #17181c)' }}>
       <div style={{ display: 'flex', gap: 8, padding: '12px 16px 0' }}>
         {COUNTS.map((n) => (
           <button
@@ -95,6 +100,11 @@ export default function DevTilesPage() {
           ))}
         </div>
       </div>
+      {mounted && count === 1 && (
+        <RoomContext.Provider value={devRoom}>
+          <SoloMeetingCard isDesktop={false} canOpenLiveDoc={host} onOpenLiveDoc={() => setView('liveDoc')} />
+        </RoomContext.Provider>
+      )}
       {mounted && (
       <KloudMeetToolbar
         activeView={view}

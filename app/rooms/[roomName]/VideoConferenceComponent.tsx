@@ -34,6 +34,7 @@ import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeet
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { markGettingStarted } from '@/lib/gettingStarted';
+import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
 import {
   isToolbarMobileUserAgent,
   postKloudShowFilePanelToIframe,
@@ -6645,6 +6646,15 @@ export function VideoConferenceComponent(props: {
               </button>
             )}
           </div>
+
+          {/* First one here: invite people or open a LiveDoc while waiting (desktop layout only) */}
+          {!isToolbarMobile && !isRecorderBot && (
+            <SoloMeetingCard
+              isDesktop={isDesktop}
+              canOpenLiveDoc={canSwitchViews && activeView !== 'liveDoc'}
+              onOpenLiveDoc={() => handleViewChange('liveDoc')}
+            />
+          )}
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
           {floatingWebcamPanelVisible &&
