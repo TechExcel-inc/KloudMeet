@@ -25,16 +25,26 @@ function personName(displayName: string): string {
 }
 
 /**
- * recordMeetingJoin — 登录用户拿到入会令牌后记下参会关系。
- * 同一成员对同一会议只保留一条，供会议列表查出「我参加过的会」。
- * 若已有同名匿名记录，则挂上成员，避免人数重复。
+ * recordMeetingJoin — 登录用户真正进入房间（LiveKit participant_joined webhook）后记下参会关系。
+ * 同一成员对同一会议只保留一条，供会议列表查出「我参加过的会」；
+ * joinedAt / leftAt 是在场时间窗，私有录像只对窗内的参会者开放。
+ * 若已有同名匿名记录，则挂上成员，避免人数重复（时间窗从这次入会算起）。
  */
 export async function recordMeetingJoin(input: RecordMeetingJoinInput): Promise<void> {
   const existing = await prisma.meetingParticipant.findFirst({
     where: { meetingId: input.meetingId, teamMemberId: input.memberId },
-    select: { id: true },
+    select: { id: true, leftAt: true },
   });
-  if (existing) return;
+  if (existing) {
+    // 再次入会：重新打开时间窗
+    if (existing.leftAt) {
+      await prisma.meetingParticipant.update({
+        where: { id: existing.id },
+        data: { leftAt: null },
+      });
+    }
+    return;
+  }
 
   const name = personName(input.displayName);
   const guest = await prisma.meetingParticipant.findFirst({
@@ -47,6 +57,8 @@ export async function recordMeetingJoin(input: RecordMeetingJoinInput): Promise<
       data: {
         teamMemberId: input.memberId,
         displayName: name,
+        joinedAt: new Date(),
+        leftAt: null,
         ...(input.host ? { roles: 'HOST' } : {}),
       },
     });
@@ -81,5 +93,21 @@ export async function recordGuestJoin(input: RecordGuestJoinInput): Promise<void
       displayName: name,
       roles: 'PARTICIPANT',
     },
+  });
+}
+
+/** recordMeetingLeave — 登录成员离开房间（participant_left webhook），关闭其在场时间窗。 */
+export async function recordMeetingLeave(meetingId: number, memberId: number): Promise<void> {
+  await prisma.meetingParticipant.updateMany({
+    where: { meetingId, teamMemberId: memberId, leftAt: null },
+    data: { leftAt: new Date() },
+  });
+}
+
+/** closeOpenParticipants — 房间结束（room_finished）时兜底关闭所有未关的时间窗，防止漏收 left 事件。 */
+export async function closeOpenParticipants(meetingId: number): Promise<void> {
+  await prisma.meetingParticipant.updateMany({
+    where: { meetingId, leftAt: null },
+    data: { leftAt: new Date() },
   });
 }

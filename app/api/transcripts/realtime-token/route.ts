@@ -6,10 +6,14 @@
  * 浏览器拿到 ek_xxx 直接连 WS 即可，无需再发 session.update。
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { requireRoomOrSession } from '@/lib/meetingAccess';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 export async function GET(req: NextRequest) {
+  const caller = await requireRoomOrSession(req);
+  if (caller instanceof NextResponse) return caller;
+
   if (!OPENAI_API_KEY) {
     return NextResponse.json(
       { error: 'OpenAI API key not configured' },

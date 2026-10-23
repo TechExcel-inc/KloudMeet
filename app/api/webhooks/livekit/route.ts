@@ -8,6 +8,16 @@ import {
   MEETING_STATUS,
   resumeIdleMeeting,
 } from '@/lib/meetingRejoin';
+import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
+import {
+  closeOpenParticipants,
+  recordGuestJoin,
+  recordMeetingJoin,
+  recordMeetingLeave,
+} from '@/lib/recordMeetingJoin';
+
+/** Web egress joins as a guest with this display name (see PageClientImpl); not a real attendee. */
+const RECORDER_BOT_NAME = 'KloudMeet Recorder';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -25,8 +35,9 @@ export async function POST(request: NextRequest) {
 
     let event;
     try {
-      // livekit-server-sdk receiver verifies the signature and parses the event payload
-      event = await receiver.receive(body, authHeader, true);
+      // Verifies the JWT signature (LIVEKIT_API_KEY/SECRET) and the body hash before parsing.
+      // Never pass skipAuth: attendance and recording state are derived from these events.
+      event = await receiver.receive(body, authHeader);
     } catch (err: unknown) {
       console.error('[webhooks livekit] signature validation failed', err);
       return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
@@ -86,6 +97,34 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // 参会记录：只在真正连上房间时写入（拿到入会票不算），并记下在场时间窗
+    if (
+      (event.event === 'participant_joined' || event.event === 'participant_left') &&
+      event.room &&
+      event.participant
+    ) {
+      const meeting = await prisma.meeting.findUnique({
+        where: { roomName: event.room.name },
+        select: { id: true, createdByMemberId: true },
+      });
+      const memberId = parseKloudMemberIdFromIdentity(event.participant.identity);
+      const displayName = event.participant.name || event.participant.identity;
+      if (meeting && event.event === 'participant_joined') {
+        if (memberId != null) {
+          await recordMeetingJoin({
+            meetingId: meeting.id,
+            memberId,
+            displayName,
+            host: memberId === meeting.createdByMemberId,
+          });
+        } else if (displayName !== RECORDER_BOT_NAME) {
+          await recordGuestJoin({ meetingId: meeting.id, displayName });
+        }
+      } else if (meeting && memberId != null) {
+        await recordMeetingLeave(meeting.id, memberId);
+      }
+    }
+
     // Capture Exact Start Time when the first user joins an Instant or Scheduled Meeting
     if (event.event === 'room_started' && event.room) {
       const roomName = event.room.name;
@@ -115,6 +154,9 @@ export async function POST(request: NextRequest) {
       const roomName = event.room.name;
 
       const meeting = await prisma.meeting.findUnique({ where: { roomName } });
+      if (meeting) {
+        await closeOpenParticipants(meeting.id);
+      }
       if (
         meeting &&
         meeting.status !== MEETING_STATUS.ENDED &&

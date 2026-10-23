@@ -8,26 +8,14 @@ import {
   isMeetingPermanentlyClosed,
 } from '@/lib/meetingRejoin';
 import { fillShareKeys } from '@/lib/recordingShare';
+import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { attendanceOverlapsRecording } from '@/lib/recordingAttendance';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { teamMember: true },
-    });
-
-    if (!session || !session.teamMember) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const member = session.teamMember;
+    // requireSession also rejects expired sessions and inactive members.
+    const member = await requireSession(request);
+    if (isAuthError(member)) return member;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
@@ -73,6 +61,9 @@ export async function GET(request: NextRequest) {
               visibility: true,
               status: true,
               durationSeconds: true,
+              teamMemberId: true,
+              createdAt: true,
+              mediaStartedAt: true,
             },
           },
           createdByMember: {
@@ -91,10 +82,30 @@ export async function GET(request: NextRequest) {
       meetings.map((m) => expireIdleMeetingIfNeeded(m)),
     );
 
+    // Attendees only see recordings they started, PUBLIC ones, or ones made while they were in the room.
+    const attendance = await prisma.meetingParticipant.findMany({
+      where: {
+        teamMemberId: member.id,
+        meetingId: { in: meetingsAfterIdle.map((m) => m.id) },
+      },
+      select: { meetingId: true, joinedAt: true, leftAt: true },
+    });
+    const now = new Date();
+    const visibleRecordings = (m: (typeof meetingsAfterIdle)[number]) => {
+      if (m.createdByMemberId === member.id) return m.recordings;
+      const windows = attendance.filter((a) => a.meetingId === m.id);
+      return m.recordings.filter(
+        (r) =>
+          r.visibility === 'PUBLIC' ||
+          r.teamMemberId === member.id ||
+          windows.some((w) => attendanceOverlapsRecording(w, r, now)),
+      );
+    };
+
     const meetingsWithKeys = await Promise.all(
       meetingsAfterIdle.map(async (m) => ({
         ...m,
-        recordings: await fillShareKeys(m.recordings),
+        recordings: await fillShareKeys(visibleRecordings(m)),
       })),
     );
 

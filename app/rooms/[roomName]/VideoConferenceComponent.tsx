@@ -23,6 +23,7 @@ import {
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
+import { setRoomAuthToken } from '@/lib/roomAuth';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
@@ -724,7 +725,11 @@ export function VideoConferenceComponent(props: {
   const intentionalDisconnectRef = React.useRef(false);
   const hasConnectedOnceRef = React.useRef(false);
   const connectionDetailsRef = React.useRef(props.connectionDetails);
-  React.useEffect(() => { connectionDetailsRef.current = props.connectionDetails; }, [props.connectionDetails]);
+  React.useEffect(() => {
+    connectionDetailsRef.current = props.connectionDetails;
+    setRoomAuthToken(props.connectionDetails?.participantToken);
+  }, [props.connectionDetails]);
+  React.useEffect(() => () => setRoomAuthToken(null), []);
   const connectOptionsRef = React.useRef(connectOptions);
   React.useEffect(() => { connectOptionsRef.current = connectOptions; }, [connectOptions]);
   // Connection error state — drives the inline error UI instead of alert()
@@ -798,6 +803,7 @@ export function VideoConferenceComponent(props: {
 
       const fresh = (await response.json()) as ConnectionDetails;
       connectionDetailsRef.current = fresh;
+      setRoomAuthToken(fresh.participantToken);
       return fresh;
     })();
 
@@ -6517,6 +6523,7 @@ export function VideoConferenceComponent(props: {
                 <RemoteControlOverlay
                   isActive={isRemoteControlMode && activeView === 'shareScreen'}
                   isPresenter={screenShareActive}
+                  approvedControllerIdentity={approvedControllerIdentity}
                 />
               </>
             )}

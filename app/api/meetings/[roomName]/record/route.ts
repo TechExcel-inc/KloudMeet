@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
-import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { forbidden, isAuthError, requireSession } from '@/lib/apiAuth';
 import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 
@@ -14,6 +14,20 @@ const S3_SECRET = process.env.S3_SECRET;
 const S3_REGION = process.env.S3_REGION;
 const S3_BUCKET = process.env.S3_BUCKET;
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
+
+/** Hosts the recorder may load: this request's own host plus the configured public app host. */
+function allowedPageHosts(request: NextRequest): Set<string> {
+  const hosts = new Set<string>(['meet.kloud.cn']);
+  for (const h of [request.headers.get('x-forwarded-host'), request.headers.get('host')]) {
+    if (h) hosts.add(h.split(',')[0].trim());
+  }
+  try {
+    if (process.env.NEXT_PUBLIC_APP_URL) hosts.add(new URL(process.env.NEXT_PUBLIC_APP_URL).host);
+  } catch {
+    /* ignore malformed env */
+  }
+  return hosts;
+}
 
 export async function POST(
   request: NextRequest,
@@ -36,6 +50,9 @@ export async function POST(
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    }
+    if (meeting.createdByMemberId !== member.id) {
+      return forbidden('Only the meeting host can start or stop recording');
     }
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
@@ -115,8 +132,22 @@ export async function POST(
 
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(pageUrl);
+    } catch {
+      return NextResponse.json({ error: 'Invalid pageUrl' }, { status: 400 });
+    }
+    // The egress browser must only load this app's own meeting page, never an arbitrary URL.
+    if (
+      !/^https?:$/.test(parsedUrl.protocol) ||
+      !allowedPageHosts(request).has(parsedUrl.host) ||
+      !parsedUrl.pathname.startsWith('/rooms/')
+    ) {
+      return NextResponse.json({ error: 'pageUrl must be this meeting page' }, { status: 400 });
+    }
+
     const activityToken = newShareKey();
-    const parsedUrl = new URL(pageUrl);
     parsedUrl.searchParams.set('isBot', 'true');
     parsedUrl.searchParams.set(SPEAK_TOKEN_PARAM, activityToken);
     const targetUrl = parsedUrl.toString();

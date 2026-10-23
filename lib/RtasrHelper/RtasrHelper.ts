@@ -16,6 +16,7 @@
  * 语言：支持 ISO-639-1 标准代码（zh/en/ja/ko…）
  *       传入空字符串或 'auto' 时由 OpenAI 自动检测语言
  */
+import { roomAuthHeaders } from '@/lib/roomAuth';
 
 export interface RtasrMessage {
   id: string | number;
@@ -68,7 +69,7 @@ export class RtasrHelper implements CaptionEngine {
       const tokenUrl = lang0 && lang0 !== 'auto'
         ? `/api/transcripts/realtime-token?lang=${encodeURIComponent(lang0)}`
         : '/api/transcripts/realtime-token';
-      const tokenRes = await fetch(tokenUrl);
+      const tokenRes = await fetch(tokenUrl, { headers: roomAuthHeaders() });
       if (!tokenRes.ok) {
         throw new Error(`Token fetch failed: ${tokenRes.status} ${await tokenRes.text()}`);
       }
