@@ -1438,15 +1438,19 @@ export function KloudMeetToolbar({
 
   /**
    * Web：视图切换分段控件「LiveDoc / Webcam / Share Screen」。
-   * - LiveDoc / Webcam 段：仅 canSwitchViews && 操作者（与旧版一致）
+   * - LiveDoc / Webcam 段：所有人可见；仅 canSwitchViews && 操作者可点，其他人看到灰色锁定态（与工具栏布局保持一致）
    * - Webcam 段主体点击：非 Webcam 时切到 Webcam，已在 Webcam 时切换宫格/焦点（与旧版一致）
    * - Webcam 段右侧箭头：弹出 Tile / Spotlight 子菜单（复用 handleWebcamLayoutSelect）
    * - Share Screen 段：所有人可见
    */
   const renderDesktopViewSwitch = () => {
     const showOperatorSegments = canSwitchViews && canShowOperatorMenus;
-    const webcamLabel =
-      webcamLayoutMode === 'spotlight' ? t('toolbar.webcamSpotlight') : t('toolbar.webcamTile');
+    const lockedTip = tr('toolbar.onlyHostSwitchesView', 'Only the host can switch what everyone sees');
+    const webcamLabel = showOperatorSegments
+      ? webcamLayoutMode === 'spotlight'
+        ? t('toolbar.webcamSpotlight')
+        : t('toolbar.webcamTile')
+      : lockedTip;
     const shareConflict = hasScreenShare && !screenShareActive;
     const shareTip = shareConflict
       ? t('toolbar.shareConflictTitle')
@@ -1454,41 +1458,47 @@ export function KloudMeetToolbar({
         ? `${t('toolbar.shareScreen')} · ${t('toolbar.sharing')}`
         : t('toolbar.shareScreen');
     const webcamLayoutLabel = tr('toolbar.webcamLayout', 'Webcam layout');
+    const lockedClass = (view: ViewMode) =>
+      !showOperatorSegments && activeView !== view ? styles.segLocked : '';
     return (
       <div className={styles.viewSwitch} role="group" aria-label={t('toolbar.selectViewLayout')}>
-        {showOperatorSegments && (
+        <button
+          type="button"
+          className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''} ${lockedClass('liveDoc')}`}
+          onClick={() => {
+            if (!showOperatorSegments) return;
+            closeViewModeMenu();
+            handleLiveDocTabClick();
+          }}
+          aria-pressed={activeView === 'liveDoc'}
+          aria-disabled={!showOperatorSegments || undefined}
+          aria-label={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${lockedTip}`}
+          data-tip={showOperatorSegments ? t('toolbar.liveDocView') : lockedTip}
+        >
+          <IconDoc />
+          <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
+        </button>
+
+        <div
+          className={`${styles.segSplit} ${activeView === 'webcam' ? styles.segActive : ''} ${lockedClass('webcam')}`}
+          data-view-mode-menu-anchor="true"
+        >
           <button
             type="button"
-            className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''}`}
+            className={`${styles.seg} ${styles.segMain}`}
             onClick={() => {
-              closeViewModeMenu();
-              handleLiveDocTabClick();
+              if (!showOperatorSegments) return;
+              handleDesktopWebcamClick();
             }}
-            aria-pressed={activeView === 'liveDoc'}
-            aria-label={t('toolbar.liveDocView')}
-            data-tip={t('toolbar.liveDocView')}
+            aria-pressed={activeView === 'webcam'}
+            aria-disabled={!showOperatorSegments || undefined}
+            aria-label={showOperatorSegments ? webcamLabel : `${t('toolbar.webcam')} · ${lockedTip}`}
+            data-tip={webcamLabel}
           >
-            <IconDoc />
-            <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
+            {webcamLayoutMode === 'spotlight' ? <IconSpotlight /> : <IconTile />}
+            <span className={styles.segLabel}>{t('toolbar.webcam')}</span>
           </button>
-        )}
-
-        {showOperatorSegments && (
-          <div
-            className={`${styles.segSplit} ${activeView === 'webcam' ? styles.segActive : ''}`}
-            data-view-mode-menu-anchor="true"
-          >
-            <button
-              type="button"
-              className={`${styles.seg} ${styles.segMain}`}
-              onClick={handleDesktopWebcamClick}
-              aria-pressed={activeView === 'webcam'}
-              aria-label={webcamLabel}
-              data-tip={webcamLabel}
-            >
-              {webcamLayoutMode === 'spotlight' ? <IconSpotlight /> : <IconTile />}
-              <span className={styles.segLabel}>{t('toolbar.webcam')}</span>
-            </button>
+          {showOperatorSegments && (
             <button
               type="button"
               className={styles.segChevron}
@@ -1504,17 +1514,17 @@ export function KloudMeetToolbar({
             >
               <IconChevronUp />
             </button>
-            {viewModeMenuOpen && (
-              <div
-                className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`}
-                role="menu"
-                aria-label={webcamLayoutLabel}
-              >
-                {renderWebcamLayoutMenuItems()}
-              </div>
-            )}
-          </div>
-        )}
+          )}
+          {showOperatorSegments && viewModeMenuOpen && (
+            <div
+              className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`}
+              role="menu"
+              aria-label={webcamLayoutLabel}
+            >
+              {renderWebcamLayoutMenuItems()}
+            </div>
+          )}
+        </div>
 
         <button
           type="button"
@@ -1593,12 +1603,12 @@ export function KloudMeetToolbar({
       <button
         ref={liveDocAiBtnRef}
         type="button"
-        className={`${styles.iconBtn} ${isActive ? styles.iconBtnActive : ''}`}
+        className={`${styles.actBtn} ${isActive ? styles.actBtnActive : ''}`}
         onClick={handleLiveDocSettingsClick}
         aria-label={t('toolbar.liveDocMenu')}
         aria-pressed={isActive}
-        data-tip={t('toolbar.liveDocMenu')}
       >
+        <span className={styles.actIcon}>
         <IconDocAi />
         {canToggleLiveDocAnnotation && (
           <span
@@ -1620,6 +1630,8 @@ export function KloudMeetToolbar({
             </svg>
           </span>
         )}
+        </span>
+        <span className={styles.actLabel}>{t('toolbar.liveDocMenu')}</span>
       </button>
     );
   };
@@ -1901,179 +1913,261 @@ export function KloudMeetToolbar({
           </>
         ) : (
           <>
-            {/* Left zone: clock | meeting name */}
+            {/* Left zone: your devices, then clock | meeting name (hidden on narrow windows) */}
             <div className={styles.zoneLeft}>
-              {clockText && <span className={styles.clock}>{clockText}</span>}
-              {clockText && meetingLabel && <span className={styles.zoneDivider} aria-hidden="true" />}
-              {meetingLabel && (
-                <span className={styles.meetingName} title={meetingLabel}>
-                  {meetingLabel}
-                </span>
+            {(() => {
+              const micLabel = isMutedByHost
+                ? tr('toolbar.mutedByHost', 'Muted by host')
+                : micEnabled
+                  ? t('toolbar.muteMic')
+                  : t('toolbar.unmuteMic');
+              const camLabel = isCamDisabledByHost
+                ? tr('toolbar.camDisabledByHost', 'Camera disabled by host')
+                : camEnabled
+                  ? t('toolbar.turnOffCam')
+                  : t('toolbar.turnOnCam');
+              return (
+                <div className={styles.deviceGroup}>
+                  {/* Mic split */}
+                  <div className={styles.split}>
+                    <button
+                      type="button"
+                      className={`${styles.roundBtn} ${!micEnabled ? styles.roundBtnOff : ''} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
+                      onClick={onToggleMic}
+                      disabled={!canUseMediaDevices}
+                      aria-label={micLabel}
+                      data-tip={micLabel}
+                    >
+                      {micEnabled ? <IconMicOn /> : <IconMicOff />}
+                    </button>
+                    {canEnumerateDevices ? (
+                      <MediaDeviceMenu
+                        kind="audioinput"
+                        className={styles.splitChevron}
+                        aria-label={t('toolbar.micSettings')}
+                        data-tip={t('toolbar.micSettings')}
+                      >
+                        <IconChevronUp />
+                      </MediaDeviceMenu>
+                    ) : (
+                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.micSettings')} disabled>
+                        <IconChevronUp />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Camera split */}
+                  <div className={styles.split}>
+                    <button
+                      type="button"
+                      className={`${styles.roundBtn} ${!camEnabled ? styles.roundBtnOff : ''} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
+                      onClick={onToggleCam}
+                      disabled={!canUseMediaDevices}
+                      aria-label={camLabel}
+                      data-tip={camLabel}
+                    >
+                      {camEnabled ? <IconCamOn /> : <IconCamOff />}
+                    </button>
+                    {canEnumerateDevices ? (
+                      <MediaDeviceMenu
+                        kind="videoinput"
+                        className={styles.splitChevron}
+                        aria-label={t('toolbar.camSettings')}
+                        data-tip={t('toolbar.camSettings')}
+                      >
+                        <IconChevronUp />
+                      </MediaDeviceMenu>
+                    ) : (
+                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.camSettings')} disabled>
+                        <IconChevronUp />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Speaker split: icon and chevron both open the output-device menu */}
+                  <div className={styles.split}>
+                    {canEnumerateDevices ? (
+                      <MediaDeviceMenu
+                        kind="audiooutput"
+                        className={styles.roundBtn}
+                        aria-label={t('toolbar.speakerSettings')}
+                        data-tip={t('toolbar.speakerSettings')}
+                      >
+                        <IconSpeaker />
+                      </MediaDeviceMenu>
+                    ) : (
+                      <span
+                        className={`${styles.roundBtn} ${styles.roundBtnStatic}`}
+                        role="img"
+                        aria-label={t('toolbar.speakerSettings')}
+                        data-tip={t('toolbar.speakerSettings')}
+                      >
+                        <IconSpeaker />
+                      </span>
+                    )}
+                    {canEnumerateDevices ? (
+                      <MediaDeviceMenu
+                        kind="audiooutput"
+                        className={styles.splitChevron}
+                        aria-label={t('toolbar.speakerSettings')}
+                        data-tip={t('toolbar.speakerSettings')}
+                      >
+                        <IconChevronUp />
+                      </MediaDeviceMenu>
+                    ) : (
+                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.speakerSettings')} disabled>
+                        <IconChevronUp />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+              {(clockText || meetingLabel) && (
+                <div className={styles.meetingMeta}>
+                  {clockText && <span className={styles.clock}>{clockText}</span>}
+                  {clockText && meetingLabel && <span className={styles.zoneDivider} aria-hidden="true" />}
+                  {meetingLabel && (
+                    <span className={styles.meetingName} title={meetingLabel}>
+                      {meetingLabel}
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
-            {/* Centre zone: devices → view switch → share tools → hand → (rec) → more → exit */}
+            {/* Centre zone: what everyone sees (modes) | what you can do (actions) */}
             <div className={styles.zoneCenter}>
-              {(() => {
-                const micLabel = isMutedByHost
-                  ? tr('toolbar.mutedByHost', 'Muted by host')
-                  : micEnabled
-                    ? t('toolbar.muteMic')
-                    : t('toolbar.unmuteMic');
-                const camLabel = isCamDisabledByHost
-                  ? tr('toolbar.camDisabledByHost', 'Camera disabled by host')
-                  : camEnabled
-                    ? t('toolbar.turnOffCam')
-                    : t('toolbar.turnOnCam');
-                return (
-                  <div className={styles.deviceGroup}>
-                    {/* Mic split */}
-                    <div className={styles.split}>
-                      <button
-                        type="button"
-                        className={`${styles.roundBtn} ${!micEnabled ? styles.roundBtnOff : ''} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
-                        onClick={onToggleMic}
-                        disabled={!canUseMediaDevices}
-                        aria-label={micLabel}
-                        data-tip={micLabel}
-                      >
-                        {micEnabled ? <IconMicOn /> : <IconMicOff />}
-                      </button>
-                      {canEnumerateDevices ? (
-                        <MediaDeviceMenu
-                          kind="audioinput"
-                          className={styles.splitChevron}
-                          aria-label={t('toolbar.micSettings')}
-                          data-tip={t('toolbar.micSettings')}
-                        >
-                          <IconChevronUp />
-                        </MediaDeviceMenu>
-                      ) : (
-                        <button type="button" className={styles.splitChevron} aria-label={t('toolbar.micSettings')} disabled>
-                          <IconChevronUp />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Camera split */}
-                    <div className={styles.split}>
-                      <button
-                        type="button"
-                        className={`${styles.roundBtn} ${!camEnabled ? styles.roundBtnOff : ''} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
-                        onClick={onToggleCam}
-                        disabled={!canUseMediaDevices}
-                        aria-label={camLabel}
-                        data-tip={camLabel}
-                      >
-                        {camEnabled ? <IconCamOn /> : <IconCamOff />}
-                      </button>
-                      {canEnumerateDevices ? (
-                        <MediaDeviceMenu
-                          kind="videoinput"
-                          className={styles.splitChevron}
-                          aria-label={t('toolbar.camSettings')}
-                          data-tip={t('toolbar.camSettings')}
-                        >
-                          <IconChevronUp />
-                        </MediaDeviceMenu>
-                      ) : (
-                        <button type="button" className={styles.splitChevron} aria-label={t('toolbar.camSettings')} disabled>
-                          <IconChevronUp />
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Speaker split: icon and chevron both open the output-device menu */}
-                    <div className={styles.split}>
-                      {canEnumerateDevices ? (
-                        <MediaDeviceMenu
-                          kind="audiooutput"
-                          className={styles.roundBtn}
-                          aria-label={t('toolbar.speakerSettings')}
-                          data-tip={t('toolbar.speakerSettings')}
-                        >
-                          <IconSpeaker />
-                        </MediaDeviceMenu>
-                      ) : (
-                        <span
-                          className={`${styles.roundBtn} ${styles.roundBtnStatic}`}
-                          role="img"
-                          aria-label={t('toolbar.speakerSettings')}
-                          data-tip={t('toolbar.speakerSettings')}
-                        >
-                          <IconSpeaker />
-                        </span>
-                      )}
-                      {canEnumerateDevices ? (
-                        <MediaDeviceMenu
-                          kind="audiooutput"
-                          className={styles.splitChevron}
-                          aria-label={t('toolbar.speakerSettings')}
-                          data-tip={t('toolbar.speakerSettings')}
-                        >
-                          <IconChevronUp />
-                        </MediaDeviceMenu>
-                      ) : (
-                        <button type="button" className={styles.splitChevron} aria-label={t('toolbar.speakerSettings')} disabled>
-                          <IconChevronUp />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* View switch: LiveDoc / Webcam (Tile·Spotlight) / Share Screen */}
+              {/* View switch: LiveDoc / Video / Screen share */}
               {renderDesktopViewSwitch()}
+
+              <span className={styles.zoneSeparator} aria-hidden="true" />
 
               {/* Annotate / Remote control: Electron + screen share only */}
               {renderDesktopShareTools()}
 
               <div className={styles.actionGroup}>
+                {renderDesktopLiveDocAiButton()}
                 {/* Raise hand: everyone */}
                 <button
                   type="button"
-                  className={`${styles.roundBtn} ${handRaised ? styles.roundBtnHand : ''}`}
+                  className={`${styles.actBtn} ${handRaised ? styles.actBtnHand : ''}`}
                   onClick={onToggleHand}
                   aria-pressed={handRaised}
                   aria-label={handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}
-                  data-tip={handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}
                 >
                   <IconHand />
+                  <span className={styles.actLabel}>{handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}</span>
                 </button>
+                <button
+                  ref={attendeeMenuBtnRef}
+                  type="button"
+                  className={`${styles.actBtn} ${attendeeOpen ? styles.actBtnActive : ''}`}
+                  onClick={handleToggleAttendee}
+                  aria-pressed={attendeeOpen}
+                  aria-label={raisedHandCount > 0 ? `${t('toolbar.attendees')} (${raisedHandCount})` : t('toolbar.attendees')}
+                >
+                  <span className={styles.actIcon}>
+                    <IconPeople />
+                    {renderCountBadge(raisedHandCount)}
+                  </span>
+                  <span className={styles.actLabel}>{t('toolbar.attendees')}</span>
+                </button>
+                <button
+                  ref={chatMenuBtnRef}
+                  type="button"
+                  className={`${styles.actBtn} ${chatOpen ? styles.actBtnActive : ''}`}
+                  onClick={handleToggleChat}
+                  aria-pressed={chatOpen}
+                  aria-label={chatBadgeCount > 0 ? `${t('toolbar.chats')} (${chatBadgeCount})` : t('toolbar.chats')}
+                >
+                  <span className={styles.actIcon}>
+                    <IconChat />
+                    {!chatOpen && renderCountBadge(chatBadgeCount)}
+                  </span>
+                  <span className={styles.actLabel}>{t('toolbar.chats')}</span>
+                </button>
+                <div data-invite-menu-anchor="true" className={styles.inviteMenuAnchor}>
+                  <button
+                    type="button"
+                    className={`${styles.actBtn} ${inviteMenuOpen ? styles.actBtnActive : ''}`}
+                    onClick={() =>
+                      setInviteMenuOpen((prev) => {
+                        const next = !prev;
+                        if (next) onOpenSheet?.();
+                        return next;
+                      })
+                    }
+                    aria-haspopup="menu"
+                    aria-expanded={inviteMenuOpen}
+                    aria-label={t('toolbar.invite')}
+                  >
+                    <IconLink />
+                    <span className={styles.actLabel}>{t('toolbar.invite')}</span>
+                  </button>
+                  {inviteMenuOpen && (
+                    <div className={`${styles.inviteDropdown} ${styles.inviteDropdownEnd}`} role="menu">
+                      <button
+                        type="button"
+                        className={styles.inviteDropdownItem}
+                        role="menuitem"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+                          showInviteToast(t('toolbar.inviteCopied'));
+                          closeInviteMenu();
+                        }}
+                      >
+                        {t('schedule.copyLink')}
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.inviteDropdownItem}
+                        role="menuitem"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                          showInviteToast(t('schedule.inviteCopied'));
+                          closeInviteMenu();
+                        }}
+                      >
+                        {t('schedule.copyInvite')}
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* Recording in progress (host / co-host): opens Stop Recording menu */}
                 {canRecord && isRecording && (
                   <button
                     ref={recordMenuBtnRef}
                     type="button"
-                    className={`${styles.roundBtn} ${styles.recBtn} ${activeSheet === 'recording' ? styles.roundBtnActive : ''}`}
+                    className={`${styles.actBtn} ${activeSheet === 'recording' ? styles.actBtnActive : ''}`}
                     onClick={() => openSheet('recording')}
                     aria-haspopup="menu"
                     aria-expanded={activeSheet === 'recording'}
                     aria-label={t('toolbar.recordingControls')}
-                    data-tip={t('toolbar.recording')}
                   >
-                    <span className={styles.recDot} aria-hidden="true" />
+                    <span className={styles.actRec} aria-hidden="true"><span className={styles.recDot} /></span>
+                    <span className={styles.actLabel}>{t('toolbar.recording')}</span>
                   </button>
                 )}
-
-                {/* More */}
+                {/* More (also holds SmartCam / picture-in-picture) */}
                 <button
                   ref={moreMenuBtnRef}
                   type="button"
-                  className={`${styles.roundBtn} ${activeSheet === 'more' ? styles.roundBtnActive : ''}`}
+                  className={`${styles.actBtn} ${activeSheet === 'more' ? styles.actBtnActive : ''}`}
                   onClick={() => openSheet('more')}
                   aria-haspopup="menu"
                   aria-expanded={activeSheet === 'more'}
                   aria-label={t('toolbar.moreOptions')}
-                  data-tip={t('toolbar.moreOptions')}
                 >
                   <IconDots />
+                  <span className={styles.actLabel}>{t('toolbar.more')}</span>
                 </button>
               </div>
+            </div>
 
-              {/* Exit: separated red pill */}
+            {/* Right zone: Leave, on its own */}
+            <div className={styles.zoneRight}>
               <button
                 ref={exitMenuBtnRef}
                 type="button"
@@ -2082,103 +2176,10 @@ export function KloudMeetToolbar({
                 aria-haspopup="menu"
                 aria-expanded={activeSheet === 'exit'}
                 aria-label={t('toolbar.exit')}
-                data-tip={t('toolbar.exit')}
               >
                 <IconHangUp />
+                <span className={styles.exitLabel}>{t('toolbar.exit')}</span>
               </button>
-            </div>
-
-            {/* Right zone: icon-only tools with tooltips + badges */}
-            <div className={styles.zoneRight}>
-              {renderDesktopLiveDocAiButton()}
-
-              <button
-                ref={attendeeMenuBtnRef}
-                type="button"
-                className={`${styles.iconBtn} ${attendeeOpen ? styles.iconBtnActive : ''}`}
-                onClick={handleToggleAttendee}
-                aria-pressed={attendeeOpen}
-                aria-label={raisedHandCount > 0 ? `${t('toolbar.attendees')} (${raisedHandCount})` : t('toolbar.attendees')}
-                data-tip={t('toolbar.attendees')}
-              >
-                <IconPeople />
-                {renderCountBadge(raisedHandCount)}
-              </button>
-
-              <button
-                ref={chatMenuBtnRef}
-                type="button"
-                className={`${styles.iconBtn} ${chatOpen ? styles.iconBtnActive : ''}`}
-                onClick={handleToggleChat}
-                aria-pressed={chatOpen}
-                aria-label={chatBadgeCount > 0 ? `${t('toolbar.chats')} (${chatBadgeCount})` : t('toolbar.chats')}
-                data-tip={t('toolbar.chats')}
-              >
-                <IconChat />
-                {!chatOpen && renderCountBadge(chatBadgeCount)}
-              </button>
-
-              <div data-invite-menu-anchor="true" className={styles.inviteMenuAnchor}>
-                <button
-                  type="button"
-                  className={`${styles.iconBtn} ${inviteMenuOpen ? styles.iconBtnActive : ''}`}
-                  onClick={() =>
-                    setInviteMenuOpen((prev) => {
-                      const next = !prev;
-                      if (next) onOpenSheet?.();
-                      return next;
-                    })
-                  }
-                  aria-haspopup="menu"
-                  aria-expanded={inviteMenuOpen}
-                  aria-label={t('toolbar.invite')}
-                  data-tip={t('toolbar.invite')}
-                >
-                  <IconLink />
-                </button>
-                {inviteMenuOpen && (
-                  <div className={`${styles.inviteDropdown} ${styles.inviteDropdownEnd}`} role="menu">
-                    <button
-                      type="button"
-                      className={styles.inviteDropdownItem}
-                      role="menuitem"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
-                        showInviteToast(t('toolbar.inviteCopied'));
-                        closeInviteMenu();
-                      }}
-                    >
-                      {t('schedule.copyLink')}
-                    </button>
-                    <button
-                      type="button"
-                      className={styles.inviteDropdownItem}
-                      role="menuitem"
-                      onClick={() => {
-                        void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
-                        showInviteToast(t('schedule.inviteCopied'));
-                        closeInviteMenu();
-                      }}
-                    >
-                      {t('schedule.copyInvite')}
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* SmartCam（智视窗 = Document PiP，同一功能，单一按钮） */}
-              {canDocumentPip && (
-                <button
-                  type="button"
-                  className={`${styles.iconBtn} ${documentPipEnabled ? styles.iconBtnActive : ''}`}
-                  onClick={() => onToggleDocumentPip?.()}
-                  aria-pressed={documentPipEnabled}
-                  aria-label={t('toolbar.documentPip')}
-                  data-tip={t('toolbar.documentPip')}
-                >
-                  <IconSmartCam />
-                </button>
-              )}
             </div>
           </>
         )}
@@ -2419,6 +2420,9 @@ export function KloudMeetToolbar({
                       onOpenDesktopApp={onOpenDesktopApp}
                       isMobile={false}
                       canShowOperatorMenus={canShowOperatorMenus}
+                      canDocumentPip={canDocumentPip}
+                      documentPipEnabled={documentPipEnabled}
+                      onToggleDocumentPip={onToggleDocumentPip}
                     />
                   </div>
                 )}
@@ -2605,6 +2609,9 @@ function ActiveSheetContent({
   onOpenDesktopApp,
   isMobile,
   canShowOperatorMenus = false,
+  canDocumentPip = false,
+  documentPipEnabled = false,
+  onToggleDocumentPip,
 }: any) {
   const { t, locale, setLocale } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
@@ -2843,6 +2850,21 @@ function ActiveSheetContent({
             </button>
           )}
           <div className={styles.menuDivider} role="separator" />
+          {/* SmartCam（智视窗 = Document PiP）：桌面浏览器才有，收进「更多」，不再常驻工具栏 */}
+          {!isMobile && canDocumentPip && (
+            <button
+              type="button"
+              className={`${styles.actionSheetItem}${documentPipEnabled ? ` ${styles.active}` : ''}`}
+              aria-pressed={documentPipEnabled}
+              onClick={() => {
+                onToggleDocumentPip?.();
+                setActiveSheet(null);
+              }}
+            >
+              <IconSmartCam />
+              {t('toolbar.documentPip')}
+            </button>
+          )}
           <button className={styles.actionSheetItem} onClick={() => {
             if (onOpenDesktopApp) {
               onOpenDesktopApp();

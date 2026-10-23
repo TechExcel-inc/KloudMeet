@@ -32,7 +32,6 @@ import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
-import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import {
   isToolbarMobileUserAgent,
@@ -174,6 +173,7 @@ const AUTO_LOWER_HAND_MS = 1500;
 const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
+import { applyTileHue } from '@/lib/tileLayout';
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -4411,6 +4411,8 @@ export function VideoConferenceComponent(props: {
         if (placeholder.getAttribute('data-lk-name') !== name) {
           placeholder.setAttribute('data-lk-name', name);
         }
+        // Same colour for this person on every tile (grid, carousel, phone)
+        applyTileHue(tile as HTMLElement, name);
         // Keep initials attribute for leftover consumers; UI uses login name via data-lk-name
         const initials = getInitials(name);
         if (placeholder.getAttribute('data-lk-initials') !== initials) {
@@ -4681,29 +4683,6 @@ export function VideoConferenceComponent(props: {
   documentPipOpenRef.current = documentPip.open;
   /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
   const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
-
-  const [showPipSuggest, setShowPipSuggest] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!livekitConnected || isDesktop || isToolbarMobile || isRecorderBot || meetingEndedByHost) {
-      setShowPipSuggest(false);
-      return;
-    }
-    if (!isWebDocumentPipEligible() || documentPip.isOpen || showMeetingReadyModal) {
-      setShowPipSuggest(false);
-      return;
-    }
-    const id = window.setTimeout(() => setShowPipSuggest(true), 1200);
-    return () => window.clearTimeout(id);
-  }, [
-    livekitConnected,
-    isDesktop,
-    isToolbarMobile,
-    isRecorderBot,
-    meetingEndedByHost,
-    documentPip.isOpen,
-    showMeetingReadyModal,
-  ]);
 
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
@@ -6732,6 +6711,13 @@ export function VideoConferenceComponent(props: {
                       onMouseLeave={() => setFloatingCollapsedPreviewId(null)}
                     >
                     <div className="floating-collapsed-row">
+                      {/* Camera glyph: this pill is the cameras view, not the attendee list */}
+                      <span className="floating-collapsed-cam" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5" />
+                          <rect x="2" y="6" width="14" height="12" rx="2" />
+                        </svg>
+                      </span>
                       <div className="floating-stacked-avatars">
                         {allParticipants.slice(0, maxVisible).map((p, i) => {
                           const participant =
@@ -7366,6 +7352,20 @@ export function VideoConferenceComponent(props: {
             .floating-stacked-avatars {
                display: flex;
                align-items: center;
+            }
+            .floating-collapsed-cam {
+               display: inline-flex;
+               align-items: center;
+               justify-content: center;
+               width: 22px;
+               height: 22px;
+               margin: 0 2px 0 4px;
+               color: #bdc1c6;
+               flex-shrink: 0;
+            }
+            .floating-collapsed-cam svg {
+               width: 18px;
+               height: 18px;
             }
             .floating-stacked-avatars .floating-avatar,
             .floating-stacked-avatars .floating-avatar-shell {
@@ -9309,13 +9309,6 @@ export function VideoConferenceComponent(props: {
         />
 
         {/* --- MODALS --- */}
-        <MeetingPipSuggestPrompt
-          visible={showPipSuggest}
-          attendeeCount={1 + room.remoteParticipants.size}
-          onEnable={() => {
-            void documentPip.open({ sticky: true });
-          }}
-        />
         {showMeetingReadyModal && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowMeetingReadyModal(false)}>
             <div className="kloud-modal" onMouseDown={e => e.stopPropagation()}>

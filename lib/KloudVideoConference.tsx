@@ -25,6 +25,7 @@ import {
   type MessageFormatter,
 } from '@livekit/components-react';
 import { KloudConnectionStateToast } from './KloudConnectionStateToast';
+import { applyBalancedGrid, applyTileHue } from './tileLayout';
 
 export type WebcamLayoutMode = 'tile' | 'spotlight';
 
@@ -78,6 +79,37 @@ export function KloudVideoConference({
   );
 
   const layoutContext = useCreateLayoutContext();
+
+  /**
+   * Balanced gallery: rows of near-equal size that fill the width (7 people → 3 + 4), and a
+   * stable colour per person for camera-off tiles. Re-applied whenever tiles come and go.
+   */
+  const gridWrapperRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const wrapper = gridWrapperRef.current;
+    if (!wrapper) return;
+    const apply = () => {
+      const grid = wrapper.querySelector<HTMLElement>('.lk-grid-layout');
+      if (!grid) return;
+      applyBalancedGrid(grid);
+      grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile) => {
+        const name =
+          tile.querySelector('.lk-participant-placeholder')?.getAttribute('data-lk-name') ||
+          tile.querySelector('.lk-participant-name')?.textContent ||
+          '';
+        applyTileHue(tile, name.trim());
+      });
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(wrapper, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-lk-name'],
+    });
+    return () => observer.disconnect();
+  });
 
   const screenShareTracks = React.useMemo(
     () =>
@@ -245,7 +277,7 @@ export function KloudVideoConference({
         <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
           <div className="lk-video-conference-inner">
             {!showFocusLayout ? (
-              <div className="lk-grid-layout-wrapper">
+              <div className="lk-grid-layout-wrapper" ref={gridWrapperRef}>
                 <GridLayout tracks={tracks}>
                   <ParticipantTile />
                 </GridLayout>

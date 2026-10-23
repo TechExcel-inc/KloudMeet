@@ -311,6 +311,7 @@
   "liveDocAi.totalFiles": "共 {total} 个文件",
   "liveDocAi.selectedCount": "已选 {count} 个",
   "toolbar.webcam": "摄像头",
+  "toolbar.onlyHostSwitchesView": "只有主持人可以切换大家看到的内容",
   "toolbar.webcamTile": "摄像头 · 宫格",
   "toolbar.webcamSpotlight": "摄像头 · 焦点",
   "toolbar.shareScreen": "共享屏幕",
