@@ -167,21 +167,21 @@
   "dash.earlyStart.message": "이 회의는 {time}에 시작 예정입니다.",
   "dash.earlyStart.confirm": "지금 시작하시겠습니까?",
   "dash.earlyStart.yes": "네, 시작합니다",
-  "prejoin.startingMeeting": "회의 시작",
-  "prejoin.activeMeeting": "회의 진행 중",
-  "prejoin.joiningUser": "{name}의 회의에 참가",
-  "prejoin.joiningMeeting": "회의에 참가",
+  "prejoin.startingMeeting": "회의를 시작할까요?",
+  "prejoin.activeMeeting": "회의가 진행 중입니다",
+  "prejoin.joiningUser": "{name}님의 회의에 참여",
+  "prejoin.joiningMeeting": "참여할 준비가 되셨나요?",
   "prejoin.configDevice": "회의 전 기기 설정을 해주세요.",
   "prejoin.alreadyHosting": "다른 세션에서 이 회의를 주최 중입니다. 참가하시겠습니까?",
   "prejoin.inProgress": "회의 진행 시간: {time}",
   "prejoin.startNow": "지금 시작",
-  "prejoin.displayMyNameAs": "내 이름 표시",
+  "prejoin.displayMyNameAs": "내 이름",
   "prejoin.microphone": "마이크",
-  "prejoin.webcam": "웹캠",
+  "prejoin.webcam": "카메라",
   "prejoin.mediaRequiresSecureContext": "이 브라우저에서 마이크와 카메라 제어를 사용하려면 HTTPS가 필요합니다.",
-  "prejoin.shareMeetingUrl": "다른 사람과 회의 URL 공유:",
-  "prejoin.joinAsHost": "호스트로 참가",
-  "prejoin.joinNow": "지금 참가",
+  "prejoin.shareMeetingUrl": "이 링크로 다른 사람을 초대하세요",
+  "prejoin.joinAsHost": "호스트로 참여",
+  "prejoin.joinNow": "지금 참여",
   "prejoin.orStartNew": "또는 새 회의 시작",
   "prejoin.meetingConcluded": "회의 종료",
   "prejoin.meetingCanceled": "회의 취소됨",
@@ -339,7 +339,7 @@
   "toolbar.stopRecording": "녹화 중지",
   "toolbar.peopleAttendees": "인원 & 참석자",
   "toolbar.copyInviteLink": "초대 링크 복사",
-  "toolbar.openDesktop.menuItem": "Kloud Meet 데스크톱 열기",
+  "toolbar.openDesktop.menuItem": "데스크톱 앱에서 열기",
   "toolbar.openDesktop.title": "Kloud Meet 데스크톱 열기",
   "toolbar.openDesktop.subtitleInMeeting": "이 회의를 Kloud Meet 데스크톱 앱에서 계속 진행합니다.",
   "toolbar.openDesktop.subtitlePrejoin": "참가 전에 데스크톱을 실행하면 더 안정적인 음성/영상 환경을 제공합니다.",
@@ -759,6 +759,42 @@
   "livedoc.retry": "다시 로드",
 
   "prejoin.cameraIsOff": "카메라가 꺼져 있습니다",
+
+  "prejoin.nobodyHereYet": "아직 다른 참가자가 없습니다",
+
+  "prejoin.checkDevices": "참여하기 전에 카메라와 마이크를 확인하세요.",
+
+  "prejoin.speaker": "스피커",
+
+  "prejoin.tryAgain": "다시 시도",
+
+
+  "prejoin.allowPermission": "브라우저에서 물으면 카메라와 마이크를 허용하세요",
+  "prejoin.cameraStarting": "카메라를 켜는 중…",
+
+  "prejoin.cameraBlocked": "카메라 접근이 차단되었습니다",
+
+  "prejoin.cameraBlockedHint": "브라우저 주소창에서 카메라를 허용한 뒤 다시 시도하세요.",
+
+  "prejoin.cameraInUse": "다른 앱이 카메라를 사용 중입니다",
+
+  "prejoin.cameraInUseHint": "그 앱을 닫거나 다른 카메라를 선택한 뒤 다시 시도하세요.",
+
+  "prejoin.cameraNotFound": "카메라를 찾을 수 없습니다",
+
+  "prejoin.cameraNotFoundHint": "카메라를 연결하거나 아래에서 다른 카메라를 선택하세요.",
+
+  "prejoin.cameraFailed": "카메라를 켤 수 없습니다",
+
+  "prejoin.cameraFailedHint": "아래에서 다른 카메라를 선택하거나 다시 시도하세요.",
+
+  "prejoin.micBlocked": "마이크 접근이 차단되었습니다. 주소창에서 허용한 뒤 다시 시도하세요.",
+
+  "prejoin.micInUse": "다른 앱이 마이크를 사용 중입니다. 그 앱을 닫거나 다른 마이크를 선택하세요.",
+
+  "prejoin.micNotFound": "마이크를 찾을 수 없습니다. 연결하거나 아래에서 다른 마이크를 선택하세요.",
+
+  "prejoin.micFailed": "마이크를 켤 수 없습니다. 아래에서 다른 마이크를 선택하거나 다시 시도하세요.",
   "prejoin.enterNameToJoin": "참가하려면 이름을 입력하세요",
   "schedule.date": "날짜",
   "schedule.startTime": "시작 시간",

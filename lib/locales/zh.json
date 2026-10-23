@@ -173,19 +173,19 @@
   "dash.earlyStart.message": "此会议预定于 {time} 开始。当前时间不在标准的 15 分钟启动窗口内。",
   "dash.earlyStart.confirm": "确定要立即开始此会议吗？",
   "dash.earlyStart.yes": "是的，开始会议",
-  "prejoin.startingMeeting": "即将开始会议",
-  "prejoin.activeMeeting": "会议正在进行中",
-  "prejoin.joiningUser": "正在加入 {name} 的会议",
-  "prejoin.joiningMeeting": "正在加入会议",
+  "prejoin.startingMeeting": "准备好开会了吗？",
+  "prejoin.activeMeeting": "会议正在进行",
+  "prejoin.joiningUser": "加入 {name} 的会议",
+  "prejoin.joiningMeeting": "准备好加入了吗？",
   "prejoin.configDevice": "请在会议开始前配置您的设备设置。",
   "prejoin.alreadyHosting": "您正在另一个会话中主持此会议。是否要加入？",
   "prejoin.inProgress": "会议已进行 {time}",
   "prejoin.startNow": "立即开始",
-  "prejoin.displayMyNameAs": "将我的姓名显示为",
+  "prejoin.displayMyNameAs": "你的名字",
   "prejoin.microphone": "麦克风",
   "prejoin.webcam": "摄像头",
   "prejoin.mediaRequiresSecureContext": "当前浏览器需要 HTTPS 才能使用麦克风和摄像头控制。",
-  "prejoin.shareMeetingUrl": "与他人共享会议链接：",
+  "prejoin.shareMeetingUrl": "把链接发给别人即可邀请",
   "prejoin.joinAsHost": "以主持人身份加入",
   "prejoin.joinNow": "立即加入",
   "prejoin.orStartNew": "或开始一个新会议",
@@ -345,7 +345,7 @@
   "toolbar.stopRecording": "停止录制",
   "toolbar.peopleAttendees": "人员与参会者",
   "toolbar.copyInviteLink": "复制邀请链接",
-  "toolbar.openDesktop.menuItem": "打开 Kloud Meet 桌面版",
+  "toolbar.openDesktop.menuItem": "在桌面应用中打开",
   "toolbar.openDesktop.title": "打开 Kloud Meet 桌面版",
   "toolbar.openDesktop.subtitleInMeeting": "在 Kloud Meet 桌面应用中继续此会议。",
   "toolbar.openDesktop.subtitlePrejoin": "加入会议前启动桌面版，可获得更流畅的音视频体验。",
@@ -754,6 +754,42 @@
   "livedoc.retry": "重新加载",
 
   "prejoin.cameraIsOff": "摄像头已关闭",
+
+  "prejoin.nobodyHereYet": "还没有其他人进来",
+
+  "prejoin.checkDevices": "加入前先检查一下摄像头和麦克风。",
+
+  "prejoin.speaker": "扬声器",
+
+  "prejoin.tryAgain": "重试",
+
+
+  "prejoin.allowPermission": "浏览器询问时，请允许使用摄像头和麦克风",
+  "prejoin.cameraStarting": "正在打开摄像头…",
+
+  "prejoin.cameraBlocked": "摄像头权限被拦截了",
+
+  "prejoin.cameraBlockedHint": "请在浏览器地址栏允许使用摄像头，然后重试。",
+
+  "prejoin.cameraInUse": "摄像头正被其他应用占用",
+
+  "prejoin.cameraInUseHint": "关闭那个应用或换一个摄像头，然后重试。",
+
+  "prejoin.cameraNotFound": "没有找到摄像头",
+
+  "prejoin.cameraNotFoundHint": "请连接摄像头，或在下方换一个。",
+
+  "prejoin.cameraFailed": "摄像头没能打开",
+
+  "prejoin.cameraFailedHint": "请在下方换一个摄像头，或重试。",
+
+  "prejoin.micBlocked": "麦克风权限被拦截了。请在浏览器地址栏允许后重试。",
+
+  "prejoin.micInUse": "麦克风正被其他应用占用。请关闭那个应用或换一个麦克风。",
+
+  "prejoin.micNotFound": "没有找到麦克风。请连接一个，或在下方换一个。",
+
+  "prejoin.micFailed": "麦克风没能打开。请在下方换一个，或重试。",
   "prejoin.enterNameToJoin": "请输入您的名字后加入",
   "schedule.date": "日期",
   "schedule.startTime": "开始时间",

@@ -279,15 +279,21 @@
   width: 120px;
   height: 120px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #8b87ff, #4d6cf5);
+  background: var(--km-primary);
   color: #ffffff;
   font-size: 48px;
-  font-weight: 700;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   text-transform: uppercase;
   flex: none;
+}
+
+/* Speaking ring: --km-level (0–1) is written by useMicLevel in KloudPreJoin. */
+.avatarSpeaking {
+  box-shadow: 0 0 0 calc(var(--km-level, 0) * 18px) rgba(255, 255, 255, 0.22);
+  transition: box-shadow 90ms linear;
 }
 
 .placeholderSvg {
@@ -303,9 +309,45 @@
 }
 
 .camOffText {
-  color: #e8eaed;
+  color: #ffffff;
   font-size: 18px;
   font-weight: 500;
+}
+
+.camOffHint {
+  max-width: 360px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.deviceIssue {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #ffffff;
+}
+
+.issueBtn {
+  margin-top: 6px;
+  height: 36px;
+  padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: var(--km-radius-pill);
+  background: transparent;
+  color: #ffffff;
+  font: 600 14px var(--km-font);
+  cursor: pointer;
+}
+
+.issueBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.issueBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px #ffffff;
 }
 
 .previewName {
@@ -330,16 +372,47 @@
 }
 
 .mutedBadge {
+  position: absolute;
+  top: 14px;
+  right: 16px;
   flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: var(--km-danger);
+  background: rgba(32, 33, 36, 0.6);
   color: #ffffff;
-  text-shadow: none;
+}
+
+/* Speaking indicator: three bars that follow the mic level, like a meeting tile. */
+.levelBadge {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--km-primary);
+}
+
+.levelBadge i {
+  display: block;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  background: #ffffff;
+  transform: scaleY(calc(0.28 + var(--km-level, 0) * 0.72));
+  transition: transform 90ms linear;
+}
+
+.levelBadge i:nth-child(2) {
+  transform: scaleY(min(1, calc(0.28 + var(--km-level, 0) * 1.1)));
 }
 
 .previewControls {
@@ -352,7 +425,7 @@
   gap: 22px;
 }
 
-/* Round mic / camera toggles (LiveKit TrackToggle). On = white outline circle, off = red rounded square. */
+/* Round mic / camera toggles. On = white outline circle, off or failed = red rounded square. */
 .previewControls .roundToggle[aria-pressed] {
   position: relative;
   display: inline-flex;
@@ -368,21 +441,27 @@
   background-image: none;
   color: #ffffff;
   cursor: pointer;
-  transition: border-radius 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  transition: border-radius 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 90ms linear;
   backdrop-filter: blur(2px);
+}
+
+.previewControls .roundToggle[data-state='live'] {
+  box-shadow: 0 0 0 calc(var(--km-level, 0) * 8px) rgba(255, 255, 255, 0.28);
 }
 
 .previewControls .roundToggle[aria-pressed]:not(:disabled):hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.previewControls .roundToggle[aria-pressed='false'] {
+.previewControls .roundToggle[aria-pressed='false'],
+.previewControls .roundToggle[data-state='error'] {
   border-color: var(--km-danger);
   background: var(--km-danger);
   border-radius: 18px;
 }
 
-.previewControls .roundToggle[aria-pressed='false']:not(:disabled):hover {
+.previewControls .roundToggle[aria-pressed='false']:not(:disabled):hover,
+.previewControls .roundToggle[data-state='error']:not(:disabled):hover {
   background: #c22f28;
   border-color: #c22f28;
 }
@@ -397,10 +476,24 @@
   opacity: 0.6;
 }
 
-.previewControls .roundToggle svg {
+.previewControls .roundToggle > svg {
   width: 24px;
   height: 24px;
   color: #ffffff;
+}
+
+.toggleAlert {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f9ab00;
+  color: #202124;
 }
 
 /* ───────────── Device chips ───────────── */
@@ -453,6 +546,19 @@
 
 .chip > * {
   pointer-events: none;
+}
+
+.noteBtn {
+  flex: none;
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--km-radius-sm);
+  background: transparent;
+  color: inherit;
+  font: 700 14px var(--km-font);
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .chipIcon {
@@ -548,6 +654,9 @@
 }
 
 .mediaNote {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin: 12px 0 0;
   padding: 10px 14px;
   border-radius: var(--km-radius-md);
@@ -565,7 +674,7 @@
 
 .title {
   margin: 0;
-  font-size: 34px;
+  font-size: 30px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.02em;
@@ -752,18 +861,16 @@
   padding: 0 30px;
   border: 0;
   border-radius: var(--km-radius-pill);
-  background: var(--km-primary-grad);
+  background: var(--km-primary);
   color: var(--km-on-primary);
-  font: 700 16px/1 var(--km-font);
+  font: 600 16px/1 var(--km-font);
   white-space: nowrap;
   cursor: pointer;
-  box-shadow: var(--km-primary-shadow);
-  transition: box-shadow 0.15s, filter 0.15s;
+  transition: background-color 0.15s;
 }
 
 .joinBtn:hover:not(:disabled) {
-  box-shadow: 0 8px 24px rgba(94, 92, 230, 0.5);
-  filter: brightness(1.05);
+  background: var(--km-primary-hover);
 }
 
 .joinBtn:focus-visible {
@@ -823,9 +930,14 @@
   align-items: center;
   gap: 8px;
   height: 48px;
-  padding: 0 6px 0 16px;
+  padding: 0 6px 0 14px;
   border-radius: var(--km-radius-md);
   background: var(--km-bg-subtle);
+}
+
+.shareIcon {
+  flex: none;
+  color: var(--km-text-muted);
 }
 
 .shareUrl {
@@ -883,14 +995,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid currentColor;
+  width: 24px;
+  height: 24px;
   color: var(--km-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  line-height: 1;
   cursor: help;
   user-select: none;
 }
@@ -1027,6 +1134,8 @@
     animation-duration: 2.4s;
   }
   .previewControls .roundToggle[aria-pressed],
+  .avatarSpeaking,
+  .levelBadge i,
   .menu {
     transition: none;
     animation: none;
@@ -1061,12 +1170,17 @@
   .panel {
     flex-basis: 100%;
   }
+  /* Phones are held upright: a square preview leaves room for status text above the toggles. */
   .preview {
+    aspect-ratio: 1 / 1;
     border-radius: 12px;
   }
   .placeholder {
-    padding-bottom: 76px;
+    padding: 40px 16px 76px;
     gap: 8px;
+  }
+  .camOffHint {
+    font-size: 13px;
   }
   .avatar,
   .placeholderSvg {
@@ -1090,7 +1204,8 @@
     width: 48px;
     height: 48px;
   }
-  .previewControls .roundToggle[aria-pressed='false'] {
+  .previewControls .roundToggle[aria-pressed='false'],
+  .previewControls .roundToggle[data-state='error'] {
     border-radius: 15px;
   }
   .chips {

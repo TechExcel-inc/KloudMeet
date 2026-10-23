@@ -60,6 +60,7 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
+import { ArrowLeft, Check, ChevronDown, CircleHelp, Globe, Info, Monitor, Moon, Sun } from 'lucide-react';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
@@ -591,10 +592,10 @@ export function PageClientImpl(props: {
   }, [isHost, isActive, meetingInfo, t]);
 
   const preJoinSubtitle = React.useMemo(() => {
-    if (isHost && !isActive) return t('prejoin.configDevice');
+    if (isHost && !isActive) return t('prejoin.nobodyHereYet');
     if (isHost && isActive) return t('prejoin.alreadyHosting');
     if (meetingInfo?.startedAt) return t('prejoin.inProgress', { time: elapsedTime || '00:00' });
-    return t('prejoin.configDevice');
+    return t('prejoin.checkDevices');
   }, [isHost, isActive, meetingInfo, elapsedTime, t]);
 
   const preJoinButtonText = React.useMemo(() => {
@@ -731,26 +732,11 @@ export function PageClientImpl(props: {
       participantLiveDocShow,
     ],
   );
-  const handlePreJoinError = React.useCallback((error: any) => {
-    console.error('PreJoin device error:', error);
-    const msg: string = error?.message || String(error);
-    // "Requested device not found" — clear stale IDs and silently remount PreJoin
-    // Device preview errors (NotFoundError, OverconstrainedError, NotReadableError)
-    // are non-fatal: LiveKit still renders the dropdown and the user can select manually.
-    // DO NOT remount — that causes an infinite loop since LiveKit retries preview on mount.
-    const DEVICE_ERRORS = [
-      'notfounderror', 'requested device', 'device not found',
-      'overconstrained', 'notreadableerror', 'could not start',
-      'getusermedia', 'enumeratedevices', 'cannot read properties of undefined', 'mediadevices',
-    ];
-    const isDeviceError = DEVICE_ERRORS.some(k => msg.toLowerCase().includes(k));
-    if (isDeviceError) {
-      // Silently suppress — user can still pick a device from the dropdown
-      console.warn('[KloudMeet] Device preview unavailable, user may select manually:', msg);
-      return;
-    }
-    alert(`${t('prejoin.prejoinError', { error: msg })}`);
-  }, [t]);
+  // KloudPreJoin shows camera/mic failures (blocked, in use, not found) next to the preview,
+  // with a retry, so preview errors are only logged here.
+  const handlePreJoinError = React.useCallback((error: unknown) => {
+    console.warn('[KloudMeet] Device preview unavailable:', error);
+  }, []);
 
   React.useEffect(() => {
     if (isBot && !connectionDetails && preJoinChoices === undefined) {
@@ -897,12 +883,7 @@ export function PageClientImpl(props: {
     );
   }
 
-  const languageIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" width={size} height={size} aria-hidden="true">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-    </svg>
-  );
+  const languageIcon = (size: number) => <Globe size={size} aria-hidden="true" />;
 
   return (
     <main style={{ height: '100%' }}>
@@ -917,14 +898,12 @@ export function PageClientImpl(props: {
           <header className={prejoinStyles.toolbar}>
             <div className={prejoinStyles.toolbarLeft}>
               <Link href="/" className={prejoinStyles.iconBtn} title={t('common.back')} aria-label={t('common.back')}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
+                <ArrowLeft size={22} aria-hidden="true" />
               </Link>
               <Link href="/" className={prejoinStyles.logoLink}>
                 <Image
                   src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
-                  alt="Kloud Meet"
+                  alt="KloudMeet"
                   width={120}
                   height={36}
                   style={{ display: 'block', transform: 'translateY(4px)' }}
@@ -940,23 +919,7 @@ export function PageClientImpl(props: {
                 aria-label={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
               >
-                {theme === 'dark' ? (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="20" aria-hidden="true">
-                    <circle cx="12" cy="12" r="5"></circle>
-                    <line x1="12" y1="1" x2="12" y2="3"></line>
-                    <line x1="12" y1="21" x2="12" y2="23"></line>
-                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                    <line x1="1" y1="12" x2="3" y2="12"></line>
-                    <line x1="21" y1="12" x2="23" y2="12"></line>
-                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" width="20" height="20" aria-hidden="true">
-                    <path d="M21 12.79A9 9 0 1111.21 3c0 .28-.01.56-.01.84A7 7 0 0021 12.79z"></path>
-                  </svg>
-                )}
+                {theme === 'dark' ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
               </button>
 
               {/* Help Button */}
@@ -967,10 +930,7 @@ export function PageClientImpl(props: {
                 aria-label={t('nav.help')}
                 onClick={() => { setShowLangMenu(false); setShowHelp(true); }}
               >
-                <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9"></circle>
-                  <path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"></path>
-                </svg>
+                <CircleHelp size={20} aria-hidden="true" />
               </button>
 
               {/* Language Pill Button */}
@@ -985,9 +945,7 @@ export function PageClientImpl(props: {
                 >
                   {languageIcon(16)}
                   <span>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
+                  <ChevronDown size={14} aria-hidden="true" />
                 </button>
                 {showLangMenu && (
                   <div className={prejoinStyles.menu} role="menu">
@@ -1008,9 +966,7 @@ export function PageClientImpl(props: {
                         {opt.label}
                         <span className={prejoinStyles.menuCode}>
                           {opt.shortCode}
-                          {locale === opt.code && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
-                          )}
+                          {locale === opt.code && <Check size={14} aria-hidden="true" />}
                         </span>
                       </button>
                     ))}
@@ -1023,6 +979,7 @@ export function PageClientImpl(props: {
                   user={{
                     displayName: currentUser.displayName || currentUser.username,
                     avatarUrl: currentUser.avatarUrl,
+                    email: currentUser.email,
                   }}
                   onOpenProfile={() => setShowProfileModal(true)}
                   onOpenSettings={() => setShowSettingsModal(true)}
@@ -1072,10 +1029,7 @@ export function PageClientImpl(props: {
                       onClick={() => openDesktopEntry('prejoin')}
                       aria-describedby="kloud-prejoin-desktop-tip"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-                        <rect x="2" y="4" width="20" height="13" rx="2" />
-                        <path d="M8 21h8M12 17v4" />
-                      </svg>
+                      <Monitor size={16} aria-hidden="true" />
                       {t('toolbar.openDesktop.menuItem')}
                     </button>
                     <span
@@ -1083,7 +1037,7 @@ export function PageClientImpl(props: {
                       title={t('toolbar.openDesktop.prejoinTip')}
                       aria-hidden="true"
                     >
-                      i
+                      <Info size={16} />
                     </span>
                     <span id="kloud-prejoin-desktop-tip" className={prejoinStyles.srOnly}>
                       {t('toolbar.openDesktop.prejoinTip')}

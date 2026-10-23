@@ -173,6 +173,7 @@ const AUTO_LOWER_HAND_MS = 1500;
 /** "XXX 举手了" 提示的合并窗口，避免多人同时举手刷屏 */
 const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
+import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -501,6 +502,7 @@ export function VideoConferenceComponent(props: {
       audioCaptureDefaults: {
         deviceId: normalizeCaptureDeviceId(props.userChoices.audioDeviceId),
       },
+      audioOutput: { deviceId: loadAudioOutputDeviceId() },
       adaptiveStream: true,
       dynacast: true,
       // 手机切后台常见 pagehide/freeze；不断连，靠现有 visibility 恢复音频

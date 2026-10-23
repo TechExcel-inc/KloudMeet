@@ -167,19 +167,19 @@
   "dash.earlyStart.message": "このミーティングは {time} に開始予定です。",
   "dash.earlyStart.confirm": "今すぐ開始しますか？",
   "dash.earlyStart.yes": "はい、開始します",
-  "prejoin.startingMeeting": "ミーティングを開始",
-  "prejoin.activeMeeting": "ミーティング進行中",
-  "prejoin.joiningUser": "{name} のミーティングに参加",
-  "prejoin.joiningMeeting": "ミーティングに参加",
+  "prejoin.startingMeeting": "会議を始めますか？",
+  "prejoin.activeMeeting": "会議は進行中です",
+  "prejoin.joiningUser": "{name} の会議に参加",
+  "prejoin.joiningMeeting": "参加の準備はできましたか？",
   "prejoin.configDevice": "デバイス設定をしてください。",
   "prejoin.alreadyHosting": "別セッションで主催中です。参加しますか？",
   "prejoin.inProgress": "経過時間: {time}",
   "prejoin.startNow": "今すぐ開始",
   "prejoin.displayMyNameAs": "表示名",
   "prejoin.microphone": "マイク",
-  "prejoin.webcam": "ウェブカメラ",
+  "prejoin.webcam": "カメラ",
   "prejoin.mediaRequiresSecureContext": "このブラウザでマイクとカメラを使うには HTTPS が必要です。",
-  "prejoin.shareMeetingUrl": "他の参加者とミーティング URL を共有：",
+  "prejoin.shareMeetingUrl": "このリンクで招待できます",
   "prejoin.joinAsHost": "ホストとして参加",
   "prejoin.joinNow": "今すぐ参加",
   "prejoin.orStartNew": "または新しいミーティングを開始",
@@ -339,7 +339,7 @@
   "toolbar.stopRecording": "録画停止",
   "toolbar.peopleAttendees": "メンバー＆参加者",
   "toolbar.copyInviteLink": "招待リンクをコピー",
-  "toolbar.openDesktop.menuItem": "Kloud Meet デスクトップを開く",
+  "toolbar.openDesktop.menuItem": "デスクトップアプリで開く",
   "toolbar.openDesktop.title": "Kloud Meet デスクトップを開く",
   "toolbar.openDesktop.subtitleInMeeting": "このミーティングを Kloud Meet デスクトップアプリで続行します。",
   "toolbar.openDesktop.subtitlePrejoin": "参加前にデスクトップ版を起動すると、音声・映像がより安定します。",
@@ -759,6 +759,42 @@
   "livedoc.retry": "再読み込み",
 
   "prejoin.cameraIsOff": "カメラはオフです",
+
+  "prejoin.nobodyHereYet": "まだ誰も参加していません",
+
+  "prejoin.checkDevices": "参加する前にカメラとマイクを確認してください。",
+
+  "prejoin.speaker": "スピーカー",
+
+  "prejoin.tryAgain": "再試行",
+
+
+  "prejoin.allowPermission": "ブラウザで確認されたら、カメラとマイクを許可してください",
+  "prejoin.cameraStarting": "カメラを起動しています…",
+
+  "prejoin.cameraBlocked": "カメラへのアクセスがブロックされています",
+
+  "prejoin.cameraBlockedHint": "ブラウザのアドレスバーでカメラを許可してから、もう一度お試しください。",
+
+  "prejoin.cameraInUse": "カメラが別のアプリで使用中です",
+
+  "prejoin.cameraInUseHint": "そのアプリを閉じるか別のカメラを選んでから、もう一度お試しください。",
+
+  "prejoin.cameraNotFound": "カメラが見つかりません",
+
+  "prejoin.cameraNotFoundHint": "カメラを接続するか、下で別のカメラを選んでください。",
+
+  "prejoin.cameraFailed": "カメラを起動できませんでした",
+
+  "prejoin.cameraFailedHint": "下で別のカメラを選ぶか、もう一度お試しください。",
+
+  "prejoin.micBlocked": "マイクへのアクセスがブロックされています。アドレスバーで許可してから、もう一度お試しください。",
+
+  "prejoin.micInUse": "マイクが別のアプリで使用中です。そのアプリを閉じるか別のマイクを選んでください。",
+
+  "prejoin.micNotFound": "マイクが見つかりません。接続するか、下で別のマイクを選んでください。",
+
+  "prejoin.micFailed": "マイクを起動できませんでした。下で別のマイクを選ぶか、もう一度お試しください。",
   "prejoin.enterNameToJoin": "参加するには名前を入力してください",
   "schedule.date": "日付",
   "schedule.startTime": "開始時刻",

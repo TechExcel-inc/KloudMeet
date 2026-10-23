@@ -37,6 +37,9 @@ export function UserAvatarMenu({
   const billingEnabled = useBillingEnabled();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCalendarSubscribe, setShowCalendarSubscribe] = useState(false);
+  // A dead avatar URL (expired upload, blocked host) falls back to the initial instead of a broken image.
+  const [avatarFailed, setAvatarFailed] = useState(false);
+  useEffect(() => setAvatarFailed(false), [user?.avatarUrl]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,13 +80,16 @@ export function UserAvatarMenu({
         title={t('nav.userMenu')}
         style={{ overflow: 'hidden' }}
       >
-        {user.avatarUrl ? (
+        {user.avatarUrl && !avatarFailed ? (
           <Image
             src={user.avatarUrl}
             alt=""
             width={40}
             height={40}
             unoptimized
+            // Google profile photos often refuse requests that carry a referrer.
+            referrerPolicy="no-referrer"
+            onError={() => setAvatarFailed(true)}
             style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
         ) : (

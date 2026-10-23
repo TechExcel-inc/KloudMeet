@@ -2,16 +2,13 @@
 
 import React from 'react';
 import { Track } from 'livekit-client';
-import {
-  TrackToggle,
-  MediaDeviceMenu,
-  ParticipantPlaceholder,
-  usePersistentUserChoices,
-  usePreviewTracks,
-} from '@livekit/components-react';
+import { MediaDeviceMenu, usePersistentUserChoices, usePreviewTracks } from '@livekit/components-react';
 import type { LocalUserChoices } from '@livekit/components-react';
+import { ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff, Volume2 } from 'lucide-react';
 import styles from '../styles/PreJoin.module.css';
 import { useI18n } from './i18n';
+import { saveAudioOutputDeviceId, loadAudioOutputDeviceId } from './audioOutputChoice';
+import { classifyDeviceError, type DeviceIssue } from './deviceIssue';
 
 export interface KloudPreJoinProps {
   defaults?: Partial<LocalUserChoices>;
@@ -25,7 +22,7 @@ export interface KloudPreJoinProps {
   joinButtonDisabled?: boolean;
   /** 发起人准备页：始终默认打开麦克风（可随后再手动关闭） */
   forceAudioEnabled?: boolean;
-  /** Right-column heading (e.g. "Starting Meeting"). */
+  /** Right-column heading (e.g. "Ready to start?"). */
   title?: React.ReactNode;
   /** Right-column sub-heading. */
   subtitle?: React.ReactNode;
@@ -37,6 +34,95 @@ export interface KloudPreJoinProps {
   footer?: React.ReactNode;
   /** Rendered between the name field and the join button (host options). */
   children?: React.ReactNode;
+}
+
+type DeviceStatus = 'off' | 'starting' | 'live' | 'error';
+
+/**
+ * Preview state for one capture device. usePreviewTracks keeps its last tracks when a new
+ * attempt fails or the device is turned off, so "live" is tracked per attempt, not inferred
+ * from whether a track exists.
+ */
+function useDevicePreview(kind: 'audio' | 'video', enabled: boolean, deviceId: string, onError?: (e: Error) => void) {
+  const attempt = enabled ? `${kind}:${deviceId}` : 'off';
+  const attemptRef = React.useRef(attempt);
+  attemptRef.current = attempt;
+  const [result, setResult] = React.useState<{ attempt: string; issue?: DeviceIssue; track?: any }>({ attempt: 'off' });
+
+  const handleError = React.useCallback(
+    (error: Error) => {
+      setResult({ attempt: attemptRef.current, issue: classifyDeviceError(error) });
+      onError?.(error);
+    },
+    [onError],
+  );
+
+  const tracks = usePreviewTracks(
+    {
+      audio: kind === 'audio' && enabled ? { deviceId } : false,
+      video: kind === 'video' && enabled ? { deviceId } : false,
+    },
+    handleError,
+  );
+
+  React.useEffect(() => {
+    const track = tracks?.find((t) => t.kind === (kind === 'audio' ? Track.Kind.Audio : Track.Kind.Video));
+    if (track && attemptRef.current !== 'off') setResult({ attempt: attemptRef.current, track });
+  }, [tracks, kind]);
+
+  const current = result.attempt === attempt ? result : undefined;
+  const status: DeviceStatus = !enabled ? 'off' : current?.issue ? 'error' : current?.track ? 'live' : 'starting';
+  return { status, issue: current?.issue, track: status === 'live' ? current?.track : undefined };
+}
+
+/**
+ * Writes the microphone's loudness (0–1) to `--km-level` on the given elements, so CSS can
+ * animate a speaking ring without re-rendering React on every frame.
+ */
+function useMicLevel(mediaStreamTrack: MediaStreamTrack | undefined, targets: React.RefObject<HTMLElement | null>[]) {
+  React.useEffect(() => {
+    const els = () => targets.map((r) => r.current).filter(Boolean) as HTMLElement[];
+    const reset = () => els().forEach((el) => el.style.setProperty('--km-level', '0'));
+    if (!mediaStreamTrack || typeof window === 'undefined' || !window.AudioContext) {
+      reset();
+      return;
+    }
+    const ctx = new AudioContext();
+    const source = ctx.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.fftSize);
+    let level = 0;
+    let frame = 0;
+    // Audio contexts start suspended until the page has had a user gesture.
+    const resume = () => void ctx.resume().catch(() => {});
+    resume();
+    window.addEventListener('pointerdown', resume);
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const target = Math.min(1, Math.sqrt(sum / data.length) * 6);
+      level = target > level ? target : level * 0.85 + target * 0.15;
+      const value = level < 0.04 ? '0' : level.toFixed(3);
+      els().forEach((el) => el.style.setProperty('--km-level', value));
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('pointerdown', resume);
+      source.disconnect();
+      void ctx.close().catch(() => {});
+      reset();
+    };
+    // targets are stable refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mediaStreamTrack]);
 }
 
 /** Returns the translation, or `fallback` when the key is not in any locale yet. */
@@ -52,7 +138,7 @@ function useTextWithFallback() {
 }
 
 /**
- * Shows the label of the currently selected capture device on the device chip.
+ * Shows the label of the currently selected device on the device chip.
  * Uses enumerateDevices only (never getUserMedia), so it can't trigger a permission prompt.
  */
 function DeviceChipLabel({
@@ -98,37 +184,18 @@ function DeviceChipLabel({
   return <span className={styles.chipLabel}>{label || fallback}</span>;
 }
 
-const MicIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className={styles.chipIcon}>
-    <rect x="9" y="3" width="6" height="11" rx="3" />
-    <path d="M5 11a7 7 0 0014 0M12 18v3" />
-  </svg>
-);
+/** A calm, stable background tint per name, like a blurred profile photo. */
+function tileBackground(name: string): string {
+  let hash = 0;
+  for (const ch of name) hash = (hash * 31 + ch.codePointAt(0)!) | 0;
+  const hue = 170 + (Math.abs(hash) % 90); // teal → blue → indigo
+  return `radial-gradient(120% 120% at 75% 15%, hsl(${hue} 28% 42%), hsl(${hue + 20} 38% 24%) 70%)`;
+}
 
-const CamIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={styles.chipIcon}>
-    <rect x="3" y="6" width="12" height="12" rx="3" />
-    <path d="M15 10l6-3v10l-6-3z" />
-  </svg>
-);
-
-const Caret = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true" className={styles.chipCaret}>
-    <path d="M6 9l6 6 6-6" />
-  </svg>
-);
-
-const MicOffIcon = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-    <path d="M9 9v2a3 3 0 005 2.2M15 9.3V6a3 3 0 00-5.6-1.5M5 11a7 7 0 0011.5 5.4M19 11a7 7 0 01-.6 2.8M12 18v3M3 3l18 18" />
-  </svg>
-);
-
-const CamOffIcon = () => (
-  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M15 10l6-3v10l-6-3M15 13.5V16a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h2M11 6h2a2 2 0 012 2v2M3 3l18 18" />
-  </svg>
-);
+const canPickSpeaker =
+  typeof window !== 'undefined' &&
+  typeof HTMLMediaElement !== 'undefined' &&
+  'setSinkId' in HTMLMediaElement.prototype;
 
 export function KloudPreJoin({
   defaults = {},
@@ -171,16 +238,15 @@ export function KloudPreJoin({
   const [videoEnabled, setVideoEnabled] = React.useState<boolean>(initialUserChoices.videoEnabled);
   const [audioDeviceId, setAudioDeviceId] = React.useState<string>(initialUserChoices.audioDeviceId);
   const [videoDeviceId, setVideoDeviceId] = React.useState<string>(initialUserChoices.videoDeviceId);
+  const [outputDeviceId, setOutputDeviceId] = React.useState<string>(() => loadAudioOutputDeviceId() ?? 'default');
   const [username, setUsername] = React.useState(initialUserChoices.username);
-  const [micToggleEpoch, setMicToggleEpoch] = React.useState(0);
   const hostMicForcedRef = React.useRef(forceAudioEnabled);
 
-  // 发起人身份晚于首屏就绪时补开麦克风，并同步 TrackToggle 初始态
+  // 发起人身份晚于首屏就绪时补开麦克风
   React.useEffect(() => {
     if (!forceAudioEnabled || hostMicForcedRef.current) return;
     hostMicForcedRef.current = true;
     setAudioEnabled(true);
-    setMicToggleEpoch((n) => n + 1);
   }, [forceAudioEnabled]);
 
   React.useEffect(() => { saveAudioInputEnabled(audioEnabled); }, [audioEnabled, saveAudioInputEnabled]);
@@ -189,48 +255,56 @@ export function KloudPreJoin({
   React.useEffect(() => { saveVideoInputDeviceId(videoDeviceId); }, [videoDeviceId, saveVideoInputDeviceId]);
   React.useEffect(() => { saveUsername(username); }, [username, saveUsername]);
 
-  const tracks = usePreviewTracks(
-    {
-      audio: canUseMediaDevices && audioEnabled ? { deviceId: audioDeviceId } : false,
-      video: canUseMediaDevices && videoEnabled ? { deviceId: videoDeviceId } : false,
-    },
-    onError,
-  );
+  const mic = useDevicePreview('audio', canUseMediaDevices && audioEnabled, audioDeviceId, onError);
+  const cam = useDevicePreview('video', canUseMediaDevices && videoEnabled, videoDeviceId, onError);
+
+  // A capture request that hasn't settled after a few seconds is almost always waiting on the
+  // browser's permission prompt; say so instead of "Starting camera…" forever.
+  const [waitingForPermission, setWaitingForPermission] = React.useState(false);
+  const anyStarting = cam.status === 'starting' || mic.status === 'starting';
+  React.useEffect(() => {
+    setWaitingForPermission(false);
+    if (!anyStarting) return;
+    const timer = window.setTimeout(() => setWaitingForPermission(true), 3000);
+    return () => window.clearTimeout(timer);
+  }, [anyStarting]);
 
   const videoEl = React.useRef<HTMLVideoElement | null>(null);
-
-  const videoTrack = React.useMemo(
-    () => tracks?.filter((t) => t.kind === Track.Kind.Video)[0] as any,
-    [tracks],
-  );
-
-  const audioTrack = React.useMemo(
-    () => tracks?.filter((t) => t.kind === Track.Kind.Audio)[0] as any,
-    [tracks],
-  );
+  const avatarRef = React.useRef<HTMLDivElement | null>(null);
+  const micBtnRef = React.useRef<HTMLButtonElement | null>(null);
+  const levelBadgeRef = React.useRef<HTMLSpanElement | null>(null);
+  useMicLevel(mic.track?.mediaStreamTrack, [avatarRef, micBtnRef, levelBadgeRef]);
 
   const facingMode = React.useMemo(() => {
-    if (!videoTrack) return 'undefined';
+    if (!cam.track) return 'undefined';
     try {
-      return videoTrack.getFacingMode?.() ?? 'undefined';
+      return cam.track.getFacingMode?.() ?? 'undefined';
     } catch {
       return 'undefined';
     }
-  }, [videoTrack]);
+  }, [cam.track]);
 
   React.useEffect(() => {
-    if (videoEl.current && videoTrack) {
-      videoTrack.unmute();
-      videoTrack.attach(videoEl.current);
+    const track = cam.track;
+    if (videoEl.current && track) {
+      track.unmute();
+      track.attach(videoEl.current);
     }
-    return () => { videoTrack?.detach(); };
-  }, [videoTrack]);
+    return () => { track?.detach(); };
+  }, [cam.track]);
+
+  /** Turning a failed device off and on again makes the preview hook request it afresh. */
+  const retry = (set: React.Dispatch<React.SetStateAction<boolean>>) => {
+    set(false);
+    requestAnimationFrame(() => set(true));
+  };
 
   const isValid = React.useMemo(() => username.trim() !== '', [username]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!isValid) return;
+    saveAudioOutputDeviceId(outputDeviceId);
     onSubmit({
       username,
       videoEnabled: canUseMediaDevices ? videoEnabled : false,
@@ -241,17 +315,53 @@ export function KloudPreJoin({
   }
 
   const trimmedName = username.trim();
-  const showVideo = !!(videoTrack && videoEnabled);
-  const micShownOn = canUseMediaDevices && audioEnabled;
-  const cameraOffLabel = tf('prejoin.cameraIsOff', 'Camera is off');
   const nameRequiredLabel = tf('prejoin.enterNameToJoin', 'Enter your name to join');
+  const tryAgainLabel = tf('prejoin.tryAgain', 'Try again');
+
+  const cameraText: Record<DeviceIssue | 'off' | 'starting', [string, string?]> = {
+    off: [tf('prejoin.cameraIsOff', 'Camera is off')],
+    starting: [tf('prejoin.cameraStarting', 'Starting camera…')],
+    blocked: [
+      tf('prejoin.cameraBlocked', 'Camera access is blocked'),
+      tf('prejoin.cameraBlockedHint', "Allow camera access in your browser's address bar, then try again."),
+    ],
+    'in-use': [
+      tf('prejoin.cameraInUse', 'Your camera is in use by another app'),
+      tf('prejoin.cameraInUseHint', 'Close the other app or pick a different camera, then try again.'),
+    ],
+    'not-found': [
+      tf('prejoin.cameraNotFound', 'No camera found'),
+      tf('prejoin.cameraNotFoundHint', 'Connect a camera or pick a different one below.'),
+    ],
+    failed: [
+      tf('prejoin.cameraFailed', "Your camera couldn't start"),
+      tf('prejoin.cameraFailedHint', 'Pick a different camera below, or try again.'),
+    ],
+  };
+  const micText: Record<DeviceIssue, string> = {
+    blocked: tf('prejoin.micBlocked', "Microphone access is blocked. Allow it in your browser's address bar, then try again."),
+    'in-use': tf('prejoin.micInUse', 'Your microphone is in use by another app. Close it or pick a different mic.'),
+    'not-found': tf('prejoin.micNotFound', 'No microphone found. Connect one or pick a different one below.'),
+    failed: tf('prejoin.micFailed', "Your microphone couldn't start. Pick a different one below, or try again."),
+  };
+  const [camTitle, camHint] = waitingForPermission && cam.status !== 'error' && cam.status !== 'live'
+    ? [tf('prejoin.allowPermission', 'Allow camera and microphone when your browser asks')]
+    : cameraText[cam.status === 'error' ? cam.issue ?? 'failed' : cam.status === 'starting' ? 'starting' : 'off'];
+
+  const micOn = mic.status !== 'off';
+  const camOn = cam.status !== 'off';
+  const micToggleLabel = micOn ? tf('toolbar.muteMic', 'Turn off microphone') : tf('toolbar.unmuteMic', 'Turn on microphone');
+  const camToggleLabel = camOn ? tf('toolbar.turnOffCam', 'Turn off camera') : tf('toolbar.turnOnCam', 'Turn on camera');
 
   return (
     <div className={styles.layout}>
       {/* ── Left: preview + devices ── */}
       <section className={styles.stage}>
-        <div className={styles.preview}>
-          {showVideo ? (
+        <div
+          className={styles.preview}
+          style={cam.status === 'live' ? undefined : { background: tileBackground(trimmedName || '?') }}
+        >
+          {cam.status === 'live' ? (
             <video
               ref={videoEl}
               width={1280}
@@ -261,70 +371,101 @@ export function KloudPreJoin({
             />
           ) : (
             <div className={styles.placeholder}>
-              {trimmedName ? (
-                <div className={styles.avatar} aria-hidden="true">
-                  {Array.from(trimmedName)[0]}
+              {cam.status === 'error' ? (
+                <div className={styles.deviceIssue} role="status">
+                  <TriangleAlert size={28} strokeWidth={1.75} aria-hidden="true" />
+                  <span className={styles.camOffText}>{camTitle}</span>
+                  {camHint && <span className={styles.camOffHint}>{camHint}</span>}
+                  <button type="button" className={styles.issueBtn} onClick={() => retry(setVideoEnabled)}>
+                    {tryAgainLabel}
+                  </button>
                 </div>
               ) : (
-                <div className={styles.placeholderSvg} aria-hidden="true">
-                  <ParticipantPlaceholder />
-                </div>
+                <>
+                  <div
+                    ref={avatarRef}
+                    className={`${styles.avatar}${mic.status === 'live' ? ` ${styles.avatarSpeaking}` : ''}`}
+                    aria-hidden="true"
+                  >
+                    {trimmedName ? Array.from(trimmedName)[0] : '?'}
+                  </div>
+                  <span className={styles.camOffText} role="status">
+                    {camTitle}
+                  </span>
+                </>
               )}
-              <span className={styles.camOffText}>{cameraOffLabel}</span>
             </div>
           )}
 
           {trimmedName && (
             <div className={styles.previewName}>
               <span>{trimmedName}</span>
-              {!micShownOn && (
-                <span className={styles.mutedBadge} aria-hidden="true">
-                  <MicOffIcon size={14} />
-                </span>
-              )}
             </div>
+          )}
+
+          {/* Speaking indicator / muted badge, top-right like a meeting tile */}
+          {mic.status === 'live' ? (
+            <span ref={levelBadgeRef} className={styles.levelBadge} aria-hidden="true">
+              <i />
+              <i />
+              <i />
+            </span>
+          ) : (
+            !micOn && (
+              <span className={styles.mutedBadge} aria-hidden="true">
+                <MicOff size={16} />
+              </span>
+            )
           )}
 
           {/* Mic + Camera toggles */}
           <div className={styles.previewControls}>
-            {canUseMediaDevices ? (
-              <>
-                <TrackToggle
-                  key={`mic-${micToggleEpoch}`}
-                  initialState={audioEnabled}
-                  source={Track.Source.Microphone}
-                  onChange={(enabled) => setAudioEnabled(enabled)}
-                  showIcon
-                  className={styles.roundToggle}
-                  title={micLabel}
-                >
-                  <span className={styles.srOnly}>{micLabel}</span>
-                </TrackToggle>
-                <TrackToggle
-                  initialState={videoEnabled}
-                  source={Track.Source.Camera}
-                  onChange={(enabled) => setVideoEnabled(enabled)}
-                  showIcon
-                  className={styles.roundToggle}
-                  title={camLabel}
-                >
-                  <span className={styles.srOnly}>{camLabel}</span>
-                </TrackToggle>
-              </>
-            ) : (
-              <>
-                <button type="button" className={styles.roundToggle} aria-pressed={false} disabled title={micLabel}>
-                  <MicOffIcon />
-                  <span className={styles.srOnly}>{micLabel}</span>
-                </button>
-                <button type="button" className={styles.roundToggle} aria-pressed={false} disabled title={camLabel}>
-                  <CamOffIcon />
-                  <span className={styles.srOnly}>{camLabel}</span>
-                </button>
-              </>
-            )}
+            <button
+              ref={micBtnRef}
+              type="button"
+              className={styles.roundToggle}
+              data-state={mic.status}
+              aria-pressed={micOn}
+              aria-label={micToggleLabel}
+              title={micToggleLabel}
+              disabled={!canUseMediaDevices}
+              onClick={() => (mic.status === 'error' ? retry(setAudioEnabled) : setAudioEnabled((v) => !v))}
+            >
+              {micOn ? <Mic aria-hidden="true" /> : <MicOff aria-hidden="true" />}
+              {mic.status === 'error' && (
+                <span className={styles.toggleAlert} aria-hidden="true">
+                  <TriangleAlert size={12} strokeWidth={2.5} />
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              className={styles.roundToggle}
+              data-state={cam.status}
+              aria-pressed={camOn}
+              aria-label={camToggleLabel}
+              title={camToggleLabel}
+              disabled={!canUseMediaDevices}
+              onClick={() => (cam.status === 'error' ? retry(setVideoEnabled) : setVideoEnabled((v) => !v))}
+            >
+              {camOn ? <Video aria-hidden="true" /> : <VideoOff aria-hidden="true" />}
+              {cam.status === 'error' && (
+                <span className={styles.toggleAlert} aria-hidden="true">
+                  <TriangleAlert size={12} strokeWidth={2.5} />
+                </span>
+              )}
+            </button>
           </div>
         </div>
+
+        {mic.status === 'error' && (
+          <p className={styles.mediaNote} role="status">
+            <span>{micText[mic.issue ?? 'failed']}</span>
+            <button type="button" className={styles.noteBtn} onClick={() => retry(setAudioEnabled)}>
+              {tryAgainLabel}
+            </button>
+          </p>
+        )}
 
         {/* Device chips with dropdown menus */}
         <div className={styles.chips}>
@@ -336,30 +477,51 @@ export function KloudPreJoin({
                   initialSelection={audioDeviceId}
                   kind="audioinput"
                   requestPermissions
-                  tracks={{ audioinput: audioTrack }}
+                  tracks={{ audioinput: mic.track }}
                   onActiveDeviceChange={(_, id) => setAudioDeviceId(id)}
                   aria-haspopup="listbox"
                   title={micLabel}
                 >
-                  <MicIcon />
-                  <DeviceChipLabel kind="audioinput" deviceId={audioDeviceId} fallback={micLabel} refreshKey={audioTrack} />
-                  <Caret />
+                  <Mic size={18} className={styles.chipIcon} aria-hidden="true" />
+                  <DeviceChipLabel kind="audioinput" deviceId={audioDeviceId} fallback={micLabel} refreshKey={mic.track} />
+                  <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </MediaDeviceMenu>
               </div>
+              {canPickSpeaker && (
+                <div className={styles.chipWrap}>
+                  <MediaDeviceMenu
+                    className={styles.chip}
+                    initialSelection={outputDeviceId}
+                    kind="audiooutput"
+                    onActiveDeviceChange={(_, id) => setOutputDeviceId(id)}
+                    aria-haspopup="listbox"
+                    title={tf('prejoin.speaker', 'Speaker')}
+                  >
+                    <Volume2 size={18} className={styles.chipIcon} aria-hidden="true" />
+                    <DeviceChipLabel
+                      kind="audiooutput"
+                      deviceId={outputDeviceId}
+                      fallback={tf('prejoin.speaker', 'Speaker')}
+                      refreshKey={mic.track}
+                    />
+                    <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
+                  </MediaDeviceMenu>
+                </div>
+              )}
               <div className={styles.chipWrap}>
                 <MediaDeviceMenu
                   className={styles.chip}
                   initialSelection={videoDeviceId}
                   kind="videoinput"
                   requestPermissions
-                  tracks={{ videoinput: videoTrack }}
+                  tracks={{ videoinput: cam.track }}
                   onActiveDeviceChange={(_, id) => setVideoDeviceId(id)}
                   aria-haspopup="listbox"
                   title={camLabel}
                 >
-                  <CamIcon />
-                  <DeviceChipLabel kind="videoinput" deviceId={videoDeviceId} fallback={camLabel} refreshKey={videoTrack} />
-                  <Caret />
+                  <Video size={18} className={styles.chipIcon} aria-hidden="true" />
+                  <DeviceChipLabel kind="videoinput" deviceId={videoDeviceId} fallback={camLabel} refreshKey={cam.track} />
+                  <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </MediaDeviceMenu>
               </div>
             </>
@@ -367,16 +529,16 @@ export function KloudPreJoin({
             <>
               <div className={styles.chipWrap}>
                 <button type="button" className={styles.chip} disabled>
-                  <MicIcon />
+                  <Mic size={18} className={styles.chipIcon} aria-hidden="true" />
                   <span className={styles.chipLabel}>{micLabel}</span>
-                  <Caret />
+                  <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </button>
               </div>
               <div className={styles.chipWrap}>
                 <button type="button" className={styles.chip} disabled>
-                  <CamIcon />
+                  <Video size={18} className={styles.chipIcon} aria-hidden="true" />
                   <span className={styles.chipLabel}>{camLabel}</span>
-                  <Caret />
+                  <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </button>
               </div>
             </>

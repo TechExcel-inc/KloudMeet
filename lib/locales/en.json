@@ -181,21 +181,21 @@
   "dash.earlyStart.confirm": "Are you sure you want to start this meeting right now?",
   "dash.earlyStart.yes": "Yes, Start Meeting",
 
-  "prejoin.startingMeeting": "Starting Meeting",
-  "prejoin.activeMeeting": "Active Meeting in Progress",
-  "prejoin.joiningUser": "Joining {name}'s meeting",
-  "prejoin.joiningMeeting": "Joining a Meeting",
+  "prejoin.startingMeeting": "Ready to start?",
+  "prejoin.activeMeeting": "Meeting in progress",
+  "prejoin.joiningUser": "Join {name}'s meeting",
+  "prejoin.joiningMeeting": "Ready to join?",
   "prejoin.configDevice": "Please configure your device settings before the meeting begins.",
   "prejoin.alreadyHosting": "You are already hosting this meeting in another session. Do you want to join?",
   "prejoin.inProgress": "Meeting in progress for {time}",
-  "prejoin.startNow": "Start Now",
-  "prejoin.displayMyNameAs": "Display my name as",
+  "prejoin.startNow": "Start now",
+  "prejoin.displayMyNameAs": "Your name",
   "prejoin.microphone": "Microphone",
-  "prejoin.webcam": "Webcam",
+  "prejoin.webcam": "Camera",
   "prejoin.mediaRequiresSecureContext": "Microphone and camera controls require HTTPS in this browser.",
-  "prejoin.shareMeetingUrl": "Share Meeting URL with others:",
-  "prejoin.joinAsHost": "Join as Host",
-  "prejoin.joinNow": "Join Now",
+  "prejoin.shareMeetingUrl": "Invite others with this link",
+  "prejoin.joinAsHost": "Join as host",
+  "prejoin.joinNow": "Join now",
   "prejoin.orStartNew": "Or start a new meeting instead",
   "prejoin.meetingConcluded": "Meeting Concluded",
   "prejoin.meetingCanceled": "Meeting Canceled",
@@ -356,7 +356,7 @@
   "toolbar.stopRecording": "Stop Recording",
   "toolbar.peopleAttendees": "People & Attendees",
   "toolbar.copyInviteLink": "Copy Invite Link",
-  "toolbar.openDesktop.menuItem": "Open Kloud Meet Desktop",
+  "toolbar.openDesktop.menuItem": "Open in desktop app",
   "toolbar.openDesktop.title": "Open Kloud Meet Desktop",
   "toolbar.openDesktop.subtitleInMeeting": "Continue this meeting in the Kloud Meet Desktop app.",
   "toolbar.openDesktop.subtitlePrejoin": "Launch Desktop before joining for smoother audio/video performance.",
@@ -770,6 +770,42 @@
   "livedoc.retry": "Reload",
 
   "prejoin.cameraIsOff": "Camera is off",
+
+  "prejoin.nobodyHereYet": "No one else is here yet",
+
+  "prejoin.checkDevices": "Check your camera and mic before you join.",
+
+  "prejoin.speaker": "Speaker",
+
+  "prejoin.tryAgain": "Try again",
+
+
+  "prejoin.allowPermission": "Allow camera and microphone when your browser asks",
+  "prejoin.cameraStarting": "Starting camera…",
+
+  "prejoin.cameraBlocked": "Camera access is blocked",
+
+  "prejoin.cameraBlockedHint": "Allow camera access in your browser's address bar, then try again.",
+
+  "prejoin.cameraInUse": "Your camera is in use by another app",
+
+  "prejoin.cameraInUseHint": "Close the other app or pick a different camera, then try again.",
+
+  "prejoin.cameraNotFound": "No camera found",
+
+  "prejoin.cameraNotFoundHint": "Connect a camera or pick a different one below.",
+
+  "prejoin.cameraFailed": "Your camera couldn't start",
+
+  "prejoin.cameraFailedHint": "Pick a different camera below, or try again.",
+
+  "prejoin.micBlocked": "Microphone access is blocked. Allow it in your browser's address bar, then try again.",
+
+  "prejoin.micInUse": "Your microphone is in use by another app. Close it or pick a different mic.",
+
+  "prejoin.micNotFound": "No microphone found. Connect one or pick a different one below.",
+
+  "prejoin.micFailed": "Your microphone couldn't start. Pick a different one below, or try again.",
   "prejoin.enterNameToJoin": "Enter your name to join",
   "schedule.date": "Date",
   "schedule.startTime": "Start time",
