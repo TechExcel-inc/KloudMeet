@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient } from 'livekit-server-sdk';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
+import { onRecordingReady } from '@/lib/billing/limits';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
 const API_KEY = process.env.LIVEKIT_API_KEY || '';
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
         }
 
         if (newStatus === 'READY' && fileResults) {
-          await prisma.recording.update({
+          const ready = await prisma.recording.update({
             where: { id: rec.id },
             data: {
               status: 'READY',
@@ -80,6 +81,8 @@ export async function GET(request: NextRequest) {
               durationSeconds: fileResults.duration ? Math.floor(Number(fileResults.duration) / 1000000000) : null,
             }
           });
+          // Billing (no-op when disabled): same metering as egress_ended; rec:<id> is idempotent.
+          await onRecordingReady(ready);
           updatedCount++;
         } else if (newStatus === 'FAILED') {
           await prisma.recording.update({

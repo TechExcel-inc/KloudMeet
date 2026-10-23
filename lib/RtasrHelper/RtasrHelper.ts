@@ -28,6 +28,8 @@ export interface RtasrMessage {
 /** 字幕识别引擎。国内百炼与国外 OpenAI 都实现这一接口。 */
 export interface CaptionEngine {
   languageCode: string;
+  /** LiveKit room name; sent to the caption token endpoint for the billing check. */
+  roomName?: string;
   OnMessage?: (msg: RtasrMessage) => void;
   Start(deviceId?: string): Promise<void>;
   Stop(): void;
@@ -41,6 +43,8 @@ export class RtasrHelper implements CaptionEngine {
   /** ISO-639-1 语言代码（zh/en/ja/ko/fr/de/es/pt/ru/ar/hi/vi 等）
    *  空字符串或 'auto' 表示自动检测 */
   public languageCode: string = 'zh';
+
+  public roomName?: string;
 
   /** 转写模型，可选 gpt-4o-transcribe / gpt-4o-mini-transcribe / whisper-1 */
   public speechModel: string = 'gpt-4o-transcribe';
@@ -65,8 +69,12 @@ export class RtasrHelper implements CaptionEngine {
     try {
       // ── Step 1: 拿 ephemeral key（语言写到服务端 transcription session）──
       const lang0 = (this.languageCode || '').trim().toLowerCase();
-      const tokenUrl = lang0 && lang0 !== 'auto'
-        ? `/api/transcripts/realtime-token?lang=${encodeURIComponent(lang0)}`
+      const tokenQuery = new URLSearchParams();
+      if (lang0 && lang0 !== 'auto') tokenQuery.set('lang', lang0);
+      // Billing: the server checks the meeting host's replay hours for this room.
+      if (this.roomName) tokenQuery.set('roomName', this.roomName);
+      const tokenUrl = tokenQuery.toString()
+        ? `/api/transcripts/realtime-token?${tokenQuery}`
         : '/api/transcripts/realtime-token';
       const tokenRes = await fetch(tokenUrl);
       if (!tokenRes.ok) {

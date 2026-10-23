@@ -6,6 +6,7 @@ import { decodePassphrase } from '@/lib/client-utils';
 import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
+import { MeetingTimeLimitBanner } from '@/lib/billing/MeetingTimeLimitBanner';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
@@ -416,7 +417,11 @@ export function VideoConferenceComponent(props: {
       if (!res.ok) {
         setIsRecording(action === 'stop'); // revert
         const toastEl = document.createElement('div');
-        toastEl.textContent = `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
+        // Billing: plan limit reached (402 BILLING_LIMIT) — explain why instead of a raw error.
+        toastEl.textContent =
+          data?.code === 'BILLING_LIMIT'
+            ? t('billing.limit.recording')
+            : `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
         toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
         document.body.appendChild(toastEl);
         setTimeout(() => toastEl.remove(), 4000);
@@ -9389,6 +9394,13 @@ export function VideoConferenceComponent(props: {
 
         {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
+        {!isRecorderBot && (
+          <MeetingTimeLimitBanner
+            meetingEndsAt={props.connectionDetails.meetingEndsAt}
+            roomName={props.connectionDetails.roomName}
+            isHost={isHost}
+          />
+        )}
         {desktopLaunchModal}
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
         </ParticipantRoleMenuProvider>

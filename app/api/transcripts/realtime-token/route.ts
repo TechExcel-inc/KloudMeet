@@ -6,6 +6,7 @@
  * 浏览器拿到 ek_xxx 直接连 WS 即可，无需再发 session.update。
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { checkCaptionQuotaForRoom } from '@/lib/billing/limits';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
@@ -18,6 +19,11 @@ export async function GET(req: NextRequest) {
   }
 
   const { searchParams } = new URL(req.url);
+
+  // Billing (no-op when disabled): captions count against the meeting host's replay hours.
+  const quotaError = await checkCaptionQuotaForRoom(searchParams.get('roomName'));
+  if (quotaError) return quotaError;
+
   const langRaw = (searchParams.get('lang') || '').trim().toLowerCase();
   const lang = langRaw && langRaw !== 'auto' ? langRaw : '';
 

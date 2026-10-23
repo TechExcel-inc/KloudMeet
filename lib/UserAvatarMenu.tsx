@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
 import { useIsAccountAdmin } from '@/lib/useIsAccountAdmin';
 import { CalendarSubscribeModal } from '@/lib/CalendarSubscribeModal';
+import { useBillingEnabled } from '@/lib/billing/useBillingSummary';
 import styles from '../styles/Home.module.css';
 
 export interface UserAvatarMenuUser {
@@ -31,6 +33,7 @@ export function UserAvatarMenu({
 }: UserAvatarMenuProps) {
   const { t } = useI18n();
   const isAccountAdmin = useIsAccountAdmin();
+  const billingEnabled = useBillingEnabled();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCalendarSubscribe, setShowCalendarSubscribe] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -127,6 +130,17 @@ export function UserAvatarMenu({
             >
               {t('calendar.subscribe.menuItem')}
             </button>
+            {/* Hidden while BILLING_ENABLED is off (summary answers { enabled: false }). */}
+            {billingEnabled && (
+              <Link
+                className={styles.orgDropdownItem}
+                href="/account/billing"
+                onClick={closeMenu}
+                style={{ textDecoration: 'none', boxSizing: 'border-box' }}
+              >
+                {t('nav.planBilling')}
+              </Link>
+            )}
             {/* System settings hold infrastructure keys: account admins only. */}
             {isAccountAdmin && onOpenSettings && (
               <button

@@ -4,7 +4,8 @@
  * 签发一分钟内、仅可使用一次的 Fun-ASR WebSocket 连接凭证。
  */
 import { createHmac, randomUUID } from 'node:crypto';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { checkCaptionQuotaForRoom } from '@/lib/billing/limits';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -13,11 +14,15 @@ function sign(raw: string, key: string): string {
   return createHmac('sha256', key).update(raw).digest('base64url');
 }
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   const key = process.env.DASHSCOPE_API_KEY || '';
   if (!key) {
     return NextResponse.json({ error: 'Fun-ASR is not configured' }, { status: 500 });
   }
+
+  // Billing (no-op when disabled): captions count against the meeting host's replay hours.
+  const quotaError = await checkCaptionQuotaForRoom(request.nextUrl.searchParams.get('roomName'));
+  if (quotaError) return quotaError;
 
   try {
     const raw = Buffer.from(JSON.stringify({

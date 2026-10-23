@@ -6,6 +6,7 @@ import {
   readVisibility,
   recordingSharePayload,
 } from '@/lib/recordingShare';
+import { checkPublicReplayAllowed } from '@/lib/billing/limits';
 
 export async function PATCH(
   req: NextRequest,
@@ -19,6 +20,12 @@ export async function PATCH(
     const visibility = readVisibility(await req.json().catch(() => null));
     if (!visibility) {
       return NextResponse.json({ error: 'Invalid visibility' }, { status: 400 });
+    }
+
+    // Billing (no-op when disabled): public replay links are a paid feature.
+    if (visibility === 'PUBLIC' && loaded.recording.visibility !== 'PUBLIC') {
+      const planError = await checkPublicReplayAllowed(loaded.memberId);
+      if (planError) return planError;
     }
 
     const updated = await prisma.recording.update({

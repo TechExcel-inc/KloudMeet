@@ -39,6 +39,7 @@ function relayUrl(token: string): string {
 export class FunAsrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
   public languageCode = 'zh';
+  public roomName?: string;
 
   private _running = false;
   private _gen = 0;
@@ -55,7 +56,10 @@ export class FunAsrHelper implements CaptionEngine {
 
     try {
       const lang = (this.languageCode || '').trim().toLowerCase();
-      const res = await fetch('/api/transcripts/funasr-token', { method: 'POST' });
+      const tokenUrl = this.roomName
+        ? `/api/transcripts/funasr-token?roomName=${encodeURIComponent(this.roomName)}`
+        : '/api/transcripts/funasr-token';
+      const res = await fetch(tokenUrl, { method: 'POST' });
       if (gen !== this._gen) return;
       if (!res.ok) throw new Error(`Fun-ASR token failed: ${res.status}`);
       const data: unknown = await res.json();

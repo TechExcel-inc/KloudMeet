@@ -158,6 +158,36 @@ export async function evictParticipantsByMemberId(
   }
 }
 
+/**
+ * Participants currently in the room, not counting the joiner's own identity or
+ * other sessions of the same member (they are evicted on join).
+ * Returns null when LiveKit cannot be queried (callers should fail open).
+ */
+export async function countOtherRoomParticipants(
+  roomName: string,
+  exclude: { identity?: string; memberId?: number | null },
+): Promise<number | null> {
+  const client = getRoomServiceClient();
+  if (!client) return null;
+  try {
+    const participants = await withTimeout(
+      client.listParticipants(roomName),
+      LIVEKIT_EVICT_TIMEOUT_MS,
+      'LiveKit listParticipants',
+    );
+    return participants.filter((p) => {
+      if (exclude.identity && p.identity === exclude.identity) return false;
+      const memberId = parseKloudMemberIdFromIdentity(p.identity);
+      return !(exclude.memberId != null && memberId === exclude.memberId);
+    }).length;
+  } catch (e: unknown) {
+    const err = e as { code?: string; status?: number };
+    if (err?.code === 'not_found' || err?.status === 404) return 0;
+    console.error('[livekitRooms] countOtherRoomParticipants failed', roomName, e);
+    return null;
+  }
+}
+
 export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
   const client = getRoomServiceClient();
   if (!client) return false;

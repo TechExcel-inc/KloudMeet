@@ -20,6 +20,12 @@ import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoom
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
+import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlements';
+import {
+  endMeetingForTimeLimit,
+  meetingEndsAtFor,
+  participantCapReached,
+} from '@/lib/billing/limits';
 import { NextRequest, NextResponse } from 'next/server';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -81,6 +87,21 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Meeting has already ended', { status: 403 });
     }
 
+    // Billing (skipped entirely when BILLING_ENABLED is off): the host's plan sets the
+    // meeting length and participant cap. Past the length limit the room is ended and
+    // new joins are refused.
+    const hostEntitlements = isBillingEnabled()
+      ? await resolveEntitlements(meeting.createdByMemberId)
+      : null;
+    let meetingEndsAt: Date | null = null;
+    if (hostEntitlements) {
+      meetingEndsAt = await meetingEndsAtFor(hostEntitlements, meeting);
+      if (meetingEndsAt && meetingEndsAt.getTime() <= Date.now()) {
+        await endMeetingForTimeLimit(meeting);
+        return new NextResponse('This meeting reached the time limit of the host’s plan', { status: 403 });
+      }
+    }
+
     let identity: string;
     let tokenMetadata = metadata;
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -104,6 +125,19 @@ export async function GET(request: NextRequest) {
         ? `${participantName}__${randomParticipantPostfix}_${guestDeviceId}`
         : `${participantName}__${randomParticipantPostfix}`;
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
+    }
+
+    if (
+      hostEntitlements &&
+      (await participantCapReached({
+        hostEntitlements,
+        roomName: livekitRoomName,
+        joinerIdentity: identity,
+        joinerMemberId: member?.id ?? null,
+        hostMemberId: meeting.createdByMemberId,
+      }))
+    ) {
+      return new NextResponse('This meeting is full', { status: 403 });
     }
 
     // Kick other devices/tabs for this member before minting. Same identity
@@ -184,6 +218,7 @@ export async function GET(request: NextRequest) {
       ...(currentView ? { currentView } : {}),
       participantLiveDocAi,
       livedocInstanceId,
+      ...(meetingEndsAt ? { meetingEndsAt: meetingEndsAt.toISOString() } : {}),
     };
     return new NextResponse(JSON.stringify(data), {
       headers,

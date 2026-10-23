@@ -291,6 +291,7 @@ export function useCaptions({
           rtasrRef.current?.Stop();
           const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper() : new RtasrHelper();
           helper.languageCode = languageCode;
+          helper.roomName = room.name;
 
           helper.OnMessage = async (d: RtasrMessage) => {
             // 使用 LiveKit 的 localParticipant（每个连接独立，不受同浏览器多 Tab 共享 localStorage 影响）

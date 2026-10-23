@@ -5,6 +5,8 @@ import { archivePersonalRoomMeeting } from '@/lib/personalRoom';
 export const MEETING_END_REASON = {
   ROOM_EMPTY: 'ROOM_EMPTY',
   HOST_ENDED: 'HOST_ENDED',
+  /** Plan meeting-length limit reached (Free 40 min). */
+  TIME_LIMIT: 'TIME_LIMIT',
 } as const;
 
 export type MeetingEndReason =
