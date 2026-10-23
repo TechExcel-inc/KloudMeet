@@ -249,7 +249,8 @@ const slimPkg = {
       {
         from: '../.next',
         to: '.',
-        filter: ['standalone', 'standalone/**/*'],
+        // 绝不把密钥文件打进安装包：standalone 里的 .env* 只给服务器部署用
+        filter: ['standalone', 'standalone/**/*', '!standalone/.env', '!standalone/.env.*'],
       },
     ],
     publish: rootBuild.publish,
