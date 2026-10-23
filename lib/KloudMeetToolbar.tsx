@@ -28,6 +28,9 @@ type ChatBubbleInteraction = {
   startRect: ChatBubbleRect;
 };
 
+
+/** Earpiece / Bluetooth / speaker switching on phones is not wired to real audio output yet. */
+const MOBILE_AUDIO_ROUTE_SUPPORTED = false;
 const CHAT_BUBBLE_MIN_WIDTH = 300;
 const CHAT_BUBBLE_MIN_HEIGHT = 260;
 const CHAT_BUBBLE_VIEWPORT_MARGIN = 12;
@@ -2727,7 +2730,8 @@ function ActiveSheetContent({
 
       {activeSheet === 'more' && (
         <>
-          {isMobile && (
+          {/* Hidden until it really routes audio: today it only changes a label and toasts "switched". */}
+          {isMobile && MOBILE_AUDIO_ROUTE_SUPPORTED && (
             <button
               type="button"
               className={styles.actionSheetItem}

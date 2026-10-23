@@ -12,6 +12,7 @@ import styles from '../styles/Home.module.css';
 export interface UserAvatarMenuUser {
   displayName: string;
   avatarUrl?: string;
+  email?: string;
 }
 
 export interface UserAvatarMenuProps {
@@ -91,25 +92,19 @@ export function UserAvatarMenu({
       </button>
       {menuOpen && (
         <div className={styles.orgDropdownMenu} style={{ right: 0, left: 'auto', marginTop: '0.5rem' }}>
+          {/* Who is signed in. (Account switching isn't built yet, so no switcher is shown.) */}
           <div className={styles.orgDropdownSection}>
-            <div className={styles.orgDropdownTitle}>{t('nav.switchAccount')}</div>
-            <button className={styles.orgDropdownItemActive}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#4f46e5', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>
-                  {user.displayName.charAt(0).toUpperCase()}
-                </div>
-                {user.displayName}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '6px 10px' }}>
+              <div style={{ width: '28px', height: '28px', flex: 'none', borderRadius: '50%', background: 'var(--km-primary, #5E5CE6)', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '13px', fontWeight: 700 }}>
+                {user.displayName.charAt(0).toUpperCase()}
               </div>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-            </button>
-            <button className={styles.orgDropdownItem} onClick={closeMenu}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '20px', height: '20px', borderRadius: '4px', background: '#e2e8f0', color: '#64748b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 'bold' }}>P</div>
-                KloudMeet Personal
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.displayName}</div>
+                {user.email && (
+                  <div style={{ fontSize: '12px', opacity: 0.65, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user.email}</div>
+                )}
               </div>
-            </button>
+            </div>
           </div>
           <div className={styles.orgDropdownSection}>
             <button
