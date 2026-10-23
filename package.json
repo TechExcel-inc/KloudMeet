@@ -129,7 +129,9 @@
         "to": ".",
         "filter": [
           "standalone",
-          "standalone/**/*"
+          "standalone/**/*",
+          "!standalone/.env",
+          "!standalone/.env.*"
         ]
       }
     ],
