@@ -4,6 +4,9 @@ import { authFetch, authHeaders } from '@/lib/kloudSession';
 import styles from '../styles/ScheduleMeetingModal.module.css';
 import { useI18n } from './i18n';
 
+/** Email / AI assistant / linked-event tabs are enterprise features with no purchase path yet. */
+const SHOW_ENTERPRISE_TABS = false;
+
 type TabType = 'general' | 'emails' | 'ai' | 'linked';
 
 interface ScheduleMeetingModalProps {
@@ -432,7 +435,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             </div>
           </div>
           
-          {/* Tabs */}
+          {/* Tabs — enterprise tabs stay hidden until there is a paid plan to upgrade to. */}
+          {SHOW_ENTERPRISE_TABS && (
           <div className={styles.tabContainer}>
             <button 
               className={activeTab === 'general' ? styles.tabActive : styles.tab} 
@@ -459,6 +463,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               {t('schedule.linkedEvents')}
             </button>
           </div>
+          )}
 
           <div className={styles.bodyScroll}>
           {/* Tab Content: General Information */}

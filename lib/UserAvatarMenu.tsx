@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useI18n } from '@/lib/i18n';
+import { useIsAccountAdmin } from '@/lib/useIsAccountAdmin';
 import styles from '../styles/Home.module.css';
 
 export interface UserAvatarMenuUser {
@@ -28,6 +29,7 @@ export function UserAvatarMenu({
   onSignOut,
 }: UserAvatarMenuProps) {
   const { t } = useI18n();
+  const isAccountAdmin = useIsAccountAdmin();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -114,15 +116,18 @@ export function UserAvatarMenu({
             >
               {t('nav.myProfile')}
             </button>
-            <button
-              className={styles.orgDropdownItem}
-              onClick={() => {
-                closeMenu();
-                onOpenSettings?.();
-              }}
-            >
-              {t('nav.systemSettings')}
-            </button>
+            {/* System settings hold infrastructure keys: account admins only. */}
+            {isAccountAdmin && onOpenSettings && (
+              <button
+                className={styles.orgDropdownItem}
+                onClick={() => {
+                  closeMenu();
+                  onOpenSettings();
+                }}
+              >
+                {t('nav.systemSettings')}
+              </button>
+            )}
             <button
               className={styles.orgDropdownItem}
               onClick={() => {

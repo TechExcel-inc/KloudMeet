@@ -26,8 +26,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const admin = await prisma.accountOwnerAndAdmin.findFirst({
+      where: { teamMemberId: member.id, status: 'ACTIVE' },
+      select: { id: true },
+    });
+
     return NextResponse.json({
       id: member.id,
+      isAccountAdmin: Boolean(admin),
       email: member.email,
       username: member.username,
       phone: member.phone,

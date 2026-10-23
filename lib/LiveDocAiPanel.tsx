@@ -511,7 +511,6 @@ export function LiveDocAiPanel({
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [removeItemId, setRemoveItemId] = React.useState<number | null>(null);
-  const [aiPresentNoticeOpen, setAiPresentNoticeOpen] = React.useState(false);
   const [pendingOpenItemId, setPendingOpenItemId] = React.useState<number | null>(null);
   const [summaryMenuOpen, setSummaryMenuOpen] = React.useState(false);
   const [summaryOptionsOpen, setSummaryOptionsOpen] = React.useState(false);
@@ -1132,24 +1131,6 @@ export function LiveDocAiPanel({
           </div>
         )}
 
-        {aiPresentNoticeOpen && (
-          <div className={styles.nestedOverlay}>
-            <div className={styles.confirmDialog}>
-              <h3>{t('liveDocAi.aiPresent')}</h3>
-              <p>{t('liveDocAi.aiPresentComingLater')}</p>
-              <div>
-                <button
-                  type="button"
-                  className={styles.primaryButton}
-                  onClick={() => setAiPresentNoticeOpen(false)}
-                >
-                  {t('common.close')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
         {pendingOpenItemId !== null && (
           <div className={styles.nestedOverlay}>
             <div
@@ -1251,15 +1232,6 @@ export function LiveDocAiPanel({
           anchorRef={activeFileMenuBtnRef}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            onClick={() => {
-              setFileMenuItemId(null);
-              setAiPresentNoticeOpen(true);
-            }}
-          >
-            {t('liveDocAi.aiPresent')}
-          </button>
           <button
             type="button"
             className={styles.danger}

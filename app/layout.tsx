@@ -5,30 +5,16 @@ import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
 import { I18nProvider } from '@/lib/i18n';
 
+/** Shown in search results and link previews (WeChat, Slack, etc.). */
+const SITE_DESCRIPTION =
+  'Meet on your slides and docs — every session becomes a replayable lesson. Join from the browser, no download. 在文档上开会，会后按页回放，浏览器即可加入。';
+
 export const metadata: Metadata = {
   title: {
     default: 'Kloud Meet',
     template: '%s',
   },
-  description:
-    'Kloud Meet is an open source WebRTC project that gives you everything needed to build scalable and real-time audio and/or video experiences in your applications.',
-  // twitter: {
-  //   creator: '@livekitted',
-  //   site: '@livekitted',
-  //   card: 'summary_large_image',
-  // },
-  // openGraph: {
-  //   url: 'https://meet.livekit.io',
-  //   images: [
-  //     {
-  //       url: 'https://meet.livekit.io/images/livekit-meet-open-graph.png',
-  //       width: 2000,
-  //       height: 1000,
-  //       type: 'image/png',
-  //     },
-  //   ],
-  //   siteName: 'LiveKit Meet',
-  // },
+  description: SITE_DESCRIPTION,
   openGraph: {
     url: 'https://meet.kloud.cn',
     images: [
@@ -40,6 +26,8 @@ export const metadata: Metadata = {
       },
     ],
     siteName: 'Kloud Meet',
+    title: 'Kloud Meet',
+    description: SITE_DESCRIPTION,
   },
 };
 

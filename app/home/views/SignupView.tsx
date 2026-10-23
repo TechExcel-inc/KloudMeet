@@ -15,7 +15,6 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
-import { MOCK_RECENT, MOCK_SCHEDULED } from '../mockData';
 
 export function SignupView({
   onBack,
