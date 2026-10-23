@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useI18n } from '../i18n';
+import { captionLanguageFor } from './captionLanguage';
 
 interface CCSettingsDialogProps {
   isOpen: boolean;
@@ -239,12 +240,13 @@ export function CCSettingsDialog({
 }: CCSettingsDialogProps) {
   const [mounted, setMounted] = useState(false);
   const [localVisible, setLocalVisible] = useState(subtitleVisible);
-  const [speakLanguages, setSpeakLanguages] = useState<string[]>(['zh', 'en', 'ja', 'ko']);
-  const [readLanguages, setReadLanguages] = useState<string[]>(['zh', 'en', 'ja', 'ko']);
-  const [defaultReadLanguage, setDefaultReadLanguage] = useState('en');
+  const { t, locale } = useI18n();
+  // Nothing saved yet → speak and read in the interface language.
+  const uiLanguage = captionLanguageFor(locale);
+  const [speakLanguages, setSpeakLanguages] = useState<string[]>([uiLanguage]);
+  const [readLanguages, setReadLanguages] = useState<string[]>([uiLanguage]);
+  const [defaultReadLanguage, setDefaultReadLanguage] = useState<string>(uiLanguage);
   const [openMenu, setOpenMenu] = useState<'speak' | 'read' | 'defaultRead' | null>(null);
-
-  const { t } = useI18n();
 
   useEffect(() => {
     setMounted(true);
@@ -261,13 +263,13 @@ export function CCSettingsDialog({
       setSpeakLanguages(
         normalizeLangList(
           parsed.speakLanguages,
-          parsed.speakLanguage ? [parsed.speakLanguage] : ['zh', 'en', 'ja', 'ko'],
+          parsed.speakLanguage ? [parsed.speakLanguage] : [uiLanguage],
         ),
       );
       setReadLanguages(
         normalizeLangList(
           parsed.readLanguages,
-          parsed.readLanguage ? [parsed.readLanguage] : ['zh', 'en', 'ja', 'ko'],
+          parsed.readLanguage ? [parsed.readLanguage] : [uiLanguage],
         ),
       );
       if (parsed.defaultReadLanguage) {
@@ -309,14 +311,14 @@ export function CCSettingsDialog({
       settings.readLanguages = readLanguages;
       settings.defaultReadLanguage = defaultReadLanguage;
       settings.readLanguage = defaultReadLanguage;
-      settings.speakLanguage = speakLanguages.length > 0 ? speakLanguages[0] : 'zh';
+      settings.speakLanguage = speakLanguages.length > 0 ? speakLanguages[0] : uiLanguage;
 
       localStorage.setItem('kloud-stt-settings', JSON.stringify(settings));
       window.dispatchEvent(new CustomEvent('kloud-stt-settings-changed', { detail: settings }));
     } catch (e) {
       console.error('Failed to save cc settings', e);
     }
-  }, [localVisible, speakLanguages, readLanguages, defaultReadLanguage]);
+  }, [localVisible, speakLanguages, readLanguages, defaultReadLanguage, uiLanguage]);
 
   useEffect(() => {
     if (!saveRef) return;

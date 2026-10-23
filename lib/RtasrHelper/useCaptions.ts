@@ -25,6 +25,7 @@ import { FunAsrHelper } from './FunAsrHelper';
 import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
+import { captionLanguageFor } from './captionLanguage';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
 
@@ -143,8 +144,9 @@ async function saveTranscript(payload: {
 export function useCaptions({
   room,
   micEnabled,
-  languageCode = 'zh',
+  languageCode = 'en',
 }: UseCaptionsOptions): UseCaptionsReturn {
+  const uiLanguage = captionLanguageFor(languageCode);
   const [captionsInfo, setCaptionsInfo] = React.useState<CaptionsInfo>({
     show: false,
     userName: '',
@@ -209,7 +211,8 @@ export function useCaptions({
       try {
         const data: CaptionPayload = JSON.parse(decoder.decode(payloadBytes));
         
-        let settings = { subtitleVisible: true, readLanguage: languageCode === 'zh' ? 'en' : 'zh' };
+        // Read in the interface language unless the user picked another one in caption settings.
+        let settings = { subtitleVisible: true, readLanguage: uiLanguage };
         try {
           const raw = localStorage.getItem('kloud-stt-settings');
           if (raw) Object.assign(settings, JSON.parse(raw));
@@ -217,8 +220,8 @@ export function useCaptions({
         
         if (!settings.subtitleVisible) return;
         
-        const speakLanguage = data.speakLanguage || languageCode || 'zh';
-        const myReadLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
+        const speakLanguage = data.speakLanguage || uiLanguage;
+        const myReadLanguage = settings.readLanguage || uiLanguage;
         
         // 核心优化：直接利用广播方的默认翻译，省去重复调用的费用
         if (data.defaultTargetLanguage === myReadLanguage && data.defaultTranslatedText) {
@@ -247,7 +250,7 @@ export function useCaptions({
     return () => {
       room.off(RoomEvent.DataReceived, handleData);
     };
-  }, [room, decoder, showCaptionsToGUI, languageCode]);
+  }, [room, decoder, showCaptionsToGUI, uiLanguage]);
 
   // 识别只由这里启动和停止。开字幕本身不连引擎，避免和开麦各打一次 token。
   React.useEffect(() => {
@@ -290,7 +293,7 @@ export function useCaptions({
         if (!rtasrRef.current || providerRef.current !== provider) {
           rtasrRef.current?.Stop();
           const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper() : new RtasrHelper();
-          helper.languageCode = languageCode;
+          helper.languageCode = uiLanguage;
           helper.roomName = room.name;
 
           helper.OnMessage = async (d: RtasrMessage) => {
@@ -300,10 +303,11 @@ export function useCaptions({
 
             const offsetSeconds = getMeetingOffsetSeconds();
 
-            let settings = { 
-              subtitleVisible: true, 
-              readLanguage: languageCode === 'zh' ? 'en' : 'zh', 
-              speakLanguage: languageCode 
+            // Speak and read in the interface language unless caption settings say otherwise.
+            let settings = {
+              subtitleVisible: true,
+              readLanguage: uiLanguage,
+              speakLanguage: uiLanguage,
             };
             try {
               const raw = localStorage.getItem('kloud-stt-settings');
@@ -311,8 +315,8 @@ export function useCaptions({
             } catch(e) {}
             
             // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
-            const speakLanguage = d.detectedLanguage || settings.speakLanguage || languageCode || 'zh';
-            const defaultTargetLanguage = settings.readLanguage || (speakLanguage === 'zh' ? 'en' : 'zh');
+            const speakLanguage = d.detectedLanguage || settings.speakLanguage || uiLanguage;
+            const defaultTargetLanguage = settings.readLanguage || uiLanguage;
             const needsTranslation =
               speakLanguage !== defaultTargetLanguage &&
               speakLanguage !== 'auto';
@@ -378,7 +382,7 @@ export function useCaptions({
           setEngineEpoch((n) => n + 1);
         } else {
           // 如果已存在实例，更新语言
-          rtasrRef.current.languageCode = languageCode;
+          rtasrRef.current.languageCode = uiLanguage;
         }
 
         // 获取最新的用户选择语言并应用到识别引擎
@@ -386,7 +390,7 @@ export function useCaptions({
           const raw = localStorage.getItem('kloud-stt-settings');
           if (raw) {
             const settings = JSON.parse(raw);
-            const speakLanguage = settings.speakLanguage || languageCode || 'zh';
+            const speakLanguage = settings.speakLanguage || uiLanguage;
             if (rtasrRef.current) {
               rtasrRef.current.languageCode = speakLanguage;
             }
@@ -403,7 +407,7 @@ export function useCaptions({
         setCaptionsInfo((prev) => ({ ...prev, show: false }));
       }
     },
-    [room, encoder, showCaptionsToGUI, languageCode],
+    [room, encoder, showCaptionsToGUI, uiLanguage],
   );
 
   // ── 组件卸载时清理 ─────────────────────────────────────────────────────
