@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 
 const WebOTS_URL = "https://ntrans.xfyun.cn/v2/ots";
-const APPID = "8273d3cd";
-const API_SECRET = "OTNlZmQ3MzJmODNhZjU0MzM5YjY3N2E1";
-const API_KEY = "017ca191598866d3e50bcec3272e1783";
+const APPID = process.env.XFYUN_APPID || '';
+const API_SECRET = process.env.XFYUN_API_SECRET || '';
+const API_KEY = process.env.XFYUN_API_KEY || '';
 
 /**
  * Helper to sign the body using SHA-256.
@@ -21,6 +22,13 @@ function hmacSign(message: string, secret: string): string {
 }
 
 export async function POST(request: NextRequest) {
+    if (!(await verifyParticipant(request))) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    if (!APPID || !API_SECRET || !API_KEY) {
+        return NextResponse.json({ error: 'Translation is not configured' }, { status: 500 });
+    }
+
     try {
         const bodyData = await request.json();
         const { text, from, to } = bodyData;

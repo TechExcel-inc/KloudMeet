@@ -48,6 +48,9 @@ export class FunAsrHelper implements CaptionEngine {
   private _processor: ScriptProcessorNode | null = null;
   private _source: MediaStreamAudioSourceNode | null = null;
 
+  /** @param getToken 每次取最新的 LiveKit 参会 token（会中会续期） */
+  constructor(private readonly getToken: () => string) {}
+
   async Start(deviceId = '') {
     if (this._running) return;
     const gen = ++this._gen;
@@ -55,7 +58,10 @@ export class FunAsrHelper implements CaptionEngine {
 
     try {
       const lang = (this.languageCode || '').trim().toLowerCase();
-      const res = await fetch('/api/transcripts/funasr-token', { method: 'POST' });
+      const res = await fetch('/api/transcripts/funasr-token', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.getToken()}` },
+      });
       if (gen !== this._gen) return;
       if (!res.ok) throw new Error(`Fun-ASR token failed: ${res.status}`);
       const data: unknown = await res.json();

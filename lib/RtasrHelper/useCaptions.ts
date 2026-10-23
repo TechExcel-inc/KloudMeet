@@ -74,6 +74,8 @@ export interface UseCaptionsOptions {
   micEnabled: boolean;
   /** AssemblyAI 语言代码（默认 zh）*/
   languageCode?: string;
+  /** 取最新 LiveKit 参会 token，用于转写/翻译接口鉴权（会中会续期，须每次现取） */
+  getToken: () => string;
 }
 
 export interface UseCaptionsReturn {
@@ -144,6 +146,7 @@ export function useCaptions({
   room,
   micEnabled,
   languageCode = 'zh',
+  getToken,
 }: UseCaptionsOptions): UseCaptionsReturn {
   const [captionsInfo, setCaptionsInfo] = React.useState<CaptionsInfo>({
     show: false,
@@ -159,7 +162,9 @@ export function useCaptions({
   const hideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const micEnabledRef = React.useRef(micEnabled);
   const openSeqRef = React.useRef(0);
+  const getTokenRef = React.useRef(getToken);
   micEnabledRef.current = micEnabled;
+  getTokenRef.current = getToken;
 
   const encoder = React.useMemo(() => new TextEncoder(), []);
   const decoder = React.useMemo(() => new TextDecoder(), []);
@@ -232,7 +237,7 @@ export function useCaptions({
           speakLanguage !== 'auto'
         ) {
            // 仅最终句翻译；中间结果（tp=1）不打 /api/translate
-           translateText(data.src, myReadLanguage, speakLanguage)
+           translateText(data.src, myReadLanguage, speakLanguage, getTokenRef.current())
              .then(translated => showCaptionsToGUI({ ...data, src: translated }))
              .catch(() => showCaptionsToGUI(data));
         } else {
@@ -289,7 +294,8 @@ export function useCaptions({
         if (seq !== openSeqRef.current) return;
         if (!rtasrRef.current || providerRef.current !== provider) {
           rtasrRef.current?.Stop();
-          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper() : new RtasrHelper();
+          const token = () => getTokenRef.current();
+          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
           helper.languageCode = languageCode;
 
           helper.OnMessage = async (d: RtasrMessage) => {
@@ -333,7 +339,12 @@ export function useCaptions({
               needsTranslation
             ) {
               try {
-                payload.defaultTranslatedText = await translateText(d.src, defaultTargetLanguage, speakLanguage);
+                payload.defaultTranslatedText = await translateText(
+                  d.src,
+                  defaultTargetLanguage,
+                  speakLanguage,
+                  getTokenRef.current(),
+                );
               } catch (e) {
                 payload.defaultTranslatedText = d.src;
               }

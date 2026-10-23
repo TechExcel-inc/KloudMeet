@@ -5055,6 +5055,7 @@ export function VideoConferenceComponent(props: {
     room,
     micEnabled,
     languageCode: locale,
+    getToken: () => connectionDetailsRef.current?.participantToken ?? '',
   });
   // 赋值给 ref，让上面 handleData 里能访问到
   setCaptionsOpenRef.current = setCaptionsOpen;
