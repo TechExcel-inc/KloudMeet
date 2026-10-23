@@ -17,9 +17,9 @@ interface CCSettingsDialogProps {
 
 const LANGUAGES = [
   { id: 'zh', label: '中文' },
-  { id: 'en', label: '英语' },
-  { id: 'ja', label: '日语' },
-  { id: 'ko', label: '韩语' },
+  { id: 'en', label: 'English' },
+  { id: 'ja', label: '日本語' },
+  { id: 'ko', label: '한국어' },
 ] as const;
 
 type LangId = (typeof LANGUAGES)[number]['id'];
@@ -439,10 +439,10 @@ export function CCSettingsDialog({
 
         <div style={{ padding: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '4px' }}>
           <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#ffffff', fontSize: '15px', fontWeight: 600, cursor: 'pointer', padding: '8px 12px' }}>
-            {t('stt.cancel') || '取消'}
+            {t('stt.cancel') || 'Cancel'}
           </button>
           <button type="button" onClick={handleSave} style={{ background: '#5c94ff', border: 'none', borderRadius: '4px', color: '#ffffff', fontSize: '15px', fontWeight: 600, cursor: 'pointer', padding: '8px 20px' }}>
-            {t('stt.ok') || '确定'}
+            {t('stt.ok') || 'OK'}
           </button>
         </div>
       </div>

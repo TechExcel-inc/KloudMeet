@@ -971,13 +971,13 @@ export default function ReplayPage() {
         }
         if (!res.ok) {
           const d = await res.json();
-          setError(d.error || '加载失败');
+          setError(d.error || t('replay.loadFailed'));
           return;
         }
         const d: ReplayData = await res.json();
         setData(d);
       } catch (e: any) {
-        setError(e.message || '网络错误');
+        setError(t('replay.networkError'));
       } finally {
         if (!redirected) setLoading(false);
       }
@@ -1023,7 +1023,7 @@ export default function ReplayPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setGenerateError(json.error || '生成失败');
+        setGenerateError(json.error || t('replay.generateFailed'));
         return;
       }
       setGenProgress(100);
@@ -1035,7 +1035,7 @@ export default function ReplayPage() {
       );
       setSelectedChapterId(null);
     } catch (e: any) {
-      setGenerateError(e.message || '网络错误');
+      setGenerateError(t('replay.networkError'));
     } finally {
       setGenerating(false);
     }

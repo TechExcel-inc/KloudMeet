@@ -752,6 +752,7 @@ export function LiveDocFloatingExpandedParticipantLayout({
   /** horizontal=浮窗；vertical=共享方左侧竖直条 */
   orientation?: 'horizontal' | 'vertical';
 }) {
+  const { t } = useI18n();
   const heroColumnRef = React.useRef<HTMLDivElement>(null);
   const restHScrollRef = React.useRef<HTMLDivElement>(null);
   const [restMaxHeight, setRestMaxHeight] = React.useState<number | undefined>(undefined);
@@ -974,8 +975,8 @@ export function LiveDocFloatingExpandedParticipantLayout({
                 className="floating-expanded-rest-hnav-btn"
                 disabled={!hScrollEdge.canLeft}
                 onClick={() => scrollRestHorizontal(-1)}
-                aria-label="向左查看更多参与者"
-                title="向左"
+                aria-label={t('layout.moreParticipantsLeft')}
+                title={t('layout.moreParticipantsLeft')}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <polyline points="15 6 9 12 15 18" />
@@ -986,8 +987,8 @@ export function LiveDocFloatingExpandedParticipantLayout({
                 className="floating-expanded-rest-hnav-btn floating-expanded-rest-hnav-btn--primary"
                 disabled={!hScrollEdge.canRight}
                 onClick={() => scrollRestHorizontal(1)}
-                aria-label="向右查看更多参与者"
-                title="向右"
+                aria-label={t('layout.moreParticipantsRight')}
+                title={t('layout.moreParticipantsRight')}
               >
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
                   <polyline points="9 6 15 12 9 18" />

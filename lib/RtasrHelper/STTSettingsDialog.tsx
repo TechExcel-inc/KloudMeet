@@ -329,7 +329,7 @@ export function STTSettingsDialog({
               padding: '8px 12px',
             }}
           >
-            {t('stt.cancel') || '取消'}
+            {t('stt.cancel') || 'Cancel'}
           </button>
           <button
             type="button"
@@ -345,7 +345,7 @@ export function STTSettingsDialog({
               padding: '8px 20px',
             }}
           >
-            {t('stt.ok') || '确定'}
+            {t('stt.ok') || 'OK'}
           </button>
         </div>
 

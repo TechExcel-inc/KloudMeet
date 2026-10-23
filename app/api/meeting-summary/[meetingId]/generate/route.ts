@@ -150,7 +150,7 @@ export async function POST(
     });
 
     if (transcripts.length === 0) {
-      return NextResponse.json({ error: '暂无字幕数据，无法生成摘要' }, { status: 422 });
+      return NextResponse.json({ error: 'No transcript yet, so a summary cannot be generated.' }, { status: 422 });
     }
 
     // Billing (no-op when disabled): Free includes a few AI summaries per month.
@@ -176,11 +176,11 @@ export async function POST(
       chapters = await callAI(prompt);
     } catch (e: any) {
       console.error('[generate] AI call failed:', e);
-      return NextResponse.json({ error: `AI 调用失败: ${e.message}` }, { status: 502 });
+      return NextResponse.json({ error: 'The AI service failed. Please try again.' }, { status: 502 });
     }
 
     if (!chapters || chapters.length === 0) {
-      return NextResponse.json({ error: 'AI 未返回有效章节数据' }, { status: 502 });
+      return NextResponse.json({ error: 'The AI service returned no usable chapters. Please try again.' }, { status: 502 });
     }
 
     // Normalize

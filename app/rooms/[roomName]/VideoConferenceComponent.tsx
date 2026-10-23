@@ -235,6 +235,12 @@ function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
   return Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
+
+/** Connect errors that need their own explanation (stored in connectError, never shown raw as a title). */
+const E2EE_UNSUPPORTED = 'E2EE_UNSUPPORTED';
+const ENCRYPTION_ERROR_PREFIX = 'E2EE_ERROR: ';
+const isEncryptionError = (message: string | null | undefined) =>
+  !!message && (message === E2EE_UNSUPPORTED || message.startsWith(ENCRYPTION_ERROR_PREFIX));
 const MIC_PUBLISH_RETRY_MS = 800;
 const AUDIO_RESUBSCRIBE_DELAY_MS = 1500;
 const AUDIO_RESUBSCRIBE_MAX_TRIES = 2;
@@ -693,7 +699,7 @@ export function VideoConferenceComponent(props: {
         room.setE2EEEnabled(true).catch((e) => {
           if (e instanceof DeviceUnsupportedError) {
             console.error('[KloudMeet] E2EE not supported by browser:', e);
-            setConnectError('您的浏览器不支持加密会议，请更新到最新版本后重试。');
+            setConnectError(E2EE_UNSUPPORTED);
             return;
           }
           throw e;
@@ -795,12 +801,12 @@ export function VideoConferenceComponent(props: {
       }
       if (response.status === 403 || response.status === 404) {
         // 会议已结束 / 不存在：终止状态，不再重试
-        const closed = new Error(`会议已关闭 ${response.status}: ${await response.text()}`);
+        const closed = new Error(`Meeting closed (${response.status}): ${await response.text()}`);
         closed.name = MEETING_CLOSED_ERROR;
         throw closed;
       }
       if (!response.ok) {
-        throw new Error(`重新获取连接信息失败 ${response.status}: ${await response.text()}`);
+        throw new Error(`Could not refresh connection details (${response.status}): ${await response.text()}`);
       }
 
       const fresh = (await response.json()) as ConnectionDetails;
@@ -1274,7 +1280,7 @@ export function VideoConferenceComponent(props: {
   const handleEncryptionError = React.useCallback((error: Error) => {
     // Route encryption errors through the same inline UI — no alert()
     console.error('[KloudMeet] Encryption error:', error);
-    setConnectError(`加密错误: ${error.message}`);
+    setConnectError(`${ENCRYPTION_ERROR_PREFIX}${error.message}`);
   }, []);
 
   React.useEffect(() => {
@@ -5805,20 +5811,22 @@ export function VideoConferenceComponent(props: {
               </div>
 
               <div style={{ fontSize: '18px', fontWeight: 700, color: '#f1f5f9', marginBottom: '8px' }}>
-                {connectError?.startsWith('加密错误')
-                  ? '加密错误'
+                {isEncryptionError(connectError)
+                  ? t('meeting.encryptionErrorTitle')
                   : t('meeting.connectionInvalidTitle')}
               </div>
               <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '24px', lineHeight: 1.6 }}>
-                {connectError?.startsWith('加密错误')
-                  ? connectError
-                  : t('meeting.connectionInvalidDesc')}
+                {connectError === E2EE_UNSUPPORTED
+                  ? t('meeting.e2eeUnsupported')
+                  : isEncryptionError(connectError)
+                    ? t('meeting.encryptionErrorDesc')
+                    : t('meeting.connectionInvalidDesc')}
               </div>
 
               {/* Error detail (collapsible) */}
               <details style={{ marginBottom: '24px', textAlign: 'left' }}>
                 <summary style={{ fontSize: '12px', color: '#64748b', cursor: 'pointer', userSelect: 'none' }}>
-                  错误详情
+                  {t('meeting.errorDetails')}
                 </summary>
                 <div style={{
                   marginTop: '8px',
