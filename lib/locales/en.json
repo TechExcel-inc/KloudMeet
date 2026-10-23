@@ -975,6 +975,7 @@
   "billing.opening": "Opening the secure billing portal…",
   "billing.error.generic": "Something went wrong. Please try again.",
   "billing.limit.recording": "Recording can't start: the replay hours for this billing period are used up. Upgrade or buy an hour pack in Plan & billing.",
+  "billing.limit.publicReplay": "Public replay links are available on Pro and Team plans. Upgrade in Plan & billing.",
   "meeting.timeLimit.warning": "This meeting ends in {time} (Free plan limit).",
   "meeting.timeLimit.ended": "This meeting reached the Free plan's 40-minute limit.",
   "meeting.timeLimit.upgrade": "Upgrade to Pro"

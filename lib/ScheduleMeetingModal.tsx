@@ -291,7 +291,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           },
         );
         if (!visibilityRes.ok) {
-          alert(t('dash.recordingVisibilityFailed'));
+          const err = await visibilityRes.json().catch(() => null);
+          alert(err?.code === 'BILLING_LIMIT' ? t('billing.limit.publicReplay') : t('dash.recordingVisibilityFailed'));
           return;
         }
       }

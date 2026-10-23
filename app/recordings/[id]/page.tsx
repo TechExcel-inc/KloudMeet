@@ -737,8 +737,20 @@ function RecordingAccessMenu({
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Menu offset from the trigger's wrapper, kept inside the viewport when the header wraps.
+  const [menuLeft, setMenuLeft] = useState<number | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const toggle = () => {
+    const wrap = wrapRef.current?.getBoundingClientRect();
+    if (wrap) {
+      const width = Math.min(320, window.innerWidth - 32);
+      const left = Math.min(Math.max(16, wrap.right - width), window.innerWidth - 16 - width);
+      setMenuLeft(left - wrap.left);
+    }
+    setOpen((v) => !v);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -774,7 +786,8 @@ function RecordingAccessMenu({
         body: JSON.stringify({ visibility: next }),
       });
       if (!res.ok) {
-        notify(t('dash.recordingVisibilityFailed'));
+        const err = await res.json().catch(() => null);
+        notify(err?.code === 'BILLING_LIMIT' ? t('billing.limit.publicReplay') : t('dash.recordingVisibilityFailed'));
         return;
       }
       const json = await res.json().catch(() => null);
@@ -823,7 +836,7 @@ function RecordingAccessMenu({
         aria-expanded={open}
         aria-label={`${t('dash.recordingShare')}: ${isPublic ? t('dash.recordingPublic') : t('dash.recordingPrivate')}`}
         disabled={saving}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggle}
       >
         {isPublic ? (
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /></svg>
@@ -834,7 +847,12 @@ function RecordingAccessMenu({
         <ChevronDown size={12} />
       </button>
       {open && (
-        <div className={css.menu} role="menu" aria-label={t('dash.recordingShare')}>
+        <div
+          className={css.menu}
+          role="menu"
+          aria-label={t('dash.recordingShare')}
+          style={menuLeft === null ? undefined : { left: menuLeft, right: 'auto' }}
+        >
           <div className={css.menuLabel} aria-hidden="true">{t('dash.recordingShare')}</div>
           {options.map((opt) => {
             const on = visibility === opt.id;
