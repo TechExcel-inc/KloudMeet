@@ -607,6 +607,7 @@
   "attendee.raisedHands": "Raised Hands",
   "attendee.lowerAllHands": "Lower All",
   "toolbar.captions": "Closed Caption",
+  "toolbar.captionsShort": "Captions",
   "toolbar.captionsOn": "Speech to Text - enabled",
   "meeting.captionsRunning": "Captions on",
   "meeting.solo.title": "Your meeting's ready",

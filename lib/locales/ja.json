@@ -588,6 +588,7 @@
   "attendee.raisedHands": "挙手",
   "attendee.lowerAllHands": "全員下ろす",
   "toolbar.captions": "字幕",
+  "toolbar.captionsShort": "字幕",
   "toolbar.captionsOn": "音声認識 - 有効",
   "meeting.captionsRunning": "字幕オン",
   "meeting.solo.title": "ミーティングの準備ができました",

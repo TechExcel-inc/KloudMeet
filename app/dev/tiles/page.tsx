@@ -138,6 +138,8 @@ export default function DevTilesPage() {
         raisedHandCount={1}
         chatBadgeCount={2}
         canDocumentPip
+        canToggleCaptions={host}
+        captionsEnabled
         meetingTitle="Weekly product review"
       />
       )}

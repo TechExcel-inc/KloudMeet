@@ -865,6 +865,24 @@
 }
 
 @media (max-width: 1024px) {
+  /* Keep Leave on the same row down to ~960px: tighter gaps instead of wrapping */
+  .desktopBar {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .zoneCenter {
+    gap: 10px;
+  }
+
+  .deviceGroup {
+    gap: 6px;
+  }
+
+  .seg {
+    min-width: 52px;
+  }
+
   .zoneRight {
     flex: 0 0 auto;
   }
@@ -884,6 +902,12 @@
 
   .exitPill {
     padding: 0 18px;
+  }
+}
+
+@media (max-width: 1000px) {
+  .actBtn {
+    min-width: 40px;
   }
 }
 

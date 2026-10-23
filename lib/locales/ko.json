@@ -588,6 +588,7 @@
   "attendee.raisedHands": "손든 참석자",
   "attendee.lowerAllHands": "모두 내리기",
   "toolbar.captions": "자막",
+  "toolbar.captionsShort": "자막",
   "toolbar.captionsOn": "음성 인식 - 활성화됨",
   "meeting.captionsRunning": "자막 켜짐",
   "meeting.solo.title": "회의가 준비되었습니다",
