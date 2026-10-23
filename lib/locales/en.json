@@ -249,9 +249,9 @@
   "prejoin.errorNotFound": "This meeting doesn't exist. Please check the meeting link or ID.",
   "prejoin.errorEnded": "This meeting has already ended.",
   "prejoin.errorNetwork": "Network connection failed. Check your connection and try again. If it keeps failing, try Chrome or Edge.",
-  "prejoin.participantLiveDocShow": "Attendees can share LiveDoc AI",
-  "prejoin.participantLiveDocHide": "Attendees read-only LiveDoc AI",
-
+  "prejoin.participantLiveDocShow": "Can share LiveDoc AI",
+  "prejoin.participantLiveDocHide": "View only",
+  "prejoin.participantLiveDocLabel": "Attendees and LiveDoc AI",
   "toolbar.muteMic": "Mute Mic",
   "toolbar.unmuteMic": "Unmute Mic",
   "toolbar.micSettings": "Microphone Settings",
