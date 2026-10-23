@@ -5064,7 +5064,14 @@ export function VideoConferenceComponent(props: {
 
   // ─── Captions (host/co-host only can toggle, all see the overlay) ────────
   const { locale } = useI18n();
-  const { captionsInfo, setCaptionsOpen, captionsRunning } = useCaptions({
+  const {
+    captionsInfo,
+    setCaptionsOpen,
+    captionsRunning,
+    readLanguage: captionReadLanguage,
+    roomLanguages: captionRoomLanguages,
+    setReadLanguage: setCaptionReadLanguage,
+  } = useCaptions({
     room,
     micEnabled,
     languageCode: locale,
@@ -9114,7 +9121,13 @@ export function VideoConferenceComponent(props: {
           </div>
         )}
 
-        <CaptionsOverlay captionsInfo={captionsInfo} bottomOffset={isToolbarMobile ? 110 : 96} />
+        <CaptionsOverlay
+          captionsInfo={captionsInfo}
+          bottomOffset={isToolbarMobile ? 110 : 96}
+          readLanguage={captionReadLanguage}
+          roomLanguages={captionRoomLanguages}
+          onChangeLanguage={setCaptionReadLanguage}
+        />
 
         {/* Custom toolbar overlay */}
         <KloudMeetToolbar

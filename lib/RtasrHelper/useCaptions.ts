@@ -25,11 +25,34 @@ import { FunAsrHelper } from './FunAsrHelper';
 import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
-import { captionLanguageFor } from './captionLanguage';
+import {
+  CAPTION_SETTINGS_EVENT,
+  captionLanguageFor,
+  isCaptionLanguage,
+  pickCaptionText,
+  readCaptionLanguage,
+  saveReadCaptionLanguage,
+  translationTargets,
+  type CaptionLanguage,
+} from './captionLanguage';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
 
 const CAPTION_TOPIC = 'kloud-caption';
+/** Each participant announces the language it reads captions in, so speakers translate once per language. */
+const CAPTION_LANG_TOPIC = 'kloud-caption-lang';
+/** A slow translation must not hold back the caption for everyone. */
+const TRANSLATE_TIMEOUT_MS = 4000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (err) => { clearTimeout(timer); reject(err); },
+    );
+  });
+}
 
 /** 字幕自动隐藏延迟（ms） */
 const CAPTION_HIDE_DELAY = 5000;
@@ -55,6 +78,8 @@ export interface CaptionPayload {
   defaultTargetLanguage?: string;
   /** 广播方提供的默认翻译文本 */
   defaultTranslatedText?: string;
+  /** Final sentence translated once into every reading language in the room, keyed by language. */
+  translations?: Record<string, string>;
 }
 
 export interface CaptionsInfo {
@@ -66,6 +91,11 @@ export interface CaptionsInfo {
   text: string;
   /** 是否是中间结果（partial），用于显示闪烁光标 */
   isPartial: boolean;
+  /** Language the text is shown in, and the language it was spoken in. */
+  lang?: string;
+  spokenLang?: string;
+  /** The words as spoken, kept under a translation (translations can be wrong). */
+  original?: string;
 }
 
 export interface UseCaptionsOptions {
@@ -87,6 +117,10 @@ export interface UseCaptionsReturn {
   setCaptionsOpen: (open: boolean) => Promise<void>;
   /** 字幕是否正在运行 */
   captionsRunning: boolean;
+  /** This participant's reading language, and every reading language announced in the room. */
+  readLanguage: CaptionLanguage;
+  roomLanguages: CaptionLanguage[];
+  setReadLanguage: (lang: CaptionLanguage) => void;
 }
 
 // ── 工具：从 localStorage 读取当前 meetingId ─────────────────────────────
@@ -147,6 +181,11 @@ export function useCaptions({
   languageCode = 'en',
 }: UseCaptionsOptions): UseCaptionsReturn {
   const uiLanguage = captionLanguageFor(languageCode);
+  const [readLanguage, setReadLanguageState] = React.useState<CaptionLanguage>(uiLanguage);
+  const readLanguageRef = React.useRef<CaptionLanguage>(uiLanguage);
+  /** identity → reading language announced by each remote participant. */
+  const peerLanguagesRef = React.useRef(new Map<string, CaptionLanguage>());
+  const [roomLanguages, setRoomLanguages] = React.useState<CaptionLanguage[]>([uiLanguage]);
   const [captionsInfo, setCaptionsInfo] = React.useState<CaptionsInfo>({
     show: false,
     userName: '',
@@ -169,7 +208,7 @@ export function useCaptions({
   // ── 显示字幕到界面 ──────────────────────────────────────────────────────
 
   const showCaptionsToGUI = React.useCallback(
-    (payload: CaptionPayload) => {
+    (payload: CaptionPayload, lang?: string, original?: string) => {
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
         hideTimerRef.current = null;
@@ -187,7 +226,15 @@ export function useCaptions({
           return payload.userId;
         })();
 
-      setCaptionsInfo({ show: true, userName: displayName, text: payload.src, isPartial: payload.tp === 1 });
+      setCaptionsInfo({
+        show: true,
+        userName: displayName,
+        text: payload.src,
+        isPartial: payload.tp === 1,
+        lang: lang || payload.speakLanguage,
+        spokenLang: payload.speakLanguage,
+        original: original && original !== payload.src ? original : undefined,
+      });
 
       // partial 结果只延迟 1s 后隐藏（给视觉刷新留余地），final 延迟 5s
       const delay = payload.tp === 1 ? 1200 : CAPTION_HIDE_DELAY;
@@ -197,6 +244,68 @@ export function useCaptions({
     },
     [room],
   );
+
+  // ── Reading languages in the room ───────────────────────────────────────
+
+  const refreshRoomLanguages = React.useCallback(() => {
+    const all = new Set<CaptionLanguage>([readLanguageRef.current, ...peerLanguagesRef.current.values()]);
+    setRoomLanguages([...all]);
+  }, []);
+
+  const announceReadLanguage = React.useCallback(() => {
+    if (room.state !== 'connected') return;
+    const data = encoder.encode(JSON.stringify({ lang: readLanguageRef.current }));
+    room.localParticipant.publishData(data, { reliable: true, topic: CAPTION_LANG_TOPIC }).catch(() => {});
+  }, [room, encoder]);
+
+  // Own reading language: saved choice, else the interface language; re-announce on change.
+  React.useEffect(() => {
+    const sync = () => {
+      const lang = readCaptionLanguage(uiLanguage);
+      readLanguageRef.current = lang;
+      setReadLanguageState(lang);
+      refreshRoomLanguages();
+      announceReadLanguage();
+    };
+    sync();
+    window.addEventListener(CAPTION_SETTINGS_EVENT, sync);
+    return () => window.removeEventListener(CAPTION_SETTINGS_EVENT, sync);
+  }, [uiLanguage, refreshRoomLanguages, announceReadLanguage]);
+
+  // Learn others' languages; tell newcomers ours; forget people who leave.
+  React.useEffect(() => {
+    const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
+      if (topic !== CAPTION_LANG_TOPIC || !participant) return;
+      try {
+        const { lang } = JSON.parse(decoder.decode(payload)) as { lang?: unknown };
+        if (!isCaptionLanguage(lang)) return;
+        peerLanguagesRef.current.set(participant.identity, lang);
+        refreshRoomLanguages();
+      } catch {
+        /* ignore malformed announcements */
+      }
+    };
+    const onJoin = () => announceReadLanguage();
+    const onLeave = (participant: { identity: string }) => {
+      if (peerLanguagesRef.current.delete(participant.identity)) refreshRoomLanguages();
+    };
+    room.on(RoomEvent.DataReceived, onData);
+    room.on(RoomEvent.ParticipantConnected, onJoin);
+    room.on(RoomEvent.ParticipantDisconnected, onLeave);
+    room.on(RoomEvent.Connected, onJoin);
+    announceReadLanguage();
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
+      room.off(RoomEvent.ParticipantConnected, onJoin);
+      room.off(RoomEvent.ParticipantDisconnected, onLeave);
+      room.off(RoomEvent.Connected, onJoin);
+    };
+  }, [room, decoder, refreshRoomLanguages, announceReadLanguage]);
+
+  const setReadLanguage = React.useCallback((lang: CaptionLanguage) => {
+    // Saving fires CAPTION_SETTINGS_EVENT, which updates state and re-announces.
+    saveReadCaptionLanguage(lang);
+  }, []);
 
   // ── 接收远端字幕（LiveKit DataChannel） ────────────────────────────────
 
@@ -212,35 +321,28 @@ export function useCaptions({
         const data: CaptionPayload = JSON.parse(decoder.decode(payloadBytes));
         
         // Read in the interface language unless the user picked another one in caption settings.
-        let settings = { subtitleVisible: true, readLanguage: uiLanguage };
+        let settings: { subtitleVisible: boolean } = { subtitleVisible: true };
         try {
           const raw = localStorage.getItem('kloud-stt-settings');
           if (raw) Object.assign(settings, JSON.parse(raw));
         } catch(e) {}
-        
+
         if (!settings.subtitleVisible) return;
-        
-        const speakLanguage = data.speakLanguage || uiLanguage;
-        const myReadLanguage = settings.readLanguage || uiLanguage;
-        
-        // 核心优化：直接利用广播方的默认翻译，省去重复调用的费用
-        if (data.defaultTargetLanguage === myReadLanguage && data.defaultTranslatedText) {
-           showCaptionsToGUI({ ...data, src: data.defaultTranslatedText });
-        } else if (data.tp === 1 && speakLanguage !== myReadLanguage) {
-           // 中间结果尚未翻译，避免先显示原文、最终句再切换成译文
-           return;
-        } else if (
-          data.tp === 0 &&
-          speakLanguage !== myReadLanguage &&
-          speakLanguage !== 'auto'
-        ) {
-           // 仅最终句翻译；中间结果（tp=1）不打 /api/translate
-           translateText(data.src, myReadLanguage, speakLanguage)
-             .then(translated => showCaptionsToGUI({ ...data, src: translated }))
-             .catch(() => showCaptionsToGUI(data));
-        } else {
-           showCaptionsToGUI(data); // 读语言 = 说语言，或仍在识别中，直接显示原文
+
+        const myReadLanguage = readLanguageRef.current;
+        const choice = pickCaptionText(data, myReadLanguage);
+        if (choice.kind === 'original') {
+          showCaptionsToGUI(data); // 读语言 = 说语言，直接显示原文
+        } else if (choice.kind === 'translated') {
+          // 发言方已经按房间里的每种阅读语言各翻译了一次，直接用，不再重复调用
+          showCaptionsToGUI({ ...data, src: choice.text }, myReadLanguage, data.src);
+        } else if (data.tp === 0) {
+          // 发言方还不知道我的语言（刚入会），只有这一句自己翻译
+          translateText(data.src, myReadLanguage, data.speakLanguage || 'auto')
+            .then((translated) => showCaptionsToGUI({ ...data, src: translated }, myReadLanguage, data.src))
+            .catch(() => showCaptionsToGUI(data));
         }
+        // 中间结果需要翻译时不显示，避免先显示原文、最终句再切换成译文
       } catch (e) {
         console.error('[useCaptions] Failed to parse caption data', e);
       }
@@ -316,10 +418,11 @@ export function useCaptions({
             
             // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
             const speakLanguage = d.detectedLanguage || settings.speakLanguage || uiLanguage;
-            const defaultTargetLanguage = settings.readLanguage || uiLanguage;
-            const needsTranslation =
-              speakLanguage !== defaultTargetLanguage &&
-              speakLanguage !== 'auto';
+            const myReadLanguage = readLanguageRef.current;
+            // Every reading language in the room (mine included) except the spoken one.
+            const targets = speakLanguage === 'auto'
+              ? []
+              : translationTargets([myReadLanguage, ...peerLanguagesRef.current.values()], speakLanguage);
 
             const payload: CaptionPayload = {
               id: d.id,
@@ -329,26 +432,39 @@ export function useCaptions({
               userName,
               offsetSeconds,
               speakLanguage,
-              defaultTargetLanguage,
+              // Kept for clients that predate `translations`.
+              defaultTargetLanguage: myReadLanguage,
             };
 
-            // 仅最终句翻译；中间结果（type=1）每个 delta 都会回调，不能打翻译接口
-            if (
-              d.type === 0 &&
-              needsTranslation
-            ) {
-              try {
-                payload.defaultTranslatedText = await translateText(d.src, defaultTargetLanguage, speakLanguage);
-              } catch (e) {
-                payload.defaultTranslatedText = d.src;
+            // 仅最终句翻译，每种语言只翻一次；中间结果（type=1）每个 delta 都会回调，不能打翻译接口
+            if (d.type === 0 && targets.length > 0) {
+              const results = await Promise.allSettled(
+                targets.map((lang) =>
+                  withTimeout(translateText(d.src, lang, speakLanguage), TRANSLATE_TIMEOUT_MS).then(
+                    (text) => [lang, text] as const,
+                  ),
+                ),
+              );
+              const translations: Record<string, string> = {};
+              for (const r of results) {
+                if (r.status === 'fulfilled' && r.value[1]) translations[r.value[0]] = r.value[1];
               }
-            } else if (!needsTranslation) {
+              payload.translations = translations;
+              payload.defaultTranslatedText = translations[myReadLanguage] || d.src;
+            } else if (myReadLanguage === speakLanguage) {
               payload.defaultTranslatedText = d.src;
             }
 
-            // 需要翻译时不显示未翻译的中间结果，只显示最终译文
-            if (settings.subtitleVisible && (d.type === 0 || !needsTranslation)) {
-                showCaptionsToGUI({ ...payload, src: payload.defaultTranslatedText || payload.src });
+            // 自己屏幕：需要翻译时不显示未翻译的中间结果；译文下方保留原文
+            const mine = pickCaptionText(payload, myReadLanguage);
+            if (settings.subtitleVisible) {
+              if (mine.kind === 'original') {
+                showCaptionsToGUI(payload);
+              } else if (mine.kind === 'translated') {
+                showCaptionsToGUI({ ...payload, src: mine.text }, myReadLanguage, d.src);
+              } else if (d.type === 0) {
+                showCaptionsToGUI(payload); // 翻译失败：至少显示原文
+              }
             }
 
             // 广播给所有参与者
@@ -425,5 +541,5 @@ export function useCaptions({
     };
   }, []);
 
-  return { captionsInfo, setCaptionsOpen, captionsRunning };
+  return { captionsInfo, setCaptionsOpen, captionsRunning, readLanguage, roomLanguages, setReadLanguage };
 }
