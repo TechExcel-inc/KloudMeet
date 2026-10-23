@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
-import { sendEmailVerification } from '@/lib/brevo';
+import { sendMail } from '@/lib/mail';
+import { verificationEmail } from '@/lib/mail/templates';
 import { codePurpose, normalizeEmail } from '@/lib/authPolicy';
 import { clientIp, rateLimited } from '@/lib/rateLimit';
 import { discardCode, issueCode, issueErrorMessage } from '@/lib/verificationCodes';
@@ -52,9 +53,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sent = await sendEmailVerification(email, issued.code, purpose);
-    if (!sent.success) {
-      console.error('[send-code] email delivery failed:', sent.error);
+    const sent = await sendMail(verificationEmail(email, issued.code, purpose));
+    if (!sent.ok) {
+      console.error('[send-code] email delivery failed:', sent.provider, sent.error);
       await discardCode(issued.id);
       return NextResponse.json(
         { error: "We couldn't send the email right now. Please try again in a minute." },
