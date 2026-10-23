@@ -142,6 +142,8 @@ export async function PUT(
     if (durationMinutes !== undefined) data.durationMinutes = durationMinutes;
     if (timezone !== undefined) data.timezone = timezone;
     if (status !== undefined) data.status = status;
+    // Calendar files derive SEQUENCE from modifiedAt, so bump it on every organizer edit.
+    if (Object.keys(data).length > 0) data.modifiedAt = new Date();
 
     // Only set actualStartedAt if not already set (webhook has priority)
     if (actualStartedAt && !current.actualStartedAt) {

@@ -13,6 +13,12 @@ import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { authFetch, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
+import {
+  calendarMenuItems,
+  inviteCalendarLines,
+  isCalendarEligible,
+  toCalendarMeetingFromClient,
+} from '@/lib/calendar/menu';
 import { ActiveMeetingConflictModal } from '@/lib/ActiveMeetingConflictModal';
 import {
   checkMeetingStartGuard,
@@ -410,6 +416,13 @@ export function DashboardView({
       description ? `Description: ${description}` : '',
       `Meeting ID: ${meeting.roomName}`,
       `Join meeting: ${link}`,
+      ...(isCalendarEligible(meeting)
+        ? inviteCalendarLines(
+            toCalendarMeetingFromClient(meeting, { hostName }),
+            window.location.origin,
+            t,
+          )
+        : []),
       '',
       'Please join a few minutes early to test your audio and video setup.',
     ]
@@ -735,6 +748,31 @@ export function DashboardView({
         <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
           Copy Invite
         </button>
+        {isCalendarEligible(m) && (
+          <>
+            <div className={styles.dropdownSeparator} role="separator" />
+            <div className={styles.dropdownSectionLabel}>{t('calendar.addToCalendar')}</div>
+            {calendarMenuItems(
+              toCalendarMeetingFromClient(m, {
+                hostName:
+                  m?.createdByMember?.fullName || m?.createdByMember?.username || user?.displayName || null,
+              }),
+              window.location.origin,
+              t,
+            ).map((item) => (
+              <a
+                key={item.key}
+                role="menuitem"
+                className={styles.dropdownItem}
+                href={item.href}
+                {...(item.download ? { download: true } : { target: '_blank', rel: 'noopener noreferrer' })}
+                onClick={() => setInviteMenuRoomName(null)}
+              >
+                {item.label}
+              </a>
+            ))}
+          </>
+        )}
       </div>
     ) : null;
 

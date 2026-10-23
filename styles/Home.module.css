@@ -480,6 +480,29 @@
   left: 0;
 }
 
+a.dropdownItem {
+  box-sizing: border-box;
+  text-decoration: none;
+}
+
+a.dropdownItem:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.dropdownSeparator {
+  height: 1px;
+  margin: 6px 0;
+  background: var(--km-border);
+}
+
+.dropdownSectionLabel {
+  padding: 6px 16px 4px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--km-text-muted);
+}
+
 /* App switcher */
 .platformMenu {
   width: 300px;

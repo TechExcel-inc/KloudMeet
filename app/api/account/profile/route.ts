@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
     const member = await getAuthMember(request);
     if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     
-    const { passwordHash, ...safeMember } = member;
+    const { passwordHash, calendarFeedToken, ...safeMember } = member;
     return NextResponse.json(safeMember);
   } catch (error) {
     console.error(error);
@@ -111,7 +111,7 @@ export async function PUT(request: NextRequest) {
       }
     });
 
-    const { passwordHash, ...safeMember } = updated;
+    const { passwordHash, calendarFeedToken, ...safeMember } = updated;
     return NextResponse.json(safeMember);
   } catch (error) {
     console.error(error);
