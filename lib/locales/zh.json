@@ -960,6 +960,13 @@
   "billing.error.generic": "出了点问题，请重试。",
   "billing.limit.recording": "无法开始录制：本计费周期的回放小时已用完。可在「套餐与账单」中升级或购买小时包。",
   "billing.limit.publicReplay": "公开回放链接仅限 Pro 和 Team 套餐。可在「套餐与账单」中升级。",
+  "desktopAuth.title": "已登录",
+  "desktopAuth.subtitle": "请回到 Kloud Meet 应用继续。",
+  "desktopAuth.open": "打开 Kloud Meet",
+  "desktopAuth.closeHint": "如果应用没有自动打开，请点上面的按钮。之后可以关闭此页面。",
+  "desktopAuth.expiredTitle": "登录链接已失效",
+  "desktopAuth.expiredSubtitle": "请回到 Kloud Meet 应用，重新选择用 Google 登录。",
+  "login.googleInBrowser": "请在浏览器中继续。登录完成后会自动回到 Kloud Meet。",
   "meeting.timeLimit.warning": "会议将在 {time} 后结束（免费版时长限制）。",
   "meeting.timeLimit.ended": "会议已达到免费版 40 分钟的上限。",
   "meeting.timeLimit.upgrade": "升级到 Pro"

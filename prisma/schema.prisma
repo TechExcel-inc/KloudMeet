@@ -465,3 +465,18 @@ model BillingCredit {
   @@index([accountId, expiresAt], map: "BillingCredit_accountId_expiresAt_idx")
   @@map("BillingCredit")
 }
+
+/// One-time hand-off from a browser Google sign-in to the desktop app (PKCE: the app holds the verifier).
+model DesktopAuthHandoff {
+  id           Int       @id @default(autoincrement())
+  codeHash     String    @unique(map: "DesktopAuthHandoff_codeHash_key") @db.VarChar(64)
+  teamMemberId Int
+  challenge    String    @db.VarChar(64)
+  next         String?   @db.VarChar(512)
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([expiresAt], map: "DesktopAuthHandoff_expiresAt_idx")
+  @@map("DesktopAuthHandoff")
+}

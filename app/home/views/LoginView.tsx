@@ -6,7 +6,7 @@ import styles from '../../../styles/Home.module.css';
 import type { AuthUser } from '../types';
 import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
 import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
-import { googleSignInHref } from '@/lib/googleSignInHref';
+import { googleSignInHref, googleSignInOpensBrowser } from '@/lib/googleSignInHref';
 
 export function LoginView({
   onBack,
@@ -25,6 +25,7 @@ export function LoginView({
 }) {
   const { t } = useI18n();
   const tx = useTx();
+  const [googleInBrowser, setGoogleInBrowser] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -154,11 +155,15 @@ export function LoginView({
       <button
         type="button"
         className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
-        onClick={() => window.location.href = googleSignInHref()}
+        onClick={() => {
+          if (googleSignInOpensBrowser()) setGoogleInBrowser(true);
+          window.location.href = googleSignInHref();
+        }}
       >
         <GoogleIcon />
         Google
       </button>
+      {googleInBrowser && <p className={styles.authSub} role="status">{t('login.googleInBrowser')}</p>}
 
       <div className={styles.authActions}>
         <span className={styles.authActionsNote}>{t('anon.noAccount')}</span>

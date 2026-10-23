@@ -10,4 +10,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   sendRemoteControlMessage: (data) => ipcRenderer.send('remote-control-message', data),
   getShareTargetBounds: () => ipcRenderer.invoke('get-share-target-bounds'),
   clearShareTarget: () => ipcRenderer.invoke('clear-share-target'),
+  /** Google sign-in opens the system browser and returns via kloudmeet://auth. */
+  googleSignInInBrowser: true,
 });

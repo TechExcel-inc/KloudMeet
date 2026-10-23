@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog, shell } = require('electron');
+const crypto = require('crypto');
 const path = require('path');
 const http = require('http');
 const { spawn } = require('child_process');
@@ -745,6 +746,104 @@ function getInitialMainWindowUrl() {
   return origin;
 }
 
+/**
+ * Google sign-in for the desktop app, the way Claude's desktop app does it: Google refuses
+ * sign-in inside embedded windows, so the app opens the system browser and gets back a
+ * one-time code via kloudmeet://auth?code=…, which it redeems with a PKCE verifier only it knows.
+ */
+const GOOGLE_SIGN_IN_TTL_MS = 15 * 60 * 1000;
+/** @type {{ verifier: string, startedAt: number } | null} */
+let pendingGoogleSignIn = null;
+
+function isGoogleSignInStart(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    return u.origin === getAppPageOrigin() && u.pathname === '/api/auth/google';
+  } catch {
+    return false;
+  }
+}
+
+function startGoogleSignInInBrowser(rawUrl) {
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  pendingGoogleSignIn = { verifier, startedAt: Date.now() };
+
+  const params = new URLSearchParams({ desktop: challenge });
+  try {
+    const next = new URL(rawUrl).searchParams.get('next');
+    if (next) params.set('next', next);
+  } catch {
+    /* no next */
+  }
+  shell.openExternal(`${getAppPageOrigin()}/api/auth/google?${params.toString()}`).catch((e) => {
+    appendStartupLog(`openExternal google sign-in failed: ${e instanceof Error ? e.message : String(e)}`);
+  });
+}
+
+function parseAuthDeepLink(rawUrl) {
+  try {
+    const u = new URL(rawUrl);
+    if (u.protocol !== 'kloudmeet:' || u.hostname !== 'auth') return null;
+    const code = u.searchParams.get('code');
+    return code ? { code } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function completeGoogleSignIn(code) {
+  const origin = getAppPageOrigin();
+  const pending = pendingGoogleSignIn;
+  pendingGoogleSignIn = null;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  const fail = (message) => loadMainContents(`${origin}/?${new URLSearchParams({ error: message }).toString()}`);
+
+  if (!pending || Date.now() - pending.startedAt > GOOGLE_SIGN_IN_TTL_MS) {
+    fail('Google sign-in expired. Please try again.');
+    return;
+  }
+  try {
+    const res = await fetch(`${origin}/api/auth/desktop/exchange`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, verifier: pending.verifier }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data || typeof data.token !== 'string') {
+      fail((data && data.error) || 'Google sign-in failed. Please try again.');
+      return;
+    }
+    const params = new URLSearchParams({ sso_token: data.token });
+    if (typeof data.next === 'string' && data.next) params.set('next', data.next);
+    loadMainContents(`${origin}/?${params.toString()}`);
+  } catch (e) {
+    appendStartupLog(`google sign-in exchange failed: ${e instanceof Error ? e.message : String(e)}`);
+    fail('Network error. Please try again.');
+  }
+}
+
+/** Routes any kloudmeet:// link: auth hand-off, else meeting join. */
+function handleDeepLink(rawUrl) {
+  const auth = parseAuthDeepLink(rawUrl);
+  if (!auth) {
+    navigateMainToDeepLink(rawUrl);
+    return;
+  }
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    try {
+      createWindows();
+    } catch (e) {
+      appendStartupLog(`auth deep link createWindows: ${e}`);
+      return;
+    }
+  }
+  void completeGoogleSignIn(auth.code);
+}
+
 function getDeepLinkFromArgv(argv) {
   const hit = argv.find((a) => typeof a === 'string' && a.startsWith('kloudmeet:'));
   return hit || null;
@@ -993,6 +1092,13 @@ function createWindows() {
     },
   });
 
+  // "Continue with Google" → system browser (Google blocks sign-in in embedded windows).
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!isGoogleSignInStart(url)) return;
+    event.preventDefault();
+    startGoogleSignInInBrowser(url);
+  });
+
   const { width, height } = require('electron').screen.getPrimaryDisplay().bounds;
 
   overlayWindow = new BrowserWindow({
@@ -1224,7 +1330,7 @@ if (!gotLock) {
         return;
       }
     }
-    if (url) navigateMainToDeepLink(url);
+    if (url) handleDeepLink(url);
     else if (mainWindow && !mainWindow.isDestroyed()) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -1233,6 +1339,11 @@ if (!gotLock) {
 
   app.on('open-url', (event, url) => {
     event.preventDefault();
+    if (parseAuthDeepLink(url)) {
+      // A hand-off only makes sense for a sign-in this running app started.
+      if (app.isReady()) handleDeepLink(url);
+      return;
+    }
     if (mainWindow && !mainWindow.isDestroyed()) {
       navigateMainToDeepLink(url);
     } else {

@@ -976,6 +976,13 @@
   "billing.error.generic": "Something went wrong. Please try again.",
   "billing.limit.recording": "Recording can't start: the replay hours for this billing period are used up. Upgrade or buy an hour pack in Plan & billing.",
   "billing.limit.publicReplay": "Public replay links are available on Pro and Team plans. Upgrade in Plan & billing.",
+  "desktopAuth.title": "You're signed in",
+  "desktopAuth.subtitle": "Return to the Kloud Meet app to continue.",
+  "desktopAuth.open": "Open Kloud Meet",
+  "desktopAuth.closeHint": "If the app didn't open, click the button above. You can close this tab afterwards.",
+  "desktopAuth.expiredTitle": "Sign-in link expired",
+  "desktopAuth.expiredSubtitle": "Go back to the Kloud Meet app and choose Continue with Google again.",
+  "login.googleInBrowser": "Continue in your browser. Kloud Meet will open again when you're signed in.",
   "meeting.timeLimit.warning": "This meeting ends in {time} (Free plan limit).",
   "meeting.timeLimit.ended": "This meeting reached the Free plan's 40-minute limit.",
   "meeting.timeLimit.upgrade": "Upgrade to Pro"

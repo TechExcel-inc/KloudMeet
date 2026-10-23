@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/?error=Google+sign-in+is+not+available+yet', origin));
   }
 
-  const payload = newGoogleState(request.nextUrl.searchParams.get('next'));
+  const { searchParams } = request.nextUrl;
+  // `desktop`: PKCE challenge from the desktop app, which opened this page in the system browser.
+  const payload = newGoogleState(searchParams.get('next'), searchParams.get('desktop'));
   const response = NextResponse.redirect(
     buildGoogleAuthUrl(clientId, googleRedirectUri(origin), payload.state),
   );

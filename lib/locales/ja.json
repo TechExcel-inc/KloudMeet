@@ -955,6 +955,13 @@
   "billing.error.generic": "問題が発生しました。もう一度お試しください。",
   "billing.limit.recording": "録画を開始できません：今期の再生時間を使い切りました。「プランと請求」でアップグレードするか時間パックを購入してください。",
   "billing.limit.publicReplay": "公開リプレイリンクは Pro と Team プランで利用できます。「プランと請求」からアップグレードしてください。",
+  "desktopAuth.title": "ログインしました",
+  "desktopAuth.subtitle": "Kloud Meet アプリに戻って続けてください。",
+  "desktopAuth.open": "Kloud Meet を開く",
+  "desktopAuth.closeHint": "アプリが開かない場合は上のボタンをクリックしてください。その後このタブは閉じて構いません。",
+  "desktopAuth.expiredTitle": "ログインリンクの有効期限が切れました",
+  "desktopAuth.expiredSubtitle": "Kloud Meet アプリに戻り、もう一度 Google でログインを選んでください。",
+  "login.googleInBrowser": "ブラウザで続けてください。ログインが完了すると Kloud Meet に戻ります。",
   "meeting.timeLimit.warning": "この会議はあと {time} で終了します（無料プランの上限）。",
   "meeting.timeLimit.ended": "この会議は無料プランの 40 分の上限に達しました。",
   "meeting.timeLimit.upgrade": "Pro にアップグレード"

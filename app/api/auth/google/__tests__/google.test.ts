@@ -9,6 +9,7 @@ const db = vi.hoisted(() => ({
       create: vi.fn(),
     },
     session: { create: vi.fn() },
+    desktopAuthHandoff: { create: vi.fn(), deleteMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/db', () => db);
@@ -18,7 +19,7 @@ import { GET as callback } from '../callback/route';
 import { GOOGLE_STATE_COOKIE, encodeGoogleState } from '@/lib/googleOAuth';
 
 const ORIGIN = 'http://localhost:3201';
-const { teamMember, session } = db.prisma;
+const { teamMember, session, desktopAuthHandoff } = db.prisma;
 
 function callbackRequest(query: string, cookie?: string) {
   return new NextRequest(`${ORIGIN}/api/auth/google/callback?${query}`, {
@@ -57,6 +58,8 @@ beforeEach(() => {
   vi.stubEnv('GOOGLE_CLIENT_SECRET', 'secret');
   teamMember.findUnique.mockResolvedValue(null);
   session.create.mockResolvedValue({});
+  desktopAuthHandoff.create.mockResolvedValue({});
+  desktopAuthHandoff.deleteMany.mockResolvedValue({ count: 0 });
 });
 
 afterEach(() => {
@@ -77,6 +80,17 @@ describe('GET /api/auth/google', () => {
     const saved = JSON.parse(Buffer.from(cookie.value, 'base64url').toString());
     expect(saved.state).toBe(location.searchParams.get('state'));
     expect(saved.next).toBe('/recordings/abc');
+  });
+
+  it('remembers the desktop app PKCE challenge and ignores a malformed one', async () => {
+    const challenge = 'a'.repeat(43);
+    const ok = await start(new NextRequest(`${ORIGIN}/api/auth/google?desktop=${challenge}`));
+    const saved = JSON.parse(Buffer.from(ok.cookies.get(GOOGLE_STATE_COOKIE)!.value, 'base64url').toString());
+    expect(saved.desktop).toBe(challenge);
+
+    const bad = await start(new NextRequest(`${ORIGIN}/api/auth/google?desktop=short`));
+    const savedBad = JSON.parse(Buffer.from(bad.cookies.get(GOOGLE_STATE_COOKIE)!.value, 'base64url').toString());
+    expect(savedBad.desktop).toBeNull();
   });
 
   it('drops an unsafe next path', async () => {
@@ -186,5 +200,24 @@ describe('GET /api/auth/google/callback', () => {
     const res = await callback(callbackRequest('code=c&state=s1', cookie));
     expect(errorOf(res)).toMatch(/suspended/);
     expect(session.create).not.toHaveBeenCalled();
+  });
+
+  it('hands off to the desktop app instead of signing in the browser', async () => {
+    mockGoogle(PROFILE);
+    teamMember.create.mockResolvedValue({ id: 7, status: 'ACTIVE' });
+    const challenge = 'b'.repeat(43);
+    const desktopCookie = encodeGoogleState({ state: 's1', next: '/recordings/abc', desktop: challenge });
+    const res = await callback(callbackRequest('code=c&state=s1', desktopCookie));
+
+    const location = new URL(res.headers.get('location')!);
+    expect(location.pathname).toBe('/auth/desktop');
+    expect(location.searchParams.get('code')).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(location.searchParams.get('sso_token')).toBeNull();
+    expect(session.create).not.toHaveBeenCalled();
+    expect(desktopAuthHandoff.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ teamMemberId: 7, challenge, next: '/recordings/abc' }),
+    });
+    // Only a hash of the code is stored.
+    expect(desktopAuthHandoff.create.mock.calls[0][0].data.codeHash).not.toBe(location.searchParams.get('code'));
   });
 });

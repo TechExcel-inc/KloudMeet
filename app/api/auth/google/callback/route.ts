@@ -10,6 +10,7 @@ import {
   stateMatches,
   usernameBaseFromEmail,
 } from '@/lib/googleOAuth';
+import { createDesktopHandoff } from '@/lib/desktopAuth';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -140,6 +141,16 @@ export async function GET(request: NextRequest) {
 
     if (member.status !== 'ACTIVE') {
       return fail('Account is suspended');
+    }
+
+    // Started from the desktop app: hand off to it through kloudmeet:// instead of signing in this browser.
+    if (saved.desktop) {
+      const handoff = await createDesktopHandoff({
+        teamMemberId: member.id,
+        challenge: saved.desktop,
+        next: saved.next,
+      });
+      return finish(`/auth/desktop?${new URLSearchParams({ code: handoff }).toString()}`);
     }
 
     // 4. Create session

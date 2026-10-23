@@ -28,10 +28,22 @@ export function googleRedirectUri(origin: string): string {
   return `${origin}/api/auth/google/callback`;
 }
 
-export type GoogleStatePayload = { state: string; next: string | null };
+/** `desktop` is the desktop app's PKCE challenge when sign-in started from the app. */
+export type GoogleStatePayload = { state: string; next: string | null; desktop?: string | null };
 
-export function newGoogleState(rawNext: string | null): GoogleStatePayload {
-  return { state: crypto.randomBytes(24).toString('hex'), next: safeReplayNext(rawNext) };
+const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
+
+/** A base64url SHA-256 PKCE challenge (43 chars), or null. */
+export function validDesktopChallenge(raw: unknown): string | null {
+  return typeof raw === 'string' && PKCE_CHALLENGE_RE.test(raw) ? raw : null;
+}
+
+export function newGoogleState(rawNext: string | null, rawDesktop: string | null = null): GoogleStatePayload {
+  return {
+    state: crypto.randomBytes(24).toString('hex'),
+    next: safeReplayNext(rawNext),
+    desktop: validDesktopChallenge(rawDesktop),
+  };
 }
 
 export function encodeGoogleState(payload: GoogleStatePayload): string {
@@ -43,7 +55,11 @@ export function decodeGoogleState(raw: string | undefined | null): GoogleStatePa
   try {
     const parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
     if (typeof parsed?.state !== 'string' || !parsed.state) return null;
-    return { state: parsed.state, next: safeReplayNext(typeof parsed.next === 'string' ? parsed.next : null) };
+    return {
+      state: parsed.state,
+      next: safeReplayNext(typeof parsed.next === 'string' ? parsed.next : null),
+      desktop: validDesktopChallenge(parsed.desktop),
+    };
   } catch {
     return null;
   }

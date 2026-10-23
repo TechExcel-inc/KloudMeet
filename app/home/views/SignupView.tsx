@@ -5,7 +5,7 @@ import { useI18n } from '@/lib/i18n';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
-import { googleSignInHref } from '@/lib/googleSignInHref';
+import { googleSignInHref, googleSignInOpensBrowser } from '@/lib/googleSignInHref';
 import { isValidPassword } from '@/lib/authPolicy';
 import { verifyEmailCode } from '@/lib/verifyEmailCode';
 
@@ -22,6 +22,7 @@ export function SignupView({
 }) {
   const { t } = useI18n();
   const tx = useTx();
+  const [googleInBrowser, setGoogleInBrowser] = useState(false);
   const [step, setStep] = useState<SignupStep>('email');
   const [email, setEmail] = useState('');
   const [verificationCode, setVerificationCode] = useState('');
@@ -214,11 +215,15 @@ export function SignupView({
           <button
             type="button"
             className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
-            onClick={() => window.location.href = googleSignInHref()}
+            onClick={() => {
+              if (googleSignInOpensBrowser()) setGoogleInBrowser(true);
+              window.location.href = googleSignInHref();
+            }}
           >
             <GoogleIcon />
             Google
           </button>
+          {googleInBrowser && <p className={styles.authSub} role="status">{t('login.googleInBrowser')}</p>}
 
           <div className={styles.authActions}>
             <span className={styles.authActionsNote}>{t('signup.alreadyHaveAccount')}</span>
