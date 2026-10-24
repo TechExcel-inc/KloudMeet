@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
@@ -63,7 +62,7 @@ export function DashboardView({
   onOpenDesktopApp: () => void;
   toast: { show: (t: string) => void };
 }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const tx = useTx();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
@@ -92,7 +91,6 @@ export function DashboardView({
   // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
   const [meetingScope, setMeetingScope] = useState<MeetingListScope>('all');
-  const [filterOpen, setFilterOpen] = useState(false);
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
@@ -143,18 +141,6 @@ export function DashboardView({
   meetingScopeRef.current = meetingScope;
   const meetingsFetchGenRef = useRef(0);
   const prevScopeRef = useRef(meetingScope);
-  const filterBtnRef = useRef<HTMLButtonElement>(null);
-  const [menuBox, setMenuBox] = useState<{ top: number; right: number } | null>(null);
-
-  const placeFilterMenu = useCallback(() => {
-    const btn = filterBtnRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    setMenuBox({
-      top: rect.bottom + 6,
-      right: Math.max(8, window.innerWidth - rect.right),
-    });
-  }, []);
 
   const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
     const term = searchTerm ?? searchQueryRef.current;
@@ -213,27 +199,6 @@ export function DashboardView({
     fetchMeetings(searchQueryRef.current, 1);
   }, [meetingScope, fetchMeetings]);
 
-  useEffect(() => {
-    if (!filterOpen) return;
-    const onDocMouseDown = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (!target?.closest('[data-meeting-filter="true"]')) setFilterOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setFilterOpen(false);
-    };
-    placeFilterMenu();
-    document.addEventListener('mousedown', onDocMouseDown);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('resize', placeFilterMenu);
-    window.addEventListener('scroll', placeFilterMenu, true);
-    return () => {
-      document.removeEventListener('mousedown', onDocMouseDown);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('resize', placeFilterMenu);
-      window.removeEventListener('scroll', placeFilterMenu, true);
-    };
-  }, [filterOpen, placeFilterMenu]);
 
   // Polling fallback to check processing recordings
   useEffect(() => {
@@ -701,6 +666,18 @@ export function DashboardView({
 
 
   /* ── Display helpers (presentation only) ── */
+  const todayLabel = new Date(currentTime).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
+  // Today's line under the title, from the meetings on this page of the list.
+  const liveCount = dbMeetings.filter((m) => m.isActive).length;
+  const soonCount = dbMeetings.filter((m) => {
+    if (m.isActive || m.status === 'ENDED' || m.status === 'CANCELED' || !m.scheduledFor) return false;
+    const diff = new Date(m.scheduledFor).getTime() - currentTime;
+    return diff > 0 && diff <= 60 * 60 * 1000;
+  }).length;
+  const summaryParts = [
+    ...(liveCount > 0 ? [{ key: 'live', text: tx('dash.summaryLive', '{n} in progress', { n: liveCount }) }] : []),
+    ...(soonCount > 0 ? [{ key: 'soon', text: tx('dash.summarySoon', '{n} starting soon', { n: soonCount }) }] : []),
+  ];
   const replayLabel = t('dash.replay').replace(/^[^\p{L}\p{N}]+/u, '').trim() || t('dash.replay');
   const hasJoinCode = joinCode.trim().length > 0;
   const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
@@ -779,7 +756,7 @@ export function DashboardView({
     ) : null;
 
   return (
-    <div className={styles.anonWrapper}>
+    <div className={`${styles.anonWrapper} ${styles.dashPage}`}>
       <TopToolbar 
         user={user} 
         onSignOut={onSignOut} 
@@ -794,6 +771,23 @@ export function DashboardView({
       <div className={styles.dashMain}>
         {/* ── Join with a code (or a personal meeting ID) first, then start a new meeting ── */}
         <section className={styles.dashHero}>
+          <div className={styles.dashTitleBlock}>
+            <h1 className={styles.dashTitle}>{tx('dash.pageTitle', 'Meetings')}</h1>
+            <p className={styles.dashSummary}>
+              {todayLabel}
+              {summaryParts.length > 0 && (
+                <>
+                  <span className={styles.dashSummaryDot} aria-hidden="true">·</span>
+                  {summaryParts.map((part, i) => (
+                    <React.Fragment key={part.key}>
+                      {i > 0 && tx('dash.listSep', ', ')}
+                      <span className={part.key === 'live' ? styles.dashSummaryLive : undefined}>{part.text}</span>
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
+            </p>
+          </div>
           <div className={styles.actionBar}>
             <div className={styles.joinGroup}>
               <label
@@ -865,7 +859,29 @@ export function DashboardView({
 
         <section className={styles.meetingListSection}>
           <div className={styles.meetingListHeader}>
-            <h2 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h2>
+            <h2 className={styles.srOnly}>{t('dash.yourMeetings')}</h2>
+            {/* All meetings / hosted by me: the two filter choices as tabs */}
+            <div className={styles.scopeTabs} role="group" aria-label={t('dash.filterShow')}>
+              {([
+                ['all', 'dash.filterAll', 'dash.filterAllHint'],
+                ['hosted', 'dash.filterHosted', 'dash.filterHostedHint'],
+              ] as const).map(([scope, labelKey, hintKey]) => {
+                const selected = meetingScope === scope;
+                return (
+                  <button
+                    key={scope}
+                    type="button"
+                    aria-pressed={selected}
+                    title={t(hintKey)}
+                    className={`${styles.scopeTab}${selected ? ` ${styles.scopeTabActive}` : ''}`}
+                    onClick={() => setMeetingScope(scope)}
+                  >
+                    {t(labelKey)}
+                    {selected && !loadingMeetings && <span className={styles.scopeCount}>{totalMeetings}</span>}
+                  </button>
+                );
+              })}
+            </div>
 
             <label className={styles.meetingSearchWrapper}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="17" height="17" className={styles.meetingSearchIcon} aria-hidden="true">
@@ -882,77 +898,15 @@ export function DashboardView({
               />
             </label>
 
-            <div className={styles.filterWrap} data-meeting-filter="true">
-              <button
-                ref={filterBtnRef}
-                type="button"
-                className={`${styles.btn} ${styles.btnOutline} ${styles.filterBtn}${meetingScope === 'hosted' ? ` ${styles.filterBtnActive}` : ''}`}
-                title={t('dash.filterMeetings')}
-                aria-haspopup="menu"
-                aria-expanded={filterOpen}
-                onClick={() => setFilterOpen((open) => !open)}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true">
-                  <path d="M3 5h18l-7 8v6l-4 2v-8z" />
-                </svg>
-                {meetingScope === 'hosted' ? t('dash.filterHosted') : t('dash.filterAll')}
-              </button>
-              {filterOpen && menuBox
-                ? createPortal(
-                <div
-                  className={`${styles.filterMenu} ${styles.filterMenuPortal}`}
-                  role="menu"
-                  aria-label={t('dash.filterShow')}
-                  data-meeting-filter="true"
-                  style={
-                    {
-                      ['--filter-top' as string]: `${menuBox.top}px`,
-                      ['--filter-right' as string]: `${menuBox.right}px`,
-                    } as React.CSSProperties
-                  }
-                >
-                  <div className={styles.filterMenuLabel}>{t('dash.filterShow')}</div>
-                  {([
-                    ['all', 'dash.filterAll', 'dash.filterAllHint'],
-                    ['hosted', 'dash.filterHosted', 'dash.filterHostedHint'],
-                  ] as const).map(([scope, labelKey, hintKey]) => {
-                    const selected = meetingScope === scope;
-                    return (
-                      <button
-                        key={scope}
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={selected}
-                        className={`${styles.filterOption}${selected ? ` ${styles.filterOptionActive}` : ''}`}
-                        onClick={() => {
-                          setMeetingScope(scope);
-                          setFilterOpen(false);
-                        }}
-                      >
-                        <svg className={styles.filterCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" aria-hidden>
-                          <polyline points="5 12 10 17 19 7" />
-                        </svg>
-                        <span className={styles.filterOptionText}>
-                          <span className={styles.filterOptionTitle}>{t(labelKey)}</span>
-                          <span className={styles.filterOptionHint}>{t(hintKey)}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>,
-                document.body,
-              )
-                : null}
-            </div>
-
             <button
               type="button"
-              className={`${styles.btn} ${styles.btnOutline} ${styles.filterBtn} ${styles.scheduleBtn}`}
+              className={styles.scheduleBtn}
               onClick={() => setShowScheduleModal(true)}
               title={t('dash.scheduleHint')}
+              aria-label={tx('dash.scheduleAction', 'Schedule')}
             >
-              <CalendarPlus size={15} aria-hidden="true" />
-              {t('dash.scheduleMeeting')}
+              <CalendarPlus size={16} aria-hidden="true" />
+              <span className={styles.scheduleBtnText}>{tx('dash.scheduleAction', 'Schedule')}</span>
             </button>
           </div>
 
@@ -976,7 +930,15 @@ export function DashboardView({
             <div className={styles.meetingCardsList}>
               {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => (
                 <div key={dateLabel} className={styles.meetingDateGroup}>
-                  <h3 className={styles.meetingDateLabel}>{dateLabel}</h3>
+                  <h3 className={styles.meetingDateLabel}>
+                    {dateLabel}
+                    {(() => {
+                      const first = (meetings as any[])[0];
+                      const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
+                      const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
+                      return full !== dateLabel ? <span className={styles.meetingDateSub}>{full}</span> : null;
+                    })()}
+                  </h3>
 
                   <div className={styles.meetingCardsGroup}>
                     {(meetings as any[]).map((m, i) => {
@@ -1013,7 +975,7 @@ export function DashboardView({
                       // The "In progress" chip already says it is live; the time column just counts minutes.
                       const durationText =
                         elapsedMin !== null
-                          ? t('dash.mins', { n: elapsedMin })
+                          ? tx('dash.elapsed', '{n} min in', { n: elapsedMin })
                           : m.durationMinutes
                             ? t('dash.mins', { n: m.durationMinutes })
                             : '';
@@ -1100,17 +1062,6 @@ export function DashboardView({
                           {(recording || processingRecording) && (
                             <div className={styles.meetingReplay}>
                               {recording && (
-                                <button
-                                  type="button"
-                                  className={`${styles.btn} ${styles.btnXs} ${styles.btnTonal}`}
-                                  onClick={openReplay}
-                                  title={t('dash.replayTitle')}
-                                >
-                                  {playIcon(13)}
-                                  {replayLabel}
-                                </button>
-                              )}
-                              {recording && (
                                 <span
                                   className={
                                     recording.visibility === 'PUBLIC'
@@ -1133,6 +1084,17 @@ export function DashboardView({
                                     : t('dash.recordingPrivate')}
                                 </span>
                               )}
+                              {recording && (
+                                <button
+                                  type="button"
+                                  className={styles.rowAction}
+                                  onClick={openReplay}
+                                  title={t('dash.replayTitle')}
+                                >
+                                  {playIcon(12)}
+                                  {replayLabel}
+                                </button>
+                              )}
                               {processingRecording && (
                                 <div className={styles.recordingProcessing}>
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -1147,7 +1109,7 @@ export function DashboardView({
                             {isLive && (
                               <button
                                 type="button"
-                                className={`${styles.btn} ${styles.btnXs} ${styles.btnFill} ${styles.btnFlat}`}
+                                className={`${styles.rowAction} ${styles.rowActionPrimary}`}
                                 onClick={() => router.push(`/rooms/${m.roomName}`)}
                               >
                                 {videoIcon(15)}
@@ -1158,13 +1120,13 @@ export function DashboardView({
                             {canJoinOrStart && (
                               <button
                                 type="button"
-                                className={`${styles.btn} ${styles.btnXs} ${styles.btnOutline}`}
+                                className={styles.rowAction}
                                 onClick={onJoinOrStart}
                               >
                                 {startLabel ? (
                                   <>
-                                    {playIcon(13)}
-                                    {t('dash.startMeeting')}
+                                    {playIcon(12)}
+                                    {t('common.start')}
                                   </>
                                 ) : (
                                   <>

@@ -119,8 +119,6 @@
 .orgDropdownItem:focus-visible,
 .orgDropdownItemActive:focus-visible,
 .platformTile:focus-visible,
-.filterBtn:focus-visible,
-.filterOption:focus-visible,
 .pageArrow:focus-visible,
 .pageNum:focus-visible,
 .pageNumActive:focus-visible,
@@ -1754,18 +1752,18 @@ a.dropdownItem:focus-visible {
 /* ── Dashboard ─────────────────────────────────────────────────────────── */
 .dashMain {
   width: 100%;
-  max-width: 1160px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 28px 32px 56px;
+  padding: 36px 32px 64px;
   display: flex;
   flex-direction: column;
-  gap: 36px;
+  gap: 28px;
 }
 
 .dashHero {
   display: flex;
   flex-direction: column;
-  gap: 22px;
+  gap: 20px;
 }
 
 /* Join with a code first (it also takes personal meeting IDs), then start a new meeting */
@@ -1781,10 +1779,10 @@ a.dropdownItem:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  height: 48px;
-  padding: 0 20px 0 16px;
+  height: 52px;
+  padding: 0 22px 0 18px;
   border: 1px solid var(--km-border);
-  border-radius: var(--km-radius-pill);
+  border-radius: var(--km-radius-md);
   background: var(--km-surface);
   color: var(--km-text);
   font: inherit;
@@ -1840,12 +1838,13 @@ a.dropdownItem:focus-visible {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  height: 48px;
-  padding: 0 6px 0 14px;
-  border: 1px solid var(--km-border);
+  height: 52px;
+  padding: 0 6px 0 16px;
+  border: 1px solid var(--dash-line-2, var(--km-border));
   border-radius: var(--km-radius-md);
-  background: var(--km-bg);
-  color: var(--km-text-muted);
+  background: var(--dash-surface, var(--km-bg));
+  box-shadow: var(--dash-shadow, none);
+  color: var(--dash-muted, var(--km-text-muted));
   cursor: text;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1888,10 +1887,10 @@ a.dropdownItem:focus-visible {
 /* "Join" sits inside the field: a quiet tonal pill that wakes up once there is a code */
 .joinTextBtn {
   flex-shrink: 0;
-  height: 36px;
+  height: 40px;
   padding: 0 18px;
   border: 0;
-  border-radius: var(--km-radius-pill);
+  border-radius: var(--km-radius-sm);
   background: var(--km-tonal);
   color: var(--km-on-tonal);
   font: inherit;
@@ -1950,10 +1949,86 @@ a.dropdownItem:focus-visible {
   }
 }
 
-/* Meeting list */
+/* ── Signed-in home: grey canvas, the meeting list on one white card ──
+   Neutral greys carry the structure; indigo (--km-primary) is the one action colour,
+   mint marks live meetings only. */
+.dashPage {
+  --dash-canvas: #f7f8fa;
+  --dash-surface: #ffffff;
+  --dash-ink: #101828;
+  --dash-ink-2: #344054;
+  --dash-muted: #667085;
+  --dash-faint: #98a2b3;
+  --dash-line: #eaecf0;
+  --dash-line-2: #d0d5dd;
+  --dash-band: #fcfcfd;
+  --dash-hover: #f9fafb;
+  --dash-mint: #0fa674;
+  --dash-mint-soft: #ecfdf3;
+  --dash-mint-ink: #067647;
+  --dash-shadow: 0 1px 2px rgba(16, 24, 40, 0.05);
+  background: var(--dash-canvas);
+}
+
+:global(html[data-theme='dark']) .dashPage {
+  --dash-canvas: #0f1115;
+  --dash-surface: #171a21;
+  --dash-ink: #f2f4f7;
+  --dash-ink-2: #d0d5dd;
+  --dash-muted: #98a2b3;
+  --dash-faint: #667085;
+  --dash-line: #262a33;
+  --dash-line-2: #323743;
+  --dash-band: #14171d;
+  --dash-hover: #1c2029;
+  --dash-mint: #3ccb97;
+  --dash-mint-soft: rgba(60, 203, 151, 0.12);
+  --dash-mint-ink: #6ee0b5;
+  --dash-shadow: none;
+}
+
+.dashPage .topNav {
+  background: var(--dash-surface);
+  border-bottom: 1px solid var(--dash-line);
+}
+
+.dashTitleBlock {
+  margin-bottom: 4px;
+}
+
+.dashTitle {
+  margin: 0;
+  color: var(--dash-ink);
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.dashSummary {
+  margin: 6px 0 0;
+  color: var(--dash-muted);
+  font-size: 14px;
+}
+
+.dashSummaryDot {
+  margin: 0 6px;
+}
+
+.dashSummaryLive {
+  color: var(--dash-mint-ink);
+  font-weight: 600;
+}
+
+/* Meeting list card */
 .meetingListSection {
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--dash-line);
+  border-radius: var(--km-radius-lg);
+  background: var(--dash-surface);
+  box-shadow: var(--dash-shadow);
+  overflow: hidden;
 }
 
 .meetingListHeader {
@@ -1962,35 +2037,77 @@ a.dropdownItem:focus-visible {
   align-items: center;
   flex-wrap: wrap;
   gap: 10px;
-  padding-bottom: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--dash-line);
 }
 
-.meetingListTitle {
-  margin: 0 auto 0 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+/* All meetings / Hosted by me */
+.scopeTabs {
+  display: inline-flex;
+  margin-right: auto;
+  padding: 3px;
+  border: 1px solid var(--dash-line);
+  border-radius: 10px;
+  background: var(--dash-canvas);
+}
+
+.scopeTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dash-muted);
+  font: 500 13px var(--km-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.scopeTab:hover {
+  color: var(--dash-ink);
+}
+
+.scopeTabActive {
+  background: var(--dash-surface);
+  color: var(--dash-ink);
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+:global(html[data-theme='dark']) .scopeTabActive {
+  background: var(--dash-line-2);
+}
+
+.scopeTab:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.scopeCount {
+  color: var(--dash-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .meetingSearchWrapper {
   display: flex;
   align-items: center;
   gap: 8px;
-  width: 280px;
+  width: 240px;
   max-width: 100%;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: var(--km-radius-pill);
-  background: var(--km-bg-subtle);
-  color: var(--km-text-muted);
-  transition: box-shadow 0.15s ease;
-}
-
-:global(html[data-theme='dark']) .meetingSearchWrapper {
-  background: var(--km-surface);
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dash-line);
+  border-radius: var(--km-radius-sm);
+  background: var(--dash-surface);
+  color: var(--dash-faint);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .meetingSearchWrapper:focus-within {
+  border-color: var(--km-primary);
   box-shadow: var(--km-focus-ring);
 }
 
@@ -2006,114 +2123,45 @@ a.dropdownItem:focus-visible {
   border: 0;
   outline: none;
   background: transparent;
-  color: var(--km-text);
-  font: 500 14px var(--km-font);
+  color: var(--dash-ink);
+  font: 400 13px var(--km-font);
 }
 
 .main .meetingSearchInput::placeholder {
-  color: var(--km-text-muted);
+  color: var(--dash-faint);
   opacity: 1;
 }
 
-.filterWrap {
-  position: relative;
+.scheduleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--dash-line-2);
+  border-radius: var(--km-radius-sm);
+  background: var(--dash-surface);
+  color: var(--dash-ink-2);
+  font: 600 13px var(--km-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.scheduleBtn:hover {
+  background: var(--dash-hover);
+}
+
+.scheduleBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
 }
 
 .scheduleBtn > svg {
   color: var(--km-primary);
 }
 
-.filterBtn {
-  height: 40px;
-  padding: 0 16px;
-  font-size: 13px;
-}
-
-.filterBtnActive {
-  background: var(--km-tonal);
-  color: var(--km-on-tonal);
-  border-color: transparent;
-}
-
-.filterBtnActive svg {
-  color: inherit;
-}
-
-.filterMenu {
-  z-index: 1000;
-  width: 260px;
-  padding: 6px 0;
-  border-radius: var(--km-radius-sm);
-  background: var(--km-surface);
-  color: var(--km-text);
-  box-shadow: var(--km-shadow);
-  font-family: var(--km-font);
-}
-
-.filterMenuPortal {
-  position: fixed;
-  top: var(--filter-top);
-  right: var(--filter-right);
-}
-
-.filterMenuLabel {
-  padding: 8px 16px 4px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--km-text-muted);
-}
-
-.filterOption {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  padding: 8px 16px;
-  border: 0;
-  background: transparent;
-  color: var(--km-text);
-  font: 500 14px var(--km-font);
-  text-align: left;
-  cursor: pointer;
-}
-
-.filterOption:hover {
-  background: var(--km-hover);
-}
-
-.filterOptionActive,
-.filterOptionActive:hover {
-  background: var(--km-tonal);
-}
-
-.filterCheck {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  opacity: 0;
-  color: var(--km-on-tonal);
-}
-
-.filterOptionActive .filterCheck {
-  opacity: 1;
-}
-
-.filterOptionText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.filterOptionTitle {
-  font-weight: 600;
-}
-
-.filterOptionHint {
-  font-size: 12px;
-  color: var(--km-text-muted);
-}
-
-/* Rows grouped by day */
+/* Day bands */
 .meetingCardsList {
   display: flex;
   flex-direction: column;
@@ -2125,38 +2173,66 @@ a.dropdownItem:focus-visible {
 }
 
 .meetingDateLabel {
-  margin: 22px 0 6px 20px;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--km-text-muted);
+  margin: 0;
+  padding: 10px 20px 8px;
+  border-bottom: 1px solid var(--dash-line);
+  background: var(--dash-band);
+  color: var(--dash-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.meetingDateGroup + .meetingDateGroup .meetingDateLabel {
+  border-top: 1px solid var(--dash-line);
+}
+
+.meetingDateSub {
+  margin-left: 6px;
+  color: var(--dash-faint);
+  font-weight: 400;
 }
 
 .meetingCardsGroup {
-  border-top: 1px solid var(--km-border);
+  display: flex;
+  flex-direction: column;
 }
 
+/* Rows */
 .meetingCard,
 .meetingCardLive {
   position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px 18px;
-  padding: 16px 8px 16px 20px;
-  border-bottom: 1px solid var(--km-border);
+  gap: 12px 16px;
+  padding: 16px 16px 16px 20px;
+  border-bottom: 1px solid var(--dash-line);
   transition: background-color 0.15s ease;
 }
 
-.meetingCard:hover {
-  background: var(--km-hover);
+.meetingCardsGroup > :last-child {
+  border-bottom: 0;
 }
 
+.meetingCard:hover {
+  background: var(--dash-hover);
+}
+
+/* Live: a mint edge and a tint that fades out across the row */
 .meetingCardLive {
-  background: var(--km-tonal);
-  border-radius: var(--km-radius-md);
-  border-bottom-color: transparent;
+  background: linear-gradient(90deg, var(--dash-mint-soft), transparent 60%);
+}
+
+.meetingCardLive::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--dash-mint);
 }
 
 /* Lift the row whose invite menu is open above its siblings */
@@ -2166,19 +2242,21 @@ a.dropdownItem:focus-visible {
 
 .meetingCardTime {
   flex: none;
-  width: 92px;
+  width: 84px;
 }
 
 .meetingCardClock {
-  font-size: 17px;
-  font-weight: 700;
+  color: var(--dash-ink);
+  font-size: 15px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 .meetingCardDuration {
-  margin-top: 4px;
+  margin-top: 2px;
+  color: var(--dash-faint);
   font-size: 12px;
-  color: var(--km-text-muted);
 }
 
 .meetingCardInfo {
@@ -2195,46 +2273,57 @@ a.dropdownItem:focus-visible {
 
 .meetingCardTitle {
   margin: 0;
-  font-size: 16px;
-  font-weight: 700;
+  color: var(--dash-ink);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   overflow-wrap: anywhere;
 }
 
+/* Host · people · code, separated by small dots */
 .meetingCardMeta {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 14px;
-  margin-top: 6px;
+  gap: 4px 8px;
+  margin-top: 4px;
+  color: var(--dash-muted);
   font-size: 13px;
-  color: var(--km-text-muted);
+}
+
+.meetingCardMeta > * + *::before {
+  content: '';
+  width: 3px;
+  height: 3px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--dash-line-2);
+}
+
+.meetingCardMeta > * {
+  display: inline-flex;
+  align-items: center;
 }
 
 .meetingCardMetaItem {
-  display: inline-flex;
-  align-items: center;
   gap: 4px;
 }
 
-.meetingCodeBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 26px;
-  padding: 0 8px;
-  margin-left: -8px;
+.main .meetingCodeBtn {
+  gap: 4px;
+  height: 22px;
+  padding: 0 6px 0 0;
   border: 0;
-  border-radius: var(--km-radius-pill);
+  border-radius: 6px;
   background: transparent;
-  color: var(--km-text-muted);
-  font: 500 13px var(--km-font);
+  color: var(--dash-muted);
+  font: 400 12px ui-monospace, 'SF Mono', Menlo, monospace;
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
 .meetingCodeBtn:hover {
-  background: var(--km-hover);
-  color: var(--km-text);
+  color: var(--dash-ink);
 }
 
 /* Status chips */
@@ -2242,40 +2331,29 @@ a.dropdownItem:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
-  padding: 0 10px;
+  height: 22px;
+  padding: 0 8px;
   border-radius: 6px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
   white-space: nowrap;
 }
 
 .statusInProgress {
+  background: var(--dash-mint-soft);
+  color: var(--dash-mint-ink);
+}
+
+.statusScheduled,
+.statusSoon {
   background: var(--km-tonal);
   color: var(--km-on-tonal);
 }
 
-.meetingCardLive .statusInProgress {
-  background: var(--km-surface);
-}
-
-:global(html[data-theme='dark']) .meetingCardLive .statusInProgress {
-  background: rgba(139, 135, 255, 0.24);
-}
-
-.statusScheduled {
-  background: var(--hm-chip-info-bg);
-  color: var(--hm-chip-info-fg);
-}
-
 .statusFinished {
-  background: var(--hm-chip-neutral-bg);
-  color: var(--hm-chip-neutral-fg);
-}
-
-.statusSoon {
-  background: var(--km-success-bg);
-  color: var(--km-success);
+  border: 1px solid var(--dash-line);
+  background: var(--dash-canvas);
+  color: var(--dash-muted);
 }
 
 .statusPastDue {
@@ -2289,21 +2367,21 @@ a.dropdownItem:focus-visible {
 }
 
 .liveDot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--km-primary);
-  animation: livePulse 1.8s infinite;
   flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--dash-mint);
+  animation: livePulse 1.8s infinite;
 }
 
 @keyframes livePulse {
-  0% { box-shadow: 0 0 0 0 rgba(94, 92, 230, 0.6); }
-  70% { box-shadow: 0 0 0 7px rgba(94, 92, 230, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(94, 92, 230, 0); }
+  0% { box-shadow: 0 0 0 0 rgba(15, 166, 116, 0.5); }
+  70% { box-shadow: 0 0 0 6px rgba(15, 166, 116, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(15, 166, 116, 0); }
 }
 
-/* Replay group */
+/* Replay and who can watch it */
 .meetingReplay {
   display: flex;
   align-items: center;
@@ -2311,24 +2389,16 @@ a.dropdownItem:focus-visible {
   flex-wrap: wrap;
 }
 
-/* Who can watch the replay: a quiet label, not a button */
 .recordingPrivateBadge,
 .recordingPublicBadge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   height: 28px;
-  padding: 0 4px;
-  color: var(--km-text-muted);
+  color: var(--dash-faint);
   font-size: 12px;
-  font-weight: 600;
   white-space: nowrap;
   cursor: default;
-}
-
-.recordingPrivateBadge svg,
-.recordingPublicBadge svg {
-  color: var(--km-text-muted);
 }
 
 .recordingProcessing {
@@ -2336,15 +2406,60 @@ a.dropdownItem:focus-visible {
   align-items: center;
   gap: 6px;
   height: 28px;
-  padding: 0 12px;
-  border-radius: var(--km-radius-pill);
+  padding: 0 10px;
+  border-radius: 6px;
   background: var(--km-warning-bg);
   color: var(--km-warning);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 500;
 }
 
-/* Row actions */
+/* One primary action per row, always the same size; the rest are quiet icons */
+.rowAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 92px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--dash-line-2);
+  border-radius: var(--km-radius-sm);
+  background: var(--dash-surface);
+  color: var(--dash-ink-2);
+  font: 600 13px var(--km-font);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.rowAction > svg {
+  color: var(--km-primary);
+}
+
+.rowAction:hover {
+  background: var(--dash-hover);
+}
+
+.rowAction:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.rowActionPrimary {
+  border-color: transparent;
+  background: var(--km-primary);
+  color: var(--km-on-primary);
+}
+
+.rowActionPrimary > svg {
+  color: inherit;
+}
+
+.rowActionPrimary:hover {
+  background: var(--km-primary-hover);
+}
+
 .meetingCardActions {
   display: flex;
   align-items: center;
@@ -2352,8 +2467,26 @@ a.dropdownItem:focus-visible {
   margin-left: auto;
 }
 
-.meetingCardActions .btn {
-  margin-right: 6px;
+.meetingCardActions > .rowAction {
+  margin-right: 8px;
+}
+
+.meetingCardActions .iconBtn,
+.meetingCardActions .iconBtnDanger {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--km-radius-sm);
+  color: var(--dash-faint);
+}
+
+.meetingCardActions .iconBtn:hover {
+  background: var(--dash-line);
+  color: var(--dash-ink);
+}
+
+.meetingCardActions .iconBtnDanger:hover {
+  background: var(--km-danger-bg);
+  color: var(--km-danger-text);
 }
 
 .anchor {
@@ -2373,25 +2506,25 @@ a.dropdownItem:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--km-radius-pill);
-  font: 700 13px/1 var(--km-font);
+  height: 34px;
+  padding: 0 12px;
+  border-radius: var(--km-radius-sm);
+  font: 600 13px/1 var(--km-font);
   cursor: pointer;
   white-space: nowrap;
 }
 
 .mobileJoinBtn {
   border: 0;
-  background: var(--km-primary-grad);
-  color: #fff;
+  background: var(--km-primary);
+  color: var(--km-on-primary);
 }
 
 .mobileStartBtn,
 .mobileCopyBtn {
-  border: 1px solid var(--km-border);
-  background: transparent;
-  color: var(--km-text);
+  border: 1px solid var(--dash-line-2);
+  background: var(--dash-surface);
+  color: var(--dash-ink-2);
 }
 
 .mobileDeleteBtn {
@@ -2405,7 +2538,6 @@ a.dropdownItem:focus-visible {
 .meetingEmptyState {
   padding: 56px 20px;
   text-align: center;
-  border-bottom: 1px solid var(--km-border);
 }
 
 .meetingLoadingState {
@@ -2416,8 +2548,8 @@ a.dropdownItem:focus-visible {
 }
 
 .meetingLoadingSpinner {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 3px solid var(--km-tonal);
   border-top-color: var(--km-primary);
@@ -2427,31 +2559,32 @@ a.dropdownItem:focus-visible {
 .meetingLoadingTitle {
   margin: 0;
   font-size: 14px;
-  color: var(--km-text-muted);
+  color: var(--dash-muted);
 }
 
 .meetingEmptyIcon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   margin-bottom: 12px;
-  border-radius: 50%;
+  border-radius: 14px;
   background: var(--km-tonal);
   color: var(--km-on-tonal);
 }
 
 .meetingEmptyTitle {
   margin: 0;
-  font-size: 17px;
-  font-weight: 700;
+  color: var(--dash-ink);
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .meetingEmptyText {
   margin: 6px 0 0;
   font-size: 14px;
-  color: var(--km-text-muted);
+  color: var(--dash-muted);
 }
 
 .authInitializing {
@@ -2464,16 +2597,18 @@ a.dropdownItem:focus-visible {
   background: var(--km-bg);
 }
 
-/* Pagination */
+/* Pagination: the card's footer */
 .paginationFooter {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 16px 4px 0;
+  padding: 10px 16px 10px 20px;
+  border-top: 1px solid var(--dash-line);
+  background: var(--dash-band);
   font-size: 13px;
-  color: var(--km-text-muted);
+  color: var(--dash-muted);
 }
 
 .paginationLeft,
@@ -2484,16 +2619,16 @@ a.dropdownItem:focus-visible {
 }
 
 .paginationRight {
-  gap: 4px;
+  gap: 2px;
 }
 
 .pageSizeSelect {
-  height: 34px;
-  padding: 0 10px;
-  border-radius: var(--km-radius-sm);
-  border: 1px solid var(--km-border);
-  background: var(--hm-field);
-  color: var(--km-text);
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--dash-line);
+  background: var(--dash-surface);
+  color: var(--dash-ink-2);
   font: 500 13px var(--km-font);
   cursor: pointer;
 }
@@ -2508,21 +2643,22 @@ a.dropdownItem:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: 6px;
   background: transparent;
-  color: var(--km-text-muted);
-  font: 700 13px var(--km-font);
+  color: var(--dash-muted);
+  font: 600 13px var(--km-font);
+  font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
 
 .pageArrow:hover:not(:disabled),
 .pageNum:hover {
-  background: var(--km-hover);
-  color: var(--km-text);
+  background: var(--dash-line);
+  color: var(--dash-ink);
 }
 
 .pageArrow:disabled {
@@ -2533,7 +2669,6 @@ a.dropdownItem:focus-visible {
 .pageNumActive {
   background: var(--km-tonal);
   color: var(--km-on-tonal);
-  font-weight: 800;
 }
 
 /* ── Dialogs (Material 3) ──────────────────────────────────────────────── */
@@ -2979,39 +3114,38 @@ a.dropdownItem:focus-visible {
     gap: 28px;
   }
 
-  /* Title and Schedule share the first line; search and filter the next */
-  .meetingListTitle {
-    flex: 1 1 auto;
+  /* Tabs and Schedule share the first line; search takes the next */
+  .meetingListHeader {
+    padding: 12px;
   }
 
+  /* Phones: Schedule shrinks to its icon so it stays beside the tabs */
   .scheduleBtn {
     order: 1;
+    width: 36px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .scheduleBtnText {
+    display: none;
   }
 
   .meetingSearchWrapper {
     order: 2;
-    flex: 1 1 180px;
+    flex: 1 1 100%;
     width: auto;
   }
 
-  .filterWrap {
-    order: 3;
-  }
-
   .meetingDateLabel {
-    margin-left: 4px;
+    padding-left: 14px;
   }
 
   .meetingCard,
   .meetingCardLive {
     align-items: flex-start;
-    padding: 14px 4px 14px 8px;
-    gap: 10px 14px;
-  }
-
-  .meetingCardLive {
-    padding-left: 12px;
-    padding-right: 12px;
+    padding: 14px;
+    gap: 10px 12px;
   }
 
   .meetingCardTime {
