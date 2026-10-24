@@ -35,6 +35,12 @@ import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
 import {
+  DEFAULT_GALLERY_PREFS,
+  loadGalleryPrefs,
+  saveGalleryPrefs,
+  type GalleryPrefs,
+} from '@/lib/galleryPrefs';
+import {
   isToolbarMobileUserAgent,
   postKloudShowFilePanelToIframe,
   postLivedocRoleToIframe,
@@ -175,7 +181,6 @@ const AUTO_LOWER_HAND_MS = 1500;
 const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
-import { applyTileHue } from '@/lib/tileLayout';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
 
 /** Height of the desktop top bar (styles/MeetingTopBar.module.css). */
@@ -345,6 +350,13 @@ export function VideoConferenceComponent(props: {
    */
   const localShareViewSessionRef = React.useRef<{ previousView: ViewMode } | null>(null);
   const [webcamLayoutMode, setWebcamLayoutMode] = React.useState<WebcamLayoutMode>('tile');
+  // Each viewer's own gallery settings (tiles per page, video first, hide without video)
+  const [galleryPrefs, setGalleryPrefs] = React.useState<GalleryPrefs>(DEFAULT_GALLERY_PREFS);
+  React.useEffect(() => setGalleryPrefs(loadGalleryPrefs()), []);
+  const handleGalleryPrefsChange = React.useCallback((next: GalleryPrefs) => {
+    setGalleryPrefs(next);
+    saveGalleryPrefs(next);
+  }, []);
   const [micEnabled, setMicEnabled] = React.useState(props.userChoices.audioEnabled);
   /**
    * 用户当前“想不想开麦/开摄像头”。重连恢复与麦克风保活以此为准，
@@ -4427,8 +4439,6 @@ export function VideoConferenceComponent(props: {
         if (placeholder.getAttribute('data-lk-name') !== name) {
           placeholder.setAttribute('data-lk-name', name);
         }
-        // Same colour for this person on every tile (grid, carousel, phone)
-        applyTileHue(tile as HTMLElement, name);
         // Keep initials attribute for leftover consumers; UI uses login name via data-lk-name
         const initials = getInitials(name);
         if (placeholder.getAttribute('data-lk-initials') !== initials) {
@@ -6466,6 +6476,7 @@ export function VideoConferenceComponent(props: {
               <VideoConferenceErrorBoundary>
                 <KloudVideoConference
                   webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
+                  galleryPrefs={galleryPrefs}
                   chatMessageFormatter={formatChatMessageLinks}
                   SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
                 />
@@ -9158,6 +9169,8 @@ export function VideoConferenceComponent(props: {
           canSwitchViews={canSwitchViews}
           webcamLayoutMode={webcamLayoutMode}
           onWebcamLayoutChange={setWebcamLayoutMode}
+          galleryPrefs={galleryPrefs}
+          onGalleryPrefsChange={handleGalleryPrefsChange}
           canToggleLiveDocAnnotation={canBroadcastViewChange}
           canShowOperatorMenus={canBroadcastViewChange}
           participantLiveDocAi={participantLiveDocAi}

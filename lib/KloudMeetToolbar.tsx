@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
+import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
@@ -88,6 +89,9 @@ interface KloudMeetToolbarProps {
   /** Webcam 子布局：Tile 宫格 / Spotlight 焦点 */
   webcamLayoutMode?: WebcamLayoutMode;
   onWebcamLayoutChange?: (mode: WebcamLayoutMode) => void;
+  /** The viewer's own gallery settings, shown in the Video menu for everyone */
+  galleryPrefs?: GalleryPrefs;
+  onGalleryPrefsChange?: (prefs: GalleryPrefs) => void;
   /** Host / Co-host / Presenter：可切换 LiveDoc Annotation */
   canToggleLiveDocAnnotation?: boolean;
   /**
@@ -254,6 +258,8 @@ export function KloudMeetToolbar({
   canSwitchViews,
   webcamLayoutMode: webcamLayoutModeProp,
   onWebcamLayoutChange,
+  galleryPrefs,
+  onGalleryPrefsChange,
   canToggleLiveDocAnnotation = false,
   canShowOperatorMenus = false,
   participantLiveDocAi = true,
@@ -1308,6 +1314,48 @@ export function KloudMeetToolbar({
     </>
   );
 
+  /** Video menu, everyone: tiles per page, video first, hide people without video (own view only) */
+  const renderGalleryMenuItems = () => {
+    if (!galleryPrefs || !onGalleryPrefsChange) return null;
+    const set = (patch: Partial<GalleryPrefs>) => onGalleryPrefsChange({ ...galleryPrefs, ...patch });
+    const toggle = (key: 'videoFirst' | 'hideNoVideo', label: string, hint: string) => (
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={galleryPrefs[key]}
+        className={styles.galleryToggle}
+        onClick={() => set({ [key]: !galleryPrefs[key] })}
+      >
+        <span className={styles.viewModeMenuItemText}>
+          <span className={styles.viewModeMenuItemLabel}>{label}</span>
+          <span className={styles.viewModeMenuItemSub}>{hint}</span>
+        </span>
+        <span className={`${styles.switch} ${galleryPrefs[key] ? styles.switchOn : ''}`} aria-hidden="true" />
+      </button>
+    );
+    return (
+      <div className={styles.gallerySection}>
+        <div className={styles.galleryLabel}>{t('toolbar.gallery.tilesPerPage')}</div>
+        <div className={styles.gallerySegments} role="radiogroup" aria-label={t('toolbar.gallery.tilesPerPage')}>
+          {TILES_PER_PAGE_OPTIONS.map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              role="radio"
+              aria-checked={galleryPrefs.tilesPerPage === opt}
+              className={`${styles.gallerySegment} ${galleryPrefs.tilesPerPage === opt ? styles.gallerySegmentOn : ''}`}
+              onClick={() => set({ tilesPerPage: opt })}
+            >
+              {opt === 'auto' ? t('toolbar.gallery.auto') : opt}
+            </button>
+          ))}
+        </div>
+        {toggle('videoFirst', t('toolbar.gallery.videoFirst'), t('toolbar.gallery.videoFirstHint'))}
+        {toggle('hideNoVideo', t('toolbar.gallery.hideNoVideo'), t('toolbar.gallery.hideNoVideoHint'))}
+      </div>
+    );
+  };
+
   /** 手机端：协作文档 / 摄像头宫格·焦点 / 共享屏幕 合并上拉菜单 */
   const renderViewModeMenu = () => (
     <div className={styles.viewModeMenu} role="menu">
@@ -1487,7 +1535,7 @@ export function KloudMeetToolbar({
             {webcamLayoutMode === 'spotlight' ? <IconSpotlight /> : <IconTile />}
             <span className={styles.segLabel}>{t('toolbar.webcam')}</span>
           </button>
-          {showOperatorSegments && (
+          {(showOperatorSegments || galleryPrefs) && (
             <button
               type="button"
               className={styles.segChevron}
@@ -1504,13 +1552,15 @@ export function KloudMeetToolbar({
               <IconChevronUp />
             </button>
           )}
-          {showOperatorSegments && viewModeMenuOpen && (
+          {(showOperatorSegments || galleryPrefs) && viewModeMenuOpen && (
             <div
               className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`}
               role="menu"
               aria-label={webcamLayoutLabel}
             >
-              {renderWebcamLayoutMenuItems()}
+              {showOperatorSegments && renderWebcamLayoutMenuItems()}
+              {showOperatorSegments && galleryPrefs && <div className={styles.menuDivider} role="separator" />}
+              {renderGalleryMenuItems()}
             </div>
           )}
         </div>

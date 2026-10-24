@@ -44,7 +44,7 @@ export function fitGrid(count: number, width: number, height: number, gap: numbe
 /** Hues that read well as a dark tile background with white text. */
 const TILE_HUES = [262, 152, 330, 205, 24, 288, 96, 186, 44, 228];
 
-/** A stable hue per person, so everyone keeps the same tile colour all meeting. */
+/** A stable hue per name (home page replay thumbnails). */
 export function tileHue(key: string): number {
   let hash = 0;
   for (const ch of key) hash = (hash * 31 + (ch.codePointAt(0) ?? 0)) | 0;
@@ -72,13 +72,4 @@ export function applyBalancedGrid(grid: HTMLElement): void {
   const h = `${fit.tileHeight}px`;
   if (grid.style.getPropertyValue('--km-tile-w') !== w) grid.style.setProperty('--km-tile-w', w);
   if (grid.style.getPropertyValue('--km-tile-h') !== h) grid.style.setProperty('--km-tile-h', h);
-}
-
-/** Gives a tile its person's colour (camera-off background and avatar). */
-export function applyTileHue(tile: HTMLElement, key: string): void {
-  if (!key) return;
-  const hue = String(tileHue(key));
-  if (tile.style.getPropertyValue('--km-tile-hue') !== hue) {
-    tile.style.setProperty('--km-tile-hue', hue);
-  }
 }

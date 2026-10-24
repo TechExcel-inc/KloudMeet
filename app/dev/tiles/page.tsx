@@ -8,10 +8,11 @@
 
 import React from 'react';
 import { notFound } from 'next/navigation';
-import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
+import { applyBalancedGrid } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
+import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from '@/lib/galleryPrefs';
 import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
 import { RoomContext } from '@livekit/components-react';
 import { Room } from 'livekit-client';
@@ -102,9 +103,11 @@ export default function DevTilesPage() {
   if (process.env.NODE_ENV === 'production') notFound();
   const [count, setCount] = React.useState(7);
   const [page, setPage] = React.useState(1);
-  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
-  const pageStart = (Math.min(page, pageCount) - 1) * PAGE_SIZE;
-  const shown = NAMES.slice(0, count).slice(pageStart, pageStart + PAGE_SIZE);
+  const [gallery, setGallery] = React.useState<GalleryPrefs>(DEFAULT_GALLERY_PREFS);
+  const perPage = gallery.tilesPerPage === 'auto' ? PAGE_SIZE : gallery.tilesPerPage;
+  const pageCount = Math.max(1, Math.ceil(count / perPage));
+  const pageStart = (Math.min(page, pageCount) - 1) * perPage;
+  const shown = NAMES.slice(0, count).slice(pageStart, pageStart + perPage);
   const [view, setView] = React.useState<ViewMode>('webcam');
   const [host, setHost] = React.useState(true);
   const [mic, setMic] = React.useState(false);
@@ -122,13 +125,10 @@ export default function DevTilesPage() {
     const grid = gridRef.current;
     if (!grid) return;
     applyBalancedGrid(grid);
-    grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile, i) => {
-      applyTileHue(tile, NAMES[pageStart + i]);
-    });
     const resize = new ResizeObserver(() => applyBalancedGrid(grid));
     resize.observe(grid);
     return () => resize.disconnect();
-  }, [count, pageStart]);
+  }, [count, pageStart, perPage]);
 
   return (
     <div className="lk-room-container km-dev-tiles" style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--km-stage, #17181c)' }}>
@@ -167,7 +167,7 @@ export default function DevTilesPage() {
         />
       </div>
       <div className="lk-grid-layout-wrapper" style={{ flex: 1, minHeight: 0, height: 0, paddingBottom: 88 }}>
-        <div className="lk-grid-layout" ref={gridRef} key={`${count}-${pageStart}`} data-lk-pagination={pageCount > 1}>
+        <div className="lk-grid-layout" ref={gridRef} key={`${count}-${pageStart}-${perPage}`} data-lk-pagination={pageCount > 1}>
           {shown.map((name, i) => (
             <div
               key={name}
@@ -237,6 +237,11 @@ export default function DevTilesPage() {
         raisedHandCount={1}
         chatBadgeCount={2}
         canDocumentPip
+        galleryPrefs={gallery}
+        onGalleryPrefsChange={(next) => {
+          setGallery(next);
+          setPage(1);
+        }}
         canToggleCaptions={host}
         captionsEnabled
         meetingTitle="Weekly product review"

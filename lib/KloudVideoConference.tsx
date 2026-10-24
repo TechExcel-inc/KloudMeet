@@ -15,7 +15,6 @@ import {
   ControlBar,
   FocusLayout,
   FocusLayoutContainer,
-  GridLayout,
   LayoutContextProvider,
   ParticipantTile,
   useCreateLayoutContext,
@@ -25,7 +24,9 @@ import {
   type MessageFormatter,
 } from '@livekit/components-react';
 import { KloudConnectionStateToast } from './KloudConnectionStateToast';
-import { applyBalancedGrid, applyTileHue } from './tileLayout';
+import { applyBalancedGrid } from './tileLayout';
+import { KloudGridLayout } from './KloudGridLayout';
+import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from './galleryPrefs';
 
 export type WebcamLayoutMode = 'tile' | 'spotlight';
 
@@ -36,6 +37,8 @@ export interface KloudVideoConferenceProps extends React.HTMLAttributes<HTMLDivE
   SettingsComponent?: React.ComponentType;
   /** Webcam 子布局：tile 宫格 / spotlight 焦点（无屏幕共享时生效） */
   webcamLayoutMode?: WebcamLayoutMode;
+  /** The viewer's own gallery settings (tiles per page, video first, hide without video) */
+  galleryPrefs?: GalleryPrefs;
 }
 
 function trackKey(track: TrackReferenceOrPlaceholder): string {
@@ -57,6 +60,7 @@ export function KloudVideoConference({
   chatMessageEncoder,
   SettingsComponent,
   webcamLayoutMode = 'tile',
+  galleryPrefs = DEFAULT_GALLERY_PREFS,
   ...props
 }: KloudVideoConferenceProps) {
   const room = useRoomContext();
@@ -80,10 +84,7 @@ export function KloudVideoConference({
 
   const layoutContext = useCreateLayoutContext();
 
-  /**
-   * Balanced gallery: rows of near-equal size that fill the width (7 people → 3 + 4), and a
-   * stable colour per person for camera-off tiles. Re-applied whenever tiles come and go.
-   */
+  /** Gallery tile size (lib/tileLayout.ts), re-applied whenever tiles come and go or the stage resizes. */
   const gridWrapperRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     const wrapper = gridWrapperRef.current;
@@ -92,13 +93,6 @@ export function KloudVideoConference({
       const grid = wrapper.querySelector<HTMLElement>('.lk-grid-layout');
       if (!grid) return;
       applyBalancedGrid(grid);
-      grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile) => {
-        const name =
-          tile.querySelector('.lk-participant-placeholder')?.getAttribute('data-lk-name') ||
-          tile.querySelector('.lk-participant-name')?.textContent ||
-          '';
-        applyTileHue(tile, name.trim());
-      });
     };
     apply();
     const observer = new MutationObserver(apply);
@@ -284,9 +278,9 @@ export function KloudVideoConference({
           <div className="lk-video-conference-inner">
             {!showFocusLayout ? (
               <div className="lk-grid-layout-wrapper" ref={gridWrapperRef}>
-                <GridLayout tracks={tracks}>
+                <KloudGridLayout tracks={tracks} prefs={galleryPrefs}>
                   <ParticipantTile />
-                </GridLayout>
+                </KloudGridLayout>
               </div>
             ) : (
               <div className="lk-focus-layout-wrapper">

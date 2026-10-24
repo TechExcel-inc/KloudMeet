@@ -319,35 +319,24 @@ h2 a {
   container-type: size;
 }
 
+/* Camera off: the name's initials as large, quiet text in the middle of the tile — the way
+   KloudMeet has always shown it, without a coloured disc */
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
   content: attr(data-lk-initials);
   position: relative;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  height: clamp(40px, 46%, 128px);
-  height: clamp(36px, 46cqmin, 128px);
-  aspect-ratio: 1 / 1;
-  border-radius: 50%;
-  /* Avatar: the person's colour (--km-tile-hue, lib/tileLayout.ts), muted so a full gallery stays calm */
-  background: hsl(var(--km-tile-hue, 248) 26% 38%);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  color: rgba(255, 255, 255, 0.92);
   font-family: var(--km-font);
-  font-size: clamp(14px, 2.4vw, 40px);
-  font-size: clamp(14px, 17cqmin, 46px);
+  font-size: clamp(16px, 2.6vw, 44px);
+  font-size: clamp(16px, 20cqmin, 56px);
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  overflow: hidden;
   white-space: nowrap;
-  text-align: center;
 }
 
 
-/* Small strip tiles (share aside / spotlight strip) show no name plate, so the avatar turns
+/* Small strip tiles (share aside / spotlight strip) show no name plate, so the initials turn
    into a name pill on hover / focus / selection. Grid & focus tiles show the name bottom-left. */
 .lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:hover .lk-participant-placeholder::after,
 .lk-carousel > .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"]:focus-within .lk-participant-placeholder::after,
@@ -359,7 +348,9 @@ h2 a {
   max-width: 100%;
   padding: 0 12px;
   border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
   font-size: 12px;
+  font-weight: 500;
   line-height: 28px;
   letter-spacing: 0;
   text-transform: none;
