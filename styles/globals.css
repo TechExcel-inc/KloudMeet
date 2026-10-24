@@ -167,7 +167,7 @@ h2 a {
   padding: 16px;
 }
 
-/* Tile shell: tile colour, 12px radius, speaking outline colour */
+/* Tile shell: one neutral tile colour, 16px radius, green speaking outline */
 .lk-room-container .lk-participant-tile {
   --lk-border-radius: var(--km-radius-lg, 16px);
   --lk-bg2: var(--km-tile, #2e3036);
@@ -314,14 +314,8 @@ h2 a {
   overflow: hidden;
   padding: 0 8%;
   box-sizing: border-box;
-  /* Each person keeps one colour (--km-tile-hue, set in lib/tileLayout.ts), like Google Meet */
+  /* Every tile is the same neutral surface; a person's colour lives only in the avatar */
   background-color: var(--km-tile, #2e3036);
-  background-image: radial-gradient(
-    130% 120% at 72% 18%,
-    hsl(var(--km-tile-hue, 248) 38% 44%) 0%,
-    hsl(var(--km-tile-hue, 248) 46% 28%) 55%,
-    hsl(var(--km-tile-hue, 248) 50% 19%) 100%
-  );
   container-type: size;
 }
 
@@ -337,8 +331,8 @@ h2 a {
   height: clamp(36px, 46cqmin, 128px);
   aspect-ratio: 1 / 1;
   border-radius: 50%;
-  /* Avatar: more saturated and a step lighter than the tile around it, so the circle reads */
-  background: hsl(var(--km-tile-hue, 248) 55% 42%);
+  /* Avatar: the person's colour (--km-tile-hue, lib/tileLayout.ts), muted so a full gallery stays calm */
+  background: hsl(var(--km-tile-hue, 248) 26% 38%);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
   color: #ffffff;
   font-family: var(--km-font);
@@ -352,51 +346,6 @@ h2 a {
   text-align: center;
 }
 
-
-/* Soft expanding voice ring behind the avatar while the person speaks */
-.lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  height: clamp(40px, 46%, 128px);
-  height: clamp(36px, 46cqmin, 128px);
-  aspect-ratio: 1 / 1;
-  border-radius: 50%;
-  background: var(--km-speaking, #8b87ff);
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(1);
-  pointer-events: none;
-}
-
-@keyframes km-voice-ring {
-  0% {
-    transform: translate(-50%, -50%) scale(1);
-    opacity: 0.55;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(1.45);
-    opacity: 0;
-  }
-}
-
-@keyframes km-avatar-breathe {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.04);
-  }
-}
-
-.lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
-  animation: km-voice-ring 1.4s ease-out infinite;
-}
-
-.lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::after {
-  animation: km-avatar-breathe 1.4s ease-in-out infinite;
-}
 
 /* Small strip tiles (share aside / spotlight strip) show no name plate, so the avatar turns
    into a name pill on hover / focus / selection. Grid & focus tiles show the name bottom-left. */
@@ -438,13 +387,26 @@ h2 a {
   inset: 0;
   border-radius: inherit;
   background-color: #1e9e4a;
-  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.35);
   background-image: linear-gradient(#fff, #fff), linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
   background-repeat: no-repeat;
   background-position: 30% 50%, 50% 50%, 70% 50%;
   background-size: 3px 30%, 3px 62%, 3px 42%;
   animation: km-eq-bars 0.9s ease-in-out infinite;
   pointer-events: none;
+}
+
+/* Quiet by default: a mic that is on but silent shows nothing (no muted icon and no voice bars
+   already says "on, no sound"). It comes back on hover so the host can still mute from the tile
+   and you can still toggle your own. Muted, host-muted and speaking always show. */
+.lk-room-container .lk-participant-tile:not([data-lk-speaking="true"]):not(:hover):not(:focus-within) .kloud-custom-mic-indicator[data-kloud-muted="false"] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  transition: opacity 0.15s ease;
+}
+
+/* Muted is information, not an alarm: white icon, no colour */
+.lk-room-container .lk-participant-tile .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]) {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 
 /* Camera on / off is visible in the tile itself, so the camera chip only shows while the host
@@ -469,11 +431,6 @@ h2 a {
     transition: none !important;
   }
 
-  /* Keep a static (non-animated) ring so speaking is still visible */
-  .lk-participant-tile[data-lk-speaking="true"][data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
-    opacity: 0.35;
-    transform: translate(-50%, -50%) scale(1.15);
-  }
 }
 
 /* ═══════════════════════════════════════════════════

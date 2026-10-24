@@ -618,7 +618,7 @@
 }
 
 .summaryItemActive {
-  box-shadow: inset 3px 0 0 var(--km-speaking, #8b87ff);
+  box-shadow: inset 3px 0 0 var(--km-on-dark-accent, #c9c8ff);
 }
 
 .summaryItem > div {

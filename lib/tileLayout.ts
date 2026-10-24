@@ -15,20 +15,30 @@ export interface GridFit {
   tileHeight: number;
 }
 
-/** The column count that gives the largest equal 16:9 tiles for `count` tiles in a W×H box. */
+/** Tiles may be this much smaller than the largest possible if that leaves fewer empty slots. */
+const EVEN_GRID_TOLERANCE = 0.85;
+
+/**
+ * The column count for `count` equal 16:9 tiles in a W×H box: tiles as large as possible, but
+ * among sizes within EVEN_GRID_TOLERANCE of the largest, the grid with the fewest empty slots
+ * (16 people → 4×4, not 5 + 5 + 5 + 1).
+ */
 export function fitGrid(count: number, width: number, height: number, gap: number, aspect = TILE_ASPECT): GridFit {
   if (count <= 0 || width <= 0 || height <= 0) return { cols: 0, rows: 0, tileWidth: 0, tileHeight: 0 };
-  let best: GridFit = { cols: 1, rows: count, tileWidth: 0, tileHeight: 0 };
+  const options: GridFit[] = [];
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
     const byWidth = (width - (cols - 1) * gap) / cols;
     const byHeight = ((height - (rows - 1) * gap) / rows) * aspect;
     const tileWidth = Math.floor(Math.min(byWidth, byHeight));
-    if (tileWidth > best.tileWidth) {
-      best = { cols, rows, tileWidth, tileHeight: Math.floor(tileWidth / aspect) };
-    }
+    if (tileWidth > 0) options.push({ cols, rows, tileWidth, tileHeight: Math.floor(tileWidth / aspect) });
   }
-  return best;
+  if (options.length === 0) return { cols: 0, rows: 0, tileWidth: 0, tileHeight: 0 };
+  const largest = Math.max(...options.map((o) => o.tileWidth));
+  const empty = (o: GridFit) => o.cols * o.rows - count;
+  return options
+    .filter((o) => o.tileWidth >= largest * EVEN_GRID_TOLERANCE)
+    .sort((a, b) => empty(a) - empty(b) || b.tileWidth - a.tileWidth)[0];
 }
 
 /** Hues that read well as a dark tile background with white text. */

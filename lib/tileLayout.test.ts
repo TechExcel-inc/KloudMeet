@@ -25,6 +25,11 @@ describe('fitGrid', () => {
     expect(fitGrid(7, 1400, 760, 12).cols).toBe(3);
   });
 
+  it('prefers an even grid when the tiles are nearly as big', () => {
+    expect(fitGrid(16, 1400, 760, 12)).toMatchObject({ cols: 4, rows: 4 });
+    expect(fitGrid(9, 1400, 760, 12)).toMatchObject({ cols: 3, rows: 3 });
+  });
+
   it('returns nothing for an empty grid or box', () => {
     expect(fitGrid(0, 1400, 760, 12).tileWidth).toBe(0);
     expect(fitGrid(3, 0, 760, 12).tileWidth).toBe(0);

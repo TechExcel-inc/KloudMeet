@@ -47,7 +47,8 @@
   --km-stage-text: #e8eaed;
   --km-stage-muted: #9aa0a6;
   --km-stage-border: rgba(255, 255, 255, 0.08);
-  --km-speaking: #8b87ff;
+  /* Who is talking: green, the one colour that means sound (tile outline, voice bars) */
+  --km-speaking: #22c55e;
   --km-on-dark-accent: #c9c8ff;
   --km-snackbar: #323232;
 
