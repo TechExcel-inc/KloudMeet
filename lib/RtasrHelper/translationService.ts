@@ -19,13 +19,15 @@ const LANGUAGE_CODE_MAP: { [key: string]: string; } = {
  *
  * @param {string} text - The text to translate.
  * @param {string} targetLangId - Target language ID.
- * @param {string} sourceLangId - Source language ID, defaults to 'auto'.
+ * @param {string} sourceLangId - Source language ID.
+ * @param {string} token - LiveKit participant token for API auth.
  * @returns {Promise<string>} Translated text.
  */
 export async function translateText(
     text: string,
     targetLangId: string,
-    sourceLangId: string = 'auto'
+    sourceLangId: string,
+    token: string
 ): Promise<string> {
     if (!text || !text.trim()) return '';
 
@@ -37,6 +39,7 @@ export async function translateText(
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
             },
             body: JSON.stringify({
                 text,

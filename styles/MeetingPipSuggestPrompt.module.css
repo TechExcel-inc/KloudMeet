@@ -10,13 +10,15 @@
   cursor: grab;
 }
 
-.rootDrag {
+.rootDrag,
+.rootDrag .enableBtn,
+.rootDrag .chevron {
   cursor: grabbing;
 }
 
 .rootFull {
   width: max-content;
-  max-width: min(360px, calc(100vw - 32px));
+  max-width: min(480px, calc(100vw - 32px));
 }
 
 .rootMini {
@@ -25,13 +27,17 @@
 
 .bar {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
-  padding: 6px 7px 6px 8px;
   border-radius: 22px;
   background: #2a2d35;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.bar *,
+.mini * {
+  touch-action: none;
 }
 
 .iconMark,
@@ -61,6 +67,7 @@
 .glyph {
   width: 58%;
   height: 58%;
+  pointer-events: none;
 }
 
 .badge {
@@ -80,7 +87,6 @@
   color: #fff;
   background: #7c3aed;
   border: 2px solid #2a2d35;
-  pointer-events: none;
 }
 
 .miniIcon .badge {
@@ -92,36 +98,20 @@
   border-color: #1a1b1e;
 }
 
-.copy {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-  flex: 1;
-}
-
-.title {
-  color: #fff;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.sub {
-  color: rgba(226, 232, 240, 0.72);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.25;
-}
-
 .enableBtn {
   flex-shrink: 0;
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
   border: none;
   border-radius: 999px;
-  padding: 5px 12px;
+  height: 24px;
+  margin: 4px 0;
+  padding: 0 12px;
   font-size: 12px;
   font-weight: 650;
-  cursor: pointer;
+  cursor: grab;
   color: #fff;
   background: #7c3aed;
   white-space: nowrap;
@@ -134,17 +124,22 @@
 
 .chevron {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  align-self: center;
+  width: 32px;
+  height: 32px;
   border: none;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
+  cursor: grab;
   color: rgba(255, 255, 255, 0.78);
   background: rgba(255, 255, 255, 0.08);
   font-family: inherit;
+}
+
+.chevron svg {
+  pointer-events: none;
 }
 
 .chevron:hover {
