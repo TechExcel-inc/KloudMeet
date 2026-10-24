@@ -159,56 +159,6 @@ export function STTSettingsDialog({
           </button>
         </div>
 
-        {/* 启用语音转文字：放在两个 Tab 上方（仅 Host/Co-host） */}
-        {canToggleCaptions && (
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '4px 24px 16px',
-            }}
-          >
-            <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
-            <div
-              style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer' }}
-              onClick={() => setLocalEnabled(!localEnabled)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setLocalEnabled(!localEnabled);
-                }
-              }}
-              role="switch"
-              aria-checked={localEnabled}
-              tabIndex={0}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  background: localEnabled ? '#3b82f6' : '#666666',
-                  borderRadius: '12px',
-                  transition: 'background 0.2s',
-                }}
-              />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: '2px',
-                  left: '2px',
-                  width: '20px',
-                  height: '20px',
-                  background: '#ffffff',
-                  borderRadius: '50%',
-                  transition: 'transform 0.2s',
-                  transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
-                }}
-              />
-            </div>
-          </div>
-        )}
-
         {/* Tabs：Host/Co-host 两个；其他人仅 My Settings。默认选中 My Settings */}
         <div
           style={{
@@ -314,39 +264,82 @@ export function STTSettingsDialog({
           )}
         </div>
 
-        {/* Footer */}
-        <div style={{ padding: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', marginTop: '4px' }}>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#ffffff',
-              fontSize: '15px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              padding: '8px 12px',
-            }}
-          >
-            {t('stt.cancel') || 'Cancel'}
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            style={{
-              background: '#5c94ff',
-              border: 'none',
-              borderRadius: '4px',
-              color: '#ffffff',
-              fontSize: '15px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              padding: '8px 20px',
-            }}
-          >
-            {t('stt.ok') || 'OK'}
-          </button>
+        {/* Footer：启用开关在左下角，取消/确定在右侧 */}
+        <div style={{ padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', marginTop: '4px' }}>
+          {canToggleCaptions && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <span style={{ fontSize: '15px' }}>{t('stt.enableSpeechToText') || 'Enable Speech to Text'}</span>
+              <div
+                style={{ position: 'relative', width: '44px', height: '24px', cursor: 'pointer', flexShrink: 0 }}
+                onClick={() => setLocalEnabled(!localEnabled)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setLocalEnabled(!localEnabled);
+                  }
+                }}
+                role="switch"
+                aria-checked={localEnabled}
+                tabIndex={0}
+              >
+                <div
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: localEnabled ? '#3b82f6' : '#666666',
+                    borderRadius: '12px',
+                    transition: 'background 0.2s',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '2px',
+                    left: '2px',
+                    width: '20px',
+                    height: '20px',
+                    background: '#ffffff',
+                    borderRadius: '50%',
+                    transition: 'transform 0.2s',
+                    transform: localEnabled ? 'translateX(20px)' : 'translateX(0)',
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexShrink: 0, marginLeft: 'auto' }}>
+            <button
+              type="button"
+              onClick={onClose}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#ffffff',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '8px 12px',
+              }}
+            >
+              {t('stt.cancel') || 'Cancel'}
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              style={{
+                background: '#5c94ff',
+                border: 'none',
+                borderRadius: '4px',
+                color: '#ffffff',
+                fontSize: '15px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '8px 20px',
+              }}
+            >
+              {t('stt.ok') || 'OK'}
+            </button>
+          </div>
         </div>
 
       </div>

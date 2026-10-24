@@ -6,6 +6,7 @@
 import { createHmac, randomUUID } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { checkCaptionQuotaForRoom } from '@/lib/billing/limits';
+import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,6 +16,9 @@ function sign(raw: string, key: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  if (!(await verifyParticipant(request, { publish: true }))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   const key = process.env.DASHSCOPE_API_KEY || '';
   if (!key) {
     return NextResponse.json({ error: 'Fun-ASR is not configured' }, { status: 500 });

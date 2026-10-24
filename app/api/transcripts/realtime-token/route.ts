@@ -7,10 +7,14 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { checkCaptionQuotaForRoom } from '@/lib/billing/limits';
+import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 export async function GET(req: NextRequest) {
+  if (!(await verifyParticipant(req, { publish: true }))) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
   if (!OPENAI_API_KEY) {
     return NextResponse.json(
       { error: 'OpenAI API key not configured' },

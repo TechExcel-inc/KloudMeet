@@ -59,6 +59,9 @@ export class RtasrHelper implements CaptionEngine {
   /** 累积每个 item_id 的增量文字，用于 partial 显示 */
   private _partialTexts = new Map<string, string>();
 
+  /** @param getToken 每次取最新的 LiveKit 参会 token（会中会续期） */
+  constructor(private readonly getToken: () => string) {}
+
   SetServerID(_id: number) {}
   SetSpeakingLanguageID(_id: number) {}
 
@@ -76,7 +79,9 @@ export class RtasrHelper implements CaptionEngine {
       const tokenUrl = tokenQuery.toString()
         ? `/api/transcripts/realtime-token?${tokenQuery}`
         : '/api/transcripts/realtime-token';
-      const tokenRes = await fetch(tokenUrl);
+      const tokenRes = await fetch(tokenUrl, {
+        headers: { Authorization: `Bearer ${this.getToken()}` },
+      });
       if (!tokenRes.ok) {
         throw new Error(`Token fetch failed: ${tokenRes.status} ${await tokenRes.text()}`);
       }

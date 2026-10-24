@@ -105,6 +105,8 @@ export interface UseCaptionsOptions {
   micEnabled: boolean;
   /** AssemblyAI 语言代码（默认 zh）*/
   languageCode?: string;
+  /** 取最新 LiveKit 参会 token，用于转写/翻译接口鉴权（会中会续期，须每次现取） */
+  getToken: () => string;
 }
 
 export interface UseCaptionsReturn {
@@ -179,6 +181,7 @@ export function useCaptions({
   room,
   micEnabled,
   languageCode = 'en',
+  getToken,
 }: UseCaptionsOptions): UseCaptionsReturn {
   const uiLanguage = captionLanguageFor(languageCode);
   const [readLanguage, setReadLanguageState] = React.useState<CaptionLanguage>(uiLanguage);
@@ -200,7 +203,9 @@ export function useCaptions({
   const hideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const micEnabledRef = React.useRef(micEnabled);
   const openSeqRef = React.useRef(0);
+  const getTokenRef = React.useRef(getToken);
   micEnabledRef.current = micEnabled;
+  getTokenRef.current = getToken;
 
   const encoder = React.useMemo(() => new TextEncoder(), []);
   const decoder = React.useMemo(() => new TextDecoder(), []);
@@ -338,7 +343,7 @@ export function useCaptions({
           showCaptionsToGUI({ ...data, src: choice.text }, myReadLanguage, data.src);
         } else if (data.tp === 0) {
           // 发言方还不知道我的语言（刚入会），只有这一句自己翻译
-          translateText(data.src, myReadLanguage, data.speakLanguage || 'auto')
+          translateText(data.src, myReadLanguage, data.speakLanguage || 'auto', getTokenRef.current())
             .then((translated) => showCaptionsToGUI({ ...data, src: translated }, myReadLanguage, data.src))
             .catch(() => showCaptionsToGUI(data));
         }
@@ -394,7 +399,8 @@ export function useCaptions({
         if (seq !== openSeqRef.current) return;
         if (!rtasrRef.current || providerRef.current !== provider) {
           rtasrRef.current?.Stop();
-          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper() : new RtasrHelper();
+          const token = () => getTokenRef.current();
+          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
           helper.languageCode = uiLanguage;
           helper.roomName = room.name;
 
@@ -440,7 +446,7 @@ export function useCaptions({
             if (d.type === 0 && targets.length > 0) {
               const results = await Promise.allSettled(
                 targets.map((lang) =>
-                  withTimeout(translateText(d.src, lang, speakLanguage), TRANSLATE_TIMEOUT_MS).then(
+                  withTimeout(translateText(d.src, lang, speakLanguage, getTokenRef.current()), TRANSLATE_TIMEOUT_MS).then(
                     (text) => [lang, text] as const,
                   ),
                 ),

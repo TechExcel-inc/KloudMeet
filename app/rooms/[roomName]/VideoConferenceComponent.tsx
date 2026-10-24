@@ -33,7 +33,7 @@ import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
-import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
+import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import { applyTileHue } from '@/lib/tileLayout';
 import {
   DEFAULT_GALLERY_PREFS,
@@ -4713,6 +4713,29 @@ export function VideoConferenceComponent(props: {
   /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
   const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
 
+  const [showPipSuggest, setShowPipSuggest] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!livekitConnected || isDesktop || isToolbarMobile || isRecorderBot || meetingEndedByHost) {
+      setShowPipSuggest(false);
+      return;
+    }
+    if (!isWebDocumentPipEligible() || documentPip.isOpen || showMeetingReadyModal) {
+      setShowPipSuggest(false);
+      return;
+    }
+    const id = window.setTimeout(() => setShowPipSuggest(true), 1200);
+    return () => window.clearTimeout(id);
+  }, [
+    livekitConnected,
+    isDesktop,
+    isToolbarMobile,
+    isRecorderBot,
+    meetingEndedByHost,
+    documentPip.isOpen,
+    showMeetingReadyModal,
+  ]);
+
   const getFloatingBottomInset = React.useCallback((parent: HTMLElement | null) => {
     const toolbar = document.querySelector<HTMLElement>('[data-skymeet-toolbar="true"]');
     if (!toolbar) {
@@ -5091,6 +5114,7 @@ export function VideoConferenceComponent(props: {
     room,
     micEnabled,
     languageCode: locale,
+    getToken: () => connectionDetailsRef.current?.participantToken ?? '',
   });
   // 赋值给 ref，让上面 handleData 里能访问到
   setCaptionsOpenRef.current = setCaptionsOpen;
@@ -6657,15 +6681,6 @@ export function VideoConferenceComponent(props: {
               </button>
             )}
           </div>
-
-          {/* First one here: invite people or open a LiveDoc while waiting (desktop layout only) */}
-          {!isToolbarMobile && !isRecorderBot && (
-            <SoloMeetingCard
-              isDesktop={isDesktop}
-              canOpenLiveDoc={canSwitchViews && activeView !== 'liveDoc'}
-              onOpenLiveDoc={() => handleViewChange('liveDoc')}
-            />
-          )}
 
           {/* Floating draggable webcam pill — at main-meeting-area level for LiveDoc + ScreenShare */}
           {floatingWebcamPanelVisible &&
@@ -9260,6 +9275,13 @@ export function VideoConferenceComponent(props: {
         />
 
         {/* --- MODALS --- */}
+        <MeetingPipSuggestPrompt
+          visible={showPipSuggest}
+          attendeeCount={1 + room.remoteParticipants.size}
+          onEnable={() => {
+            void documentPip.open({ sticky: true });
+          }}
+        />
         {showMeetingReadyModal && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowMeetingReadyModal(false)}>
             <div className="kloud-modal" onMouseDown={e => e.stopPropagation()}>
