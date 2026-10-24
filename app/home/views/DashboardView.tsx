@@ -859,34 +859,39 @@ export function DashboardView({
             <p className={styles.dashDate}>{todayLabel}</p>
           </div>
 
-          <div className={styles.actionCards}>
+          {/* One row: start now, schedule, or join with a code */}
+          <div className={styles.actionBar}>
             <button
               type="button"
-              className={`${styles.actionCard} ${styles.actionCardPrimary}`}
+              className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
               onClick={handleNewMeeting}
               disabled={isCreatingMeeting}
               aria-busy={isCreatingMeeting}
+              title={t('dash.newMeetingHint')}
             >
-              <Video size={22} aria-hidden="true" />
-              <span className={styles.actionCardTitle}>
-                {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
-              </span>
-              <span className={styles.actionCardHint}>{t('dash.newMeetingHint')}</span>
+              <Video size={18} aria-hidden="true" />
+              {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
             </button>
-            <button type="button" className={styles.actionCard} onClick={() => setShowScheduleModal(true)}>
-              <CalendarPlus size={22} aria-hidden="true" />
-              <span className={styles.actionCardTitle}>{t('dash.scheduleMeeting')}</span>
-              <span className={styles.actionCardHint}>{t('dash.scheduleHint')}</span>
+            <button
+              type="button"
+              className={styles.actionBtn}
+              onClick={() => setShowScheduleModal(true)}
+              title={t('dash.scheduleHint')}
+            >
+              <CalendarPlus size={18} aria-hidden="true" />
+              {t('dash.scheduleMeeting')}
             </button>
-            <div className={`${styles.actionCard} ${styles.actionCardJoin}`}>
-              <Keyboard size={22} aria-hidden="true" />
-              <label className={styles.actionCardTitle} htmlFor="dash-join-code">
-                {t('dash.joinWithCode')}
-              </label>
-              <div className={styles.joinRow}>
+            <span className={styles.actionDivider} aria-hidden="true" />
+            <div className={styles.joinGroup}>
+              <label
+                className={`${styles.joinField}${warningMessage ? ` ${styles.joinFieldError}` : ''}`}
+                htmlFor="dash-join-code"
+              >
+                <Keyboard size={18} aria-hidden="true" />
+                <span className={styles.srOnly}>{t('dash.joinWithCode')}</span>
                 <input
                   id="dash-join-code"
-                  className={`${styles.joinInput}${warningMessage ? ` ${styles.joinInputError}` : ''}`}
+                  className={styles.joinFieldInput}
                   placeholder={t('dash.joinCodePlaceholder')}
                   value={joinCode}
                   autoComplete="off"
@@ -898,16 +903,16 @@ export function DashboardView({
                   }}
                   onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
                 />
-                <button
-                  type="button"
-                  className={`${styles.btn} ${styles.btnXs} ${hasJoinCode ? styles.btnFill : styles.btnTonal} ${styles.btnFlat}`}
-                  onClick={handleJoinMeeting}
-                  disabled={!hasJoinCode}
-                  aria-busy={isJoining}
-                >
-                  {isJoining ? t('common.joining') : t('common.join')}
-                </button>
-              </div>
+              </label>
+              <button
+                type="button"
+                className={`${styles.joinTextBtn}${hasJoinCode ? ` ${styles.joinTextBtnReady}` : ''}`}
+                onClick={handleJoinMeeting}
+                disabled={!hasJoinCode}
+                aria-busy={isJoining}
+              >
+                {isJoining ? t('common.joining') : t('common.join')}
+              </button>
             </div>
           </div>
 
