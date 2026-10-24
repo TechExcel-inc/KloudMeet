@@ -110,6 +110,13 @@ model Meeting {
   /// Who is host / co-host / presenter right now, as reported by the current host's client:
   /// { host, cohosts[], presenters[] } (LiveKit identities). Used to check recording permission.
   meetingRoles            Json?
+  /// Schedule dialog → Emails: send invitations / reminders to the attendees
+  inviteEmails            Boolean                  @default(true)
+  reminderEmails          Boolean                  @default(true)
+  /// Minutes before the start to send reminders, e.g. [1440, 480]; null = the default
+  reminderOffsets         Json?
+  invitees                MeetingInvitee[]
+  reminderLogs            MeetingReminderLog[]
   account                 KloudMeetAccount?        @relation(fields: [accountId], references: [id], map: "Meeting_accountId_fkey")
   createdByMember         TeamMember               @relation(fields: [createdByMemberId], references: [id], map: "Meeting_createdByMemberId_fkey")
   participants            MeetingParticipant[]
@@ -494,4 +501,34 @@ model DesktopAuthHandoff {
 
   @@index([expiresAt], map: "DesktopAuthHandoff_expiresAt_idx")
   @@map("DesktopAuthHandoff")
+}
+
+/// People invited by email from the schedule dialog
+model MeetingInvitee {
+  id         Int       @id @default(autoincrement())
+  meetingId  Int
+  email      String
+  /// When the latest invitation was sent, and for which start time (a new time re-sends it)
+  invitedAt  DateTime?
+  invitedFor DateTime?
+  createdAt  DateTime  @default(now())
+  meeting    Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, email])
+  @@index([meetingId])
+  @@map("MeetingInvitee")
+}
+
+/// One row per reminder sent, so each reminder goes out once per start time
+model MeetingReminderLog {
+  id            Int      @id @default(autoincrement())
+  meetingId     Int
+  offsetMinutes Int
+  scheduledFor  DateTime
+  sentAt        DateTime @default(now())
+  meeting       Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, offsetMinutes, scheduledFor])
+  @@index([meetingId])
+  @@map("MeetingReminderLog")
 }

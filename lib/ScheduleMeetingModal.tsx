@@ -15,6 +15,13 @@ import {
   toCalendarMeetingFromClient,
   type CalendarMenuItem,
 } from '@/lib/calendar/menu';
+import {
+  DEFAULT_REMINDER_OFFSETS,
+  MAX_INVITEES,
+  invitationEmail,
+  isValidEmail,
+  reminderEmail,
+} from '@/lib/meetingInvites';
 
 /** Email / AI assistant / linked-event tabs (enterprise features; shown as before — not saved yet). */
 const SHOW_ENTERPRISE_TABS = true;
@@ -80,13 +87,51 @@ function formatInviteDateTime(scheduledFor?: string, timezone?: string): string 
   }
 }
 
+type ReminderUnit = 'hours' | 'days';
+interface ReminderRow {
+  amount: number;
+  unit: ReminderUnit;
+}
+const REMINDER_AMOUNTS: Record<ReminderUnit, number[]> = {
+  hours: [1, 2, 3, 4, 6, 8, 12],
+  days: [1, 2, 3, 7],
+};
+const MAX_REMINDERS = 5;
+
+function offsetsToRows(offsets: number[]): ReminderRow[] {
+  return offsets.map((minutes) =>
+    minutes % 1440 === 0
+      ? { amount: minutes / 1440, unit: 'days' as const }
+      : { amount: Math.max(1, Math.round(minutes / 60)), unit: 'hours' as const },
+  );
+}
+
+function rowsToOffsets(rows: ReminderRow[]): number[] {
+  return rows.map((row) => row.amount * (row.unit === 'days' ? 1440 : 60));
+}
+
+/** Emails typed or pasted together: "a@x.com, b@y.com; c@z.com" */
+function splitEmails(text: string): string[] {
+  return text
+    .split(/[\s,;]+/)
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** "90min(1.5h)" → 90 */
+function durationMinutesFrom(durationStr: string): number {
+  const match = /^(\d+)min/.exec(durationStr);
+  return match ? Number(match[1]) : 30;
+}
+
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('general');
   const { t } = useI18n();
   /** Translation with an English fallback for keys not yet added to the locale files. */
-  const tf = (key: string, fallback: string) => {
-    const value = t(key);
-    return value === key ? fallback : value;
+  const tf = (key: string, fallback: string, params?: Record<string, string | number>) => {
+    const value = t(key, params);
+    if (value !== key) return value;
+    return Object.entries(params ?? {}).reduce((text, [k, v]) => text.split(`{${k}}`).join(String(v)), fallback);
   };
   const [subModal, setSubModal] = useState<'invite' | 'reminder' | null>(null);
   const [showInviteMenu, setShowInviteMenu] = useState(false);
@@ -145,6 +190,87 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const [recordingVisibility, setRecordingVisibility] = useState<RecordingVisibility>(
     recording?.visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
   );
+
+  // Attendees (AI tab) and invitation / reminder emails (Emails tab); saved after the meeting.
+  const [attendees, setAttendees] = useState<string[]>([]);
+  const [attendeeDraft, setAttendeeDraft] = useState('');
+  const [attendeeError, setAttendeeError] = useState('');
+  const [inviteEmails, setInviteEmails] = useState(true);
+  const [reminderEmails, setReminderEmails] = useState(true);
+  const [reminders, setReminders] = useState<ReminderRow[]>(() => offsetsToRows(DEFAULT_REMINDER_OFFSETS));
+  const [invitesTouched, setInvitesTouched] = useState(false);
+  const [inviteResult, setInviteResult] = useState<{ sent: number; failed: string[]; error?: boolean } | null>(null);
+
+  useEffect(() => {
+    const roomName = existingMeeting?.roomName;
+    if (!roomName) return;
+    let cancelled = false;
+    authFetch(`/api/meetings/${encodeURIComponent(roomName)}/invitees`, { headers: authHeaders() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data) return;
+        setAttendees(Array.isArray(data.emails) ? data.emails : []);
+        setInviteEmails(data.inviteEmails !== false);
+        setReminderEmails(data.reminderEmails !== false);
+        if (Array.isArray(data.reminderOffsets)) setReminders(offsetsToRows(data.reminderOffsets));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [existingMeeting?.roomName]);
+
+  /** Adds the valid addresses; invalid ones stay in the input with an error. */
+  const addAttendees = (text: string) => {
+    const parts = splitEmails(text);
+    const valid = parts.filter(isValidEmail);
+    const invalid = parts.filter((part) => !isValidEmail(part));
+    if (valid.length > 0) {
+      setAttendees((prev) => Array.from(new Set([...prev, ...valid])).slice(0, MAX_INVITEES));
+      setInvitesTouched(true);
+    }
+    setAttendeeDraft(invalid.join(', '));
+    setAttendeeError(invalid.length > 0 ? tf('schedule.attendeeInvalid', 'Enter a valid email address') : '');
+  };
+
+  const removeAttendee = (email: string) => {
+    setAttendees((prev) => prev.filter((item) => item !== email));
+    setInvitesTouched(true);
+  };
+
+  const updateReminders = (next: ReminderRow[]) => {
+    setReminders(next);
+    setInvitesTouched(true);
+  };
+
+  /** Saves attendees + email settings; the server emails attendees not yet invited for this time. */
+  const saveInvites = async (roomName: string) => {
+    const pending = splitEmails(attendeeDraft).filter(isValidEmail);
+    const emails = Array.from(new Set([...attendees, ...pending]));
+    if (!invitesTouched && emails.length === 0) return null;
+    try {
+      const res = await authFetch(`/api/meetings/${encodeURIComponent(roomName)}/invitees`, {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ emails, inviteEmails, reminderEmails, reminderOffsets: rowsToOffsets(reminders) }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) return { sent: 0, failed: [], error: true };
+      return { sent: Number(data.sent) || 0, failed: Array.isArray(data.failed) ? data.failed : [] };
+    } catch {
+      return { sent: 0, failed: [], error: true };
+    }
+  };
+
+  const inviteResultText = (result: { sent: number; failed: string[]; error?: boolean } | null): string => {
+    if (!result) return '';
+    if (result.error) return tf('schedule.invitesSaveFailed', "Attendees couldn't be saved. Open the meeting and save again.");
+    const lines: string[] = [];
+    if (result.sent > 0) lines.push(tf('schedule.invitesSent', 'Invitation sent to {n} attendee(s).', { n: result.sent }));
+    if (result.failed.length > 0)
+      lines.push(tf('schedule.invitesFailed', "Couldn't email: {list}", { list: result.failed.join(', ') }));
+    return lines.join(' ');
+  };
 
   useEffect(() => {
     if (!showInviteMenu && !showCalendarMenu) return;
@@ -268,18 +394,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     try {
       const scheduledForIso = zonedDateTimeToUtcIso(date, time, timezone);
       
-      let durationMinutes = 30;
-      if (durationStr === '15min') durationMinutes = 15;
-      else if (durationStr === '30min') durationMinutes = 30;
-      else if (durationStr === '45min') durationMinutes = 45;
-      else if (durationStr === '60min') durationMinutes = 60;
-      else if (durationStr === '90min(1.5h)') durationMinutes = 90;
-      else if (durationStr === '120min(2h)') durationMinutes = 120;
-      else if (durationStr === '180min(3h)') durationMinutes = 180;
-      else if (durationStr === '240min(4h)') durationMinutes = 240;
-      else if (durationStr === '300min(5h)') durationMinutes = 300;
-      else if (durationStr === '360min(6h)') durationMinutes = 360;
-      else if (durationStr === '420min(7h)') durationMinutes = 420;
+      const durationMinutes = durationMinutesFrom(durationStr);
 
       if (recording?.shareKey && recording.visibility !== recordingVisibility) {
         const visibilityRes = await authFetch(
@@ -335,12 +450,15 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         if (!res.ok) throw new Error(`Create failed (${res.status})`);
         saved = await res.json().catch(() => null);
       }
+      const invites = saved?.roomName ? await saveInvites(saved.roomName) : null;
+      setInviteResult(invites);
       if (saved?.roomName && isCalendarEligible(saved)) {
         // Stay open on an "add to calendar" step; Done/close then refreshes the list.
         setSavedKind(existingMeeting?.roomName ? 'updated' : 'created');
         setSavedMeeting(saved);
         return;
       }
+      if (invites && (invites.error || invites.failed.length > 0)) alert(inviteResultText(invites));
       onSave();
     } catch (error) {
       console.error('Failed to schedule meeting', error);
@@ -522,6 +640,15 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 <div className={styles.savedMeetingWhen}>
                   {formatInviteDateTime(savedMeeting.scheduledFor, savedMeeting.timezone || undefined)}
                 </div>
+                {inviteResultText(inviteResult) && (
+                  <p
+                    className={styles.hint}
+                    role="status"
+                    style={inviteResult?.error || inviteResult?.failed.length ? { color: '#b91c1c' } : undefined}
+                  >
+                    {inviteResultText(inviteResult)}
+                  </p>
+                )}
                 <div className={styles.sectionLabel}>{t('calendar.addToCalendar')}</div>
                 <div className={styles.calendarGrid}>
                   {calendarItemsFor(savedMeeting).map((item) => (
@@ -784,58 +911,119 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                 
                 {/* Invitation Email */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }} />
-                  <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.invitationEmail')}</span>
-                  <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '2rem' }} onClick={() => setSubModal('invite')}>{t('common.view')}</button>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <input
+                      type="checkbox"
+                      checked={inviteEmails}
+                      disabled={isReadOnly}
+                      onChange={(e) => {
+                        setInviteEmails(e.target.checked);
+                        setInvitesTouched(true);
+                      }}
+                      aria-label={t('schedule.invitationEmail')}
+                      style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }}
+                    />
+                    <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.invitationEmail')}</span>
+                    <button type="button" className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '2rem' }} onClick={() => setSubModal('invite')}>{t('common.view')}</button>
+                  </div>
+                  <p style={{ margin: '0.4rem 0 0 2.25rem', fontSize: '0.85rem', color: '#6b7280' }}>
+                    {attendees.length > 0
+                      ? tf('schedule.inviteRecipients', 'Sent to {n} attendee(s) when you save.', { n: attendees.length })
+                      : tf('schedule.inviteNoRecipients', 'No attendees yet.')}{' '}
+                    {!isReadOnly && (
+                      <button type="button" className={styles.linkBtn} style={{ display: 'inline', padding: 0, fontSize: 'inherit' }} onClick={() => setActiveTab('ai')}>
+                        {t('schedule.addAttendee')}
+                      </button>
+                    )}
+                  </p>
                 </div>
 
                 {/* Reminder Email */}
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <input type="checkbox" defaultChecked style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }} />
+                    <input
+                      type="checkbox"
+                      checked={reminderEmails}
+                      disabled={isReadOnly}
+                      onChange={(e) => {
+                        setReminderEmails(e.target.checked);
+                        setInvitesTouched(true);
+                      }}
+                      aria-label={t('schedule.reminderEmail')}
+                      style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }}
+                    />
                     <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.reminderEmail')}</span>
-                    <button className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '1.9rem' }} onClick={() => setSubModal('reminder')}>{t('common.view')}</button>
+                    <button type="button" className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '1.9rem' }} onClick={() => setSubModal('reminder')}>{t('common.view')}</button>
                   </div>
-                  
-                  <div style={{ marginLeft: '2.25rem', marginTop: '1rem' }}>
+
+                  <div style={{ marginLeft: '2.25rem', marginTop: '1rem', opacity: reminderEmails ? 1 : 0.5 }}>
                     <p style={{ fontSize: '0.95rem', color: '#374151', margin: '0 0 1rem 0', fontWeight: 600 }}>{t('schedule.sendBefore')}</p>
-                    
-                    {/* Reminder 1: 1 Days */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                      <select className={`${styles.input} ${styles.select}`} style={{ width: '80px', padding: '0.5rem' }} defaultValue="1">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="8">8</option>
-                      </select>
-                      <select className={`${styles.input} ${styles.select}`} style={{ width: '130px', padding: '0.5rem' }} defaultValue="Days">
-                        <option value="Hours">{t('schedule.hours')}</option>
-                        <option value="Days">{t('schedule.days')}</option>
-                      </select>
-                      <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}>×</button>
-                    </div>
 
-                    {/* Reminder 2: 8 Hours */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                      <select className={`${styles.input} ${styles.select}`} style={{ width: '80px', padding: '0.5rem' }} defaultValue="8">
-                        <option value="1">1</option>
-                        <option value="2">2</option>
-                        <option value="8">8</option>
-                      </select>
-                      <select className={`${styles.input} ${styles.select}`} style={{ width: '130px', padding: '0.5rem' }} defaultValue="Hours">
-                        <option value="Hours">{t('schedule.hours')}</option>
-                        <option value="Days">{t('schedule.days')}</option>
-                      </select>
-                      <button style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}>×</button>
-                    </div>
+                    {reminders.map((row, index) => (
+                      <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                        <select
+                          className={`${styles.input} ${styles.select}`}
+                          style={{ width: '80px', padding: '0.5rem' }}
+                          value={row.amount}
+                          disabled={isReadOnly || !reminderEmails}
+                          aria-label={t('schedule.sendBefore')}
+                          onChange={(e) =>
+                            updateReminders(reminders.map((r, i) => (i === index ? { ...r, amount: Number(e.target.value) } : r)))
+                          }
+                        >
+                          {Array.from(new Set([...REMINDER_AMOUNTS[row.unit], row.amount]))
+                            .sort((x, y) => x - y)
+                            .map((n) => (
+                              <option key={n} value={n}>{n}</option>
+                            ))}
+                        </select>
+                        <select
+                          className={`${styles.input} ${styles.select}`}
+                          style={{ width: '130px', padding: '0.5rem' }}
+                          value={row.unit}
+                          disabled={isReadOnly || !reminderEmails}
+                          aria-label={`${t('schedule.hours')} / ${t('schedule.days')}`}
+                          onChange={(e) => {
+                            const unit = e.target.value as ReminderUnit;
+                            const amount = REMINDER_AMOUNTS[unit].includes(row.amount) ? row.amount : 1;
+                            updateReminders(reminders.map((r, i) => (i === index ? { amount, unit } : r)));
+                          }}
+                        >
+                          <option value="hours">{t('schedule.hours')}</option>
+                          <option value="days">{t('schedule.days')}</option>
+                        </select>
+                        <button
+                          type="button"
+                          aria-label={tf('schedule.removeReminder', 'Remove reminder')}
+                          title={tf('schedule.removeReminder', 'Remove reminder')}
+                          disabled={isReadOnly || !reminderEmails}
+                          onClick={() => updateReminders(reminders.filter((_, i) => i !== index))}
+                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}
+                        >×</button>
+                      </div>
+                    ))}
 
-                    <button className={styles.linkBtn} style={{ marginTop: '1rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                      </svg>
-                      {t('schedule.addReminder')}
-                    </button>
+                    {reminders.length < MAX_REMINDERS && (
+                      <button
+                        type="button"
+                        className={styles.linkBtn}
+                        disabled={isReadOnly || !reminderEmails}
+                        onClick={() => {
+                          const used = rowsToOffsets(reminders);
+                          const next =
+                            [60, 120, 1440, 240, 2880].find((m) => !used.includes(m)) ?? 180;
+                          updateReminders([...reminders, ...offsetsToRows([next])]);
+                        }}
+                        style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                        {t('schedule.addReminder')}
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -876,18 +1064,71 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                       </div>
                     </div>
                     
-                    {/* Inline Add Button */}
-                    <button 
-                      className={styles.addBtn} 
-                      style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                      title={t('schedule.addAttendee')}
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
-                      </svg>
-                    </button>
+                    {attendees.map((email) => (
+                      <span
+                        key={email}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#eef2ff', color: '#3730a3', padding: '0.35rem 0.4rem 0.35rem 0.75rem', borderRadius: '24px', border: '1px solid #e0e7ff', fontSize: '0.85rem' }}
+                      >
+                        {email}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            onClick={() => removeAttendee(email)}
+                            aria-label={`${tf('schedule.removeAttendee', 'Remove')} ${email}`}
+                            title={tf('schedule.removeAttendee', 'Remove')}
+                            style={{ width: '22px', height: '22px', borderRadius: '50%', border: 'none', background: 'transparent', color: '#6366f1', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                          >×</button>
+                        )}
+                      </span>
+                    ))}
                   </div>
+                  {!isReadOnly && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
+                      <input
+                        type="email"
+                        className={styles.input}
+                        style={{ maxWidth: '300px' }}
+                        placeholder={tf('schedule.attendeePlaceholder', 'name@company.com')}
+                        aria-label={t('schedule.addAttendee')}
+                        aria-invalid={attendeeError ? true : undefined}
+                        value={attendeeDraft}
+                        onChange={(e) => {
+                          setAttendeeDraft(e.target.value);
+                          if (attendeeError) setAttendeeError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+                            e.preventDefault();
+                            addAttendees(attendeeDraft);
+                          } else if (e.key === 'Backspace' && !attendeeDraft && attendees.length > 0) {
+                            removeAttendee(attendees[attendees.length - 1]);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (attendeeDraft.trim()) addAttendees(attendeeDraft);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className={styles.addBtn}
+                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                        title={t('schedule.addAttendee')}
+                        aria-label={t('schedule.addAttendee')}
+                        onClick={() => addAttendees(attendeeDraft)}
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
+                          <line x1="12" y1="5" x2="12" y2="19"></line>
+                          <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+                  {attendeeError && (
+                    <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{attendeeError}</p>
+                  )}
+                  <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.5rem 0 0' }}>
+                    {tf('schedule.attendeeHint', 'Attendees get the invitation and reminder emails set in the Emails tab.')}
+                  </p>
                 </div>
               </div>
 
@@ -931,36 +1172,42 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       </div>
 
       {/* Sub Modals for Emails */}
-      {subModal === 'invite' && (
-        <EmailPreviewModal 
-          type={t('schedule.invitationEmail')} 
-          title="Join us for KloudMeeting" 
-          body={<>
-            Welcome, Please start registration process by entering your name and email.<br/><br/>
-            For those who can&apos;t attend our live session, we are providing recording after the event.<br/>
-            Once registered, a confirmation email will be sent to you with info on how to join the event.<br/><br/>
-            Cheers,<br/>The Kloud team
-          </>} 
-          onClose={() => setSubModal(null)} 
-        />
-      )}
-
-      {subModal === 'reminder' && (
-        <EmailPreviewModal 
-          type={t('schedule.reminderEmail')} 
-          title="Reminder: KloudMeeting is starting soon" 
-          body={<>
-            <strong>To join the conference</strong><br/>
-            Join from a PC, Mac, or any mobile device.<br/>
-            Please click the link to join the conference at the scheduled start time.<br/><br/>
-            <strong>To cancel this registration</strong><br/>
-            If you can&apos;t attend, you may <span style={{color:'#3b82f6', cursor:'pointer'}}>Cancel</span> your registration at any time.<br/><br/>
-            Please contact us with any questions. We&apos;re always happy to help.<br/><br/>
-            Cheers,<br/>The Kloud team
-          </>} 
-          onClose={() => setSubModal(null)} 
-        />
-      )}
+      {subModal && (() => {
+        const tz = timezone || getUserTimezone();
+        let scheduledFor = new Date();
+        try {
+          scheduledFor = new Date(zonedDateTimeToUtcIso(date, time, tz));
+        } catch {}
+        const preview = {
+          roomName: existingMeeting?.roomName || 'meeting-id',
+          title,
+          description,
+          scheduledFor,
+          durationMinutes: durationMinutesFrom(durationStr),
+          timezone: tz,
+          hostName: hostDisplayName(existingMeeting),
+        };
+        const to = attendees[0] || 'attendee@example.com';
+        const mail =
+          subModal === 'invite'
+            ? invitationEmail(to, preview, window.location.origin, 'new')
+            : reminderEmail(to, preview, window.location.origin, rowsToOffsets(reminders)[0] ?? DEFAULT_REMINDER_OFFSETS[0]);
+        return (
+          <EmailPreviewModal
+            type={subModal === 'invite' ? t('schedule.invitationEmail') : t('schedule.reminderEmail')}
+            title={mail.subject}
+            body={
+              <iframe
+                title={mail.subject}
+                srcDoc={mail.html}
+                sandbox=""
+                style={{ width: '100%', height: '340px', border: 0, background: '#fff', borderRadius: '4px' }}
+              />
+            }
+            onClose={() => setSubModal(null)}
+          />
+        );
+      })()}
     </>
   );
 }
@@ -985,7 +1232,7 @@ function DownloadGlyph({ size }: { size: number }) {
 function EmailPreviewModal({ type, title, body, onClose }: any) {
   const { t } = useI18n();
   return (
-    <div className={styles.overlay} style={{ zIndex: 110 }}>
+    <div className={styles.overlay} style={{ zIndex: 10000 }}>
       <div className={styles.modal} style={{ maxWidth: '650px', padding: '2.5rem' }}>
         <h2 style={{ margin: '0 0 2rem 0', color: '#1e1e2e', fontSize: '1.5rem', fontWeight: 600 }}>{type}</h2>
         
