@@ -1194,21 +1194,6 @@ export function DashboardView({
                               </div>
                             )}
 
-                            {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
-                            {recording && m.status === 'ENDED' && (
-                              <button
-                                type="button"
-                                title={t('dash.replaySummaryTitle')}
-                                aria-label={t('dash.replaySummaryTitle')}
-                                className={styles.iconBtn}
-                                onClick={openReplay}
-                              >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden="true">
-                                  <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                  <polyline points="10 8 16 12 10 16"/>
-                                </svg>
-                              </button>
-                            )}
 
                             {m.status === 'ENDED' && (
                               <button
