@@ -439,26 +439,37 @@ h2 a {
 /* Quiet by default: a mic that is on but silent shows nothing (no muted icon and no voice bars
    already says "on, no sound"). It comes back on hover so the host can still mute from the tile
    and you can still toggle your own. Muted, host-muted and speaking always show. */
-.lk-room-container .lk-participant-tile:not([data-lk-speaking="true"]):not(:hover):not(:focus-within) .kloud-custom-mic-indicator[data-kloud-muted="false"] {
-  opacity: 0 !important;
-  pointer-events: none !important;
-  transition: opacity 0.15s ease;
+@media (hover: hover) {
+  .lk-room-container .lk-participant-tile:not([data-lk-speaking="true"]):not(:hover):not(:focus-within) .kloud-custom-mic-indicator[data-kloud-muted="false"] {
+    opacity: 0 !important;
+    pointer-events: none !important;
+    transition: opacity 0.15s ease;
+  }
 }
+/* Touch screens have no hover, so there the chip always shows: tile mute stays reachable */
 
 /* Muted is information, not an alarm: white icon, no colour */
 .lk-room-container .lk-participant-tile .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]) {
   color: rgba(255, 255, 255, 0.85) !important;
 }
 
-/* Camera on / off is visible in the tile itself, so the camera chip only shows while the host
-   has disabled that camera (red, click to cancel). Hosts still disable cameras from People. */
-.lk-participant-tile .kloud-custom-cam-indicator[data-kloud-host-restricted="false"] {
+/* Camera on / off is visible in the tile itself, so the camera chip is quiet: it always shows
+   while the host has disabled that camera (red, click to cancel), and otherwise only when the
+   tile is hovered by someone who can act on it — the host (disable camera) or you on your own
+   tile (camera on/off) — or always on touch screens, which have no hover. */
+.lk-participant-tile .kloud-custom-cam-indicator[data-kloud-host-restricted="false"]:not(.operator-interactive):not(.self-interactive) {
   display: none !important;
 }
 
-/* With the camera chip gone, the ⋯ menu moves next to the mic chip (top-right) */
-.lk-grid-layout-wrapper .lk-participant-tile > .lk-participant-metadata:not(:has(.kloud-custom-cam-indicator[data-kloud-host-restricted="true"])) .kloud-tile-more-menu-wrap--inline,
-.sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout > .lk-participant-tile > .lk-participant-metadata:not(:has(.kloud-custom-cam-indicator[data-kloud-host-restricted="true"])) .kloud-tile-more-menu-wrap--inline {
+@media (hover: hover) {
+  .lk-participant-tile:not(:hover):not(:focus-within) .kloud-custom-cam-indicator[data-kloud-host-restricted="false"] {
+    display: none !important;
+  }
+}
+
+/* When this tile never shows a camera chip, the ⋯ menu moves next to the mic chip (top-right) */
+.lk-grid-layout-wrapper .lk-participant-tile > .lk-participant-metadata:not(:has(.kloud-custom-cam-indicator:is([data-kloud-host-restricted="true"], .operator-interactive, .self-interactive))) .kloud-tile-more-menu-wrap--inline,
+.sky-meet-video-wrapper.webcam-spotlight .lk-focus-layout > .lk-participant-tile > .lk-participant-metadata:not(:has(.kloud-custom-cam-indicator:is([data-kloud-host-restricted="true"], .operator-interactive, .self-interactive))) .kloud-tile-more-menu-wrap--inline {
   right: 46px !important;
 }
 
