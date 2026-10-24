@@ -38,8 +38,9 @@ export function KloudGridLayout({
   const pageCount = Math.max(1, Math.ceil(ordered.length / perPage));
   const [page, setPage] = React.useState(1);
   const current = Math.min(page, pageCount);
-  const next = React.useCallback(() => setPage((p) => (p >= pageCount ? 1 : p + 1)), [pageCount]);
-  const prev = React.useCallback(() => setPage((p) => (p <= 1 ? pageCount : p - 1)), [pageCount]);
+  // Stops at the first and last page, as LiveKit's own paging does
+  const next = React.useCallback(() => setPage((p) => Math.min(p + 1, pageCount)), [pageCount]);
+  const prev = React.useCallback(() => setPage((p) => Math.max(p - 1, 1)), []);
   useSwipe(gridRef, { onLeftSwipe: next, onRightSwipe: prev });
 
   const pageTracks = ordered.slice((current - 1) * perPage, current * perPage);

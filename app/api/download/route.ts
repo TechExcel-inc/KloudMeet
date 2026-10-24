@@ -8,6 +8,17 @@ const MANIFEST_BY_OS: Record<string, string> = {
   mac: 'latest-mac.yml',
 };
 
+/** Shown when the macOS button is used before a Mac build has been published. */
+function macComingSoonPage(): NextResponse {
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KloudMeet for Mac</title>
+<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f4f5fa;color:#1f1f1f}main{max-width:420px;padding:32px;text-align:center}h1{font-size:22px;margin:0 0 8px}p{margin:0 0 20px;color:#5f6368;line-height:1.5}a{color:#5e5ce6;font-weight:600;text-decoration:none}</style></head>
+<body><main><h1>KloudMeet for Mac is coming soon</h1><p>The macOS app isn't published yet. You can join any meeting from your browser in the meantime.</p><a href="/">Back to KloudMeet</a></main></body></html>`;
+  return new NextResponse(html, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 export async function GET(request: NextRequest) {
   try {
     const os = request.nextUrl.searchParams.get('os') === 'mac' ? 'mac' : 'win';
@@ -21,10 +32,8 @@ export async function GET(request: NextRequest) {
     const text = res.ok ? await res.text() : '';
     // 清单不存在时下载站会回落到 SPA 首页（HTML 200），不能当成清单解析
     if (!res.ok || !/^version:/m.test(text)) {
-      return NextResponse.json(
-        { error: os === 'mac' ? 'macOS version is not available yet' : `Failed to fetch ${manifest}` },
-        { status: os === 'mac' ? 404 : 502 },
-      );
+      if (os === 'mac') return macComingSoonPage();
+      return NextResponse.json({ error: `Failed to fetch ${manifest}` }, { status: 502 });
     }
 
     // 解析 latest.yml，拿到 path 字段（即安装包文件名）

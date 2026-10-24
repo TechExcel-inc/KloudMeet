@@ -1499,6 +1499,10 @@ export function KloudMeetToolbar({
       !showOperatorSegments && activeView !== view ? styles.segLocked : '';
     return (
       <div className={styles.viewSwitch} role="group" aria-label={t('toolbar.selectViewLayout')}>
+        {/* As before the redesign: LiveDoc and Webcam are only shown to people who can switch
+            what everyone sees; everyone else gets Screen share alone */}
+        {showOperatorSegments && (
+        <>
         <button
           type="button"
           className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''} ${lockedClass('liveDoc')}`}
@@ -1564,6 +1568,8 @@ export function KloudMeetToolbar({
             </div>
           )}
         </div>
+        </>
+        )}
 
         <button
           type="button"
@@ -1805,7 +1811,6 @@ export function KloudMeetToolbar({
         onAction={liveDocAiBridge.sendAction}
         onOpenDocument={handleLiveDocDocumentOpen}
         livekitToken={livekitToken}
-        canManage={canRecord}
       />
 
       {!visible && !syncPlayerActive && (
@@ -2661,6 +2666,12 @@ function ActiveSheetContent({
   onToggleDocumentPip,
 }: any) {
   const { t, locale, setLocale } = useI18n();
+  /** Recording sheet entries that are planned but not built yet (kept visible, as before) */
+  const showComingSoon = (feature: string) => {
+    setToastMsg(t('toolbar.comingSoon', { feature }));
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+  };
   const [langOpen, setLangOpen] = useState(false);
   const langAnchorRef = useRef<HTMLDivElement | null>(null);
   const langCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3017,10 +3028,45 @@ function ActiveSheetContent({
 
       {canRecord && activeSheet === 'recording' && (
         <>
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.pauseRecording')); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+            {t('toolbar.pauseRecording')}
+          </button>
           <button className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
             {t('toolbar.stopRecording')}
           </button>
+
+          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
+
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.liveTranscript')); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
+            {t('toolbar.liveTranscript')}
+          </button>
+
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingSettings')}</div>
+
+          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.cloudRecordingMode')); setActiveSheet(null); }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+            {t('toolbar.cloudRecordingMode')}
+          </button>
+
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
+              {t('toolbar.syncTranscript')}
+            </div>
+            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+          </label>
+
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.localPermissions')}</div>
+
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {t('toolbar.onlyHostRecord')}
+            </div>
+            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+          </label>
         </>
       )}
 

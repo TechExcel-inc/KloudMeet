@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Copy, Link2, Play, Video } from 'lucide-react';
+import { Play, Video } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { tileHue } from '@/lib/tileLayout';
 import { replayMinutes, type DashMeeting, type ReplayItem, type UpNextItem } from '../dashboardData';
@@ -157,36 +157,3 @@ export function RecentReplaysCard({ items, onOpen }: { items: ReplayItem[]; onOp
   );
 }
 
-export function PersonalRoomCard({
-  link,
-  onStart,
-  onCopy,
-  starting,
-  compact,
-}: {
-  link: string;
-  onStart: () => void;
-  onCopy: () => void;
-  starting?: boolean;
-  /** One row (title · link · start) when it is the only card on the page */
-  compact?: boolean;
-}) {
-  const { t } = useI18n();
-  return (
-    <section className={`${styles.dashCard}${compact ? ` ${styles.roomCardCompact}` : ''}`} aria-labelledby="dash-room">
-      <h2 id="dash-room" className={styles.dashCardTitle}>{t('dash.personalRoom')}</h2>
-      {!compact && <p className={styles.dashCardHint}>{t('dash.personalRoomHint')}</p>}
-      <div className={styles.roomLinkRow}>
-        <Link2 size={16} aria-hidden="true" />
-        <span className={styles.roomLinkText}>{link.replace(/^https?:\/\//, '')}</span>
-        <button type="button" className={styles.iconBtn} onClick={onCopy} aria-label={t('dash.copyLink')} title={t('dash.copyLink')}>
-          <Copy size={16} aria-hidden="true" />
-        </button>
-      </div>
-      <button type="button" className={`${styles.btn} ${styles.btnXs} ${styles.btnTonal}`} onClick={onStart} disabled={starting}>
-        <Video size={15} aria-hidden="true" />
-        {t('dash.startRoom')}
-      </button>
-    </section>
-  );
-}

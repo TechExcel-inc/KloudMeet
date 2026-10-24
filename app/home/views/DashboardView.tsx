@@ -32,7 +32,7 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
-import { PersonalRoomCard, RecentReplaysCard, UpNextCard } from '../components/DashboardCards';
+import { RecentReplaysCard, UpNextCard } from '../components/DashboardCards';
 import { pickRecentReplays, pickUpNext, type DashMeeting, type ReplayItem } from '../dashboardData';
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
@@ -743,11 +743,8 @@ export function DashboardView({
 
   const upNext = pickUpNext(highlightMeetings, currentTime);
   const recentReplays = pickRecentReplays(highlightMeetings);
-  const personalRoomLink =
-    personalRoomId && typeof window !== 'undefined' ? `${window.location.origin}/?code=${personalRoomId}` : '';
   // Show only what has content: no empty "Up next"
   const hasMain = upNext.length > 0 || recentReplays.length > 0;
-  const hasRail = !!personalRoomLink;
 
   const openRecording = (recording: { id: number | string; shareKey?: string | null }) => {
     window.open(recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`, '_blank');
@@ -755,10 +752,6 @@ export function DashboardView({
   const joinFromUpNext = (m: DashMeeting) => router.push(`/rooms/${m.roomName}`);
   const startFromUpNext = (m: DashMeeting) => handleStartMeetingClick(m);
   const scrollToAllMeetings = () => allMeetingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const copyPersonalRoomLink = () => {
-    navigator.clipboard?.writeText(personalRoomLink);
-    toast.show(t('dash.linkCopied'));
-  };
   const renderUpNextInvite = (m: DashMeeting) => (
     <div data-invite-menu-anchor="true" className={styles.anchor}>
       <button
@@ -941,11 +934,11 @@ export function DashboardView({
           )}
         </section>
 
-        {/* ── Up next, replays and the personal room — each only when it has something to show ── */}
-        {(hasMain || hasRail) && (
-          <div className={`${styles.dashGrid}${hasMain && hasRail ? '' : ` ${styles.dashGridSingle}`}`}>
-            {hasMain && (
-              <div className={styles.dashColumn}>
+        {/* ── Up next and recent replays — only when there is something to show.
+             The personal room stays off the home page (it can resolve to another user's bound meeting account). ── */}
+        {hasMain && (
+          <div className={`${styles.dashGrid} ${styles.dashGridSingle}`}>
+            <div className={styles.dashColumn}>
                 {upNext.length > 0 && (
                   <UpNextCard
                     items={upNext}
@@ -960,19 +953,7 @@ export function DashboardView({
                 {recentReplays.length > 0 && (
                   <RecentReplaysCard items={recentReplays} onOpen={(item: ReplayItem) => openRecording(item.recording)} />
                 )}
-              </div>
-            )}
-            {hasRail && (
-              <aside className={styles.dashColumn}>
-                <PersonalRoomCard
-                  compact={!hasMain}
-                  link={personalRoomLink}
-                  onStart={handleMyRoomClick}
-                  onCopy={copyPersonalRoomLink}
-                  starting={isCreatingMeeting}
-                />
-              </aside>
-            )}
+            </div>
           </div>
         )}
 

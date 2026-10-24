@@ -16,8 +16,8 @@ import {
   type CalendarMenuItem,
 } from '@/lib/calendar/menu';
 
-/** Email / AI assistant / linked-event tabs are enterprise features with no purchase path yet. */
-const SHOW_ENTERPRISE_TABS = false;
+/** Email / AI assistant / linked-event tabs (enterprise features; shown as before — not saved yet). */
+const SHOW_ENTERPRISE_TABS = true;
 
 type TabType = 'general' | 'emails' | 'ai' | 'linked';
 
