@@ -32,11 +32,8 @@ import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
-import { RecentReplaysCard, UpNextCard } from '../components/DashboardCards';
-import { pickRecentReplays, pickUpNext, type DashMeeting, type ReplayItem } from '../dashboardData';
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
-const HIGHLIGHTS_PAGE_SIZE = 50;
 
 type MeetingListScope = 'all' | 'hosted';
 
@@ -66,7 +63,7 @@ export function DashboardView({
   onOpenDesktopApp: () => void;
   toast: { show: (t: string) => void };
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   const tx = useTx();
   const router = useRouter();
   const [joinCode, setJoinCode] = useState('');
@@ -102,32 +99,9 @@ export function DashboardView({
     pendingIntent: MeetingStartIntent;
   } | null>(null);
   const [endingActiveMeeting, setEndingActiveMeeting] = useState(false);
-  // The most recent meetings regardless of the list's search, filter and page.
-  const [highlightMeetings, setHighlightMeetings] = useState<DashMeeting[]>([]);
-  const allMeetingsRef = useRef<HTMLElement>(null);
   const userToken = user.token;
   const userId = user.id;
 
-  const fetchHighlights = useCallback(() => {
-    if (!userToken) return;
-    fetch(`/api/account/meetings?page=1&pageSize=${HIGHLIGHTS_PAGE_SIZE}`, {
-      headers: { Authorization: `Bearer ${userToken}` },
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data?.meetings)) setHighlightMeetings(data.meetings);
-      })
-      .catch(() => {});
-  }, [userToken]);
-
-  // Refresh every minute so live and starting-soon states stay current.
-  useEffect(() => {
-    fetchHighlights();
-    const id = setInterval(() => {
-      if (document.visibilityState === 'visible') fetchHighlights();
-    }, 60000);
-    return () => clearInterval(id);
-  }, [fetchHighlights]);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -394,7 +368,6 @@ export function DashboardView({
       });
       if (res.ok) {
         setDbMeetings(prev => prev.filter(m => m.roomName !== roomName));
-        setHighlightMeetings(prev => prev.filter(m => m.roomName !== roomName));
         toast.show(t('dash.meetingDeleted'));
       } else {
         toast.show(t('dash.deleteFailure'));
@@ -423,7 +396,7 @@ export function DashboardView({
   const copyMeetingLink = (meeting: any) => {
     const link = `${window.location.origin}/?code=${meeting.roomName}`;
     navigator.clipboard?.writeText(link);
-    toast.show('Meeting link copied!');
+    toast.show(t('schedule.linkCopied'));
     setInviteMenuRoomName(null);
   };
 
@@ -460,7 +433,7 @@ export function DashboardView({
       .filter(Boolean)
       .join('\n');
     navigator.clipboard?.writeText(inviteText);
-    toast.show('Invite copied!');
+    toast.show(t('schedule.inviteCopied'));
     setInviteMenuRoomName(null);
   };
 
@@ -606,7 +579,6 @@ export function DashboardView({
     setMeetingConflict(null);
     setEndingActiveMeeting(false);
     fetchMeetings();
-    fetchHighlights();
 
     if (pendingIntent.type === 'startScheduled') {
       const meeting =
@@ -729,47 +701,14 @@ export function DashboardView({
 
 
   /* ── Display helpers (presentation only) ── */
-  const greetingHour = new Date(currentTime).getHours();
-  const greeting =
-    greetingHour < 12
-      ? tx('dash.greeting.morning', 'Good morning, {name}', { name: user.displayName })
-      : greetingHour < 18
-        ? tx('dash.greeting.afternoon', 'Good afternoon, {name}', { name: user.displayName })
-        : tx('dash.greeting.evening', 'Good evening, {name}', { name: user.displayName });
-  const todayLabel = new Date(currentTime).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
   const replayLabel = t('dash.replay').replace(/^[^\p{L}\p{N}]+/u, '').trim() || t('dash.replay');
   const hasJoinCode = joinCode.trim().length > 0;
   const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
 
-  const upNext = pickUpNext(highlightMeetings, currentTime);
-  const recentReplays = pickRecentReplays(highlightMeetings);
-  // Show only what has content: no empty "Up next"
-  const hasMain = upNext.length > 0 || recentReplays.length > 0;
 
   const openRecording = (recording: { id: number | string; shareKey?: string | null }) => {
     window.open(recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`, '_blank');
   };
-  const joinFromUpNext = (m: DashMeeting) => router.push(`/rooms/${m.roomName}`);
-  const startFromUpNext = (m: DashMeeting) => handleStartMeetingClick(m);
-  const scrollToAllMeetings = () => allMeetingsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  const renderUpNextInvite = (m: DashMeeting) => (
-    <div data-invite-menu-anchor="true" className={styles.anchor}>
-      <button
-        type="button"
-        title={t('dash.copyInvite')}
-        aria-label={t('dash.copyInvite')}
-        aria-haspopup="menu"
-        aria-expanded={inviteMenuRoomName === `upnext:${m.roomName}`}
-        className={styles.iconBtn}
-        onClick={() =>
-          setInviteMenuRoomName((prev) => (prev === `upnext:${m.roomName}` ? null : `upnext:${m.roomName}`))
-        }
-      >
-        {linkIcon(18)}
-      </button>
-      {renderInviteMenu(m, false, `upnext:${m.roomName}`)}
-    </div>
-  );
 
   const copyIcon = (size: number) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
@@ -806,10 +745,10 @@ export function DashboardView({
     inviteMenuRoomName === menuKey ? (
       <div className={`${styles.dropdownMenu} ${styles.inviteMenu}${alignLeft ? ` ${styles.inviteMenuLeft}` : ''}`} role="menu">
         <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
-          Copy Link
+          {t('schedule.copyLink')}
         </button>
         <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
-          Copy Invite
+          {t('dash.copyInvite')}
         </button>
         {isCalendarEligible(m) && (
           <>
@@ -849,18 +788,45 @@ export function DashboardView({
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}
         hideAvatar={false} 
+        tagline={tx('dash.meetingListTagline', 'Where AI agents learn from and work with your teams and customers.')}
       />
 
       <div className={styles.dashMain}>
-        {/* ── Greeting + actions ── */}
+        {/* ── Join with a code (or a personal meeting ID) first, then start a new meeting ── */}
         <section className={styles.dashHero}>
-          <div>
-            <h1 className={styles.dashGreeting}>{greeting}</h1>
-            <p className={styles.dashDate}>{todayLabel}</p>
-          </div>
-
-          {/* One row: start now, schedule, or join with a code */}
           <div className={styles.actionBar}>
+            <div className={styles.joinGroup}>
+              <label
+                className={`${styles.joinField}${warningMessage ? ` ${styles.joinFieldError}` : ''}`}
+                htmlFor="dash-join-code"
+              >
+                <Keyboard size={18} aria-hidden="true" />
+                <span className={styles.srOnly}>{t('dash.joinWithCode')}</span>
+                <input
+                  id="dash-join-code"
+                  className={styles.joinFieldInput}
+                  placeholder={tx('dash.joinAnyCode', 'Code, link or personal ID')}
+                  value={joinCode}
+                  autoComplete="off"
+                  aria-invalid={!!warningMessage}
+                  aria-describedby={warningMessage ? 'dash-join-error' : undefined}
+                  onChange={(e) => {
+                    setJoinCode(e.target.value);
+                    if (warningMessage) setWarningMessage(null);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
+                />
+                <button
+                  type="button"
+                  className={`${styles.joinTextBtn}${hasJoinCode ? ` ${styles.joinTextBtnReady}` : ''}`}
+                  onClick={handleJoinMeeting}
+                  disabled={!hasJoinCode}
+                  aria-busy={isJoining}
+                >
+                  {isJoining ? t('common.joining') : t('common.join')}
+                </button>
+              </label>
+            </div>
             <button
               type="button"
               className={`${styles.actionBtn} ${styles.actionBtnPrimary}`}
@@ -872,48 +838,6 @@ export function DashboardView({
               <Video size={18} aria-hidden="true" />
               {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
             </button>
-            <button
-              type="button"
-              className={styles.actionBtn}
-              onClick={() => setShowScheduleModal(true)}
-              title={t('dash.scheduleHint')}
-            >
-              <CalendarPlus size={18} aria-hidden="true" />
-              {t('dash.scheduleMeeting')}
-            </button>
-            <span className={styles.actionDivider} aria-hidden="true" />
-            <div className={styles.joinGroup}>
-              <label
-                className={`${styles.joinField}${warningMessage ? ` ${styles.joinFieldError}` : ''}`}
-                htmlFor="dash-join-code"
-              >
-                <Keyboard size={18} aria-hidden="true" />
-                <span className={styles.srOnly}>{t('dash.joinWithCode')}</span>
-                <input
-                  id="dash-join-code"
-                  className={styles.joinFieldInput}
-                  placeholder={t('dash.joinCodePlaceholder')}
-                  value={joinCode}
-                  autoComplete="off"
-                  aria-invalid={!!warningMessage}
-                  aria-describedby={warningMessage ? 'dash-join-error' : undefined}
-                  onChange={(e) => {
-                    setJoinCode(e.target.value);
-                    if (warningMessage) setWarningMessage(null);
-                  }}
-                  onKeyDown={(e) => e.key === 'Enter' && handleJoinMeeting()}
-                />
-              </label>
-              <button
-                type="button"
-                className={`${styles.joinTextBtn}${hasJoinCode ? ` ${styles.joinTextBtnReady}` : ''}`}
-                onClick={handleJoinMeeting}
-                disabled={!hasJoinCode}
-                aria-busy={isJoining}
-              >
-                {isJoining ? t('common.joining') : t('common.join')}
-              </button>
-            </div>
           </div>
 
           {/* Join errors — inline instead of a blocking dialog */}
@@ -939,30 +863,7 @@ export function DashboardView({
           )}
         </section>
 
-        {/* ── Up next and recent replays — only when there is something to show.
-             The personal room stays off the home page (it can resolve to another user's bound meeting account). ── */}
-        {hasMain && (
-          <div className={`${styles.dashGrid} ${styles.dashGridSingle}`}>
-            <div className={styles.dashColumn}>
-                {upNext.length > 0 && (
-                  <UpNextCard
-                    items={upNext}
-                    now={currentTime}
-                    userId={user.id}
-                    onJoin={joinFromUpNext}
-                    onStart={startFromUpNext}
-                    renderInvite={renderUpNextInvite}
-                    onSeeAll={scrollToAllMeetings}
-                  />
-                )}
-                {recentReplays.length > 0 && (
-                  <RecentReplaysCard items={recentReplays} onOpen={(item: ReplayItem) => openRecording(item.recording)} />
-                )}
-            </div>
-          </div>
-        )}
-
-        <section className={styles.meetingListSection} ref={allMeetingsRef}>
+        <section className={styles.meetingListSection}>
           <div className={styles.meetingListHeader}>
             <h2 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h2>
 
@@ -1043,6 +944,16 @@ export function DashboardView({
               )
                 : null}
             </div>
+
+            <button
+              type="button"
+              className={`${styles.btn} ${styles.btnOutline} ${styles.filterBtn} ${styles.scheduleBtn}`}
+              onClick={() => setShowScheduleModal(true)}
+              title={t('dash.scheduleHint')}
+            >
+              <CalendarPlus size={15} aria-hidden="true" />
+              {t('dash.scheduleMeeting')}
+            </button>
           </div>
 
           {loadingMeetings ? (
@@ -1099,9 +1010,10 @@ export function DashboardView({
                         isLive && m.actualStartedAt
                           ? Math.max(0, Math.floor((currentTime - new Date(m.actualStartedAt).getTime()) / 60000))
                           : null;
+                      // The "In progress" chip already says it is live; the time column just counts minutes.
                       const durationText =
                         elapsedMin !== null
-                          ? t('dash.ongoing', { n: elapsedMin })
+                          ? t('dash.mins', { n: elapsedMin })
                           : m.durationMinutes
                             ? t('dash.mins', { n: m.durationMinutes })
                             : '';
@@ -1121,8 +1033,15 @@ export function DashboardView({
                       const copyCode = (e: React.MouseEvent) => {
                         e.stopPropagation();
                         navigator.clipboard?.writeText(m.roomName);
-                        toast.show('Meeting code copied');
+                        toast.show(tx('dash.codeCopied', 'Meeting code copied'));
                       };
+                      const hostLabel = m.createdByMember?.fullName || m.createdByMember?.username || '';
+                      // Instant meetings have no title: name them after the host instead of repeating the code.
+                      const displayTitle =
+                        m.title ||
+                        (hostLabel
+                          ? tx('dash.instantMeetingOf', "{name}'s instant meeting", { name: hostLabel })
+                          : m.roomName || t('dash.untitledMeeting'));
 
                       return (
                         <article
@@ -1143,16 +1062,20 @@ export function DashboardView({
                           {/* Title, status, meta */}
                           <div className={styles.meetingCardInfo}>
                             <div className={styles.meetingCardTitleRow}>
-                              <h4 className={styles.meetingCardTitle}>{m.title || m.roomName || t('dash.untitledMeeting')}</h4>
-                              <span className={`${styles.statusBadge} ${statusClass}`}>
-                                {isLive && <span className={styles.liveDot} aria-hidden="true" />}
-                                {statusLabel}
-                              </span>
-                              {countdownText && <span className={styles.meetingCountdown}>{countdownText}</span>}
+                              <h4 className={styles.meetingCardTitle}>{displayTitle}</h4>
+                              {/* One status: "Starts in 24 min" replaces "Scheduled" in the last hour */}
+                              {countdownText ? (
+                                <span className={`${styles.statusBadge} ${styles.statusSoon}`}>{countdownText}</span>
+                              ) : (
+                                <span className={`${styles.statusBadge} ${statusClass}`}>
+                                  {isLive && <span className={styles.liveDot} aria-hidden="true" />}
+                                  {statusLabel}
+                                </span>
+                              )}
                             </div>
 
                             <div className={styles.meetingCardMeta}>
-                              <span>{t('dash.by', { name: m.createdByMember?.username || t('common.unknown') })}</span>
+                              <span>{tx('dash.hostedBy', 'Host: {name}', { name: hostLabel || t('common.unknown') })}</span>
                               {m._count?.participants > 0 && (
                                 <span className={styles.meetingCardMetaItem} title={t('dash.attendees')}>
                                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -1164,7 +1087,7 @@ export function DashboardView({
                                   type="button"
                                   className={styles.meetingCodeBtn}
                                   onClick={copyCode}
-                                  title="Copy meeting code"
+                                  title={tx('dash.copyCode', 'Copy meeting code')}
                                 >
                                   {m.roomName}
                                   {copyIcon(13)}
@@ -1256,8 +1179,8 @@ export function DashboardView({
                               <div data-invite-menu-anchor="true" className={styles.anchor}>
                                 <button
                                   type="button"
-                                  title="Copy meeting invite"
-                                  aria-label="Copy meeting invite"
+                                  title={t('dash.copyInvite')}
+                                  aria-label={t('dash.copyInvite')}
                                   aria-haspopup="menu"
                                   aria-expanded={cardMenuOpen}
                                   className={styles.iconBtn}
@@ -1369,7 +1292,7 @@ export function DashboardView({
                                   }
                                 >
                                   {linkIcon(14)}
-                                  Invite
+                                  {tx('dash.invite', 'Invite')}
                                 </button>
                                 {renderInviteMenu(m, true)}
                               </div>

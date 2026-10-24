@@ -51,6 +51,7 @@ export function TopToolbar({
   hideLogo,
   showClock,
   transparent,
+  tagline,
 }: {
   onBack?: () => void;
   onSignIn?: () => void;
@@ -67,6 +68,8 @@ export function TopToolbar({
   hideLogo?: boolean;
   showClock?: boolean;
   transparent?: boolean;
+  /** One quiet line beside the logo (the product promise on the signed-in home). */
+  tagline?: string;
 }) {
   const { t, locale, setLocale } = useI18n();
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -165,6 +168,7 @@ export function TopToolbar({
               <KloudLogo variant="nav" />
             </button>
           )}
+          {tagline && <span className={styles.navTagline}>{tagline}</span>}
         </div>
 
         {/* ── Right: clock, help, theme, language, apps, account ── */}

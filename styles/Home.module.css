@@ -277,6 +277,31 @@
   min-width: 0;
 }
 
+.navTagline {
+  min-width: 0;
+  margin-left: 6px;
+  padding-left: 14px;
+  border-left: 1px solid var(--km-border);
+  overflow: hidden;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 900px) {
+  .navTagline {
+    display: none;
+  }
+
+  /* Tablets: the search box gives way so title, search, filter and Schedule stay on one line */
+  .meetingSearchWrapper {
+    flex: 1 1 160px;
+    width: auto;
+  }
+}
+
 .navLogo {
   display: inline-flex;
   align-items: center;
@@ -1743,22 +1768,7 @@ a.dropdownItem:focus-visible {
   gap: 22px;
 }
 
-.dashGreeting {
-  margin: 0;
-  font-size: 40px;
-  line-height: 1.15;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  overflow-wrap: anywhere;
-}
-
-.dashDate {
-  margin: 6px 0 0;
-  font-size: 16px;
-  color: var(--km-text-muted);
-}
-
-/* One row of actions: new meeting, schedule, join with a code */
+/* Join with a code first (it also takes personal meeting IDs), then start a new meeting */
 .actionBar {
   display: flex;
   align-items: center;
@@ -1769,8 +1779,9 @@ a.dropdownItem:focus-visible {
 .actionBtn {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  height: 44px;
+  height: 48px;
   padding: 0 20px 0 16px;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-pill);
@@ -1817,18 +1828,9 @@ a.dropdownItem:focus-visible {
   cursor: progress;
 }
 
-.actionDivider {
-  width: 1px;
-  height: 28px;
-  margin: 0 4px;
-  background: var(--km-border);
-}
-
 .joinGroup {
   display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 1 340px;
+  flex: 1 1 420px;
   min-width: 0;
 }
 
@@ -1838,8 +1840,8 @@ a.dropdownItem:focus-visible {
   gap: 8px;
   flex: 1;
   min-width: 0;
-  height: 44px;
-  padding: 0 12px;
+  height: 48px;
+  padding: 0 6px 0 14px;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-md);
   background: var(--km-bg);
@@ -1883,31 +1885,32 @@ a.dropdownItem:focus-visible {
   color: var(--km-text-muted);
 }
 
-/* "Join" reads as a quiet text action until there is a code to join with */
+/* "Join" sits inside the field: a quiet tonal pill that wakes up once there is a code */
 .joinTextBtn {
   flex-shrink: 0;
-  height: 44px;
-  padding: 0 12px;
+  height: 36px;
+  padding: 0 18px;
   border: 0;
   border-radius: var(--km-radius-pill);
-  background: transparent;
-  color: var(--km-text-muted);
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
   font: inherit;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: default;
-  transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 
 .joinTextBtnReady {
-  color: var(--km-primary);
+  background: var(--km-primary);
+  color: var(--km-on-primary);
   opacity: 1;
   cursor: pointer;
 }
 
 .joinTextBtnReady:hover {
-  background: var(--km-hover);
+  background: var(--km-primary-hover);
 }
 
 .joinTextBtn:focus-visible {
@@ -1915,188 +1918,6 @@ a.dropdownItem:focus-visible {
   box-shadow: var(--km-focus-ring);
 }
 
-/* Up next / replays on the left, personal room / get started on the right */
-.dashGrid {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr);
-  gap: 16px;
-  align-items: start;
-}
-
-.dashGridSingle {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.dashColumn {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  min-width: 0;
-}
-
-.dashCard {
-  padding: 16px 18px 18px;
-  border: 1px solid var(--km-border);
-  border-radius: var(--km-radius-lg);
-  background: var(--km-surface);
-  min-width: 0;
-}
-
-.dashCardHeader {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 32px;
-}
-
-.dashCardTitle {
-  margin: 0 auto 0 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.dashCardHint {
-  margin: 2px 0 12px;
-  font-size: 13px;
-  color: var(--km-text-muted);
-}
-
-.dashCardCount {
-  font-size: 13px;
-  color: var(--km-text-muted);
-}
-
-.dashTextLink {
-  padding: 4px 8px;
-  border: 0;
-  border-radius: var(--km-radius-sm);
-  background: none;
-  color: var(--km-primary);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.dashTextLink:hover {
-  background: var(--km-tonal);
-}
-
-.dashTextLink:focus-visible {
-  outline: none;
-  box-shadow: var(--km-focus-ring);
-}
-
-.upNextList {
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.upNextRow {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 10px 0;
-  border-top: 1px solid var(--km-border);
-}
-
-.upNextRow:first-child {
-  border-top: 0;
-}
-
-.upNextWhen {
-  flex: none;
-  width: 56px;
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.upNextNow {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--km-primary);
-}
-
-.upNextInfo {
-  flex: 1;
-  min-width: 0;
-}
-
-.upNextTitle {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.upNextSub {
-  margin: 2px 0 0;
-  font-size: 13px;
-  color: var(--km-text-muted);
-}
-
-.upNextSubLive {
-  color: var(--km-primary);
-}
-
-.upNextSubSoon {
-  color: var(--km-success);
-}
-
-.upNextSubLate {
-  color: var(--km-warning);
-}
-
-.upNextActions {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.replayGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 12px;
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.replayTile {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 100%;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--km-text);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.replayThumb {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 16 / 9;
-  margin-bottom: 6px;
-  border-radius: var(--km-radius-md);
-  background: radial-gradient(
-    120% 120% at 30% 20%,
-    hsl(var(--km-tile-hue, 248) 45% 46%),
-    hsl(var(--km-tile-hue, 248) 40% 24%)
-  );
-  overflow: hidden;
-}
 
 .replayPlay {
   display: flex;
@@ -2114,85 +1935,18 @@ a.dropdownItem:focus-visible {
   margin-left: 2px;
 }
 
-.replayTile:hover .replayPlay {
-  transform: scale(1.08);
-}
-
-.replayTile:focus-visible {
-  outline: none;
-}
-
-.replayTile:focus-visible .replayThumb {
-  box-shadow: var(--km-focus-ring);
-}
-
-.replayLength {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.replayTitle {
-  font-size: 14px;
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.replayMeta {
-  font-size: 13px;
-  color: var(--km-text-muted);
-}
-
-@media (max-width: 900px) {
-  .dashGrid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 520px) {
-  /* Phones: the two buttons share a row, the code field takes the next one */
+  /* Phones: the code field and New meeting each take a full row */
   .actionBar {
     gap: 8px;
   }
 
   .actionBtn {
-    flex: 1 1 0;
-    justify-content: center;
-    padding: 0 14px;
-  }
-
-  .actionDivider {
-    display: none;
+    flex: 1 1 100%;
   }
 
   .joinGroup {
     flex: 1 1 100%;
-  }
-
-  .upNextRow {
-    flex-wrap: wrap;
-    gap: 6px 12px;
-  }
-
-  .upNextInfo {
-    flex-basis: calc(100% - 68px);
-  }
-
-  .upNextActions {
-    margin-left: 68px;
-  }
-
-  .replayGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
   }
 }
 
@@ -2263,6 +2017,10 @@ a.dropdownItem:focus-visible {
 
 .filterWrap {
   position: relative;
+}
+
+.scheduleBtn > svg {
+  color: var(--km-primary);
 }
 
 .filterBtn {
@@ -2442,12 +2200,6 @@ a.dropdownItem:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.meetingCountdown {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--km-primary);
-}
-
 .meetingCardMeta {
   display: flex;
   flex-wrap: wrap;
@@ -2521,6 +2273,11 @@ a.dropdownItem:focus-visible {
   color: var(--hm-chip-neutral-fg);
 }
 
+.statusSoon {
+  background: var(--km-success-bg);
+  color: var(--km-success);
+}
+
 .statusPastDue {
   background: var(--km-warning-bg);
   color: var(--km-warning);
@@ -2554,19 +2311,19 @@ a.dropdownItem:focus-visible {
   flex-wrap: wrap;
 }
 
+/* Who can watch the replay: a quiet label, not a button */
 .recordingPrivateBadge,
 .recordingPublicBadge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 14px;
-  border-radius: var(--km-radius-pill);
-  border: 1px solid var(--km-border);
-  color: var(--km-text);
-  font-size: 13px;
-  font-weight: 700;
+  gap: 4px;
+  height: 28px;
+  padding: 0 4px;
+  color: var(--km-text-muted);
+  font-size: 12px;
+  font-weight: 600;
   white-space: nowrap;
+  cursor: default;
 }
 
 .recordingPrivateBadge svg,
@@ -3222,17 +2979,23 @@ a.dropdownItem:focus-visible {
     gap: 28px;
   }
 
-  .dashGreeting {
-    font-size: 30px;
+  /* Title and Schedule share the first line; search and filter the next */
+  .meetingListTitle {
+    flex: 1 1 auto;
   }
 
-  .meetingListTitle {
-    flex-basis: 100%;
+  .scheduleBtn {
+    order: 1;
   }
 
   .meetingSearchWrapper {
-    flex: 1;
+    order: 2;
+    flex: 1 1 180px;
     width: auto;
+  }
+
+  .filterWrap {
+    order: 3;
   }
 
   .meetingDateLabel {
