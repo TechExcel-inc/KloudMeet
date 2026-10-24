@@ -212,8 +212,18 @@ export async function DELETE(
       data: { deletedAt: new Date() },
     });
     await archivePersonalRoomMeeting(current);
+
+    // Deleting an upcoming meeting cancels it for the invited attendees too (once: not if
+    // it was already canceled, which sent the notice then).
+    let cancelNotice: { sent: number; failed: string[] } | undefined;
+    if (!isCanceledStatus(current.status) && current.status !== MEETING_STATUS.ENDED) {
+      cancelNotice = await sendCancellationEmails(current.id, publicOrigin(request)).catch((error) => {
+        console.error('[meetings DELETE] cancellation emails', error);
+        return { sent: 0, failed: [] };
+      });
+    }
     const meeting = await prisma.meeting.findUnique({ where: { id: current.id } });
-    return NextResponse.json({ success: true, meeting: meeting ?? updated });
+    return NextResponse.json({ success: true, meeting: meeting ?? updated, ...(cancelNotice ? { cancelNotice } : {}) });
   } catch (error) {
     console.error('[meetings DELETE]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

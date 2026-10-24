@@ -85,7 +85,7 @@ async function sendPendingInvitations(meetingId: number, origin: string): Promis
     include: { invitees: true, createdByMember: hostSelect },
   });
   const failed: string[] = [];
-  if (!meeting || !meeting.inviteEmails || !meeting.scheduledFor) return { sent: 0, failed };
+  if (!meeting || meeting.deletedAt || !meeting.inviteEmails || !meeting.scheduledFor) return { sent: 0, failed };
   if (isClosed(meeting.status) || meeting.scheduledFor.getTime() <= Date.now()) return { sent: 0, failed };
 
   const scheduledFor = meeting.scheduledFor;
@@ -109,7 +109,7 @@ async function sendPendingInvitations(meetingId: number, origin: string): Promis
 }
 
 /**
- * After the host cancels: tell every attendee who received an invitation. Skipped for
+ * After the host cancels or deletes the meeting: tell every attendee who received an invitation. Skipped for
  * meetings whose start time has passed (nothing left to cancel for them).
  */
 export async function sendCancellationEmails(meetingId: number, origin: string): Promise<{ sent: number; failed: string[] }> {
@@ -135,6 +135,7 @@ export async function sendDueReminders(origin: string, now = new Date()): Promis
   const meetings = await prisma.meeting.findMany({
     where: {
       reminderEmails: true,
+      deletedAt: null,
       scheduledFor: { gt: now, lte: new Date(now.getTime() + MAX_REMINDER_MINUTES * 60000) },
       invitees: { some: {} },
     },
