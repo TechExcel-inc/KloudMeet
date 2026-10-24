@@ -1934,13 +1934,13 @@ export function KloudMeetToolbar({
                   ) : (
                     <>
                       <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-                      {/* 自己关摄像头：斜线跟 icon 同色；主持人禁用仍走红色底样式 */}
+                      {/* 自己关摄像头：斜线跟 icon 同色；主持人禁用时斜线为红色（与改版前一致） */}
                       <line
                         x1="4"
                         y1="4"
                         x2="20"
                         y2="20"
-                        stroke="currentColor"
+                        stroke={isCamDisabledByHost ? '#ef4444' : 'currentColor'}
                         strokeWidth="2.5"
                         strokeLinecap="round"
                       />
