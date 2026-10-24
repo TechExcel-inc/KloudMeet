@@ -16,12 +16,17 @@ import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
 import { RoomContext } from '@livekit/components-react';
 import { Room } from 'livekit-client';
 
-const NAMES = [
+const BASE_NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
   'ying huang', 'Akira Sato', 'Min-jun Kim', 'Laura Chen', 'Diego Ruiz', 'Priya Nair',
   'Tom Becker', 'Sara Lind', 'Omar Haddad', 'Yuki Mori',
 ];
-const COUNTS = [1, 2, 3, 4, 5, 7, 9, 12, 16];
+const NAMES = Array.from({ length: 40 }, (_, i) =>
+  i < BASE_NAMES.length ? BASE_NAMES[i] : `${BASE_NAMES[i % BASE_NAMES.length].split(' ')[0]} ${i + 1}`,
+);
+const COUNTS = [1, 2, 3, 4, 5, 7, 9, 12, 16, 25, 40];
+/* Like LiveKit's GridLayout on a wide stage: 25 tiles a page, then arrows and "n of m" */
+const PAGE_SIZE = 25;
 
 /* The mic / camera chips a real room injects into each tile (VideoConferenceComponent.tsx,
    "Custom Microphone Indicator DOM Injection"), with the same classes, attributes and glyphs.
@@ -96,6 +101,10 @@ const CHIP_CSS = `
 export default function DevTilesPage() {
   if (process.env.NODE_ENV === 'production') notFound();
   const [count, setCount] = React.useState(7);
+  const [page, setPage] = React.useState(1);
+  const pageCount = Math.max(1, Math.ceil(count / PAGE_SIZE));
+  const pageStart = (Math.min(page, pageCount) - 1) * PAGE_SIZE;
+  const shown = NAMES.slice(0, count).slice(pageStart, pageStart + PAGE_SIZE);
   const [view, setView] = React.useState<ViewMode>('webcam');
   const [host, setHost] = React.useState(true);
   const [mic, setMic] = React.useState(false);
@@ -114,12 +123,12 @@ export default function DevTilesPage() {
     if (!grid) return;
     applyBalancedGrid(grid);
     grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile, i) => {
-      applyTileHue(tile, NAMES[i]);
+      applyTileHue(tile, NAMES[pageStart + i]);
     });
     const resize = new ResizeObserver(() => applyBalancedGrid(grid));
     resize.observe(grid);
     return () => resize.disconnect();
-  }, [count]);
+  }, [count, pageStart]);
 
   return (
     <div className="lk-room-container km-dev-tiles" style={{ position: 'relative', height: '100vh', display: 'flex', flexDirection: 'column', background: 'var(--km-stage, #17181c)' }}>
@@ -129,7 +138,10 @@ export default function DevTilesPage() {
           <button
             key={n}
             type="button"
-            onClick={() => setCount(n)}
+            onClick={() => {
+              setCount(n);
+              setPage(1);
+            }}
             aria-pressed={n === count}
             style={{ height: 32, padding: '0 12px', borderRadius: 8, border: 0, cursor: 'pointer', background: n === count ? '#7c79ff' : '#2e3036', color: '#fff' }}
           >
@@ -155,8 +167,8 @@ export default function DevTilesPage() {
         />
       </div>
       <div className="lk-grid-layout-wrapper" style={{ flex: 1, minHeight: 0, height: 0, paddingBottom: 88 }}>
-        <div className="lk-grid-layout" ref={gridRef} key={count}>
-          {NAMES.slice(0, count).map((name, i) => (
+        <div className="lk-grid-layout" ref={gridRef} key={`${count}-${pageStart}`} data-lk-pagination={pageCount > 1}>
+          {shown.map((name, i) => (
             <div
               key={name}
               className="lk-participant-tile"
@@ -167,12 +179,24 @@ export default function DevTilesPage() {
               <div className="lk-participant-placeholder" data-lk-name={name} data-lk-initials={getInitials(name)} />
               <div className="lk-participant-metadata">
                 <div className="lk-participant-metadata-item">
-                  <TileChips index={i} host={host} />
+                  <TileChips index={pageStart + i} host={host} />
                   <span className="lk-participant-name">{name}</span>
                 </div>
               </div>
             </div>
           ))}
+          {pageCount > 1 && (
+            /* Same markup as LiveKit's: one right chevron, the first is rotated by LiveKit's CSS */
+            <div className="lk-pagination-control">
+              <button type="button" className="lk-button" onClick={() => setPage((p) => (p <= 1 ? pageCount : p - 1))} aria-label="Previous page">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
+              <span className="lk-pagination-count">{`${Math.min(page, pageCount)} of ${pageCount}`}</span>
+              <button type="button" className="lk-button" onClick={() => setPage((p) => (p >= pageCount ? 1 : p + 1))} aria-label="Next page">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {mounted && count === 1 && (

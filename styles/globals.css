@@ -207,6 +207,66 @@ h2 a {
   box-sizing: border-box;
 }
 
+/* Large meetings: LiveKit pages the gallery (25 tiles a page on wide screens, 16 / 9 / 4 as the
+   stage gets smaller — like Zoom), and moves whoever speaks onto the page in view. Its arrows
+   only appeared on hover; here they always show at the left and right edges, with "2 of 3"
+   at the top, so people know there are more pages. */
+.lk-room-container .lk-grid-layout-wrapper .lk-grid-layout[data-lk-pagination="true"] {
+  padding: 40px 68px 16px;
+}
+
+.lk-room-container .lk-grid-layout[data-lk-pagination="true"] .lk-pagination-control {
+  position: absolute;
+  inset: 0;
+  left: 0;
+  bottom: 0;
+  transform: none;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  background: none;
+  opacity: 1 !important;
+  pointer-events: none;
+}
+
+.lk-room-container .lk-grid-layout[data-lk-pagination="true"] .lk-pagination-control > .lk-button {
+  pointer-events: auto;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 50% !important;
+  background: var(--km-control, #2e3036);
+  color: var(--km-stage-text, #e8eaed);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.lk-room-container .lk-grid-layout[data-lk-pagination="true"] .lk-pagination-control > .lk-button:hover {
+  background: var(--km-control-hover, #3a3c43);
+}
+
+.lk-room-container .lk-grid-layout[data-lk-pagination="true"] .lk-pagination-count {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 3px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--km-control, #2e3036);
+  color: var(--km-stage-text, #e8eaed);
+  font-family: var(--km-font);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+}
+
+/* The page count replaces LiveKit's dots */
+.lk-room-container .lk-grid-layout[data-lk-pagination="true"] .lk-pagination-indicator {
+  display: none;
+}
+
 /* Tiles fade/scale in, staggered, whenever the layout re-mounts them */
 @keyframes km-tile-in {
   from {
