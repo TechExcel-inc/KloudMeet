@@ -25,7 +25,8 @@ const COUNTS = [1, 2, 3, 4, 5, 7, 9, 12, 16];
 
 /* The mic / camera chips a real room injects into each tile (VideoConferenceComponent.tsx,
    "Custom Microphone Indicator DOM Injection"), with the same classes, attributes and glyphs.
-   Sample states: mic on, mic off, and one person muted by the host. */
+   Sample states: speaking (tile 1), mic off, muted by the host (tile 3), mic on but silent,
+   camera disabled by the host (tile 5). */
 const MIC_PATH =
   'M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z';
 const CAM_PATH =
@@ -35,6 +36,7 @@ const Slash = () => <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" st
 function TileChips({ index, host }: { index: number; host: boolean }) {
   const hostMuted = index === 2;
   const muted = hostMuted || index % 3 === 1;
+  const camDisabledByHost = index === 4;
   const interactive = host ? 'operator-interactive' : '';
   return (
     <>
@@ -51,10 +53,10 @@ function TileChips({ index, host }: { index: number; host: boolean }) {
         </svg>
       </div>
       <div
-        className={`kloud-custom-cam-indicator ${interactive}`}
+        className={`kloud-custom-cam-indicator${camDisabledByHost ? ' kloud-custom-cam--force-disabled' : ''} ${interactive}`}
         data-kloud-video-disabled="true"
-        data-kloud-host-restricted="false"
-        title={host ? 'Disable camera' : undefined}
+        data-kloud-host-restricted={camDisabledByHost ? 'true' : 'false'}
+        title={host ? (camDisabledByHost ? 'Cancel disable (does not turn on camera)' : 'Disable camera') : undefined}
       >
         <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
           <path d={CAM_PATH} />
@@ -65,22 +67,28 @@ function TileChips({ index, host }: { index: number; host: boolean }) {
   );
 }
 
-/* The room's chip styles live in VideoConferenceComponent's inline stylesheet; this is the
-   subset the grid uses, so the preview looks like a meeting. */
+/* The room's tile chrome lives in VideoConferenceComponent's inline stylesheet ("2026-10
+   redesign — Meet-style tile chrome"); this mirrors the part the grid uses so the preview looks
+   like a meeting: name bottom-left, status chips top-right. */
 const CHIP_CSS = `
-.km-dev-tiles .lk-participant-metadata-item { display: inline-flex !important; align-items: center !important; gap: 6px !important; }
+.km-dev-tiles .lk-grid-layout-wrapper .lk-participant-tile > .lk-participant-metadata {
+  top: 0; left: 0; right: 0; bottom: 0; padding: 10px 52px 10px 14px; align-items: flex-end; pointer-events: none; z-index: 3;
+}
+.km-dev-tiles .lk-participant-metadata-item { display: inline-flex !important; align-items: center !important; gap: 6px !important; position: static !important; }
 .km-dev-tiles .kloud-custom-mic-indicator,
 .km-dev-tiles .kloud-custom-cam-indicator {
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  width: 28px; height: 28px; padding: 3px; box-sizing: border-box; border-radius: 50%;
-  background: rgba(32, 33, 36, 0.75); backdrop-filter: blur(4px);
+  position: absolute !important; top: 10px; right: 10px;
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; padding: 7px; box-sizing: border-box; border-radius: 50%;
+  background: rgba(32, 33, 36, 0.75); backdrop-filter: blur(4px); pointer-events: auto;
 }
+.km-dev-tiles .kloud-custom-cam-indicator { right: 46px; }
 .km-dev-tiles .operator-interactive { cursor: pointer; }
 .km-dev-tiles .operator-interactive:hover { background: rgba(60, 64, 67, 0.92); }
 .km-dev-tiles .kloud-custom-mic-indicator[data-kloud-muted="false"] { color: #22c55e; }
-.km-dev-tiles .kloud-custom-mic-indicator[data-kloud-muted="true"],
-.km-dev-tiles .kloud-custom-cam-indicator[data-kloud-video-disabled="true"] { color: rgba(255, 255, 255, 0.75); }
-.km-dev-tiles .kloud-custom-mic-indicator[data-kloud-host-restricted="true"] {
+.km-dev-tiles .kloud-custom-mic-indicator[data-kloud-muted="true"] { color: rgba(255, 255, 255, 0.85); }
+.km-dev-tiles .kloud-custom-mic-indicator[data-kloud-host-restricted="true"],
+.km-dev-tiles .kloud-custom-cam-indicator[data-kloud-host-restricted="true"] {
   color: #ff2020; filter: drop-shadow(0 0 5px rgba(255, 32, 32, 0.8));
 }
 `;
@@ -108,6 +116,9 @@ export default function DevTilesPage() {
     grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile, i) => {
       applyTileHue(tile, NAMES[i]);
     });
+    const resize = new ResizeObserver(() => applyBalancedGrid(grid));
+    resize.observe(grid);
+    return () => resize.disconnect();
   }, [count]);
 
   return (

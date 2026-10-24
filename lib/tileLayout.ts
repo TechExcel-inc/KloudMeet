@@ -1,19 +1,34 @@
 /**
  * Gallery layout helpers for the desktop webcam grid.
  *
- * LiveKit's GridLayout uses a fixed column count, so 7 people become a 3×3 grid with two
- * empty cells. Like Google Meet we instead split tiles into rows of near-equal size
- * (7 → 3 + 4) and let every row fill the full width.
+ * Like Zoom, Google Meet and Teams, every tile in the gallery is the same size and 16:9, and
+ * a short last row is centred. Only the tile size changes as people join or the window
+ * resizes; tiles never stretch to different shapes row by row.
  */
 
-/** Tiles per row for `count` tiles, top row first. Lower rows get the extra tile. */
-export function rowPlan(count: number): number[] {
-  if (count <= 0) return [];
-  if (count <= 3) return [count];
-  const rows = count <= 8 ? 2 : count <= 15 ? 3 : 4;
-  const base = Math.floor(count / rows);
-  const extra = count % rows;
-  return Array.from({ length: rows }, (_, i) => base + (i >= rows - extra ? 1 : 0));
+export const TILE_ASPECT = 16 / 9;
+
+export interface GridFit {
+  cols: number;
+  rows: number;
+  tileWidth: number;
+  tileHeight: number;
+}
+
+/** The column count that gives the largest equal 16:9 tiles for `count` tiles in a W×H box. */
+export function fitGrid(count: number, width: number, height: number, gap: number, aspect = TILE_ASPECT): GridFit {
+  if (count <= 0 || width <= 0 || height <= 0) return { cols: 0, rows: 0, tileWidth: 0, tileHeight: 0 };
+  let best: GridFit = { cols: 1, rows: count, tileWidth: 0, tileHeight: 0 };
+  for (let cols = 1; cols <= count; cols++) {
+    const rows = Math.ceil(count / cols);
+    const byWidth = (width - (cols - 1) * gap) / cols;
+    const byHeight = ((height - (rows - 1) * gap) / rows) * aspect;
+    const tileWidth = Math.floor(Math.min(byWidth, byHeight));
+    if (tileWidth > best.tileWidth) {
+      best = { cols, rows, tileWidth, tileHeight: Math.floor(tileWidth / aspect) };
+    }
+  }
+  return best;
 }
 
 /** Hues that read well as a dark tile background with white text. */
@@ -27,47 +42,33 @@ export function tileHue(key: string): number {
 }
 
 /**
- * Marks a `.lk-grid-layout` for the balanced layout (see globals.css): sets the row count on
- * the grid and each tile's row size. Safe to call repeatedly.
+ * Sizes the tiles of a `.lk-grid-layout` (see globals.css): one tile size for all, from the
+ * grid's own box. Safe to call repeatedly; only writes when the size changes.
  */
 export function applyBalancedGrid(grid: HTMLElement): void {
-  const tiles = Array.from(grid.children).filter((el): el is HTMLElement =>
-    el.classList.contains('lk-participant-tile'),
-  );
-  const plan = rowPlan(tiles.length);
-  if (plan.length === 0) {
+  const count = Array.from(grid.children).filter((el) => el.classList.contains('lk-participant-tile')).length;
+  if (count === 0) {
     grid.removeAttribute('data-km-balanced');
     return;
   }
+  const cs = getComputedStyle(grid);
+  const width = grid.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const height = grid.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const gap = parseFloat(cs.columnGap) || 0;
+  const fit = fitGrid(count, width, height, gap);
+  if (fit.tileWidth <= 0) return;
   grid.setAttribute('data-km-balanced', 'true');
-  grid.style.setProperty('--km-rows', String(plan.length));
-  let index = 0;
-  for (const cols of plan) {
-    for (let i = 0; i < cols; i++, index++) {
-      tiles[index].style.setProperty('--km-row-cols', String(cols));
-    }
-  }
+  const w = `${fit.tileWidth}px`;
+  const h = `${fit.tileHeight}px`;
+  if (grid.style.getPropertyValue('--km-tile-w') !== w) grid.style.setProperty('--km-tile-w', w);
+  if (grid.style.getPropertyValue('--km-tile-h') !== h) grid.style.setProperty('--km-tile-h', h);
 }
 
-/** One letter for the camera-off avatar, like Google Meet ("ying huang" → "Y"). */
-export function tileInitial(name: string): string {
-  const first = Array.from(name.trim())[0];
-  return first ? first.toLocaleUpperCase() : '';
-}
-
-/**
- * Gives a tile its person's colour (camera-off background and avatar) and the single letter
- * the avatar shows.
- */
+/** Gives a tile its person's colour (camera-off background and avatar). */
 export function applyTileHue(tile: HTMLElement, key: string): void {
   if (!key) return;
   const hue = String(tileHue(key));
   if (tile.style.getPropertyValue('--km-tile-hue') !== hue) {
     tile.style.setProperty('--km-tile-hue', hue);
-  }
-  const placeholder = tile.querySelector<HTMLElement>('.lk-participant-placeholder');
-  const initial = tileInitial(key);
-  if (placeholder && initial && placeholder.getAttribute('data-km-initial') !== initial) {
-    placeholder.setAttribute('data-km-initial', initial);
   }
 }

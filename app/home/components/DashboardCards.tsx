@@ -1,10 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Check, Copy, Link2, Play, Video, X } from 'lucide-react';
+import { Copy, Link2, Play, Video } from 'lucide-react';
 import { useI18n } from '@/lib/i18n';
 import { tileHue } from '@/lib/tileLayout';
-import { GETTING_STARTED_STEPS, type GettingStartedStep } from '@/lib/gettingStarted';
 import { replayMinutes, type DashMeeting, type ReplayItem, type UpNextItem } from '../dashboardData';
 import styles from '../../../styles/Home.module.css';
 
@@ -35,7 +34,6 @@ export function UpNextCard({
   onJoin,
   onStart,
   renderInvite,
-  onSchedule,
   onSeeAll,
 }: {
   items: UpNextItem[];
@@ -45,7 +43,6 @@ export function UpNextCard({
   onStart: (m: DashMeeting) => void;
   /** The invite button and its menu, as in the meeting list. */
   renderInvite: (m: DashMeeting) => React.ReactNode;
-  onSchedule: () => void;
   onSeeAll: () => void;
 }) {
   const { t, locale } = useI18n();
@@ -58,14 +55,6 @@ export function UpNextCard({
         </button>
       </header>
 
-      {items.length === 0 ? (
-        <div className={styles.upNextEmpty}>
-          <span>{t('dash.nothingScheduled')}</span>
-          <button type="button" className={styles.dashTextLink} onClick={onSchedule}>
-            {t('dash.scheduleOne')}
-          </button>
-        </div>
-      ) : (
         <ul className={styles.upNextList}>
           {items.map(({ meeting: m, kind, at }) => {
             const isHost = String(m.createdByMemberId) === String(userId);
@@ -126,7 +115,6 @@ export function UpNextCard({
             );
           })}
         </ul>
-      )}
     </section>
   );
 }
@@ -174,17 +162,20 @@ export function PersonalRoomCard({
   onStart,
   onCopy,
   starting,
+  compact,
 }: {
   link: string;
   onStart: () => void;
   onCopy: () => void;
   starting?: boolean;
+  /** One row (title · link · start) when it is the only card on the page */
+  compact?: boolean;
 }) {
   const { t } = useI18n();
   return (
-    <section className={styles.dashCard} aria-labelledby="dash-room">
+    <section className={`${styles.dashCard}${compact ? ` ${styles.roomCardCompact}` : ''}`} aria-labelledby="dash-room">
       <h2 id="dash-room" className={styles.dashCardTitle}>{t('dash.personalRoom')}</h2>
-      <p className={styles.dashCardHint}>{t('dash.personalRoomHint')}</p>
+      {!compact && <p className={styles.dashCardHint}>{t('dash.personalRoomHint')}</p>}
       <div className={styles.roomLinkRow}>
         <Link2 size={16} aria-hidden="true" />
         <span className={styles.roomLinkText}>{link.replace(/^https?:\/\//, '')}</span>
@@ -196,36 +187,6 @@ export function PersonalRoomCard({
         <Video size={15} aria-hidden="true" />
         {t('dash.startRoom')}
       </button>
-    </section>
-  );
-}
-
-export function GettingStartedCard({ done, onHide }: { done: Set<GettingStartedStep>; onHide: () => void }) {
-  const { t } = useI18n();
-  const count = GETTING_STARTED_STEPS.filter((s) => done.has(s)).length;
-  return (
-    <section className={styles.dashCard} aria-labelledby="dash-get-started">
-      <header className={styles.dashCardHeader}>
-        <h2 id="dash-get-started" className={styles.dashCardTitle}>{t('dash.getStarted')}</h2>
-        <span className={styles.dashCardCount}>{t('dash.getStartedProgress', { done: count, total: GETTING_STARTED_STEPS.length })}</span>
-        <button type="button" className={styles.iconBtn} onClick={onHide} aria-label={t('dash.hideGetStarted')} title={t('dash.hideGetStarted')}>
-          <X size={16} aria-hidden="true" />
-        </button>
-      </header>
-      <ul className={styles.checklist}>
-        {GETTING_STARTED_STEPS.map((step) => {
-          const isDone = done.has(step);
-          return (
-            <li key={step} className={isDone ? styles.checklistDone : undefined}>
-              <span className={styles.checklistMark} aria-hidden="true">
-                {isDone && <Check size={12} strokeWidth={3} />}
-              </span>
-              <span>{t(`dash.getStarted.${step}`)}</span>
-              {isDone && <span className={styles.srOnly}>{t('dash.getStartedDone')}</span>}
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }

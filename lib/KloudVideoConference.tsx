@@ -108,7 +108,13 @@ export function KloudVideoConference({
       attributes: true,
       attributeFilter: ['data-lk-name'],
     });
-    return () => observer.disconnect();
+    // Tile size follows the stage size (window resize, side panels opening)
+    const resize = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(apply) : null;
+    resize?.observe(wrapper);
+    return () => {
+      observer.disconnect();
+      resize?.disconnect();
+    };
   });
 
   const screenShareTracks = React.useMemo(

@@ -1,39 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { rowPlan, tileHue, tileInitial } from './tileLayout';
+import { fitGrid, tileHue } from './tileLayout';
 
-describe('rowPlan', () => {
-  it('keeps small meetings on one row', () => {
-    expect(rowPlan(1)).toEqual([1]);
-    expect(rowPlan(3)).toEqual([3]);
-  });
-
-  it('splits into near-equal rows with the extra tiles at the bottom', () => {
-    expect(rowPlan(4)).toEqual([2, 2]);
-    expect(rowPlan(5)).toEqual([2, 3]);
-    expect(rowPlan(7)).toEqual([3, 4]);
-    expect(rowPlan(9)).toEqual([3, 3, 3]);
-    expect(rowPlan(11)).toEqual([3, 4, 4]);
-    expect(rowPlan(16)).toEqual([4, 4, 4, 4]);
-  });
-
-  it('never loses a tile', () => {
-    for (let n = 0; n <= 25; n++) {
-      expect(rowPlan(n).reduce((a, b) => a + b, 0)).toBe(n);
+describe('fitGrid', () => {
+  it('keeps every tile 16:9', () => {
+    for (const n of [1, 2, 3, 5, 7, 12, 16]) {
+      const fit = fitGrid(n, 1400, 760, 12);
+      expect(Math.abs(fit.tileWidth / fit.tileHeight - 16 / 9)).toBeLessThan(0.02);
+      expect(fit.cols * fit.rows).toBeGreaterThanOrEqual(n);
     }
+  });
+
+  it('fits inside the box', () => {
+    for (const n of [1, 2, 4, 7, 9, 16]) {
+      const fit = fitGrid(n, 1400, 760, 12);
+      expect(fit.cols * fit.tileWidth + (fit.cols - 1) * 12).toBeLessThanOrEqual(1400);
+      expect(fit.rows * fit.tileHeight + (fit.rows - 1) * 12).toBeLessThanOrEqual(760);
+    }
+  });
+
+  it('picks the column count that gives the biggest tiles', () => {
+    expect(fitGrid(1, 1400, 760, 12).cols).toBe(1);
+    expect(fitGrid(2, 1400, 760, 12).cols).toBe(2);
+    expect(fitGrid(4, 1400, 760, 12).cols).toBe(2);
+    expect(fitGrid(7, 1400, 760, 12).cols).toBe(3);
+  });
+
+  it('returns nothing for an empty grid or box', () => {
+    expect(fitGrid(0, 1400, 760, 12).tileWidth).toBe(0);
+    expect(fitGrid(3, 0, 760, 12).tileWidth).toBe(0);
   });
 });
 
 describe('tileHue', () => {
   it('is stable for the same person', () => {
     expect(tileHue('Angela')).toBe(tileHue('Angela'));
-  });
-});
-
-describe('tileInitial', () => {
-  it('shows one letter, upper-cased', () => {
-    expect(tileInitial('ying huang')).toBe('Y');
-    expect(tileInitial('  Kloud Solution')).toBe('K');
-    expect(tileInitial('黄莹')).toBe('黄');
-    expect(tileInitial('')).toBe('');
   });
 });

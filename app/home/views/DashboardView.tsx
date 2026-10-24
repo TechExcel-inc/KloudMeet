@@ -27,21 +27,13 @@ import {
   type MeetingStartIntent,
 } from '@/lib/meetingStartGuard';
 import { CalendarPlus, Keyboard, Video } from 'lucide-react';
-import {
-  hideGettingStarted,
-  isGettingStartedHidden,
-  markGettingStarted,
-  readGettingStarted,
-  GETTING_STARTED_STEPS,
-  type GettingStartedStep,
-} from '@/lib/gettingStarted';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
-import { GettingStartedCard, PersonalRoomCard, RecentReplaysCard, UpNextCard } from '../components/DashboardCards';
-import { hasHostedMeeting, pickRecentReplays, pickUpNext, type DashMeeting, type ReplayItem } from '../dashboardData';
+import { PersonalRoomCard, RecentReplaysCard, UpNextCard } from '../components/DashboardCards';
+import { pickRecentReplays, pickUpNext, type DashMeeting, type ReplayItem } from '../dashboardData';
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
 const HIGHLIGHTS_PAGE_SIZE = 50;
@@ -112,16 +104,9 @@ export function DashboardView({
   const [endingActiveMeeting, setEndingActiveMeeting] = useState(false);
   // The most recent meetings regardless of the list's search, filter and page.
   const [highlightMeetings, setHighlightMeetings] = useState<DashMeeting[]>([]);
-  const [gettingStartedDone, setGettingStartedDone] = useState<Set<GettingStartedStep>>(() => new Set());
-  const [gettingStartedHidden, setGettingStartedHidden] = useState(true);
   const allMeetingsRef = useRef<HTMLElement>(null);
   const userToken = user.token;
   const userId = user.id;
-
-  useEffect(() => {
-    setGettingStartedDone(readGettingStarted());
-    setGettingStartedHidden(isGettingStartedHidden());
-  }, []);
 
   const fetchHighlights = useCallback(() => {
     if (!userToken) return;
@@ -758,17 +743,13 @@ export function DashboardView({
 
   const upNext = pickUpNext(highlightMeetings, currentTime);
   const recentReplays = pickRecentReplays(highlightMeetings);
-  const doneSteps = new Set(gettingStartedDone);
-  if (hasHostedMeeting(highlightMeetings, user.id)) doneSteps.add('firstMeeting');
-  const showGettingStarted =
-    !gettingStartedHidden && GETTING_STARTED_STEPS.some((step) => !doneSteps.has(step));
   const personalRoomLink =
     personalRoomId && typeof window !== 'undefined' ? `${window.location.origin}/?code=${personalRoomId}` : '';
-  const hasRail = !!personalRoomLink || showGettingStarted;
+  // Show only what has content: no empty "Up next"
+  const hasMain = upNext.length > 0 || recentReplays.length > 0;
+  const hasRail = !!personalRoomLink;
 
   const openRecording = (recording: { id: number | string; shareKey?: string | null }) => {
-    markGettingStarted('replay');
-    setGettingStartedDone(readGettingStarted());
     window.open(recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`, '_blank');
   };
   const joinFromUpNext = (m: DashMeeting) => router.push(`/rooms/${m.roomName}`);
@@ -960,47 +941,41 @@ export function DashboardView({
           )}
         </section>
 
-        {/* ── Up next, replays, personal room, get started ── */}
-        <div className={`${styles.dashGrid}${hasRail ? '' : ` ${styles.dashGridSingle}`}`}>
-          <div className={styles.dashColumn}>
-            <UpNextCard
-              items={upNext}
-              now={currentTime}
-              userId={user.id}
-              onJoin={joinFromUpNext}
-              onStart={startFromUpNext}
-              renderInvite={renderUpNextInvite}
-              onSchedule={() => setShowScheduleModal(true)}
-              onSeeAll={scrollToAllMeetings}
-            />
-            {recentReplays.length > 0 && (
-              <RecentReplaysCard items={recentReplays} onOpen={(item: ReplayItem) => openRecording(item.recording)} />
+        {/* ── Up next, replays and the personal room — each only when it has something to show ── */}
+        {(hasMain || hasRail) && (
+          <div className={`${styles.dashGrid}${hasMain && hasRail ? '' : ` ${styles.dashGridSingle}`}`}>
+            {hasMain && (
+              <div className={styles.dashColumn}>
+                {upNext.length > 0 && (
+                  <UpNextCard
+                    items={upNext}
+                    now={currentTime}
+                    userId={user.id}
+                    onJoin={joinFromUpNext}
+                    onStart={startFromUpNext}
+                    renderInvite={renderUpNextInvite}
+                    onSeeAll={scrollToAllMeetings}
+                  />
+                )}
+                {recentReplays.length > 0 && (
+                  <RecentReplaysCard items={recentReplays} onOpen={(item: ReplayItem) => openRecording(item.recording)} />
+                )}
+              </div>
             )}
-          </div>
-          {hasRail && (
-            <aside className={styles.dashColumn}>
-              {personalRoomLink && (
+            {hasRail && (
+              <aside className={styles.dashColumn}>
                 <PersonalRoomCard
+                  compact={!hasMain}
                   link={personalRoomLink}
                   onStart={handleMyRoomClick}
                   onCopy={copyPersonalRoomLink}
                   starting={isCreatingMeeting}
                 />
-              )}
-              {showGettingStarted && (
-                <GettingStartedCard
-                  done={doneSteps}
-                  onHide={() => {
-                    hideGettingStarted();
-                    setGettingStartedHidden(true);
-                  }}
-                />
-              )}
-            </aside>
-          )}
-        </div>
+              </aside>
+            )}
+          </div>
+        )}
 
-        {/* ── Meeting list ── */}
         <section className={styles.meetingListSection} ref={allMeetingsRef}>
           <div className={styles.meetingListHeader}>
             <h2 className={styles.meetingListTitle}>{t('dash.yourMeetings')}</h2>
