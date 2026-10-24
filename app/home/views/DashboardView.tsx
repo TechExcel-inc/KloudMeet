@@ -49,7 +49,7 @@ export function DashboardView({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
-  
+
   const [isJoining, setIsJoining] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const creatingMeetingRef = useRef(false);
@@ -69,6 +69,8 @@ export function DashboardView({
   // meetingView removed — all meetings shown together
   const [searchQuery, setSearchQuery] = useState('');
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
+  const meetingCardRefs = useRef(new Map<number, HTMLDivElement>());
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
     pendingIntent: MeetingStartIntent;
@@ -98,10 +100,10 @@ export function DashboardView({
   useEffect(() => {
     if (!userToken) return;
     fetch('/api/account/profile', {
-      headers: { Authorization: `Bearer ${userToken}` }
+      headers: { Authorization: `Bearer ${userToken}` },
     })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
         if (data?.personalRoomId) setPersonalRoomId(data.personalRoomId);
       })
       .catch(() => {});
@@ -115,38 +117,45 @@ export function DashboardView({
   pageSizeRef.current = pageSize;
   const meetingsFetchGenRef = useRef(0);
 
-  const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
-    const term = searchTerm ?? searchQueryRef.current;
-    if (!userToken && !userId) return;
-    const currentPage = pageOverride ?? pageRef.current;
-    const gen = ++meetingsFetchGenRef.current;
-    setLoadingMeetings(true);
-    const qs = new URLSearchParams({
-      page: String(currentPage),
-      pageSize: String(pageSizeRef.current),
-      ...(term.trim() ? { search: term.trim() } : {}),
-    });
-    fetch(`/api/account/meetings?${qs.toString()}`, {
-      headers: { Authorization: `Bearer ${userToken}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (gen !== meetingsFetchGenRef.current) return;
-        if (data.meetings) {
-          const sorted = data.meetings.sort((a: any, b: any) => {
-            const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-            const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-            return tB - tA;
-          });
-          setDbMeetings(sorted);
-          setTotalMeetings(data.total || 0);
-        }
-      })
-      .catch(console.error)
-      .finally(() => {
-        if (gen === meetingsFetchGenRef.current) setLoadingMeetings(false);
+  const fetchMeetings = useCallback(
+    (searchTerm?: string, pageOverride?: number) => {
+      const term = searchTerm ?? searchQueryRef.current;
+      if (!userToken && !userId) return;
+      const currentPage = pageOverride ?? pageRef.current;
+      const gen = ++meetingsFetchGenRef.current;
+      setLoadingMeetings(true);
+      const qs = new URLSearchParams({
+        page: String(currentPage),
+        pageSize: String(pageSizeRef.current),
+        ...(term.trim() ? { search: term.trim() } : {}),
       });
-  }, [userId, userToken]);
+      fetch(`/api/account/meetings?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (gen !== meetingsFetchGenRef.current) return;
+          if (data.meetings) {
+            const sorted = data.meetings.sort((a: any, b: any) => {
+              const tA = a.scheduledFor
+                ? new Date(a.scheduledFor).getTime()
+                : new Date(a.createdAt).getTime();
+              const tB = b.scheduledFor
+                ? new Date(b.scheduledFor).getTime()
+                : new Date(b.createdAt).getTime();
+              return tB - tA;
+            });
+            setDbMeetings(sorted);
+            setTotalMeetings(data.total || 0);
+          }
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (gen === meetingsFetchGenRef.current) setLoadingMeetings(false);
+        });
+    },
+    [userId, userToken],
+  );
 
   useEffect(() => {
     fetchMeetings();
@@ -169,40 +178,44 @@ export function DashboardView({
   // Polling fallback to check processing recordings
   useEffect(() => {
     if (!userToken) return;
-    
+
     // Check if any meetings in the current list have a PROCESSING/UPLOADING recording
-    const hasProcessing = dbMeetings.some(m => 
-      m.recordings?.some((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status))
+    const hasProcessing = dbMeetings.some((m) =>
+      m.recordings?.some((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status)),
     );
 
     if (!hasProcessing) return;
 
     const intervalId = setInterval(() => {
       fetch('/api/account/recordings/sync', {
-        headers: { Authorization: `Bearer ${userToken}` }
+        headers: { Authorization: `Bearer ${userToken}` },
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.updatedCount > 0) {
-          // Re-fetch meetings silently without setting loading state
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.updatedCount > 0) {
+            // Re-fetch meetings silently without setting loading state
             fetch(`/api/account/meetings?page=${page}&pageSize=${pageSize}`, {
-              headers: { Authorization: `Bearer ${userToken}` }
+              headers: { Authorization: `Bearer ${userToken}` },
             })
-              .then(res => res.json())
-              .then(d => {
+              .then((res) => res.json())
+              .then((d) => {
                 if (d.meetings) {
                   const sorted = d.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                    const tA = a.scheduledFor
+                      ? new Date(a.scheduledFor).getTime()
+                      : new Date(a.createdAt).getTime();
+                    const tB = b.scheduledFor
+                      ? new Date(b.scheduledFor).getTime()
+                      : new Date(b.createdAt).getTime();
                     return tB - tA;
                   });
                   setDbMeetings(sorted);
                   setTotalMeetings(d.total || 0);
                 }
               });
-        }
-      })
-      .catch(console.error);
+          }
+        })
+        .catch(console.error);
     }, 5000);
 
     return () => clearInterval(intervalId);
@@ -274,14 +287,14 @@ export function DashboardView({
       const target = new Date(scheduledModalData.scheduledFor).getTime();
       const diffMs = target - Date.now();
       if (diffMs <= 0) {
-        setCountdown("00:00");
+        setCountdown('00:00');
         toast.show(t('dash.meetingStarting'));
         router.push(`/rooms/${scheduledModalData.roomName}`);
         setScheduledModalData(null);
         return;
       }
       if (diffMs > 3600000) {
-        setCountdown("MORE_THAN_HOUR");
+        setCountdown('MORE_THAN_HOUR');
         return;
       }
       const totalSec = Math.floor(diffMs / 1000);
@@ -302,7 +315,7 @@ export function DashboardView({
         headers: { Authorization: `Bearer ${user.token}` },
       });
       if (res.ok) {
-        setDbMeetings(prev => prev.filter(m => m.roomName !== roomName));
+        setDbMeetings((prev) => prev.filter((m) => m.roomName !== roomName));
         toast.show(t('dash.meetingDeleted'));
       } else {
         toast.show(t('dash.deleteFailure'));
@@ -509,10 +522,9 @@ export function DashboardView({
     fetchMeetings();
 
     if (pendingIntent.type === 'startScheduled') {
-      const meeting =
-        dbMeetings.find((x) => x.roomName === pendingIntent.roomName) ?? {
-          roomName: pendingIntent.roomName,
-        };
+      const meeting = dbMeetings.find((x) => x.roomName === pendingIntent.roomName) ?? {
+        roomName: pendingIntent.roomName,
+      };
       if (meeting.scheduledFor) {
         const diff = new Date(meeting.scheduledFor).getTime() - Date.now();
         if (Math.abs(diff) > 15 * 60 * 1000) {
@@ -531,7 +543,7 @@ export function DashboardView({
       return;
     }
     if (isJoining) return;
-    
+
     let roomId = raw;
     if (raw.includes('/rooms/')) {
       roomId = raw.split('/rooms/')[1].split('?')[0].split('#')[0];
@@ -543,21 +555,21 @@ export function DashboardView({
       toast.show('Please enter a valid meeting code');
       return;
     }
-    
+
     setIsJoining(true);
 
     try {
       const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`, {
         headers: authHeaders(),
       });
-      
+
       // 1. Non-Existing
       if (!res.ok) {
         setWarningMessage(t('dash.meetingNotFoundDash'));
         setIsJoining(false);
         return;
       }
-      
+
       const data = await res.json();
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
       if (data.status === 'ENDED' && !data.isPersonalRoom) {
@@ -565,7 +577,7 @@ export function DashboardView({
         setIsJoining(false);
         return;
       }
-      
+
       // 6. Already In Progress
       if (data.isActive) {
         router.push(`/rooms/${roomId}`);
@@ -575,7 +587,7 @@ export function DashboardView({
       // Check Scheduling
       if (data.scheduledFor) {
         const diffMs = new Date(data.scheduledFor).getTime() - Date.now();
-        
+
         if (diffMs > 0) {
           // 4 & 5. Scheduled for Future
           setScheduledModalData(data);
@@ -588,10 +600,10 @@ export function DashboardView({
           return;
         }
       }
-      
+
       // Valid routing
       router.push(`/rooms/${roomId}`);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       setWarningMessage('An error occurred connecting to the API. Please try again.');
       setIsJoining(false);
@@ -601,15 +613,16 @@ export function DashboardView({
   // Group meetings by date for Figma card layout
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const toLocalDateStr = (date: Date) =>
-    date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
+  const toLocalDateStr = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
 
   const getDisplayDate = (m: any) => {
     const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
     const dateStr = toLocalDateStr(d);
     const todayStr = toLocalDateStr(new Date());
-    const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const tomorrowStr = toLocalDateStr(tomorrowDate);
     const yesterdayStr = toLocalDateStr(yesterdayDate);
     if (dateStr === todayStr) return t('dash.today');
@@ -627,16 +640,107 @@ export function DashboardView({
     return acc;
   }, {});
 
+  // Rows in display order (across date groups) for arrow-key navigation
+  const orderedMeetings = Object.values(groupedMeetings).flat();
+  const tabStopMeetingId = orderedMeetings.some((m) => m.id === selectedMeetingId)
+    ? selectedMeetingId
+    : orderedMeetings[0]?.id;
+
+  const openFinishedMeeting = (m: any) => {
+    const rec =
+      m.recordings?.find((r: any) => r.status === 'READY') ??
+      m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+    if (rec) {
+      const key = rec.shareKey as string | undefined;
+      window.open(key ? recordingReplayPath(key) : `/recordings/${rec.id}`, '_blank');
+    } else {
+      router.push(`/meeting/${m.id}/chat`);
+    }
+  };
+
+  // Open (finished) / Start (host) / Join (guest or live)
+  const runPrimaryAction = (m: any) => {
+    if (m.isActive) {
+      router.push(`/rooms/${m.roomName}`);
+    } else if (m.status === 'ENDED') {
+      openFinishedMeeting(m);
+    } else if (m.status === 'CANCELED') {
+      return;
+    } else if (m.createdByMemberId === user.id) {
+      handleStartMeetingClick(m);
+    } else {
+      router.push(`/rooms/${m.roomName}`);
+    }
+  };
+
+  const selectMeetingAt = (index: number) => {
+    const m = orderedMeetings[Math.max(0, Math.min(index, orderedMeetings.length - 1))];
+    if (!m) return;
+    setSelectedMeetingId(m.id);
+    meetingCardRefs.current.get(m.id)?.focus();
+  };
+
+  const moveMeetingSelection = (delta: number) => {
+    const idx = orderedMeetings.findIndex((m) => m.id === selectedMeetingId);
+    if (idx === -1) selectMeetingAt(delta > 0 ? 0 : orderedMeetings.length - 1);
+    else selectMeetingAt(idx + delta);
+  };
+
+  const handleMeetingCardKeyDown = (e: React.KeyboardEvent<HTMLDivElement>, m: any) => {
+    // Keys on the buttons inside the row keep their own behaviour
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveMeetingSelection(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      selectMeetingAt(e.key === 'Home' ? 0 : orderedMeetings.length - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runPrimaryAction(m);
+    }
+  };
+
+  const anyDashModalOpen = Boolean(
+    showScheduleModal ||
+      showSettingsModal ||
+      showProfileModal ||
+      editingMeeting ||
+      scheduledModalData ||
+      warningMessage ||
+      earlyStartMeeting ||
+      deletingMeeting ||
+      meetingConflict,
+  );
+  const moveMeetingSelectionRef = useRef(moveMeetingSelection);
+  moveMeetingSelectionRef.current = moveMeetingSelection;
+
+  // Arrow keys with nothing focused (e.g. after a click on the page background) step into the list.
+  // Inputs, buttons and rows handle their own keys, so typing in the search or code field is untouched.
+  useEffect(() => {
+    if (anyDashModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      e.preventDefault();
+      moveMeetingSelectionRef.current(e.key === 'ArrowDown' ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [anyDashModalOpen]);
+
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar 
-        user={user} 
-        onSignOut={onSignOut} 
+      <TopToolbar
+        user={user}
+        onSignOut={onSignOut}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenProfile={() => setShowProfileModal(true)}
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}
-        hideAvatar={false} 
+        hideAvatar={false}
       />
 
       <div className={styles.dashboardTopTaglineWrap}>
@@ -644,7 +748,6 @@ export function DashboardView({
       </div>
 
       <div className={styles.dashStickyTop}>
-
         {/* ── QuickActions Glassmorphism Bar ── */}
         <div className={styles.quickActionsBar}>
           <div className={styles.quickActionsInner}>
@@ -662,8 +765,19 @@ export function DashboardView({
                 onClick={handleJoinMeeting}
                 disabled={!joinCode.trim()}
               >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                  <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3" strokeLinecap="round" strokeLinejoin="round" />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  width="18"
+                  height="18"
+                >
+                  <path
+                    d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M13.8 12H3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
                 {t('dash.joinMeeting')}
               </button>
@@ -697,11 +811,23 @@ export function DashboardView({
                     : undefined
                 }
               >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18" aria-hidden>
-                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
-            </button>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  width="18"
+                  height="18"
+                  aria-hidden
+                >
+                  <path
+                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+                {isCreatingMeeting ? t('common.loading') : t('dash.newMeeting')}
+              </button>
             </div>
           </div>
         </div>
@@ -716,7 +842,15 @@ export function DashboardView({
           {/* Search + Schedule */}
           <div className={styles.meetingListActions}>
             <div className={styles.meetingSearchWrapper}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" className={styles.meetingSearchIcon}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="16"
+                height="16"
+                className={styles.meetingSearchIcon}
+              >
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.35-4.35" />
               </svg>
@@ -729,8 +863,15 @@ export function DashboardView({
             </div>
             {/* Filter funnel button */}
             <button className={styles.filterBtn} title="Filter meetings">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="16"
+                height="16"
+              >
+                <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
               </svg>
             </button>
             <button
@@ -738,17 +879,22 @@ export function DashboardView({
               onClick={() => setShowScheduleModal(true)}
               title={t('dash.scheduleMeeting')}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="18" height="18">
-                <line x1="12" y1="5" x2="12" y2="19"/>
-                <line x1="5" y1="12" x2="19" y2="12"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                width="18"
+                height="18"
+              >
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
               </svg>
             </button>
           </div>
-
         </div>
       </div>
       <div className={styles.dashContainer}>
-
         {/* ── Meeting Cards ── */}
         {loadingMeetings ? (
           <div className={styles.meetingLoadingState}>
@@ -783,20 +929,37 @@ export function DashboardView({
                   {(meetings as any[]).map((m, i) => {
                     const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
                     const recording = m.recordings?.find((r: any) => r.status === 'READY');
-                    const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-                    const failedRecording = !recording && !processingRecording && m.recordings?.find((r: any) => r.status === 'FAILED');
-                    const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
+                    const processingRecording =
+                      !recording &&
+                      m.recordings?.find((r: any) =>
+                        ['PROCESSING', 'UPLOADING'].includes(r.status),
+                      );
+                    const diffMs = m.scheduledFor
+                      ? new Date(m.scheduledFor).getTime() - currentTime
+                      : -1;
                     const isHost = m.createdByMemberId === user.id;
                     const isLive = m.isActive;
-                    const showStart = isHost && m.status !== 'ENDED' && m.status !== 'CANCELED' && !m.isActive && !recording && !processingRecording && !failedRecording && m.scheduledFor;
+                    const isFinished = m.status === 'ENDED';
+                    const canStart = !isLive && !isFinished && m.status !== 'CANCELED';
+                    const primaryLabel = isFinished ? 'Open' : isHost ? 'Start' : 'Join';
+                    const isSelected = m.id === selectedMeetingId;
                     const cardMenuOpen = inviteMenuRoomName === m.roomName;
 
                     return (
                       <div
                         key={m.id || i}
+                        ref={(el) => {
+                          if (el) meetingCardRefs.current.set(m.id, el);
+                          else meetingCardRefs.current.delete(m.id);
+                        }}
+                        tabIndex={m.id === tabStopMeetingId ? 0 : -1}
+                        aria-label={m.title || m.roomName || 'Untitled Meeting'}
                         className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
-                          cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''
-                        }`}
+                          isSelected ? ` ${styles.meetingCardSelected}` : ''
+                        }${cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''}`}
+                        onClick={() => setSelectedMeetingId(m.id)}
+                        onFocus={() => setSelectedMeetingId(m.id)}
+                        onKeyDown={(e) => handleMeetingCardKeyDown(e, m)}
                         onDoubleClick={() => {
                           if (isHost) setEditingMeeting(m);
                         }}
@@ -812,20 +975,40 @@ export function DashboardView({
                         <div className={styles.meetingCardContent}>
                           {/* Time column — desktop only */}
                           <div className={styles.meetingCardTime}>
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" style={{ color: '#94a3b8', flexShrink: 0 }}>
-                              <circle cx="12" cy="12" r="10"/>
-                              <polyline points="12 6 12 12 16 14"/>
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              width="14"
+                              height="14"
+                              style={{ color: '#94a3b8', flexShrink: 0 }}
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                              <polyline points="12 6 12 12 16 14" />
                             </svg>
-                            <span>{d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}</span>
+                            <span>
+                              {d.toLocaleTimeString(undefined, {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                hour12: false,
+                                timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                              })}
+                            </span>
                           </div>
 
                           {/* Info column */}
                           <div className={styles.meetingCardInfo}>
                             {/* Title row — includes mobile "..." button on right */}
                             <div className={styles.mobileCardTitleRow}>
-                              <h3 className={styles.meetingCardTitle}>{m.title || m.roomName || 'Untitled Meeting'}</h3>
+                              <h3 className={styles.meetingCardTitle}>
+                                {m.title || m.roomName || 'Untitled Meeting'}
+                              </h3>
                               {/* Mobile-only three-dot menu */}
-                              <button className={styles.mobileMenuBtn} onClick={(e) => e.stopPropagation()}>
+                              <button
+                                className={styles.mobileMenuBtn}
+                                onClick={(e) => e.stopPropagation()}
+                              >
                                 <span>•••</span>
                               </button>
                             </div>
@@ -833,19 +1016,45 @@ export function DashboardView({
                             <div className={styles.meetingCardMeta}>
                               {/* Mobile: time + duration on same line */}
                               <span className={styles.mobileTimeLine}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12">
-                                  <circle cx="12" cy="12" r="10"/>
-                                  <polyline points="12 6 12 12 16 14"/>
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  width="12"
+                                  height="12"
+                                >
+                                  <circle cx="12" cy="12" r="10" />
+                                  <polyline points="12 6 12 12 16 14" />
                                 </svg>
-                                {d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone })}
+                                {d.toLocaleTimeString(undefined, {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                  hour12: false,
+                                  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                                })}
                                 {m.durationMinutes ? `\u00a0•\u00a0${m.durationMinutes} min` : ''}
                               </span>
 
                               {/* Desktop: duration + participants */}
-                              {m.durationMinutes && <span className={styles.desktopMeta}>{m.durationMinutes} min</span>}
+                              {m.durationMinutes && (
+                                <span className={styles.desktopMeta}>{m.durationMinutes} min</span>
+                              )}
                               {m._count?.participants > 0 && (
-                                <span className={`${styles.meetingCardMetaItem} ${styles.desktopMeta}`}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <span
+                                  className={`${styles.meetingCardMetaItem} ${styles.desktopMeta}`}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="12"
+                                    height="12"
+                                  >
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                  </svg>
                                   {m._count.participants}
                                 </span>
                               )}
@@ -853,13 +1062,26 @@ export function DashboardView({
                               {/* Mobile: attendees + host on same line */}
                               {m._count?.participants > 0 && (
                                 <span className={styles.mobileMetaLine}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                  {m._count.participants}{'\u00a0\u00a0'}Host: {m.createdByMember?.username || 'Unknown'}
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="12"
+                                    height="12"
+                                  >
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                  </svg>
+                                  {m._count.participants}
+                                  {'\u00a0\u00a0'}Host: {m.createdByMember?.username || 'Unknown'}
                                 </span>
                               )}
 
                               {/* Desktop: host */}
-                              <span className={styles.desktopMeta}>Host: {m.createdByMember?.username || 'Unknown'}</span>
+                              <span className={styles.desktopMeta}>
+                                Host: {m.createdByMember?.username || 'Unknown'}
+                              </span>
 
                               {/* Code — desktop inline */}
                               {m.roomName && (
@@ -872,8 +1094,32 @@ export function DashboardView({
                                   }}
                                 >
                                   {m.roomName}
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="11" height="11"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="11"
+                                    height="11"
+                                  >
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                                  </svg>
                                 </button>
+                              )}
+
+                              {/* Recording state — quiet tag next to the code */}
+                              {recording && (
+                                <span className={styles.meetingMetaTag}>
+                                  {recording.visibility === 'PUBLIC'
+                                    ? t('dash.recordingPublic')
+                                    : t('dash.recordingPrivate')}
+                                </span>
+                              )}
+                              {processingRecording && (
+                                <span className={styles.meetingMetaTag}>
+                                  {t('common.processing')}
+                                </span>
                               )}
 
                               {/* Code — mobile full line */}
@@ -887,7 +1133,17 @@ export function DashboardView({
                                   }}
                                 >
                                   Code: {m.roomName}
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="12" height="12"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="12"
+                                    height="12"
+                                  >
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                    <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                                  </svg>
                                 </button>
                               )}
                             </div>
@@ -895,255 +1151,187 @@ export function DashboardView({
 
                           {/* Action area — right side of card */}
                           <div className={styles.meetingCardActions}>
-
                             {/* ── Always-visible: Join Now for live meetings ── */}
                             {isLive && (
                               <button
                                 className={styles.joinNowBtn}
                                 onClick={() => router.push(`/rooms/${m.roomName}`)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="15" height="15">
-                                  <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  width="15"
+                                  height="15"
+                                >
+                                  <path
+                                    d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
                                 </svg>
                                 Join Now
                               </button>
                             )}
 
-                            {/* ── Recording pill (always visible if available) ── */}
-                            {recording && (
-                              <button
-                                className={styles.playRecordingBtn}
-                                onClick={() => {
-                                  const key = recording.shareKey as string | undefined;
-                                  window.open(key ? recordingReplayPath(key) : `/recordings/${recording.id}`, '_blank');
-                                }}
-                                title={t('dash.replayTitle')}
-                              >
-                                <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
-                                {t('dash.replay')}
-                              </button>
-                            )}
-                            {recording && (
+                            {/* ── Status badge for upcoming/canceled (hidden while actions show) ── */}
+                            {!isLive && !isFinished && (
                               <span
-                                className={
-                                  recording.visibility === 'PUBLIC'
-                                    ? styles.recordingPublicBadge
-                                    : styles.recordingPrivateBadge
-                                }
+                                className={`${styles.statusBadge} ${styles.statusBadgeHideable} ${
+                                  m.status === 'CANCELED'
+                                    ? styles.statusCanceled
+                                    : diffMs < 0 && m.scheduledFor
+                                      ? styles.statusPastDue
+                                      : m.scheduledFor
+                                        ? styles.statusScheduled
+                                        : styles.statusFinished
+                                }`}
                               >
-                                {recording.visibility === 'PUBLIC'
-                                  ? t('dash.recordingPublic')
-                                  : t('dash.recordingPrivate')}
+                                {m.status === 'CANCELED'
+                                  ? 'Canceled'
+                                  : diffMs < 0 && m.scheduledFor
+                                    ? 'Past Due'
+                                    : m.scheduledFor
+                                      ? 'Scheduled'
+                                      : 'Created'}
                               </span>
                             )}
-                            {processingRecording && (
-                              <div className={styles.recordingProcessing}>
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                {t('common.processing')}
-                              </div>
-                            )}
 
-                            {/* ── Status badge (hidden on hover to make room for actions) ── */}
+                            {/* ── Row actions: shown on hover, selection or keyboard focus ── */}
                             {!isLive && (
-                              <span className={`${styles.statusBadge} ${styles.statusBadgeHideable} ${
-                                m.status === 'ENDED' ? styles.statusFinished
-                                : m.status === 'CANCELED' ? styles.statusCanceled
-                                : diffMs < 0 && m.scheduledFor ? styles.statusPastDue
-                                : m.scheduledFor ? styles.statusScheduled
-                                : styles.statusFinished
-                              }`}>
-                                {m.status === 'ENDED' ? 'Finished'
-                                  : m.status === 'CANCELED' ? 'Canceled'
-                                  : diffMs < 0 && m.scheduledFor ? 'Past Due'
-                                  : m.scheduledFor ? 'Scheduled'
-                                  : 'Created'}
-                              </span>
-                            )}
-
-                            {/* ── Hover action bar: slides in from right on card hover ── */}
-                            <div className={styles.meetingHoverActions}>
-                              {/* Join / Start */}
-                              {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
-                                <button
-                                  className={isHost && !m.isActive && m.scheduledFor ? styles.startActionBtn : styles.cardJoinBtn}
-                                  onClick={() => {
-                                    if (isHost) {
-                                      handleStartMeetingClick(m);
-                                    } else {
-                                      router.push(`/rooms/${m.roomName}`);
-                                    }
-                                  }}
-                                >
-                                  {isHost && !m.isActive ? (
-                                    <>
-                                      <svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13"><path d="M8 5v14l11-7z" /></svg>
-                                      Start
-                                    </>
-                                  ) : (
-                                    <>
-                                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                        <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                                      </svg>
-                                      Join
-                                    </>
-                                  )}
-                                </button>
-                              )}
-
-                              {/* Copy link */}
-                              {m.roomName && (
-                                <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
+                              <div className={styles.meetingHoverActions}>
+                                {(isFinished || canStart) && (
                                   <button
-                                    title="Copy meeting invite"
-                                    className={styles.iconBtn}
-                                    onClick={() =>
-                                      setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
-                                    }
+                                    className={styles.cardJoinBtn}
+                                    onClick={() => runPrimaryAction(m)}
                                   >
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                      <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                      <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                      width="13"
+                                      height="13"
+                                    >
+                                      <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    {primaryLabel}
+                                  </button>
+                                )}
+
+                                {isHost && (
+                                  <button
+                                    title="Edit meeting"
+                                    aria-label="Edit meeting"
+                                    className={styles.iconBtn}
+                                    onClick={() => setEditingMeeting(m)}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      width="14"
+                                      height="14"
+                                    >
+                                      <path
+                                        d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                      <path
+                                        d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
                                     </svg>
                                   </button>
-                                  {inviteMenuRoomName === m.roomName && (
-                                    <div
-                                      style={{
-                                        position: 'absolute',
-                                        top: 'calc(100% + 8px)',
-                                        right: 0,
-                                        minWidth: '170px',
-                                        background: '#fff',
-                                        border: '1px solid #e5e7eb',
-                                        borderRadius: '8px',
-                                        boxShadow: '0 10px 24px rgba(15, 23, 42, 0.15)',
-                                        zIndex: 60,
-                                        padding: '6px',
-                                      }}
+                                )}
+
+                                {isHost && (
+                                  <button
+                                    title="Delete meeting"
+                                    aria-label="Delete meeting"
+                                    className={styles.iconBtn}
+                                    onClick={() => setDeletingMeeting(m)}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      width="14"
+                                      height="14"
                                     >
-                                      <button
-                                        type="button"
-                                        className={styles.dropdownItem}
-                                        onClick={() => copyMeetingLink(m)}
-                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                      >
-                                        Copy Link
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={styles.dropdownItem}
-                                        onClick={() => copyMeetingInvite(m)}
-                                        style={{ borderRadius: '6px', padding: '8px 10px' }}
-                                      >
-                                        Copy Invite
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {/* 🎬 Replay 摘要 — 已结束且有录制的会议 */}
-                              {recording && m.status === 'ENDED' && (
-                                <button
-                                  title={t('dash.replaySummaryTitle')}
-                                  className={styles.iconBtn}
-                                  style={{ color: '#818cf8' }}
-                                  onClick={() => {
-                                    const key = recording.shareKey as string | undefined;
-                                    window.open(key ? recordingReplayPath(key) : `/recordings/${recording.id}`, '_blank');
-                                  }}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <rect x="3" y="3" width="18" height="18" rx="2"/>
-                                    <polyline points="10 8 16 12 10 16"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {m.status === 'ENDED' && (
-                                <button
-                                  title={t('chatHistory.open')}
-                                  className={styles.iconBtn}
-                                  onClick={() => router.push(`/meeting/${m.id}/chat`)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {/* Edit */}
-                              {isHost && (
-                                <button
-                                  title="Edit meeting"
-                                  className={styles.iconBtn}
-                                  onClick={() => setEditingMeeting(m)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-
-                              {/* Delete */}
-                              {isHost && !m.isActive && (
-                                <button
-                                  title="Delete meeting"
-                                  className={styles.iconBtnDanger}
-                                  onClick={() => setDeletingMeeting(m)}
-                                >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
-                                  </svg>
-                                </button>
-                              )}
-                            </div>
+                                      <polyline
+                                        points="3 6 5 6 21 6"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                      <path
+                                        d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                      <path
+                                        d="M10 11v6M14 11v6"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                      <path
+                                        d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                      />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* ── Mobile-only bottom action bar ── */}
                           <div className={styles.meetingCardMobileActions}>
-                            {/* Join / Start button */}
-                            {!isLive && m.status !== 'ENDED' && m.status !== 'CANCELED' && (
+                            {/* Open (finished) / Start / Join */}
+                            {(isFinished || canStart) && (
                               <button
-                                className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
-                                onClick={() => {
-                                  if (isHost) {
-                                    handleStartMeetingClick(m);
-                                  } else {
-                                    router.push(`/rooms/${m.roomName}`);
-                                  }
-                                }}
+                                className={styles.mobileJoinBtn}
+                                onClick={() => runPrimaryAction(m)}
                               >
-                                {isHost && !m.isActive ? (
-                                  <>
-                                    <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M8 5v14l11-7z" /></svg>
-                                    Start
-                                  </>
-                                ) : (
-                                  <>
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                      <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                    Join
-                                  </>
-                                )}
+                                <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+                                  <path d="M8 5v14l11-7z" />
+                                </svg>
+                                {primaryLabel}
                               </button>
                             )}
-                            {/* Copy link */}
-                            {m.roomName && (
+                            {/* Copy link — only for non-finished meetings */}
+                            {!isFinished && m.roomName && (
                               <div data-invite-menu-anchor="true" style={{ position: 'relative' }}>
                                 <button
                                   className={styles.mobileCopyBtn}
                                   onClick={() =>
-                                    setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                    setInviteMenuRoomName((prev) =>
+                                      prev === m.roomName ? null : m.roomName,
+                                    )
                                   }
                                 >
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" strokeLinecap="round" strokeLinejoin="round"/>
-                                    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" strokeLinecap="round" strokeLinejoin="round"/>
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="14"
+                                    height="14"
+                                  >
+                                    <path
+                                      d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
+                                    <path
+                                      d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
                                   </svg>
                                   Invite
                                 </button>
@@ -1182,34 +1370,73 @@ export function DashboardView({
                                 )}
                               </div>
                             )}
-                            {m.status === 'ENDED' && (
+                            {/* Edit (host only) */}
+                            {isHost && !isLive && (
                               <button
                                 className={styles.mobileCopyBtn}
-                                onClick={() => router.push(`/meeting/${m.id}/chat`)}
+                                onClick={() => setEditingMeeting(m)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                  <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  width="14"
+                                  height="14"
+                                >
+                                  <path
+                                    d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
                                 </svg>
-                                {t('chatHistory.shortTitle')}
+                                Edit
                               </button>
                             )}
-                            {/* Delete */}
-                            {isHost && !m.isActive && (
+                            {/* Delete (host only) — neutral; the confirm dialog carries the warning */}
+                            {isHost && !isLive && (
                               <button
                                 className={styles.mobileDeleteBtn}
                                 onClick={() => setDeletingMeeting(m)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14">
-                                  <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  width="14"
+                                  height="14"
+                                >
+                                  <polyline
+                                    points="3 6 5 6 21 6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M10 11v6M14 11v6"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
+                                  <path
+                                    d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
                                 </svg>
                                 Delete
                               </button>
                             )}
                           </div>
-
                         </div>
                       </div>
                     );
@@ -1224,74 +1451,145 @@ export function DashboardView({
                 <select
                   className={styles.pageSizeSelect}
                   value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setPage(1);
+                  }}
                 >
                   <option value={15}>15 / Page</option>
                   <option value={25}>25 / Page</option>
                   <option value={50}>50 / Page</option>
                   <option value={100}>100 / Page</option>
                 </select>
-                <span className={styles.totalFiles}>{totalMeetings} {t('dash.totalRecords')}</span>
+                <span className={styles.totalFiles}>
+                  {totalMeetings} {t('dash.totalRecords')}
+                </span>
               </div>
               <div className={styles.paginationRight}>
-                <button className={styles.pageArrow} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>&lt;</button>
+                <button
+                  className={styles.pageArrow}
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                >
+                  &lt;
+                </button>
                 {(() => {
                   const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
                   const pages = [];
                   for (let i = 1; i <= Math.min(4, totalPages); i++) {
                     pages.push(
-                      <button key={i} className={page === i ? styles.pageNumActive : styles.pageNum} onClick={() => setPage(i)}>{i}</button>
+                      <button
+                        key={i}
+                        className={page === i ? styles.pageNumActive : styles.pageNum}
+                        onClick={() => setPage(i)}
+                      >
+                        {i}
+                      </button>,
                     );
                   }
                   return pages;
                 })()}
-                <button className={styles.pageArrow} disabled={page >= Math.ceil(totalMeetings / pageSize)} onClick={() => setPage(p => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))}>&gt;</button>
+                <button
+                  className={styles.pageArrow}
+                  disabled={page >= Math.ceil(totalMeetings / pageSize)}
+                  onClick={() =>
+                    setPage((p) => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))
+                  }
+                >
+                  &gt;
+                </button>
               </div>
             </div>
           </div>
         )}
-
-      </div>{/* end dashContainer */}
+      </div>
+      {/* end dashContainer */}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
           <div className={styles.dashModalContent}>
             <h3>Scheduled Meeting</h3>
             <p style={{ marginTop: '1rem', color: '#4b5563', lineHeight: '1.5' }}>
-              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
+              <strong>{scheduledModalData.title || scheduledModalData.roomName}</strong> is hosted
+              by <strong>{scheduledModalData.createdByMember?.fullName || 'Host'}</strong>.
             </p>
             {(() => {
               const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
               return diffMs > 60 * 60 * 1000 ? (
-                <div style={{ marginTop: '1.5rem', padding: '1rem', background: '#f8fafc', borderRadius: '8px' }}>
-                  <p style={{ color: '#64748b' }}>Scheduled for: <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
-                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>This meeting is more than an hour away. Please check back closer to the start time.</p>
+                <div
+                  style={{
+                    marginTop: '1.5rem',
+                    padding: '1rem',
+                    background: '#f8fafc',
+                    borderRadius: '8px',
+                  }}
+                >
+                  <p style={{ color: '#64748b' }}>
+                    Scheduled for:{' '}
+                    <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong>
+                  </p>
+                  <p style={{ marginTop: '0.5rem', color: '#334155' }}>
+                    This meeting is more than an hour away. Please check back closer to the start
+                    time.
+                  </p>
                 </div>
               ) : (
-                <div style={{ textAlign: 'center', marginTop: '2rem', padding: '1.5rem', background: 'rgba(124, 58, 237, 0.05)', borderRadius: '12px', border: '1px solid rgba(124, 58, 237, 0.1)' }}>
-                  <p style={{ color: '#6b7280', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>Starting in</p>
-                  <h2 style={{ fontSize: '3.5rem', margin: '0.5rem 0', color: '#5227D3', fontFamily: 'monospace', fontWeight: 700 }}>{countdown}</h2>
+                <div
+                  style={{
+                    textAlign: 'center',
+                    marginTop: '2rem',
+                    padding: '1.5rem',
+                    background: 'rgba(124, 58, 237, 0.05)',
+                    borderRadius: '12px',
+                    border: '1px solid rgba(124, 58, 237, 0.1)',
+                  }}
+                >
+                  <p
+                    style={{
+                      color: '#6b7280',
+                      fontSize: '0.9rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em',
+                      fontWeight: 600,
+                    }}
+                  >
+                    Starting in
+                  </p>
+                  <h2
+                    style={{
+                      fontSize: '3.5rem',
+                      margin: '0.5rem 0',
+                      color: '#5227D3',
+                      fontFamily: 'monospace',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {countdown}
+                  </h2>
                 </div>
               );
             })()}
             <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem' }}>
-              <button 
-                onClick={() => setScheduledModalData(null)} 
-                className={styles.dashSignOut} 
+              <button
+                onClick={() => setScheduledModalData(null)}
+                className={styles.dashSignOut}
                 style={{ flex: 1, padding: '0.75rem', borderRadius: '12px' }}
               >
                 Close
               </button>
-              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
-                <button 
+              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <=
+                60 * 60 * 1000 && (
+                <button
                   onClick={() => {
                     setScheduledModalData(null);
                     router.push(`/rooms/${scheduledModalData.roomName}`);
-                  }} 
-                  className={styles.dashJoinBtn} 
+                  }}
+                  className={styles.dashJoinBtn}
                   style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', width: 'auto' }}
                 >
-                  {scheduledModalData.createdByMemberId === user.id ? 'Start Meeting' : 'Join Anyway'}
+                  {scheduledModalData.createdByMemberId === user.id
+                    ? 'Start Meeting'
+                    : 'Join Anyway'}
                 </button>
               )}
             </div>
@@ -1300,25 +1598,25 @@ export function DashboardView({
       )}
 
       {showScheduleModal && (
-        <ScheduleMeetingModal 
+        <ScheduleMeetingModal
           user={user}
           onClose={() => setShowScheduleModal(false)}
           onSave={() => {
             setShowScheduleModal(false);
             fetchMeetings();
-          }} 
+          }}
         />
       )}
 
       {editingMeeting && (
-        <ScheduleMeetingModal 
+        <ScheduleMeetingModal
           user={user}
           existingMeeting={editingMeeting}
           onClose={() => setEditingMeeting(null)}
           onSave={() => {
             setEditingMeeting(null);
             fetchMeetings();
-          }} 
+          }}
         />
       )}
 
@@ -1337,22 +1635,46 @@ export function DashboardView({
       {earlyStartMeeting && (
         <div className={styles.dashModalOverlay}>
           <div className={styles.dashModalContent}>
-            <h3 style={{ marginTop: 0, color: '#111827', fontSize: '1.25rem' }}>Start Meeting Outside Window?</h3>
+            <h3 style={{ marginTop: 0, color: '#111827', fontSize: '1.25rem' }}>
+              Start Meeting Outside Window?
+            </h3>
             <p style={{ color: '#4b5563', lineHeight: '1.5', fontSize: '0.95rem' }}>
-              This meeting is scheduled to begin at <strong>{new Date(earlyStartMeeting.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}</strong>. The current time is outside the standard 15-minute starting window.
-              <br /><br />
+              This meeting is scheduled to begin at{' '}
+              <strong>
+                {new Date(earlyStartMeeting.scheduledFor).toLocaleString([], {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                })}
+              </strong>
+              . The current time is outside the standard 15-minute starting window.
+              <br />
+              <br />
               Are you sure you want to start this meeting right now?
             </p>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '28px' }}>
-              <button 
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '12px',
+                marginTop: '28px',
+              }}
+            >
+              <button
                 onClick={() => setEarlyStartMeeting(null)}
                 style={{
-                  padding: '9px 18px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: '1px solid #cbd5e1',
+                  background: '#fff',
+                  color: '#475569',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
                 }}
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={() => {
                   const m = earlyStartMeeting;
                   setEarlyStartMeeting(null);
@@ -1364,7 +1686,14 @@ export function DashboardView({
                   }
                 }}
                 style={{
-                  padding: '9px 18px', borderRadius: '8px', border: 'none', background: '#db2777', color: '#fff', fontWeight: 600, cursor: 'pointer', fontSize: '0.9rem'
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: '#db2777',
+                  color: '#fff',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
                 }}
               >
                 Yes, Start Meeting
@@ -1375,7 +1704,7 @@ export function DashboardView({
       )}
 
       {showSettingsModal && (
-        <SystemSettingsModal 
+        <SystemSettingsModal
           onClose={() => setShowSettingsModal(false)}
           onSave={() => {
             setShowSettingsModal(false);
@@ -1385,8 +1714,8 @@ export function DashboardView({
       )}
 
       {showProfileModal && (
-        <MyProfileModal 
-          user={user} 
+        <MyProfileModal
+          user={user}
           onClose={() => setShowProfileModal(false)}
           onSave={({ personalRoomId: newId, avatarUrl: newAvatar, displayName: newName }) => {
             setPersonalRoomId(newId || null);
@@ -1398,7 +1727,9 @@ export function DashboardView({
                 ...(newName ? { displayName: newName } : {}),
               };
               // Keep localStorage in sync
-              try { localStorage.setItem('kloudUser', JSON.stringify(updated)); } catch {}
+              try {
+                localStorage.setItem('kloudUser', JSON.stringify(updated));
+              } catch {}
               onUpdateUser(updated);
             }
           }}
@@ -1409,9 +1740,20 @@ export function DashboardView({
       {/* ── Warning Message Overlay ── */}
       {warningMessage && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
-          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+          <div
+            className={styles.dashModalContent}
+            style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}
+          >
             <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="48"
+                height="48"
+                style={{ margin: '0 auto' }}
+              >
                 <circle cx="12" cy="12" r="10"></circle>
                 <line x1="12" y1="8" x2="12" y2="12"></line>
                 <line x1="12" y1="16" x2="12.01" y2="16"></line>
@@ -1421,10 +1763,16 @@ export function DashboardView({
             <p style={{ color: '#4b5563', lineHeight: '1.5', marginBottom: '2rem' }}>
               {warningMessage}
             </p>
-            <button 
-              onClick={() => setWarningMessage(null)} 
-              className={styles.dashSignOut} 
-              style={{ width: '100%', padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+            <button
+              onClick={() => setWarningMessage(null)}
+              className={styles.dashSignOut}
+              style={{
+                width: '100%',
+                padding: '0.75rem',
+                borderRadius: '12px',
+                background: '#f1f5f9',
+                border: '1px solid #e2e8f0',
+              }}
             >
               Close
             </button>
@@ -1435,31 +1783,76 @@ export function DashboardView({
       {/* ── Delete Confirmation Modal ── */}
       {deletingMeeting && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
-          <div className={styles.dashModalContent} style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}>
+          <div
+            className={styles.dashModalContent}
+            style={{ maxWidth: '400px', textAlign: 'center', padding: '2rem' }}
+          >
             <div style={{ color: '#ef4444', marginBottom: '1rem' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="48" height="48" style={{ margin: '0 auto' }}>
-                <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" strokeLinecap="round" strokeLinejoin="round"/>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="48"
+                height="48"
+                style={{ margin: '0 auto' }}
+              >
+                <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M10 11v6M14 11v6" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </div>
-            <h3 style={{ fontSize: '1.2rem', color: '#1e293b', marginBottom: '0.5rem' }}>Delete Meeting?</h3>
-            <p style={{ color: '#6b7280', fontSize: '0.9rem', marginBottom: '2rem', lineHeight: 1.5 }}>
-              <strong>{deletingMeeting.title || deletingMeeting.roomName}</strong> will be permanently deleted.
+            <h3 style={{ fontSize: '1.2rem', color: '#1e293b', marginBottom: '0.5rem' }}>
+              Delete Meeting?
+            </h3>
+            <p
+              style={{
+                color: '#6b7280',
+                fontSize: '0.9rem',
+                marginBottom: '2rem',
+                lineHeight: 1.5,
+              }}
+            >
+              <strong>{deletingMeeting.title || deletingMeeting.roomName}</strong> will be
+              permanently deleted.
             </p>
             <div style={{ display: 'flex', gap: '0.75rem' }}>
               <button
                 onClick={() => setDeletingMeeting(null)}
                 className={styles.dashSignOut}
-                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#f1f5f9', border: '1px solid #e2e8f0' }}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  borderRadius: '12px',
+                  background: '#f1f5f9',
+                  border: '1px solid #e2e8f0',
+                }}
                 disabled={deleteLoading}
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleDeleteMeeting(deletingMeeting.roomName)}
-                style={{ flex: 1, padding: '0.75rem', borderRadius: '12px', background: '#ef4444', color: '#fff', border: 'none', fontWeight: 600, cursor: deleteLoading ? 'not-allowed' : 'pointer', opacity: deleteLoading ? 0.7 : 1 }}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  borderRadius: '12px',
+                  background: '#ef4444',
+                  color: '#fff',
+                  border: 'none',
+                  fontWeight: 600,
+                  cursor: deleteLoading ? 'not-allowed' : 'pointer',
+                  opacity: deleteLoading ? 0.7 : 1,
+                }}
                 disabled={deleteLoading}
               >
                 {deleteLoading ? 'Deleting...' : 'Delete'}
@@ -1468,7 +1861,6 @@ export function DashboardView({
           </div>
         </div>
       )}
-
     </div>
   );
 }

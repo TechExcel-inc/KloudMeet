@@ -2282,6 +2282,8 @@
 /* Base meeting card */
 .meetingCard {
   position: relative;
+  scroll-margin-top: 220px;
+  scroll-margin-bottom: 16px;
   background: rgba(255,255,255,0.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -2290,13 +2292,39 @@
   box-shadow: 0 1px 4px rgba(0,0,0,0.03);
   ring: 1px solid rgba(255,255,255,0.75);
   transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
-  cursor: default;
+  cursor: pointer;
 }
 
 .meetingCard:hover {
   background: rgba(255,255,255,0.75);
   border-color: rgba(203,213,225,0.85);
   box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+
+/* Selected row (click or arrow keys) */
+.meetingCard:focus {
+  outline: none;
+}
+
+.meetingCardSelected,
+.meetingCardSelected:hover {
+  background: rgba(245, 243, 255, 0.9);
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 1px #a78bfa, 0 4px 16px rgba(82, 39, 211, 0.1);
+}
+
+/* Small quiet label on the details line (e.g. recording "Private") */
+.meetingMetaTag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  font-size: 0.7rem;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 /* Live card variant */
@@ -2427,7 +2455,9 @@
 }
 
 .meetingCard:hover .meetingHoverActions,
-.meetingCardLive:hover .meetingHoverActions {
+.meetingCardLive:hover .meetingHoverActions,
+.meetingCardSelected .meetingHoverActions,
+.meetingCard:focus-within .meetingHoverActions {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
@@ -2439,7 +2469,9 @@
 }
 
 .meetingCard:hover .statusBadgeHideable,
-.meetingCardLive:hover .statusBadgeHideable {
+.meetingCardLive:hover .statusBadgeHideable,
+.meetingCardSelected .statusBadgeHideable,
+.meetingCard:focus-within .statusBadgeHideable {
   opacity: 0;
   pointer-events: none;
 }
@@ -3251,10 +3283,10 @@
     gap: 5px;
     height: 34px;
     padding: 0 12px;
-    border: 1px solid #fecaca;
+    border: 1px solid #e2e8f0;
     border-radius: 100px;
-    background: #fff1f2;
-    color: #ef4444;
+    background: #f8fafc;
+    color: #475569;
     font-size: 0.82rem;
     font-weight: 500;
     cursor: pointer;
@@ -3265,8 +3297,8 @@
   }
 
   .mobileDeleteBtn:hover {
-    background: #fecaca;
-    color: #dc2626;
+    background: #e2e8f0;
+    color: #0f172a;
   }
 }
 
@@ -3356,6 +3388,33 @@
   background: rgba(15, 23, 42, 0.72) !important;
   border-color: rgba(71, 85, 105, 0.58) !important;
   box-shadow: 0 8px 20px rgba(2, 6, 23, 0.35) !important;
+}
+
+:global(html[data-theme='dark']) .meetingCardSelected,
+:global(html[data-theme='dark']) .meetingCardSelected:hover {
+  background: rgba(76, 29, 149, 0.28) !important;
+  border-color: #8b5cf6 !important;
+  box-shadow: 0 0 0 1px #8b5cf6, 0 8px 20px rgba(2, 6, 23, 0.35) !important;
+}
+
+:global(html[data-theme='dark']) .meetingMetaTag {
+  background: rgba(148, 163, 184, 0.14);
+  color: #94a3b8;
+}
+
+:global(html[data-theme='dark']) .cardJoinBtn {
+  color: #c4b5fd;
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+:global(html[data-theme='dark']) .cardJoinBtn:hover {
+  background: rgba(139, 92, 246, 0.2);
+  border-color: #a78bfa;
+}
+
+:global(html[data-theme='dark']) .iconBtn:hover {
+  background: #1e293b;
+  color: #f1f5f9;
 }
 
 :global(html[data-theme='dark']) .meetingCardMeta,
