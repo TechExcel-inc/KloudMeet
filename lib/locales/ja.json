@@ -430,6 +430,7 @@
   "schedule.linkCopied": "ミーティングリンクをクリップボードにコピーしました！",
   "schedule.inviteCopied": "招待リンクをクリップボードにコピーしました！",
   "schedule.cancelConfirm": "このミーティングをキャンセルしますか？",
+  "schedule.cancelNotifyAttendees": "招待済みの参加者にはキャンセルのお知らせメールが届きます。",
   "schedule.cancelFailed": "キャンセルに失敗しました。",
   "schedule.deleteConfirm": "このミーティングを削除しますか？元に戻せません。",
   "schedule.deleteFailed": "削除に失敗しました。",

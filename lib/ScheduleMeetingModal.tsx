@@ -359,14 +359,20 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   };
 
   const handleCancelMeeting = async () => {
-    if (!confirm(t('schedule.cancelConfirm'))) return;
+    const notifyLine = attendees.length > 0
+      ? `\n\n${tf('schedule.cancelNotifyAttendees', 'Attendees who were invited will get a cancellation email.')}`
+      : '';
+    if (!confirm(`${t('schedule.cancelConfirm')}${notifyLine}`)) return;
     setIsSaving(true);
     try {
-      await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
+      const res = await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
         method: 'PUT',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ status: 'CANCELED' }),
       });
+      const data = await res.json().catch(() => null);
+      const failed: string[] = Array.isArray(data?.cancelNotice?.failed) ? data.cancelNotice.failed : [];
+      if (failed.length > 0) alert(tf('schedule.invitesFailed', "Couldn't email: {list}", { list: failed.join(', ') }));
       onSave();
     } catch (e) {
       alert(t('schedule.cancelFailed'));

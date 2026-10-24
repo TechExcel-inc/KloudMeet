@@ -178,6 +178,39 @@ export function invitationEmail(to: string, meeting: MeetingForEmail, origin: st
   };
 }
 
+/** Sent to invited attendees when the host cancels the meeting. */
+export function cancellationEmail(to: string, meeting: MeetingForEmail, origin: string) {
+  const title = meeting.title || 'Kloud Meet meeting';
+  const intro = `${meeting.hostName || 'The host'} canceled this meeting. The join link no longer works.`;
+  const rows = meetingRows(meeting).filter(([k]) => k !== 'Details');
+  // The .ics endpoint serves STATUS:CANCELLED, so opening it updates calendars that imported it.
+  const icsUrl = buildCalendarLinks(meeting, origin).ics;
+  const footer = 'If you added this meeting to your calendar, you can delete it.';
+  const rowsHtml = rows
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:4px 12px 4px 0;color:#6b7280;font-size:14px;vertical-align:top;white-space:nowrap">${escapeHtml(k)}</td><td style="padding:4px 0;color:#6b7280;font-size:14px;text-decoration:line-through">${escapeHtml(v)}</td></tr>`,
+    )
+    .join('');
+  const html = `
+    <div style="font-family: 'Plus Jakarta Sans', Inter, Arial, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+      <h2 style="color:#111827;margin:0 0 8px">Meeting canceled</h2>
+      <p style="color:#4b5563;font-size:15px;margin:0 0 20px">${escapeHtml(intro)}</p>
+      <table style="border-collapse:collapse;margin:0 0 20px">${rowsHtml}</table>
+      <p style="color:#4b5563;font-size:14px;margin:0">${escapeHtml(footer)}
+        <a href="${escapeHtml(icsUrl)}" style="color:#5E5CE6">Update calendar (.ics)</a></p>
+    </div>`;
+  const text = [
+    intro,
+    '',
+    ...rows.map(([k, v]) => `${k}: ${v}`),
+    '',
+    footer,
+    `Calendar file (.ics): ${icsUrl}`,
+  ].join('\n');
+  return { to, tag: 'meeting-cancel', subject: `Canceled: ${title}`, text, html };
+}
+
 /** Reminder sent `offsetMinutes` before the start. */
 export function reminderEmail(to: string, meeting: MeetingForEmail, origin: string, offsetMinutes: number) {
   const joinUrl = meetingJoinUrl(origin, meeting.roomName);

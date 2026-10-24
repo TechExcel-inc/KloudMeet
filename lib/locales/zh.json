@@ -428,6 +428,7 @@
   "schedule.linkCopied": "会议链接已复制到剪贴板！",
   "schedule.inviteCopied": "邀请链接已复制到剪贴板！",
   "schedule.cancelConfirm": "确定要取消此会议吗？",
+  "schedule.cancelNotifyAttendees": "已收到邀请的参会人会收到取消通知邮件。",
   "schedule.cancelFailed": "取消会议失败。",
   "schedule.deleteConfirm": "确定要删除此会议吗？此操作无法撤销。",
   "schedule.deleteFailed": "删除会议失败。",

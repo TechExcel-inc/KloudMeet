@@ -439,6 +439,7 @@
   "schedule.linkCopied": "Meeting link copied to clipboard!",
   "schedule.inviteCopied": "Invite copied to clipboard!",
   "schedule.cancelConfirm": "Are you sure you want to cancel this meeting?",
+  "schedule.cancelNotifyAttendees": "Attendees who were invited will get a cancellation email.",
   "schedule.cancelFailed": "Failed to cancel meeting.",
   "schedule.deleteConfirm": "Are you sure you want to delete this meeting? This cannot be undone.",
   "schedule.deleteFailed": "Failed to delete meeting.",

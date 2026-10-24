@@ -8,6 +8,7 @@ import { toCalendarMeeting } from './calendar/server';
 import { isCanceledStatus } from './calendar/ics';
 import {
   MAX_REMINDER_MINUTES,
+  cancellationEmail,
   dueReminderOffsets,
   invitationEmail,
   normalizeEmails,
@@ -103,6 +104,28 @@ async function sendPendingInvitations(meetingId: number, origin: string): Promis
       where: { id: invitee.id },
       data: { invitedAt: new Date(), invitedFor: scheduledFor },
     });
+  }
+  return { sent, failed };
+}
+
+/**
+ * After the host cancels: tell every attendee who received an invitation. Skipped for
+ * meetings whose start time has passed (nothing left to cancel for them).
+ */
+export async function sendCancellationEmails(meetingId: number, origin: string): Promise<{ sent: number; failed: string[] }> {
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: { invitees: { where: { invitedAt: { not: null } } }, createdByMember: hostSelect },
+  });
+  const failed: string[] = [];
+  if (!meeting?.scheduledFor || meeting.scheduledFor.getTime() <= Date.now()) return { sent: 0, failed };
+  const scheduledFor = meeting.scheduledFor;
+  const calendar = { ...toCalendarMeeting({ ...meeting, scheduledFor }), scheduledFor };
+  let sent = 0;
+  for (const invitee of meeting.invitees) {
+    const result = await sendMail(cancellationEmail(invitee.email, calendar, origin));
+    if (result.ok) sent += 1;
+    else failed.push(invitee.email);
   }
   return { sent, failed };
 }

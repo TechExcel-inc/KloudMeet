@@ -430,6 +430,7 @@
   "schedule.linkCopied": "회의 링크가 클립보드에 복사되었습니다!",
   "schedule.inviteCopied": "초대 링크가 클립보드에 복사되었습니다!",
   "schedule.cancelConfirm": "이 회의를 취소하시겠습니까?",
+  "schedule.cancelNotifyAttendees": "초대를 받은 참석자에게 취소 안내 이메일이 발송됩니다.",
   "schedule.cancelFailed": "회의 취소에 실패했습니다.",
   "schedule.deleteConfirm": "이 회의를 삭제하시겠습니까? 되돌릴 수 없습니다.",
   "schedule.deleteFailed": "회의 삭제에 실패했습니다.",

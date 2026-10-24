@@ -23,6 +23,9 @@ import {
   MEETING_STATUS,
   withMeetingLifecycleMeta,
 } from '@/lib/meetingRejoin';
+import { isCanceledStatus } from '@/lib/calendar/ics';
+import { publicOrigin } from '@/lib/calendar/server';
+import { sendCancellationEmails } from '@/lib/meetingInvites.server';
 
 export async function GET(
   request: NextRequest,
@@ -170,7 +173,16 @@ export async function PUT(
       where: { roomName },
       data
     });
-    return NextResponse.json({ success: true, meeting: updated });
+
+    // Host canceled a scheduled meeting: tell the attendees who were invited.
+    let cancelNotice: { sent: number; failed: string[] } | undefined;
+    if (isCanceledStatus(updated.status) && !isCanceledStatus(current.status)) {
+      cancelNotice = await sendCancellationEmails(updated.id, publicOrigin(request)).catch((error) => {
+        console.error('[meetings PUT] cancellation emails', error);
+        return { sent: 0, failed: [] };
+      });
+    }
+    return NextResponse.json({ success: true, meeting: updated, ...(cancelNotice ? { cancelNotice } : {}) });
   } catch (error) {
     console.error('[meetings PUT]', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

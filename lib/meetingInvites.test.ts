@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_REMINDER_OFFSETS,
+  cancellationEmail,
   dueReminderOffsets,
   formatLeadTime,
   invitationEmail,
@@ -84,5 +85,22 @@ describe('emails', () => {
     expect(formatLeadTime(1440)).toBe('1 day');
     expect(formatLeadTime(2880)).toBe('2 days');
     expect(formatLeadTime(45)).toBe('45 minutes');
+  });
+});
+
+describe('cancellationEmail', () => {
+  it('names the meeting, leaves out the join button and links the canceled .ics', () => {
+    const mail = cancellationEmail('a@b.co', {
+      roomName: 'abc-123',
+      title: 'Q4 <review>',
+      scheduledFor: new Date('2026-11-02T10:00:00Z'),
+      timezone: 'Asia/Tokyo',
+      hostName: 'ying huang',
+    }, 'https://meet.example.com');
+    expect(mail.subject).toBe('Canceled: Q4 <review>');
+    expect(mail.text).toContain('ying huang canceled this meeting');
+    expect(mail.text).toContain('https://meet.example.com/api/meetings/abc-123/calendar.ics');
+    expect(mail.html).not.toContain('Join meeting');
+    expect(mail.html).toContain('Q4 &lt;review&gt;');
   });
 });
