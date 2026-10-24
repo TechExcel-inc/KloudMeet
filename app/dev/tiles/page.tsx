@@ -13,6 +13,7 @@ import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from '@/lib/galleryPrefs';
+import { IDLE_RECORDING_STATE, type RecordingState } from '@/lib/recordingControls';
 
 const BASE_NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
@@ -101,6 +102,8 @@ export default function DevTilesPage() {
   const [count, setCount] = React.useState(7);
   const [page, setPage] = React.useState(1);
   const [gallery, setGallery] = React.useState<GalleryPrefs>(DEFAULT_GALLERY_PREFS);
+  // Recording panel preview: a running recording whose controls change local state only
+  const [rec, setRec] = React.useState<RecordingState>({ ...IDLE_RECORDING_STATE, active: true });
   const perPage = gallery.tilesPerPage === 'auto' ? PAGE_SIZE : gallery.tilesPerPage;
   const pageCount = Math.max(1, Math.ceil(count / perPage));
   const pageStart = (Math.min(page, pageCount) - 1) * perPage;
@@ -159,7 +162,7 @@ export default function DevTilesPage() {
           meetingTitle="Weekly product review"
           modeLabel={view === 'liveDoc' ? 'LiveDoc' : view === 'shareScreen' ? 'Screen share' : 'Video · Grid'}
           isRecording={host}
-          recordingLabel="Recording"
+          recordingLabel={rec.paused ? 'Recording paused' : 'Recording'}
           captionsOn
           captionsLabel="Captions on"
         />
@@ -225,6 +228,10 @@ export default function DevTilesPage() {
         onToggleAttendee={noop}
         canRecord={host}
         isRecording={host}
+        recordingState={rec}
+        canChangeRecordingPolicy={host}
+        onRecordingAction={(action) => setRec((r) => ({ ...r, paused: action === 'pause' }))}
+        onRecordingSettings={(patch) => setRec((r) => ({ ...r, ...patch }))}
         handRaised={hand}
         onToggleHand={() => setHand((v) => !v)}
         raisedHandCount={1}

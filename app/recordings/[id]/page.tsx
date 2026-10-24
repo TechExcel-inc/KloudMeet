@@ -9,6 +9,7 @@ import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import css from '@/styles/Replay.module.css';
+import { skipPaused } from '@/lib/recordingControls';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -49,6 +50,8 @@ interface ReplayData {
     visibility?: string | null;
     fileName: string;
     durationSeconds: number | null;
+    /** Paused stretches [start, end] in seconds; the player jumps over them */
+    pausedRanges?: Array<[number, number]>;
     streamUrl: string | null;
     status: string;
     createdAt: string;
@@ -1216,7 +1219,13 @@ export default function ReplayPage() {
               controls
               playsInline
               className={cx(css.video, !hasTranscripts && css.videoSolo)}
-              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onTimeUpdate={(e) => {
+                const el = e.currentTarget;
+                // Recording was paused here: the file shows a "paused" slate, so skip past it
+                const target = skipPaused(el.currentTime, recording.pausedRanges ?? []);
+                if (target !== el.currentTime) el.currentTime = Math.min(target, el.duration || target);
+                setCurrentTime(el.currentTime);
+              }}
               onDurationChange={(e) => setDuration(e.currentTarget.duration)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}

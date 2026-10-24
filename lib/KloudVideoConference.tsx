@@ -39,6 +39,8 @@ export interface KloudVideoConferenceProps extends React.HTMLAttributes<HTMLDivE
   webcamLayoutMode?: WebcamLayoutMode;
   /** The viewer's own gallery settings (tiles per page, video first, hide without video) */
   galleryPrefs?: GalleryPrefs;
+  /** Recorder bot in gallery mode: keep the video grid even while someone shares their screen */
+  ignoreScreenShare?: boolean;
 }
 
 function trackKey(track: TrackReferenceOrPlaceholder): string {
@@ -61,6 +63,7 @@ export function KloudVideoConference({
   SettingsComponent,
   webcamLayoutMode = 'tile',
   galleryPrefs = DEFAULT_GALLERY_PREFS,
+  ignoreScreenShare = false,
   ...props
 }: KloudVideoConferenceProps) {
   const room = useRoomContext();
@@ -74,12 +77,16 @@ export function KloudVideoConference({
   // 勿限制为仅 ActiveSpeakersChanged：否则屏幕共享 publish/subscribe 后 tracks 可能不刷新，
   // 表现为 Tab 已是 shareScreen，主画面仍停在摄像头宫格。
   // 不传 updateOnlyOn 时走默认 allParticipantRoomEvents（含 ActiveSpeakers + Track*）。
-  const tracks = useTracks(
+  const allTracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
     { onlySubscribed: false },
+  );
+  const tracks = React.useMemo(
+    () => (ignoreScreenShare ? allTracks.filter((track) => track.source !== Track.Source.ScreenShare) : allTracks),
+    [allTracks, ignoreScreenShare],
   );
 
   const layoutContext = useCreateLayoutContext();

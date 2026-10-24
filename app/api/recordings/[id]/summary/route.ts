@@ -5,6 +5,7 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
+import { parsePauseSpans, pauseRangesInMedia } from '@/lib/recordingControls';
 import {
   authorizeRecordingView,
   ensureShareKey,
@@ -106,6 +107,8 @@ export async function GET(
         canTranscribe,
         fileName: recording.fileName,
         durationSeconds: recording.durationSeconds,
+        // Paused stretches, as [start, end] seconds into the file: the player skips them
+        pausedRanges: pauseRangesInMedia(parsePauseSpans(recording.pauseSpans), recording.mediaStartedAt),
         fileSizeBytes: recording.fileSizeBytes,
         status: recording.status,
         createdAt: recording.createdAt,

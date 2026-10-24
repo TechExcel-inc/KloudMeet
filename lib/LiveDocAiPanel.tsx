@@ -42,6 +42,8 @@ interface LiveDocAiPanelProps {
    * 可看文档列表、摘要、转写，不显示上传、删除、切换、生成等操作。
    */
   canManage?: boolean;
+  /** Bump `nonce` to switch the panel to `tab` (e.g. the recording sheet's Live transcript) */
+  requestedTab?: { tab: LiveDocAiTab; nonce: number } | null;
 }
 
 interface MeetingCaption {
@@ -509,9 +511,13 @@ export function LiveDocAiPanel({
   onOpenDocument,
   livekitToken = '',
   canManage = true,
+  requestedTab = null,
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
+  React.useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab.tab);
+  }, [requestedTab]);
   const [documentSearch, setDocumentSearch] = React.useState('');
   const [transcriptSearch, setTranscriptSearch] = React.useState('');
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);

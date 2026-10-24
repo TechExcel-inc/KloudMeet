@@ -103,6 +103,13 @@ model Meeting {
   endedReason             String?
   rejoinableUntil         DateTime?
   roomEmptyAt             DateTime?
+  /// Recording settings for this meeting (set by the host in the recording sheet)
+  recordingHostOnly       Boolean                  @default(true)
+  recordingMode           String                   @default("follow")
+  recordingSyncTranscript Boolean                  @default(true)
+  /// Who is host / co-host / presenter right now, as reported by the current host's client:
+  /// { host, cohosts[], presenters[] } (LiveKit identities). Used to check recording permission.
+  meetingRoles            Json?
   account                 KloudMeetAccount?        @relation(fields: [accountId], references: [id], map: "Meeting_accountId_fkey")
   createdByMember         TeamMember               @relation(fields: [createdByMemberId], references: [id], map: "Meeting_createdByMemberId_fkey")
   participants            MeetingParticipant[]
@@ -262,6 +269,14 @@ model Recording {
   sttStatus       String?
   sttStartedAt    DateTime?
   sttError        String?                  @db.Text
+  /// Layout recorded: follow | gallery | speaker | audio
+  mode            String                   @default("follow")
+  /// Set while the recording is paused (pause = the recorder shows a "paused" slate and is silent)
+  pausedAt        DateTime?
+  /// Closed pauses as [{ "from": ISO, "to": ISO }] — skipped on replay and not billed
+  pauseSpans      Json?
+  /// Transcribe automatically once the file is ready (copied from the meeting at start)
+  syncTranscript  Boolean                  @default(true)
   createdAt       DateTime                 @default(now())
   createdBy       String?
   deletedAt       DateTime?

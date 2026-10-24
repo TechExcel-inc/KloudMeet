@@ -34,6 +34,13 @@ import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeet
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
+import {
+  canControlRecording,
+  IDLE_RECORDING_STATE,
+  RECORDING_STATE_MSG,
+  type RecordingMode,
+  type RecordingState,
+} from '@/lib/recordingControls';
 import { applyTileHue } from '@/lib/tileLayout';
 import {
   DEFAULT_GALLERY_PREFS,
@@ -398,7 +405,22 @@ export function VideoConferenceComponent(props: {
   );
 
   const [showMeetingReadyModal, setShowMeetingReadyModal] = React.useState(false);
-  const [isRecording, setIsRecording] = React.useState(false);
+  // Recording state everyone in the meeting shares (server is the source of truth; whoever
+  // changes it broadcasts RECORDING_STATE). Before, only the person recording knew.
+  const [recordingState, setRecordingState] = React.useState<RecordingState>(IDLE_RECORDING_STATE);
+  const isRecording = recordingState.active;
+  const setIsRecording = React.useCallback(
+    (on: boolean) => setRecordingState((s) => ({ ...s, active: on, paused: on ? s.paused : false })),
+    [],
+  );
+  /** True on the client that started the recording: leaving from here stops it, as before. */
+  const startedRecordingHereRef = React.useRef(false);
+  const broadcastRecordingStateRef = React.useRef<(state: RecordingState) => void>(() => {});
+  const applyRecordingState = React.useCallback((state: RecordingState | undefined | null, broadcast: boolean) => {
+    if (!state) return;
+    setRecordingState(state);
+    if (broadcast) broadcastRecordingStateRef.current(state);
+  }, []);
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -438,10 +460,14 @@ export function VideoConferenceComponent(props: {
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ action, pageUrl: pageUrlStr }),
+        body: JSON.stringify({ action, pageUrl: pageUrlStr, mode: recordingState.mode }),
       });
 
       const data = await res.json();
+      if (res.ok) {
+        startedRecordingHereRef.current = action === 'start';
+        applyRecordingState(data.state, true);
+      }
       if (!res.ok) {
         setIsRecording(action === 'stop'); // revert
         const toastEl = document.createElement('div');
@@ -449,7 +475,9 @@ export function VideoConferenceComponent(props: {
         toastEl.textContent =
           data?.code === 'BILLING_LIMIT'
             ? t('billing.limit.recording')
-            : `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
+            : data?.code === 'RECORDING_NOT_ALLOWED'
+              ? t('toolbar.recordingNotAllowed')
+              : `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
         toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
         document.body.appendChild(toastEl);
         setTimeout(() => toastEl.remove(), 4000);
@@ -466,6 +494,42 @@ export function VideoConferenceComponent(props: {
       setTimeout(() => toastEl.remove(), 3000);
     }
   };
+
+  /** Pause / resume and recording settings: ask the server, then tell everyone. */
+  const recordingRequest = React.useCallback(
+    async (body: { action: 'pause' | 'resume' } | { action: 'settings'; mode?: RecordingMode; hostOnly?: boolean; syncTranscript?: boolean }) => {
+      const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
+      const showError = (text: string) => {
+        const toastEl = document.createElement('div');
+        toastEl.textContent = text;
+        toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
+        document.body.appendChild(toastEl);
+        setTimeout(() => toastEl.remove(), 3500);
+      };
+      try {
+        const res = await fetch(`/api/meetings/${roomSeg}/record`, {
+          method: 'POST',
+          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          showError(
+            data?.code === 'MODE_NEEDS_RESTART'
+              ? t('toolbar.recordingModeNeedsRestart')
+              : data?.code === 'RECORDING_NOT_ALLOWED'
+                ? t('toolbar.recordingNotAllowed')
+                : `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data?.error ?? res.status}`,
+          );
+          return;
+        }
+        applyRecordingState(data.state, true);
+      } catch {
+        showError(t('toolbar.recordNetworkError') || 'Network error while toggling recording');
+      }
+    },
+    [applyRecordingState, t],
+  );
 
   React.useEffect(() => {
     if (navigator.mediaDevices && (navigator.mediaDevices as any).setCaptureHandleConfig) {
@@ -2158,10 +2222,12 @@ export function VideoConferenceComponent(props: {
    */
   const stopRecordingAndThen = React.useCallback(
     async (afterFn: () => void) => {
-      if (!isRecording) {
+      if (!isRecording || !startedRecordingHereRef.current) {
         afterFn();
         return;
       }
+      startedRecordingHereRef.current = false;
+      broadcastRecordingStateRef.current({ ...recordingState, active: false, paused: false });
 
       setRecordSavePhase('saving');
 
@@ -2189,7 +2255,7 @@ export function VideoConferenceComponent(props: {
       await new Promise((r) => setTimeout(r, 1500));
       afterFn();
     },
-    [isRecording],
+    [isRecording, recordingState],
   );
 
   // Wrapped leave: stop recording then leave
@@ -2772,6 +2838,9 @@ export function VideoConferenceComponent(props: {
     },
     [room, encoder],
   );
+  broadcastRecordingStateRef.current = (state: RecordingState) => {
+    sendMeetingMsg({ type: RECORDING_STATE_MSG, state });
+  };
 
   const participantLiveDocSentRef = React.useRef<boolean | null>(null);
   const participantLiveDocSavedRef = React.useRef<boolean | null>(null);
@@ -3709,6 +3778,9 @@ export function VideoConferenceComponent(props: {
           ) {
             sendMeetingMsg(buildCorrection(), [senderIdentity]);
           }
+        } else if (msg.type === RECORDING_STATE_MSG && msg.state) {
+          // Someone started / stopped / paused recording or changed its settings
+          setRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) });
         } else if (msg.type === 'CAPTIONS_ON') {
           // Host/Co-host 开启了全局字幕 — 本地启动识别
           setCaptionsOpenRef.current?.(true);
@@ -4713,6 +4785,80 @@ export function VideoConferenceComponent(props: {
   /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
   const floatingWebcamPanelVisible = shouldShowFloatingWebcamPanel && !documentPip.isOpen;
 
+  // Recording: pick up the meeting's recording state when joining (late joiners, the recorder bot)
+  React.useEffect(() => {
+    if (!livekitConnected) return;
+    const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
+    const token = connectionDetailsRef.current?.participantToken;
+    if (!roomSeg || !token) return;
+    let cancelled = false;
+    fetch(`/api/meetings/${roomSeg}/record`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.state) setRecordingState(data.state as RecordingState);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [livekitConnected]);
+
+  // The current host keeps the server's list of host / co-hosts / presenters, which the record
+  // API uses to check who may record.
+  const meetingRolesKey = JSON.stringify({
+    host: hostIdentity || null,
+    cohosts: [...cohostIdentities].sort(),
+    presenters: [...new Set([...copresenterIdentities, ...(autoPresenterIdentity ? [autoPresenterIdentity] : [])])].sort(),
+  });
+  React.useEffect(() => {
+    if (!livekitConnected || !isHost || isRecorderBot) return;
+    const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
+    if (!roomSeg) return;
+    const id = window.setTimeout(() => {
+      void fetch(`/api/meetings/${roomSeg}/record`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify({ action: 'roles', roles: JSON.parse(meetingRolesKey) }),
+      }).catch(() => undefined);
+    }, 600);
+    return () => window.clearTimeout(id);
+  }, [livekitConnected, isHost, isRecorderBot, meetingRolesKey]);
+
+  // Recorder bot: the cloud recording mode decides what it shows.
+  //   follow  — whatever the meeting shows (as before)
+  //   gallery — everyone's video in a grid, even while someone shares
+  //   speaker — whoever is talking; the shared content while someone shares / presents LiveDoc
+  // The meeting's own view is kept in meetingViewRef so "follow" and "speaker" can return to it.
+  const meetingViewRef = React.useRef<ViewMode>(activeView);
+  const botForcingViewRef = React.useRef(false);
+  const botMode = isRecorderBot ? recordingState.mode : 'follow';
+  React.useEffect(() => {
+    if (!isRecorderBot) return;
+    if (botForcingViewRef.current) {
+      botForcingViewRef.current = false;
+    } else {
+      meetingViewRef.current = activeView;
+    }
+    const meetingView = meetingViewRef.current;
+    let wantView: ViewMode = meetingView;
+    if (botMode === 'gallery') wantView = 'webcam';
+    if (botMode === 'speaker') wantView = hasScreenShare || meetingView === 'liveDoc' ? meetingView : 'webcam';
+    if (wantView !== activeView) {
+      botForcingViewRef.current = true;
+      setActiveView(wantView);
+    }
+    if (botMode === 'gallery' && webcamLayoutMode !== 'tile') setWebcamLayoutMode('tile');
+    if (botMode === 'speaker' && webcamLayoutMode !== 'spotlight') setWebcamLayoutMode('spotlight');
+  }, [isRecorderBot, botMode, activeView, hasScreenShare, webcamLayoutMode]);
+
+  /** Who may start / stop / pause recording here (the server checks the same rule) */
+  const canRecordHere = canControlRecording({
+    isHost,
+    isCohost,
+    isPresenter: isCopresenter || isAutoPresenter,
+    hostOnly: recordingState.hostOnly,
+  });
+
   const [showPipSuggest, setShowPipSuggest] = React.useState(false);
 
   React.useEffect(() => {
@@ -5552,7 +5698,34 @@ export function VideoConferenceComponent(props: {
         {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
         {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
         {/* 桌面端远端音频挂在错误边界之外：视频区域反复出错被卸载时仍能听到声音 */}
-        {!isToolbarMobile && <RoomAudioRenderer />}
+        {/* While recording is paused the recorder bot shows a slate instead of the meeting
+            (and goes silent below), so nothing said or shown during the pause is in the file */}
+        {isRecorderBot && recordingState.paused && (
+          <div
+            role="status"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 100000,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 16,
+              background: 'var(--km-stage, #17181c)',
+              color: '#e8eaed',
+              fontFamily: 'var(--km-font)',
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M10 8v8M14 8v8" strokeLinecap="round" />
+            </svg>
+            <span style={{ fontSize: 28, fontWeight: 600 }}>{t('toolbar.recordingPaused')}</span>
+          </div>
+        )}
+        {/* The recorder bot goes silent while recording is paused, so the pause isn't in the file */}
+        {!isToolbarMobile && <RoomAudioRenderer muted={isRecorderBot && recordingState.paused} />}
         <KeyboardShortcuts />
 
         {/* ── Host ended meeting (remote end or END_MEETING) ── */}
@@ -6330,7 +6503,7 @@ export function VideoConferenceComponent(props: {
             }
             modeDetail={activeView === 'liveDoc' && isWhiteboardDoc ? t('liveDocAi.whiteboard') : undefined}
             isRecording={isRecording}
-            recordingLabel={t('toolbar.recording')}
+            recordingLabel={recordingState.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
             captionsOn={captionsRunning}
             captionsLabel={t('meeting.captionsRunning')}
           />
@@ -6503,6 +6676,7 @@ export function VideoConferenceComponent(props: {
               <VideoConferenceErrorBoundary>
                 <KloudVideoConference
                   webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
+                  ignoreScreenShare={botMode === 'gallery'}
                   galleryPrefs={galleryPrefs}
                   chatMessageFormatter={formatChatMessageLinks}
                   SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
@@ -9194,14 +9368,18 @@ export function VideoConferenceComponent(props: {
           participantLiveDocAi={participantLiveDocAi}
           onPrepareLiveDoc={() => setLivedocHasBeenActivated(true)}
           canEndForAll={isHost || isCohost}
-          canRecord={isHost || isCohost}
+          canRecord={canRecordHere}
           isRecording={isRecording}
           onOpenRecordPopup={() => {
-            if (isHost || isCohost) setShowRecordPopup(true);
+            if (canRecordHere) setShowRecordPopup(true);
           }}
           onStopRecording={() => {
-            if (isHost || isCohost) handleToggleRecording('stop');
+            if (canRecordHere) handleToggleRecording('stop');
           }}
+          recordingState={recordingState}
+          canChangeRecordingPolicy={isHost}
+          onRecordingAction={(action) => void recordingRequest({ action })}
+          onRecordingSettings={(patch) => void recordingRequest({ action: 'settings', ...patch })}
           onOpenHelp={() => setShowHelp(true)}
           canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
           muteAllActive={muteAllActive}
@@ -9315,7 +9493,7 @@ export function VideoConferenceComponent(props: {
         )}
 
         {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
-        {showRecordPopup && (isHost || isCohost) && (
+        {showRecordPopup && canRecordHere && (
           <div className="kloud-modal-overlay" onMouseDown={() => setShowRecordPopup(false)}>
             <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
               <div className="kloud-modal-body">
@@ -9327,9 +9505,28 @@ export function VideoConferenceComponent(props: {
                   </svg>
                   <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 600, color: '#111827' }}>{t('toolbar.everyoneReady')}</h3>
                 </div>
-                <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, margin: '0 0 20px' }}>
+                <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, margin: '0 0 16px' }}>
                   {t('toolbar.consentNotice')}
                 </p>
+                {/* Cloud recording mode: chosen before starting (can change while recording) */}
+                <div role="radiogroup" aria-label={t('toolbar.recordingModeLabel')} style={{ margin: '0 0 20px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{t('toolbar.recordingModeLabel')}</div>
+                  {(['follow', 'gallery', 'speaker', 'audio'] as const).map((m) => (
+                    <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 0', cursor: 'pointer', fontSize: '13px', color: '#111827' }}>
+                      <input
+                        type="radio"
+                        name="km-recording-mode"
+                        checked={recordingState.mode === m}
+                        onChange={() => setRecordingState((st) => ({ ...st, mode: m }))}
+                        style={{ marginTop: '2px', accentColor: '#5e5ce6' }}
+                      />
+                      <span>
+                        {t(`toolbar.recordingMode.${m}`)}
+                        <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>{t(`toolbar.recordingMode.${m}Hint`)}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
                   <button className="kloud-btn-text" onClick={() => setShowRecordPopup(false)}>{t('common.cancel')}</button>
                   <button className="kloud-btn-primary" onClick={() => {

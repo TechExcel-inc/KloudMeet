@@ -10,6 +10,8 @@ import {
 } from '@/lib/meetingRejoin';
 import { onRecordingReady } from '@/lib/billing/limits';
 import { meterCaptions, meterSafely } from '@/lib/billing/usage';
+import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
+import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -85,7 +87,21 @@ export async function POST(request: NextRequest) {
             }
           });
           // Billing (no-op when disabled): meter rec:<id> seconds, then Free replay retention.
-          await onRecordingReady(ready);
+          // Paused stretches are in the file but skipped on replay, so they aren't billed.
+          const paused = pausedSeconds(parsePauseSpans(ready.pauseSpans));
+          await onRecordingReady({
+            ...ready,
+            durationSeconds: ready.durationSeconds === null ? null : Math.max(0, ready.durationSeconds - paused),
+          });
+          // Sync transcript: transcribe now unless the meeting already has a live-caption transcript.
+          if (ready.syncTranscript) {
+            const captionLines = await prisma.meetingTranscript.count({ where: { meetingId: ready.meetingId } });
+            if (captionLines === 0) {
+              await startRecordingTranscription(ready).catch((err) =>
+                console.error('[webhook] sync transcript failed to start', ready.id, err),
+              );
+            }
+          }
         }
       }
     }

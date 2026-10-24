@@ -6,6 +6,8 @@ import { MediaDeviceMenu } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
 import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
+import { RECORDING_MODES, type RecordingMode, type RecordingState } from './recordingControls';
+import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
@@ -124,6 +126,12 @@ interface KloudMeetToolbarProps {
   isRecording?: boolean;
   onOpenRecordPopup?: () => void;
   onStopRecording?: () => void;
+  /** Shared recording state (paused, layout, host-only, sync transcript) */
+  recordingState?: RecordingState;
+  /** The host may change who can record and sync transcript */
+  canChangeRecordingPolicy?: boolean;
+  onRecordingAction?: (action: 'pause' | 'resume') => void;
+  onRecordingSettings?: (patch: { mode?: RecordingMode; hostOnly?: boolean; syncTranscript?: boolean }) => void;
   /** Opens the Help modal */
   onOpenHelp?: () => void;
   /** Whether local user can mute/unmute all participants */
@@ -276,6 +284,10 @@ export function KloudMeetToolbar({
   isRecording,
   onOpenRecordPopup,
   onStopRecording,
+  recordingState,
+  canChangeRecordingPolicy = false,
+  onRecordingAction,
+  onRecordingSettings,
   onOpenHelp,
   canMuteAll,
   muteAllActive,
@@ -1175,6 +1187,35 @@ export function KloudMeetToolbar({
     setLiveDocActionDialogVisible(false);
   };
 
+  /** Recording sheet → Live transcript: the Doc AI panel's transcript tab (captions start first) */
+  const [liveDocRequestedTab, setLiveDocRequestedTab] = useState<{ tab: LiveDocAiTab; nonce: number } | null>(null);
+  const openLiveTranscript = () => {
+    if (!captionsEnabled) {
+      if (canToggleCaptions) {
+        onToggleCaptions?.();
+      } else {
+        showInviteToast(t('toolbar.askHostForCaptions'));
+        return;
+      }
+    }
+    if (!canOpenLiveDocAi) {
+      showInviteToast(t('toolbar.liveDocAiNoPermission'));
+      return;
+    }
+    onPrepareLiveDoc?.();
+    setActiveSheet(null);
+    setInviteMenuOpen(false);
+    setLiveDocMenuVisible(true);
+    setLiveDocRequestedTab({ tab: 'transcript', nonce: Date.now() });
+  };
+  const recordingControls = {
+    state: recordingState,
+    canChangePolicy: canChangeRecordingPolicy,
+    onAction: onRecordingAction,
+    onSettings: onRecordingSettings,
+    onOpenLiveTranscript: openLiveTranscript,
+  };
+
   const handleLiveDocDocumentOpen = (itemId: number) => {
     void liveDocAiBridge.sendAction('document.switch', { itemId }).catch(() => undefined);
     setLiveDocMenuVisible(false);
@@ -1811,6 +1852,7 @@ export function KloudMeetToolbar({
         onAction={liveDocAiBridge.sendAction}
         onOpenDocument={handleLiveDocDocumentOpen}
         livekitToken={livekitToken}
+        requestedTab={liveDocRequestedTab}
       />
 
       {!visible && !syncPlayerActive && (
@@ -2275,6 +2317,7 @@ export function KloudMeetToolbar({
                 canEndForAll={canEndForAll}
                 canRecord={canRecord}
                 isRecording={isRecording}
+                recordingControls={recordingControls}
                 onOpenRecordPopup={onOpenRecordPopup}
                 onStopRecording={onStopRecording}
                 onOpenHelp={onOpenHelp}
@@ -2331,6 +2374,7 @@ export function KloudMeetToolbar({
               canEndForAll={canEndForAll}
               canRecord={canRecord}
               isRecording={isRecording}
+              recordingControls={recordingControls}
               onOpenRecordPopup={onOpenRecordPopup}
               onStopRecording={onStopRecording}
               onOpenHelp={onOpenHelp}
@@ -2447,6 +2491,7 @@ export function KloudMeetToolbar({
                       canEndForAll={canEndForAll}
                       canRecord={canRecord}
                       isRecording={isRecording}
+                      recordingControls={recordingControls}
                       onOpenRecordPopup={onOpenRecordPopup}
                       onStopRecording={onStopRecording}
                       onOpenHelp={onOpenHelp}
@@ -2642,6 +2687,7 @@ function ActiveSheetContent({
   canEndForAll,
   canRecord = false,
   isRecording,
+  recordingControls,
   onOpenRecordPopup,
   onStopRecording,
   onOpenHelp,
@@ -2666,12 +2712,6 @@ function ActiveSheetContent({
   onToggleDocumentPip,
 }: any) {
   const { t, locale, setLocale } = useI18n();
-  /** Recording sheet entries that are planned but not built yet (kept visible, as before) */
-  const showComingSoon = (feature: string) => {
-    setToastMsg(t('toolbar.comingSoon', { feature }));
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
-  };
   const [langOpen, setLangOpen] = useState(false);
   const langAnchorRef = useRef<HTMLDivElement | null>(null);
   const langCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -3026,11 +3066,23 @@ function ActiveSheetContent({
         </>
       )}
 
-      {canRecord && activeSheet === 'recording' && (
+      {canRecord && activeSheet === 'recording' && (() => {
+        const rec: RecordingState | undefined = recordingControls?.state;
+        const paused = !!rec?.paused;
+        const mode: RecordingMode = rec?.mode ?? 'follow';
+        const policyTitle = recordingControls?.canChangePolicy ? undefined : t('toolbar.recordingHostSetting');
+        return (
         <>
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.pauseRecording')); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-            {t('toolbar.pauseRecording')}
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => { recordingControls?.onAction?.(paused ? 'resume' : 'pause'); setActiveSheet(null); }}
+          >
+            {paused ? (
+              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z" /></svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
+            )}
+            {paused ? t('toolbar.resumeRecording') : t('toolbar.pauseRecording')}
           </button>
           <button className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
@@ -3039,36 +3091,62 @@ function ActiveSheetContent({
 
           <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
 
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.liveTranscript')); setActiveSheet(null); }}>
+          <button className={styles.actionSheetItem} onClick={() => { recordingControls?.onOpenLiveTranscript?.(); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
             {t('toolbar.liveTranscript')}
           </button>
 
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingSettings')}</div>
+          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingMode')}</div>
+          <div role="radiogroup" aria-label={t('toolbar.cloudRecordingMode')}>
+            {RECORDING_MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                role="radio"
+                aria-checked={mode === m}
+                className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
+                onClick={() => recordingControls?.onSettings?.({ mode: m })}
+              >
+                <span style={{ width: 16, flex: 'none', display: 'inline-flex', justifyContent: 'center' }} aria-hidden="true">{mode === m ? '✓' : ''}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+                  <span>{t(`toolbar.recordingMode.${m}`)}</span>
+                  <span style={{ fontSize: 11, opacity: 0.6 }}>{t(`toolbar.recordingMode.${m}Hint`)}</span>
+                </span>
+              </button>
+            ))}
+          </div>
 
-          <button className={styles.actionSheetItem} onClick={() => { showComingSoon(t('toolbar.cloudRecordingMode')); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
-            {t('toolbar.cloudRecordingMode')}
-          </button>
-
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default' }} title={policyTitle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
               {t('toolbar.syncTranscript')}
             </div>
-            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+            <input
+              type="checkbox"
+              checked={rec?.syncTranscript ?? true}
+              disabled={!recordingControls?.canChangePolicy}
+              onChange={(e) => recordingControls?.onSettings?.({ syncTranscript: e.target.checked })}
+              style={{ accentColor: '#7c79ff' }}
+            />
           </label>
 
           <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.localPermissions')}</div>
 
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: 'pointer' }}>
+          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default' }} title={policyTitle}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               {t('toolbar.onlyHostRecord')}
             </div>
-            <input type="checkbox" defaultChecked style={{ accentColor: '#0b57d0' }} />
+            <input
+              type="checkbox"
+              checked={rec?.hostOnly ?? true}
+              disabled={!recordingControls?.canChangePolicy}
+              onChange={(e) => recordingControls?.onSettings?.({ hostOnly: e.target.checked })}
+              style={{ accentColor: '#7c79ff' }}
+            />
           </label>
         </>
-      )}
+        );
+      })()}
 
       {activeSheet === 'exit' && (
         <>
