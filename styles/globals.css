@@ -295,11 +295,6 @@ h2 a {
   content: attr(data-km-initial);
 }
 
-/* Camera off is already obvious from the avatar: hide the camera-off glyph on the tile
-   (it stays while the host has disabled that camera, so "cancel disable" is reachable). */
-.lk-participant-tile .kloud-custom-cam-indicator[data-kloud-video-disabled="true"][data-kloud-host-restricted="false"] {
-  display: none !important;
-}
 
 /* Soft expanding voice ring behind the avatar while the person speaks */
 .lk-participant-tile[data-lk-video-muted="true"][data-lk-source="camera"] .lk-participant-placeholder::before {
