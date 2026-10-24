@@ -34,6 +34,7 @@ import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeet
 import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { SoloMeetingCard } from '@/lib/SoloMeetingCard';
+import { applyTileHue } from '@/lib/tileLayout';
 import {
   DEFAULT_GALLERY_PREFS,
   loadGalleryPrefs,
@@ -4436,6 +4437,8 @@ export function VideoConferenceComponent(props: {
         ).trim();
         if (!name) return;
 
+        // Same soft tint for this person on every tile (grid, carousel, phone)
+        applyTileHue(tile as HTMLElement, name);
         if (placeholder.getAttribute('data-lk-name') !== name) {
           placeholder.setAttribute('data-lk-name', name);
         }

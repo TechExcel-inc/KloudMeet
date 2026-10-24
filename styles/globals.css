@@ -314,8 +314,15 @@ h2 a {
   overflow: hidden;
   padding: 0 8%;
   box-sizing: border-box;
-  /* Every tile is the same neutral surface; a person's colour lives only in the avatar */
-  background-color: var(--km-tile, #2e3036);
+  /* A soft, dark tint per person (--km-tile-hue, lib/tileLayout.ts): enough that a gallery with
+     no cameras isn't a wall of grey, low enough in colour that it never turns into a rainbow */
+  background-color: hsl(var(--km-tile-hue, 230) 12% 19%);
+  background-image: radial-gradient(
+    120% 110% at 50% 0%,
+    hsl(var(--km-tile-hue, 230) 24% 27%) 0%,
+    hsl(var(--km-tile-hue, 230) 14% 21%) 55%,
+    hsl(var(--km-tile-hue, 230) 10% 17%) 100%
+  );
   container-type: size;
 }
 
@@ -389,6 +396,17 @@ h2 a {
 
 .lk-room-container .lk-participant-tile[data-lk-speaking="true"] .kloud-custom-mic-indicator[data-kloud-muted="false"] svg {
   visibility: hidden;
+}
+
+/* The voice bars are also where a host mutes a noisy speaker: hovering the chip (host, or your
+   own tile) swaps the bars for the mic, so it reads as "click to mute" */
+.lk-room-container .lk-participant-tile[data-lk-speaking="true"] .kloud-custom-mic-indicator[data-kloud-muted="false"]:is(.operator-interactive, .self-interactive):hover svg {
+  visibility: visible;
+}
+
+.lk-room-container .lk-participant-tile[data-lk-speaking="true"] .kloud-custom-mic-indicator[data-kloud-muted="false"]:is(.operator-interactive, .self-interactive):hover::before,
+.lk-room-container .lk-participant-tile[data-lk-speaking="true"] .kloud-custom-mic-indicator[data-kloud-muted="false"]:is(.operator-interactive, .self-interactive):hover::after {
+  display: none;
 }
 
 /* Middle bar */

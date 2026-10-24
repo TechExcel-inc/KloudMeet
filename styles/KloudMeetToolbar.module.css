@@ -424,22 +424,46 @@
   cursor: default;
 }
 
-/* Off: light red with a dark red glyph (Google Meet style) — reads as "off", not as an alarm */
+/* Mic / camera, as KloudMeet has always shown them: green while live, solid grey with a red
+   slash when off, red with a pulse when the host turned it off */
+.roundBtnLive,
+.split .roundBtnLive {
+  background: #22c55e;
+  color: #fff;
+}
+
+.roundBtnLive:hover,
+.split .roundBtnLive:hover {
+  background: #16a34a;
+  color: #fff;
+}
+
 .roundBtnOff,
 .split .roundBtnOff {
-  background: #f9dedc;
-  color: #8c1d18;
+  background: #565666;
+  color: #fff;
 }
 
 .roundBtnOff:hover,
 .split .roundBtnOff:hover {
-  background: #f5cbc8;
-  color: #8c1d18;
+  background: #6b6b7a;
+  color: #fff;
 }
 
-/* Forced off by host: same red, plus a soft pulse to tell it apart */
-.roundBtnByHost {
+.offSlash {
+  stroke: #f87171;
+}
+
+.roundBtnByHost,
+.split .roundBtnByHost,
+.roundBtnByHost:hover,
+.split .roundBtnByHost:hover {
+  background: rgba(239, 68, 68, 0.85);
   animation: mutedByHostPulse 2s ease-in-out infinite;
+}
+
+.roundBtnByHost .offSlash {
+  stroke: #fff;
 }
 
 .roundBtnActive,
@@ -933,11 +957,6 @@
   .iconBtn svg {
     width: 20px;
     height: 20px;
-  }
-
-  .roundBtnOff,
-  .split .roundBtnOff {
-    border-radius: 13px;
   }
 
   .splitChevron {

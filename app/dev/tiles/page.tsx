@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { notFound } from 'next/navigation';
-import { applyBalancedGrid } from '@/lib/tileLayout';
+import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
@@ -125,6 +125,9 @@ export default function DevTilesPage() {
     const grid = gridRef.current;
     if (!grid) return;
     applyBalancedGrid(grid);
+    grid.querySelectorAll<HTMLElement>(':scope > .lk-participant-tile').forEach((tile, i) => {
+      applyTileHue(tile, NAMES[pageStart + i]);
+    });
     const resize = new ResizeObserver(() => applyBalancedGrid(grid));
     resize.observe(grid);
     return () => resize.disconnect();

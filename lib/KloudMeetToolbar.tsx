@@ -172,13 +172,13 @@ const IconMicOn = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
 );
 const IconMicOff = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M9 9v2a3 3 0 005 2.2M15 9.3V6a3 3 0 00-5.6-1.5M5 11a7 7 0 0011.5 5.4M19 11a7 7 0 01-.6 2.8M12 18v3M3 3l18 18" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M9 9v2a3 3 0 005 2.2M15 9.3V6a3 3 0 00-5.6-1.5M5 11a7 7 0 0011.5 5.4M19 11a7 7 0 01-.6 2.8M12 18v3" /><path className={styles.offSlash} d="M3 3l18 18" /></svg>
 );
 const IconCamOn = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="6" width="12" height="12" rx="3" /><path d="M15 10l6-3v10l-6-3z" /></svg>
 );
 const IconCamOff = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M15 10l6-3v10l-6-3M15 13.5V16a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h2M11 6h2a2 2 0 012 2v2M3 3l18 18" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M15 10l6-3v10l-6-3M15 13.5V16a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h2M11 6h2a2 2 0 012 2v2" /><path className={styles.offSlash} d="M3 3l18 18" /></svg>
 );
 const IconSpeaker = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M11 5L6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" /></svg>
@@ -1971,7 +1971,7 @@ export function KloudMeetToolbar({
                   <div className={styles.split}>
                     <button
                       type="button"
-                      className={`${styles.roundBtn} ${!micEnabled ? styles.roundBtnOff : ''} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
+                      className={`${styles.roundBtn} ${micEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
                       onClick={onToggleMic}
                       disabled={!canUseMediaDevices}
                       aria-label={micLabel}
@@ -1999,7 +1999,7 @@ export function KloudMeetToolbar({
                   <div className={styles.split}>
                     <button
                       type="button"
-                      className={`${styles.roundBtn} ${!camEnabled ? styles.roundBtnOff : ''} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
+                      className={`${styles.roundBtn} ${camEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
                       onClick={onToggleCam}
                       disabled={!canUseMediaDevices}
                       aria-label={camLabel}
