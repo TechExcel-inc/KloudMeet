@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aiFailureReason,
   buildSummaryPrompt,
   normalizeSummary,
   sectionContent,
@@ -126,5 +127,16 @@ describe('normalizeSummary', () => {
   it('returns null when no section survives', () => {
     expect(normalizeSummary({ sections: [{ title: 'x', points: [{ text: 'y', sec: 9999 }] }] }, lines)).toBeNull();
     expect(normalizeSummary('not json', lines)).toBeNull();
+  });
+});
+
+describe('aiFailureReason', () => {
+  it('names timeouts, HTTP errors and anything else', () => {
+    const timeout = new Error('aborted');
+    timeout.name = 'TimeoutError';
+    expect(aiFailureReason(timeout)).toBe('timeout');
+    expect(aiFailureReason(Object.assign(new Error('x'), { status: 503 }))).toBe('HTTP 503');
+    expect(aiFailureReason(new Error('socket hang up'))).toBe('error');
+    expect(aiFailureReason(null)).toBe('error');
   });
 });

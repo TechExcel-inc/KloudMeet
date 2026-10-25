@@ -6,6 +6,7 @@ import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import { parsePauseSpans, pauseRangesInMedia } from '@/lib/recordingControls';
+import { isInternalMember } from '@/lib/internalStaff.server';
 import {
   authorizeRecordingView,
   ensureShareKey,
@@ -70,7 +71,17 @@ export async function GET(
                 orderBy: { joinedAt: 'asc' },
               },
               summaryItems: { orderBy: { sortOrder: 'asc' } },
-              summary: { select: { topic: true, overview: true, speakers: true, todos: true } },
+              summary: {
+                select: {
+                  topic: true,
+                  overview: true,
+                  speakers: true,
+                  todos: true,
+                  model: true,
+                  fallbackReason: true,
+                  updatedAt: true,
+                },
+              },
               transcripts: {
                 orderBy: { captionTime: 'asc' },
                 take: 500,
@@ -137,8 +148,11 @@ export async function GET(
               member: p.teamMember,
             })),
             summaryItems: recording.meeting.summaryItems,
-            // Topic / overview / speakers / to-dos of the structured summary; null for older summaries
-            summary: recording.meeting.summary,
+            // Topic / overview / speakers / to-dos of the structured summary; null for older summaries.
+            // Which model wrote it is an internal note, only for staff on INTERNAL_STAFF_EMAILS.
+            summary: recording.meeting.summary
+              ? await withInternalNote(recording.meeting.summary, access.memberId)
+              : null,
             transcripts: recording.meeting.transcripts,
           }
         : null,
@@ -147,4 +161,22 @@ export async function GET(
     console.error('[replay summary GET]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
+}
+
+/** The summary head for the page; the model note is added only for internal staff. */
+async function withInternalNote(
+  summary: {
+    topic: string | null;
+    overview: string | null;
+    speakers: unknown;
+    todos: unknown;
+    model: string | null;
+    fallbackReason: string | null;
+    updatedAt: Date;
+  },
+  memberId: number | null,
+) {
+  const { model, fallbackReason, updatedAt, ...head } = summary;
+  if (!model || !(await isInternalMember(memberId))) return head;
+  return { ...head, generation: { model, fallbackReason, at: updatedAt } };
 }

@@ -14,10 +14,12 @@ import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { meterAiSummary, meterSafely } from '@/lib/billing/usage';
 import {
   SUMMARY_SYSTEM_PROMPT,
+  aiFailureReason,
   buildSummaryPrompt,
   normalizeSummary,
   sectionContent,
 } from '@/lib/meetingSummary';
+import { isInternalMember } from '@/lib/internalStaff.server';
 
 // ── Auth helper ──────────────────────────────────────────────
 async function getSession(req: NextRequest) {
@@ -55,23 +57,36 @@ async function chat(url: string, key: string, model: string, prompt: string): Pr
     }),
     signal: AbortSignal.timeout(90000),
   });
-  if (!res.ok) throw new Error(`${model} error: ${await res.text()}`);
+  if (!res.ok) {
+    throw Object.assign(new Error(`${model} error: ${await res.text()}`), { status: res.status });
+  }
   const data = await res.json();
   return JSON.parse(data.choices?.[0]?.message?.content || '{}');
 }
 
-async function callAI(prompt: string): Promise<unknown> {
+/** The draft, which model wrote it, and why DeepSeek was skipped (null when it wasn't). */
+interface AIResult {
+  raw: unknown;
+  model: string;
+  fallbackReason: string | null;
+}
+
+async function callAI(prompt: string): Promise<AIResult> {
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
+  let fallbackReason = 'no-key';
   if (deepseekKey) {
     try {
-      return await chat('https://api.deepseek.com/v1/chat/completions', deepseekKey, 'deepseek-chat', prompt);
+      const raw = await chat('https://api.deepseek.com/v1/chat/completions', deepseekKey, 'deepseek-chat', prompt);
+      return { raw, model: 'deepseek-chat', fallbackReason: null };
     } catch (e) {
-      console.warn('[generate] DeepSeek failed, trying OpenAI:', e);
+      fallbackReason = aiFailureReason(e);
+      console.warn(`[generate] DeepSeek failed (${fallbackReason}), trying OpenAI:`, e);
     }
   }
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error('No AI API key configured');
-  return chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', prompt);
+  const raw = await chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', prompt);
+  return { raw, model: 'gpt-4o-mini', fallbackReason };
 }
 
 // ── Main handler ─────────────────────────────────────────────
@@ -115,16 +130,16 @@ export async function POST(
     const meetingName = meeting.title || meeting.roomName || `Meeting #${localMeetingId}`;
     const prompt = buildSummaryPrompt(meetingName, transcripts);
 
-    let raw: unknown;
+    let ai: AIResult;
     try {
-      raw = await callAI(prompt);
+      ai = await callAI(prompt);
     } catch (e: any) {
       console.error('[generate] AI call failed:', e);
       return NextResponse.json({ error: 'The AI service failed. Please try again.' }, { status: 502 });
     }
 
     // Every point and to-do must land on a real transcript line; the rest is dropped
-    const summary = normalizeSummary(raw, transcripts);
+    const summary = normalizeSummary(ai.raw, transcripts);
     if (!summary) {
       return NextResponse.json({ error: 'The AI service returned no usable summary. Please try again.' }, { status: 502 });
     }
@@ -147,12 +162,14 @@ export async function POST(
         overview: summary.overview || null,
         speakers: summary.speakers as unknown as Prisma.InputJsonValue,
         todos: summary.todos as unknown as Prisma.InputJsonValue,
+        model: ai.model,
+        fallbackReason: ai.fallbackReason,
       };
       const head = await tx.meetingSummary.upsert({
         where: { meetingId: localMeetingId },
         create: { meetingId: localMeetingId, ...fields },
         update: fields,
-        select: { topic: true, overview: true, speakers: true, todos: true },
+        select: { topic: true, overview: true, speakers: true, todos: true, updatedAt: true },
       });
       const items = await tx.meetingSummaryItem.findMany({
         where: { meetingId: localMeetingId },
@@ -163,7 +180,12 @@ export async function POST(
 
     await meterSafely(`ai:${localMeetingId}`, () => meterAiSummary(session.teamMemberId, localMeetingId));
 
-    return NextResponse.json({ success: true, items: saved.items, summary: saved.head });
+    // Which model wrote it is an internal note: only staff on INTERNAL_STAFF_EMAILS get it
+    const { updatedAt, ...head } = saved.head;
+    const generation = (await isInternalMember(session.teamMemberId))
+      ? { model: ai.model, fallbackReason: ai.fallbackReason, at: updatedAt }
+      : undefined;
+    return NextResponse.json({ success: true, items: saved.items, summary: { ...head, generation } });
   } catch (err) {
     console.error('[meeting-summary generate]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

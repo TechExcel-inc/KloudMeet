@@ -226,6 +226,18 @@ export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): 
   };
 }
 
+/**
+ * Short reason an AI call failed, kept with the summary as an internal note:
+ * "timeout", "HTTP 503" (the provider answered with an error), or "error".
+ */
+export function aiFailureReason(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'error';
+  const e = error as { name?: unknown; status?: unknown };
+  if (e.name === 'TimeoutError' || e.name === 'AbortError') return 'timeout';
+  if (typeof e.status === 'number') return `HTTP ${e.status}`;
+  return 'error';
+}
+
 /** Plain text of a section for older readers of MeetingSummaryItem.content. */
 export function sectionContent(section: SummarySection): string {
   return section.points.map((point) => point.text).join('\n');

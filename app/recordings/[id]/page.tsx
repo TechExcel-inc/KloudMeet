@@ -46,6 +46,38 @@ interface SummaryHead {
   overview: string | null;
   speakers: string[] | null;
   todos: { task: string; owner: string | null; due: string | null; sec: number }[] | null;
+  /** Internal staff only: which model wrote it, and why DeepSeek was skipped (null when it wasn't) */
+  generation?: { model: string | null; fallbackReason: string | null; at: string } | null;
+}
+
+/** Internal note above the summary: who wrote it, and why DeepSeek was skipped if it was. */
+function InternalNote({ generation }: { generation: NonNullable<SummaryHead['generation']> }) {
+  const { t, locale } = useI18n();
+  const model = /^gpt-/i.test(generation.model || '') ? `OpenAI ${generation.model}` : generation.model || '?';
+  const time = new Date(generation.at).toLocaleString(locale, {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  const reason = generation.fallbackReason;
+  const why =
+    reason === 'timeout'
+      ? t('replay.fallbackTimeout')
+      : reason === 'no-key'
+        ? t('replay.fallbackNoKey')
+        : reason
+          ? t('replay.fallbackError', { detail: reason })
+          : '';
+  return (
+    <p className={reason ? s.internalNoteWarn : s.internalNote} role="note">
+      <span className={s.internalTag}>{t('replay.internalTag')}</span>
+      <span>
+        {why && `${why}${t('replay.fallbackJoin')}`}
+        {t(reason ? 'replay.fallbackModel' : 'replay.generatedBy', { model, time })}
+      </span>
+    </p>
+  );
 }
 
 interface Transcript {
@@ -544,6 +576,7 @@ function SummaryPanel({
   return (
     <div className={s.tabBody}>
       <div className={s.scroll}>
+        {head?.generation && <InternalNote generation={head.generation} />}
         {(head?.topic || speakers.length > 0 || overview) && (
           <dl className={s.summaryMeta}>
             {head?.topic && (

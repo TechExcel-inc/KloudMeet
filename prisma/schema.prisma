@@ -209,17 +209,21 @@ model MeetingSummaryItem {
 /// AI summary of a meeting: one-line topic, overview, who spoke, and to-dos
 /// (sections and their points live in MeetingSummaryItem)
 model MeetingSummary {
-  id        Int      @id @default(autoincrement())
-  meetingId Int      @unique(map: "MeetingSummary_meetingId_key")
-  topic     String?  @db.VarChar(500)
-  overview  String?  @db.Text
+  id             Int      @id @default(autoincrement())
+  meetingId      Int      @unique(map: "MeetingSummary_meetingId_key")
+  topic          String?  @db.VarChar(500)
+  overview       String?  @db.Text
   /// Names of people who spoke, most talk first
-  speakers  Json?
+  speakers       Json?
   /// [{ task, owner, due, sec }] — owner / due are null when nobody said
-  todos     Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingSummary_meetingId_fkey")
+  todos          Json?
+  /// Model that wrote it (e.g. deepseek-chat), and why DeepSeek was skipped when another one did:
+  /// "timeout", "HTTP 503", "error", "no-key". Shown only to internal staff.
+  model          String?  @db.VarChar(100)
+  fallbackReason String?  @db.VarChar(200)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  meeting        Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingSummary_meetingId_fkey")
 
   @@map("MeetingSummary")
 }

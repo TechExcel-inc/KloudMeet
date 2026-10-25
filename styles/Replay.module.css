@@ -947,6 +947,49 @@
   color: var(--km-primary);
 }
 
+/* Internal note (staff only): which model wrote the summary, amber when DeepSeek was skipped */
+.internalNote,
+.internalNoteWarn {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 7px 10px;
+  border: 1px dashed var(--km-border);
+  border-radius: var(--km-radius-sm);
+  color: var(--km-text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.internalNoteWarn {
+  border-color: rgba(214, 140, 30, 0.45);
+  background: #fff8ec;
+  color: #8a5410;
+}
+
+:global(html[data-theme='dark']) .internalNoteWarn {
+  border-color: rgba(226, 166, 75, 0.35);
+  background: rgba(226, 166, 75, 0.1);
+  color: #f2cc8a;
+}
+
+.internalTag {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--km-bg-subtle);
+  color: var(--km-text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+}
+
+.internalNoteWarn .internalTag {
+  background: rgba(214, 140, 30, 0.16);
+  color: inherit;
+}
+
 .summaryMeta {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
