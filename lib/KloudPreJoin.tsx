@@ -36,9 +36,11 @@ export interface KloudPreJoinProps {
   joinFooter?: React.ReactNode;
   /** Rendered at the bottom of the right column (share link, desktop app entry). */
   footer?: React.ReactNode;
+  /** Rendered above the name field (host meeting settings). */
+  beforeName?: React.ReactNode;
   /** Rendered between the name field and the join button (host options). */
   children?: React.ReactNode;
-  /** Small note rendered below the device chips (e.g. "No one else is here yet"). */
+  /** Small note rendered after the device chips, beside the camera (e.g. "No one else is here yet"). */
   nobodyHereText?: React.ReactNode;
 }
 
@@ -237,6 +239,7 @@ export function KloudPreJoin({
   subtitleIsNotice = false,
   joinFooter,
   footer,
+  beforeName,
   children,
   nobodyHereText,
 }: KloudPreJoinProps) {
@@ -635,13 +638,13 @@ export function KloudPreJoin({
               </div>
             </>
           )}
+          {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
         </div>
         {!canUseMediaDevices && mediaUnavailableLabel && (
           <p className={styles.mediaNote} role="status">
             {mediaUnavailableLabel}
           </p>
         )}
-        {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
       </section>
 
       {/* ── Right: heading, name, options, join ── */}
@@ -660,11 +663,17 @@ export function KloudPreJoin({
           </div>
         )}
 
+        {/* Injected settings above the name (host meeting settings) */}
+        {beforeName}
+
         {/* Name field */}
-        <label className={styles.field} htmlFor="kloud-prejoin-username">
+        <div className={styles.rowField}>
+          <label className={styles.rowLabel} htmlFor="kloud-prejoin-username">
+            {userLabel}
+          </label>
           <input
             id="kloud-prejoin-username"
-            className={styles.fieldInput}
+            className={styles.rowInput}
             type="text"
             defaultValue={username}
             autoComplete="off"
@@ -672,8 +681,7 @@ export function KloudPreJoin({
             aria-describedby={!isValid ? 'kloud-prejoin-join-reason' : undefined}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <span className={styles.fieldLabel}>{userLabel}</span>
-        </label>
+        </div>
 
         {/* Injected children: host options */}
         {children}

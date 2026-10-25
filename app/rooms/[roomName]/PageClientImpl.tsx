@@ -13,7 +13,7 @@ import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
-import { PrejoinParticipantLiveDocSelect } from '@/lib/PrejoinParticipantLiveDocSelect';
+import { PrejoinAttendeeShareCheckbox } from '@/lib/PrejoinAttendeeShareCheckbox';
 import { PrejoinAccessLevelSelect, type AccessLevel } from '@/lib/PrejoinAccessLevelSelect';
 import {
   PrejoinRecordingOptionSelect,
@@ -199,7 +199,7 @@ export function PageClientImpl(props: {
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
   const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
-  const [recordingOption, setRecordingOption] = React.useState<RecordingOption>('none');
+  const [recordingOption, setRecordingOption] = React.useState<RecordingOption>('ai_smart');
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -1056,6 +1056,17 @@ export function PageClientImpl(props: {
                 subtitle={preJoinSubtitle}
                 subtitleIsNotice={isHost && isActive}
                 nobodyHereText={isHost && !isActive ? t('prejoin.nobodyHereYet') : undefined}
+                beforeName={
+                  isHost ? (
+                    <>
+                      <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
+                      <PrejoinRecordingOptionSelect
+                        value={recordingOption}
+                        onChange={setRecordingOption}
+                      />
+                    </>
+                  ) : null
+                }
                 joinFooter={
                   isHost && isActive && !isSameTabRefresh ? (
                     <button
@@ -1101,14 +1112,9 @@ export function PageClientImpl(props: {
               >
                 {isHost && (
                   <div className={prejoinStyles.hostOptions}>
-                    <PrejoinParticipantLiveDocSelect
-                      show={participantLiveDocShow}
+                    <PrejoinAttendeeShareCheckbox
+                      checked={participantLiveDocShow}
                       onChange={handleParticipantLiveDocChange}
-                    />
-                    <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
-                    <PrejoinRecordingOptionSelect
-                      value={recordingOption}
-                      onChange={setRecordingOption}
                     />
                     <PrejoinPersonalRoomCheckbox
                       active

@@ -688,7 +688,8 @@
 }
 
 .nobodyHere {
-  margin: 14px 0 0;
+  align-self: center;
+  margin: 0 0 0 6px;
   color: var(--km-text-muted);
   font-size: 15px;
   font-weight: 500;
@@ -728,48 +729,53 @@
   text-align: left;
 }
 
-.field {
+/* Labelled row: label on the left, value on the right, one bordered box (name, Meeting Access, Recording) */
+.rowField {
   position: relative;
-  display: block;
-}
-
-.fieldLabel {
-  position: absolute;
-  left: 16px;
-  top: 9px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--km-text-muted);
-  pointer-events: none;
-}
-
-.fieldInput {
-  width: 100%;
-  height: 56px;
-  padding: 20px 16px 4px;
+  display: flex;
+  align-items: center;
+  min-height: 52px;
   border-radius: var(--km-radius-md);
   border: 1px solid var(--km-border);
   background: var(--km-surface);
-  color: var(--km-text);
-  font: 600 16px var(--km-font);
-  outline: none;
   transition:
     border-color 0.15s,
     box-shadow 0.15s;
 }
 
-.fieldInput:hover {
+.rowField:hover {
   border-color: var(--km-text-muted);
 }
 
-.fieldInput:focus {
+.rowField:focus-within {
   border-color: var(--km-primary);
   box-shadow: var(--km-focus-ring);
 }
 
-.fieldInput:focus + .fieldLabel,
-.field:focus-within .fieldLabel {
+.rowLabel {
+  flex: none;
+  width: 136px;
+  padding: 0 12px 0 16px;
+  color: var(--km-text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.rowField:focus-within .rowLabel {
   color: var(--km-primary);
+}
+
+.rowInput {
+  flex: 1;
+  min-width: 0;
+  height: 50px;
+  padding: 0 16px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--km-text);
+  font: 600 16px var(--km-font);
+  outline: none;
 }
 
 /* Host options: plain fields stacked under the name, no surrounding card */
@@ -779,20 +785,122 @@
   gap: 12px;
 }
 
-.fieldSelect {
-  appearance: none;
-  -webkit-appearance: none;
-  padding-right: 44px;
+/* PrejoinSelect: button + listbox */
+.selectButton {
+  flex: 1;
+  min-width: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 14px 0 0;
+  border: 0;
+  background: transparent;
+  color: var(--km-text);
+  font: 600 16px var(--km-font);
+  text-align: left;
   cursor: pointer;
+  outline: none;
 }
 
-.fieldChevron {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
+.selectIcon {
+  flex: none;
+  color: var(--km-primary);
+}
+
+.selectValue {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectChevron {
+  flex: none;
   color: var(--km-text-muted);
-  pointer-events: none;
+  transition: transform 0.15s;
+}
+
+.selectChevronOpen {
+  transform: rotate(180deg);
+}
+
+.selectMenu {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  border-radius: var(--km-radius-md);
+  border: 1px solid var(--km-border);
+  background: var(--km-surface);
+  box-shadow: var(--km-shadow);
+  outline: none;
+  animation: selectMenuIn 0.12s ease-out;
+}
+
+@keyframes selectMenuIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.selectOption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: var(--km-radius-sm);
+  color: var(--km-text);
+  font: 500 15px var(--km-font);
+  cursor: pointer;
+  user-select: none;
+}
+
+.selectOptionActive {
+  background: var(--km-hover);
+}
+
+.selectOptionIcon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-hover);
+  color: var(--km-text-muted);
+}
+
+.selectOptionSelected {
+  color: var(--km-on-tonal);
+  font-weight: 700;
+}
+
+.selectOptionSelected .selectOptionIcon {
+  background: var(--km-tonal);
+  color: var(--km-primary);
+}
+
+.selectOptionLabel {
+  flex: 1;
+  min-width: 0;
+}
+
+.selectCheck {
+  flex: none;
+  color: var(--km-primary);
 }
 
 .checkRow {
@@ -1209,7 +1317,9 @@
   .previewControls .roundToggle[aria-pressed],
   .avatarSpeaking,
   .levelBadge i,
-  .menu {
+  .menu,
+  .selectMenu,
+  .selectChevron {
     transition: none;
     animation: none;
   }
@@ -1242,6 +1352,15 @@
   .stage,
   .panel {
     flex-basis: 100%;
+  }
+  .rowLabel {
+    width: 104px;
+    padding: 0 8px 0 14px;
+    font-size: 13px;
+  }
+  .selectButton,
+  .rowInput {
+    font-size: 15px;
   }
   /* Phones are held upright: a square preview leaves room for status text above the toggles. */
   .preview {
