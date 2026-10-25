@@ -12,6 +12,7 @@ import { isUniqueConstraintError } from '@/lib/prismaErrors';
 import {
   HOURS_PACK,
   isBillingInterval,
+  isSeatPlan,
   isSelfServePlan,
   planForStripePrice,
   type PlanId,
@@ -68,7 +69,7 @@ async function afterPlanChange(accountId: number, row: Pick<BillingSubscription,
   const plan = effectivePlan(row);
   if (plan === 'FREE') return;
   await unarchiveAccountReplays(accountId);
-  if (plan === 'TEAM') await ensureOwnerSeat(accountId);
+  if (isSeatPlan(plan)) await ensureOwnerSeat(accountId);
 }
 
 export async function handleStripeEvent(event: StripeEvent): Promise<WebhookOutcome> {

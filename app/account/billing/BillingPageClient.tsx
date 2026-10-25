@@ -12,13 +12,13 @@ import { useI18n } from '@/lib/i18n';
 import { authFetch } from '@/lib/kloudSession';
 import { useBillingSummary } from '@/lib/billing/useBillingSummary';
 import type { BillingSummary, CatalogPlan } from '@/lib/billing/summary';
-import type { BillingInterval, PlanId } from '@/lib/billing/plans';
+import { isSeatPlan, type BillingInterval, type PlanId, type SelfServePlanId } from '@/lib/billing/plans';
 import css from '@/styles/Billing.module.css';
 
 type Notice = { kind: 'ok' | 'info' | 'error'; text: string } | null;
-type Dialog = { kind: 'upgrade'; plan: 'PRO' | 'TEAM' } | { kind: 'cancel' } | null;
+type Dialog = { kind: 'upgrade'; plan: SelfServePlanId } | { kind: 'cancel' } | null;
 
-const RANK: Record<PlanId, number> = { FREE: 0, PRO: 1, TEAM: 2, ENTERPRISE: 3, LEGACY: 3 };
+const RANK: Record<PlanId, number> = { FREE: 0, PRO: 1, TEAM: 2, BUSINESS: 3, ENTERPRISE: 4, LEGACY: 4 };
 
 function intlLocale(locale: string): string {
   return locale === 'zh' ? 'zh-CN' : locale;
@@ -190,7 +190,7 @@ export function BillingPageClient() {
     const rate = planById(s.plan)?.prices[s.interval ?? 'month']?.monthlyRateCents ?? 0;
     const period = t(s.interval === 'year' ? 'billing.period.yearly' : 'billing.period.monthly');
     const head =
-      s.plan === 'TEAM'
+      isSeatPlan(s.plan)
         ? t('billing.planLine.team', { seats: s.seats, price: f.money(rate), period })
         : t('billing.planLine.pro', { price: f.money(rate), period });
     const tail = s.currentPeriodEnd
@@ -250,7 +250,7 @@ export function BillingPageClient() {
     pct: s.plan === 'FREE' ? 100 : 15,
     hint: t('billing.meter.meetingLengthHint'),
   });
-  if (s.plan === 'TEAM') {
+  if (isSeatPlan(s.plan)) {
     meters.push({
       label: t('billing.meter.seats'),
       value: t('billing.meter.seatsValue', { used: s.seatsUsed, total: s.seats }),
@@ -261,14 +261,15 @@ export function BillingPageClient() {
   const replaysFull = s.replays.limit !== null && s.replays.kept >= s.replays.limit;
 
   /* ── plan cards ── */
-  const features: Record<'FREE' | 'PRO' | 'TEAM', string[]> = {
+  const features: Record<'FREE' | SelfServePlanId, string[]> = {
     FREE: [1, 2, 3, 4].map((n) => t(`billing.feat.free.${n}`)),
     PRO: [1, 2, 3, 4].map((n) => t(`billing.feat.pro.${n}`)),
     TEAM: [1, 2, 3, 4].map((n) => t(`billing.feat.team.${n}`)),
+    BUSINESS: [1, 2, 3, 4].map((n) => t(`billing.feat.business.${n}`)),
   };
 
   const planCard = (p: CatalogPlan) => {
-    const id = p.id as 'FREE' | 'PRO' | 'TEAM';
+    const id = p.id as 'FREE' | SelfServePlanId;
     const price = p.prices[interval];
     const isCurrent = id === s.plan;
     const up = RANK[id] > RANK[s.plan];
@@ -291,7 +292,7 @@ export function BillingPageClient() {
     } else {
       label = available ? t('billing.upgradeTo', { plan: p.name }) : t('billing.notAvailable');
       cls = `${css.btn} ${css.btnFill}`;
-      onClick = available ? () => setDialog({ kind: 'upgrade', plan: id as 'PRO' | 'TEAM' }) : undefined;
+      onClick = available ? () => setDialog({ kind: 'upgrade', plan: id as SelfServePlanId }) : undefined;
     }
     const disabled = isCurrent || !onClick || !canManage || busy;
     let note = '';
@@ -328,7 +329,7 @@ export function BillingPageClient() {
   /* ── upgrade dialog ── */
   const dialogPlan = dialog?.kind === 'upgrade' ? planById(dialog.plan) : undefined;
   const dialogPrice = dialogPlan?.prices[interval];
-  const qty = dialog?.kind === 'upgrade' && dialog.plan === 'TEAM' ? Math.max(dialogPlan?.minSeats ?? 3, seats) : 1;
+  const qty = dialog?.kind === 'upgrade' && isSeatPlan(dialog.plan) ? Math.max(dialogPlan?.minSeats ?? 3, seats) : 1;
   const total = (dialogPrice?.amountCents ?? 0) * qty;
 
   const intervalToggle = (
@@ -500,7 +501,7 @@ export function BillingPageClient() {
           >
             <h2 className={css.dialogTitle}>{t('billing.dlg.upgradeTitle', { plan: dialogPlan.name })}</h2>
             {intervalToggle}
-            {dialog.plan === 'TEAM' && (
+            {isSeatPlan(dialog.plan) && (
               <>
                 <div className={css.stepper}>
                   <b style={{ flex: 1 }}>{t('billing.dlg.seats')}</b>
@@ -526,7 +527,7 @@ export function BillingPageClient() {
                 <span>
                   {[
                     dialogPlan.name,
-                    dialog.plan === 'TEAM' ? t('billing.dlg.seatsCount', { n: qty }) : null,
+                    isSeatPlan(dialog.plan) ? t('billing.dlg.seatsCount', { n: qty }) : null,
                     t(yearly ? 'billing.dlg.months12' : 'billing.dlg.month1'),
                   ]
                     .filter(Boolean)
