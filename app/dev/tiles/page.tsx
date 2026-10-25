@@ -307,7 +307,19 @@ export default function DevTilesPage() {
         hasScreenShare={false}
         isDesktop={false}
         canSwitchViews
-        onDesignClick={() => (designLink ? setView('design') : setDesignDialog(true))}
+        designItem={
+          designLink
+            ? {
+                label: designLink.kind === 'figma' ? designLink.label : designLink.host,
+                kind: designLink.kind,
+                kindLabel: designLink.kind === 'figma' ? 'Figma design' : 'Web page',
+                setByName: 'You',
+                showing: view === 'design',
+              }
+            : null
+        }
+        onShowDesign={() => designLink && setView('design')}
+        onAddDesignLink={() => setDesignDialog(true)}
         canShowOperatorMenus={host}
         canToggleLiveDocAnnotation={host}
         participantLiveDocAi

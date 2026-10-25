@@ -11,6 +11,7 @@ import { SettingsMenu } from '@/lib/SettingsMenu';
 import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 import { KloudMeetToolbar, ViewMode, WebcamLayoutMode, buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
+import type { LiveDocDesignItem } from '@/lib/LiveDocAiPanel';
 import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
 import {
@@ -195,6 +196,7 @@ import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
 import {
   DESIGN_ALLOW_LOCAL_HTTP,
+  designKindKey,
   parseDesignLink,
   parseStoredDesignLink,
   type DesignLink,
@@ -3464,14 +3466,25 @@ export function VideoConferenceComponent(props: {
     [isHost, sendMeetingMsg, persistDesignLink],
   );
 
-  const handleDesignClick = React.useCallback(() => {
-    if (!canSwitchViews) return;
-    if (designLink) {
-      handleViewChange('design');
-      return;
-    }
-    setDesignDialogOpen(true);
+  /** Design mode lives in the LiveDoc panel: the shared link is a row there, "Link" sits with the uploads */
+  const designItem: LiveDocDesignItem | null = React.useMemo(() => {
+    if (!designLink) return null;
+    const kind = designKindKey(designLink);
+    const kindLabel = t(kind.key);
+    return {
+      label: designLink.kind === 'figma' ? designLink.label : designLink.host,
+      kind: designLink.kind,
+      kindLabel: kindLabel === kind.key ? kind.fallback : kindLabel,
+      setByName: designStored?.setByName,
+      showing: activeView === 'design',
+    };
+  }, [designLink, designStored?.setByName, activeView, t]);
+  const showDesign = React.useCallback(() => {
+    if (canSwitchViews && designLink) handleViewChange('design');
   }, [canSwitchViews, designLink, handleViewChange]);
+  const openDesignDialog = React.useCallback(() => {
+    if (canSwitchViews) setDesignDialogOpen(true);
+  }, [canSwitchViews]);
 
   const submitDesignLink = React.useCallback(
     (link: DesignLink) => {
@@ -9555,7 +9568,9 @@ export function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
-          onDesignClick={handleDesignClick}
+          designItem={designItem}
+          onShowDesign={canSwitchViews ? showDesign : undefined}
+          onAddDesignLink={canSwitchViews ? openDesignDialog : undefined}
           webcamLayoutMode={webcamLayoutMode}
           onWebcamLayoutChange={setWebcamLayoutMode}
           galleryPrefs={galleryPrefs}

@@ -29,6 +29,15 @@ export interface StoredDesignLink {
   setAt?: number;
 }
 
+/** Locale key (and English fallback) naming what kind of link this is, e.g. "Figma prototype". */
+export function designKindKey(link: Pick<DesignLink, 'kind' | 'figmaType'>): { key: string; fallback: string } {
+  if (link.kind !== 'figma') return { key: 'design.kindWeb', fallback: 'Web page' };
+  if (link.figmaType === 'proto') return { key: 'design.kindFigmaProto', fallback: 'Figma prototype' };
+  if (link.figmaType === 'board') return { key: 'design.kindFigmaBoard', fallback: 'FigJam board' };
+  if (link.figmaType === 'slides' || link.figmaType === 'deck') return { key: 'design.kindFigmaSlides', fallback: 'Figma slides' };
+  return { key: 'design.kindFigmaDesign', fallback: 'Figma design' };
+}
+
 export type DesignLinkError = 'empty' | 'tooLong' | 'invalid' | 'notHttps' | 'sameSite' | 'privateHost';
 
 export const DESIGN_EMBED_HOST = 'kloudmeet';
