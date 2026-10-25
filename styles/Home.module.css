@@ -45,12 +45,13 @@
   box-sizing: border-box;
 }
 
-/* Legacy default for inputs rendered by shared modals inside .main
-   (ScheduleMeetingModal, MyProfileModal…). Our own fields override below. */
-.main input,
-.main textarea {
-  background: #fff;
-  color: #1e1e2e;
+/* Default for inputs rendered by shared modals inside .main (ScheduleMeetingModal,
+   MyProfileModal…). :where() keeps it below any class a modal sets on its own fields,
+   and the tokens follow the dark theme. */
+:where(.main) input,
+:where(.main) textarea {
+  background: var(--km-surface);
+  color: var(--km-text);
 }
 
 .main button,

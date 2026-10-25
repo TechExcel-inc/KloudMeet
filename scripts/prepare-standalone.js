@@ -45,7 +45,14 @@ copyDir(publicSrc, publicDest);
 for (const file of ['run-next-with-funasr.cjs', 'funasr-relay.cjs']) {
   fs.copyFileSync(path.join(root, 'scripts', file), path.join(standalone, file));
 }
-copyDir(path.join(root, 'node_modules', 'ws'), path.join(standalone, 'node_modules', 'ws'));
+// funasr-relay.cjs requires 'ws', which Next's file tracing does not pick up. Without it the
+// relay crashes at start and the desktop app reports a startup failure, so stop here instead.
+const wsSrc = path.join(root, 'node_modules', 'ws');
+if (!fs.existsSync(path.join(wsSrc, 'package.json'))) {
+  console.error("Missing node_modules/ws (needed by funasr-relay.cjs). Run the package install, then build again.");
+  process.exit(1);
+}
+copyDir(wsSrc, path.join(standalone, 'node_modules', 'ws'));
 
 const envProd = path.join(root, '.env.production');
 const envProdDest = path.join(standalone, '.env.production');
