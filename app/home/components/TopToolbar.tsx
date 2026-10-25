@@ -9,6 +9,9 @@ import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
 
 const LOCALE_TAGS: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' };
 
+/** Kloud platform switcher (9-dot menu): hidden until kloud.cn is ready to receive users from Meet. */
+const SHOW_APP_SWITCHER = false;
+
 /** "2:32 PM • Thu, Oct 23" in the active UI language; client-only (rendered after mount). */
 function NavClock() {
   const { locale } = useI18n();
@@ -250,7 +253,7 @@ export function TopToolbar({
           </div>
 
           {/* App Switcher — only for logged-in users with a Kloud platform account */}
-          {user && (
+          {SHOW_APP_SWITCHER && user && (
             <div style={{ position: 'relative' }} ref={appSwitcherRef}>
               <button
                 type="button"

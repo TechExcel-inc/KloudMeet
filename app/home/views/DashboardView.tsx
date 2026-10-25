@@ -652,7 +652,7 @@ export function DashboardView({
     if (dateStr === todayStr) return t('dash.today');
     if (dateStr === tomorrowStr) return t('dash.tomorrow');
     if (dateStr === yesterdayStr) return t('dash.yesterday');
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: userTZ });
+    return d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
   };
 
   const filteredMeetings = dbMeetings.slice();
@@ -943,6 +943,7 @@ export function DashboardView({
                       const first = (meetings as any[])[0];
                       const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
                       const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
+                      // Only "Today" / "Yesterday" / "Tomorrow" get the date beside them
                       return full !== dateLabel ? <span className={styles.meetingDateSub}>{full}</span> : null;
                     })()}
                   </h3>
