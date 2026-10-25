@@ -47,6 +47,9 @@ function meetingsQuery(page: number, size: number, search: string, scope: Meetin
   return qs.toString();
 }
 
+/** The pager shows this many page numbers at a time; « » jump a whole group. */
+const PAGE_GROUP_SIZE = 5;
+
 export function DashboardView({
   user,
   onSignOut,
@@ -92,6 +95,9 @@ export function DashboardView({
   const [searchQuery, setSearchQuery] = useState('');
   const [meetingScope, setMeetingScope] = useState<MeetingListScope>('all');
   const [inviteMenuRoomName, setInviteMenuRoomName] = useState<string | null>(null);
+  // Row selection for click and keyboard (↑ ↓ Home End move, Enter runs the row's main action)
+  const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
+  const meetingCardRefs = useRef(new Map<number, HTMLElement>());
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
     pendingIntent: MeetingStartIntent;
@@ -664,6 +670,98 @@ export function DashboardView({
     return acc;
   }, {});
 
+  // Rows in display order (across date groups) for arrow-key navigation
+  const orderedMeetings = Object.values(groupedMeetings).flat();
+  const tabStopMeetingId = orderedMeetings.some((m) => m.id === selectedMeetingId)
+    ? selectedMeetingId
+    : orderedMeetings[0]?.id;
+
+  /** Finished meeting: its recording when there is one, else the chat history. */
+  const openFinishedMeeting = (m: any) => {
+    const rec =
+      m.recordings?.find((r: any) => r.status === 'READY') ??
+      m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
+    if (rec) {
+      const key = rec.shareKey as string | undefined;
+      window.open(key ? recordingReplayPath(key) : `/recordings/${rec.id}`, '_blank');
+    } else {
+      router.push(`/meeting/${m.id}/chat`);
+    }
+  };
+
+  // Open (finished) / Start (host) / Join (guest or live)
+  const runPrimaryAction = (m: any) => {
+    if (m.isActive) {
+      router.push(`/rooms/${m.roomName}`);
+    } else if (m.status === 'ENDED') {
+      openFinishedMeeting(m);
+    } else if (m.status === 'CANCELED') {
+      return;
+    } else if (m.createdByMemberId === user.id) {
+      handleStartMeetingClick(m);
+    } else {
+      router.push(`/rooms/${m.roomName}`);
+    }
+  };
+
+  const selectMeetingAt = (index: number) => {
+    const m = orderedMeetings[Math.max(0, Math.min(index, orderedMeetings.length - 1))];
+    if (!m) return;
+    setSelectedMeetingId(m.id);
+    meetingCardRefs.current.get(m.id)?.focus();
+  };
+
+  const moveMeetingSelection = (delta: number) => {
+    const idx = orderedMeetings.findIndex((m) => m.id === selectedMeetingId);
+    if (idx === -1) selectMeetingAt(delta > 0 ? 0 : orderedMeetings.length - 1);
+    else selectMeetingAt(idx + delta);
+  };
+
+  const handleMeetingCardKeyDown = (e: React.KeyboardEvent<HTMLElement>, m: any) => {
+    // Keys on the buttons inside the row keep their own behaviour
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveMeetingSelection(e.key === 'ArrowDown' ? 1 : -1);
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      selectMeetingAt(e.key === 'Home' ? 0 : orderedMeetings.length - 1);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      runPrimaryAction(m);
+    }
+  };
+
+  const anyDashModalOpen = Boolean(
+    showScheduleModal ||
+    showSettingsModal ||
+    showProfileModal ||
+    editingMeeting ||
+    scheduledModalData ||
+    warningMessage ||
+    earlyStartMeeting ||
+    deletingMeeting ||
+    meetingConflict,
+  );
+  const moveMeetingSelectionRef = useRef(moveMeetingSelection);
+  moveMeetingSelectionRef.current = moveMeetingSelection;
+
+  // Arrow keys with nothing focused (e.g. after a click on the page background) step into the list.
+  // Inputs, buttons and rows handle their own keys, so typing in the search or code field is untouched.
+  useEffect(() => {
+    if (anyDashModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      e.preventDefault();
+      moveMeetingSelectionRef.current(e.key === 'ArrowDown' ? 1 : -1);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [anyDashModalOpen]);
+
 
   /* ── Display helpers (presentation only) ── */
   const greetingHour = new Date(currentTime).getHours();
@@ -1016,9 +1114,18 @@ export function DashboardView({
                       return (
                         <article
                           key={m.id || i}
+                          ref={(el) => {
+                            if (el) meetingCardRefs.current.set(m.id, el);
+                            else meetingCardRefs.current.delete(m.id);
+                          }}
+                          tabIndex={m.id === tabStopMeetingId ? 0 : -1}
+                          aria-label={displayTitle}
                           className={`${isLive ? styles.meetingCardLive : styles.meetingCard}${
-                            cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''
-                          }`}
+                            m.id === selectedMeetingId ? ` ${styles.meetingCardSelected}` : ''
+                          }${cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''}`}
+                          onClick={() => setSelectedMeetingId(m.id)}
+                          onFocus={() => setSelectedMeetingId(m.id)}
+                          onKeyDown={(e) => handleMeetingCardKeyDown(e, m)}
                           onDoubleClick={() => {
                             if (isHost) setEditingMeeting(m);
                           }}
@@ -1036,7 +1143,7 @@ export function DashboardView({
                               {/* One status: "Starts in 24 min" replaces "Scheduled" in the last hour */}
                               {countdownText ? (
                                 <span className={`${styles.statusBadge} ${styles.statusSoon}`}>{countdownText}</span>
-                              ) : (
+                              ) : m.status === 'ENDED' && !isLive ? null : (
                                 <span className={`${styles.statusBadge} ${statusClass}`}>
                                   {isLive && <span className={styles.liveDot} aria-hidden="true" />}
                                   {statusLabel}
@@ -1122,6 +1229,18 @@ export function DashboardView({
                               >
                                 {videoIcon(15)}
                                 {t('common.join')}
+                              </button>
+                            )}
+
+                            {m.status === 'ENDED' && !isLive && !recording && (
+                              <button
+                                type="button"
+                                className={styles.rowAction}
+                                onClick={() => openFinishedMeeting(m)}
+                                title={processingRecording ? t('common.processing') : t('chatHistory.open')}
+                              >
+                                {playIcon(12)}
+                                {tx('dash.open', 'Open')}
                               </button>
                             )}
 
@@ -1307,8 +1426,11 @@ export function DashboardView({
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
                   </button>
                   {(() => {
+                    // Pages in groups of PAGE_GROUP_SIZE (1–5, 6–10, …)
+                    const groupStart = Math.floor((page - 1) / PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1;
+                    const groupEnd = Math.min(totalPages, groupStart + PAGE_GROUP_SIZE - 1);
                     const pages = [];
-                    for (let i = 1; i <= Math.min(4, totalPages); i++) {
+                    for (let i = groupStart; i <= groupEnd; i++) {
                       pages.push(
                         <button
                           key={i}
@@ -1321,7 +1443,37 @@ export function DashboardView({
                         </button>
                       );
                     }
-                    return pages;
+                    const groupLabelPrev = tx('dash.prevPageGroup', 'Previous {n} pages', { n: PAGE_GROUP_SIZE });
+                    const groupLabelNext = tx('dash.nextPageGroup', 'Next {n} pages', { n: PAGE_GROUP_SIZE });
+                    return (
+                      <>
+                        {totalPages > PAGE_GROUP_SIZE && (
+                          <button
+                            type="button"
+                            className={styles.pageArrow}
+                            disabled={groupStart <= 1}
+                            onClick={() => setPage(groupStart - PAGE_GROUP_SIZE)}
+                            title={groupLabelPrev}
+                            aria-label={groupLabelPrev}
+                          >
+                            «
+                          </button>
+                        )}
+                        {pages}
+                        {totalPages > PAGE_GROUP_SIZE && (
+                          <button
+                            type="button"
+                            className={styles.pageArrow}
+                            disabled={groupEnd >= totalPages}
+                            onClick={() => setPage(groupEnd + 1)}
+                            title={groupLabelNext}
+                            aria-label={groupLabelNext}
+                          >
+                            »
+                          </button>
+                        )}
+                      </>
+                    );
                   })()}
                   <button
                     type="button"

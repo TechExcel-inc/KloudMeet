@@ -64,5 +64,58 @@ if (isWin && !alreadyPrepackaged) {
   process.exit(phase2.status == null ? 1 : phase2.status);
 }
 
-const result = runBuilder(args);
-process.exit(result.status == null ? 1 : result.status);
+/**
+ * macOS：npmmirror 上没有 dmg-builder 的 dmgbuild-bundle（404），
+ * 而它走 @electron/get，会被 ELECTRON_MIRROR 改写地址。
+ * 这里先临时用 GitHub 地址预下载到 electron-builder 缓存，
+ * 之后打包直接命中缓存；Electron 本体仍走国内镜像。
+ */
+async function prefetchDmgBuilderBundle() {
+  const fs = require('fs');
+  const dmgUtilPath = require.resolve('dmg-builder/out/dmgUtil.js');
+  const src = fs.readFileSync(dmgUtilPath, 'utf8');
+  const releaseName = (src.match(/releaseName:\s*"(dmg-builder@[^"]+)"/) || [])[1];
+  const checksums = {};
+  for (const m of src.matchAll(/"(dmgbuild-bundle-[^"]+\.tar\.gz)":\s*"([0-9a-f]{64})"/g)) {
+    checksums[m[1]] = m[2];
+  }
+  const arch = process.arch === 'arm64' ? 'arm64' : 'x86_64';
+  const filenameWithExt = Object.keys(checksums).find((f) =>
+    f.startsWith(`dmgbuild-bundle-${arch}-`),
+  );
+  if (!releaseName || !filenameWithExt) {
+    console.warn('[run-electron-builder] dmg-builder bundle info not found; skip prefetch');
+    return;
+  }
+
+  const mirrorVars = [
+    'ELECTRON_MIRROR',
+    'NPM_CONFIG_ELECTRON_MIRROR',
+    'npm_config_electron_mirror',
+    'npm_package_config_electron_mirror',
+  ];
+  const saved = Object.fromEntries(mirrorVars.map((k) => [k, process.env[k]]));
+  for (const k of mirrorVars) delete process.env[k];
+  process.env.ELECTRON_MIRROR =
+    'https://github.com/electron-userland/electron-builder-binaries/releases/download/';
+  try {
+    const { downloadArtifact } = require('app-builder-lib/out/binDownload');
+    await downloadArtifact({ releaseName, filenameWithExt, checksums });
+    console.log(`[run-electron-builder] dmg-builder bundle ready: ${filenameWithExt}`);
+  } catch (err) {
+    console.warn(`[run-electron-builder] dmg-builder prefetch failed: ${err.message}`);
+  } finally {
+    for (const k of mirrorVars) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  }
+}
+
+(async () => {
+  if (args.includes('--mac') && process.platform === 'darwin') {
+    await prefetchDmgBuilderBundle();
+  }
+  const result = runBuilder(args);
+  process.exit(result.status == null ? 1 : result.status);
+})();

@@ -2219,6 +2219,21 @@ a.dropdownItem:focus-visible {
   background: var(--dash-hover);
 }
 
+/* Selected row (click or arrow keys) */
+.meetingCard:focus-visible,
+.meetingCardLive:focus-visible {
+  outline: none;
+}
+
+.meetingCardSelected {
+  background: var(--dash-hover);
+  box-shadow: inset 0 0 0 1px var(--dash-line-2);
+}
+
+.meetingCardSelected:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--km-primary);
+}
+
 /* Live: a mint edge and a tint that fades out across the row */
 .meetingCardLive {
   background: linear-gradient(90deg, var(--dash-mint-soft), transparent 60%);
@@ -2477,6 +2492,24 @@ a.dropdownItem:focus-visible {
   height: 32px;
   border-radius: var(--km-radius-sm);
   color: var(--dash-faint);
+}
+
+/* Secondary actions appear on hover, selection or keyboard focus; the primary action stays visible */
+@media (hover: hover) {
+  .meetingCardActions > .iconBtn,
+  .meetingCardActions > .iconBtnDanger,
+  .meetingCardActions > .anchor {
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .meetingCard:hover .meetingCardActions > *,
+  .meetingCardLive:hover .meetingCardActions > *,
+  .meetingCardSelected .meetingCardActions > *,
+  .meetingCardInviteMenuOpen .meetingCardActions > *,
+  .meetingCardActions:focus-within > * {
+    opacity: 1;
+  }
 }
 
 .meetingCardActions .iconBtn:hover {
