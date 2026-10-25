@@ -715,7 +715,7 @@
   "replay.transcribeClose": "Close",
   "replay.noAccess": "You do not have access to this recording",
 
-  "dash.replay": "🎬 Replay",
+  "dash.replay": "▶ Play",
   "dash.replayTitle": "Play meeting recording",
   "dash.replaySummaryTitle": "View replay & summary",
   "dash.recordingPrivate": "Private",

@@ -1240,9 +1240,20 @@ export function DashboardView({
                                 </button>
                               )}
 
-                              {/* Recording: Play button + Private/Public badge */}
+                              {/* Recording: Private/Public badge + Play button */}
                               {recording && (
                                 <>
+                                  <span
+                                    className={
+                                      recording.visibility === 'PUBLIC'
+                                        ? styles.recordingPublicBadge
+                                        : styles.recordingPrivateBadge
+                                    }
+                                  >
+                                    {recording.visibility === 'PUBLIC'
+                                      ? t('dash.recordingPublic')
+                                      : t('dash.recordingPrivate')}
+                                  </span>
                                   <button
                                     className={styles.playRecordingBtn}
                                     onClick={(e) => {
@@ -1267,17 +1278,6 @@ export function DashboardView({
                                     </svg>
                                     {t('dash.replay')}
                                   </button>
-                                  <span
-                                    className={
-                                      recording.visibility === 'PUBLIC'
-                                        ? styles.recordingPublicBadge
-                                        : styles.recordingPrivateBadge
-                                    }
-                                  >
-                                    {recording.visibility === 'PUBLIC'
-                                      ? t('dash.recordingPublic')
-                                      : t('dash.recordingPrivate')}
-                                  </span>
                                 </>
                               )}
                               {processingRecording && (
@@ -1322,9 +1322,20 @@ export function DashboardView({
                                 </button>
                               )}
 
-                              {/* Mobile: Play + Private/Public badge after code */}
+                              {/* Mobile: Private/Public badge + Play after code */}
                               {recording && (
                                 <span className={styles.mobileRecordingRow}>
+                                  <span
+                                    className={
+                                      recording.visibility === 'PUBLIC'
+                                        ? styles.recordingPublicBadge
+                                        : styles.recordingPrivateBadge
+                                    }
+                                  >
+                                    {recording.visibility === 'PUBLIC'
+                                      ? t('dash.recordingPublic')
+                                      : t('dash.recordingPrivate')}
+                                  </span>
                                   <button
                                     className={styles.playRecordingBtn}
                                     onClick={(e) => {
@@ -1349,17 +1360,6 @@ export function DashboardView({
                                     </svg>
                                     {t('dash.replay')}
                                   </button>
-                                  <span
-                                    className={
-                                      recording.visibility === 'PUBLIC'
-                                        ? styles.recordingPublicBadge
-                                        : styles.recordingPrivateBadge
-                                    }
-                                  >
-                                    {recording.visibility === 'PUBLIC'
-                                      ? t('dash.recordingPublic')
-                                      : t('dash.recordingPrivate')}
-                                  </span>
                                 </span>
                               )}
                             </div>

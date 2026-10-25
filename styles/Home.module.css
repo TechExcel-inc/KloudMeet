@@ -3145,6 +3145,7 @@
 .mobileTimeLine,
 .mobileMetaLine,
 .mobileCodeLine,
+.mobileRecordingRow,
 .mobileMenuBtn,
 .mobileCardTitleRow .mobileMenuBtn {
   display: none;
@@ -3235,6 +3236,13 @@
     padding: 0;
     cursor: pointer;
     font-family: inherit;
+  }
+
+  .mobileRecordingRow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
   }
 
   /* Mobile three-dot menu button */
