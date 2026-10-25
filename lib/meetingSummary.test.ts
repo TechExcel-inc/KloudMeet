@@ -93,6 +93,18 @@ describe('normalizeSummary', () => {
     expect(sectionContent(s.sections[1])).toBe('每家至少两个案例\n法兰克福先认证');
   });
 
+  it('drops the closing full stop of points and tasks', () => {
+    const s = normalizeSummary(
+      {
+        sections: [{ title: 'A', startSec: 0, points: [{ text: '德法贡献 62%。', sec: 0 }, { text: 'Nordics grow.', sec: 134 }] }],
+        todos: [{ task: '发出目标表。', owner: null, due: null, sec: 1870 }],
+      },
+      lines,
+    )!;
+    expect(s.sections[0].points.map((p) => p.text)).toEqual(['德法贡献 62%', 'Nordics grow']);
+    expect(s.todos[0].task).toBe('发出目标表');
+  });
+
   it('returns null when no section survives', () => {
     expect(normalizeSummary({ sections: [{ title: 'x', points: [{ text: 'y', sec: 9999 }] }] }, lines)).toBeNull();
     expect(normalizeSummary('not json', lines)).toBeNull();

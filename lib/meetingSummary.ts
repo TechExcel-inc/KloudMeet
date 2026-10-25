@@ -114,6 +114,11 @@ function text(value: unknown): string {
   return typeof value === 'string' ? stripEmoji(value) : '';
 }
 
+/** A point or task without its closing full stop: the time link follows it on the page. */
+function line(value: unknown): string {
+  return text(value).replace(/[。.]+$/u, '');
+}
+
 /** The speaker with the most lines between two times, or null. */
 function dominantSpeaker(lines: SummaryTranscriptLine[], startSec: number, endSec: number): string | null {
   const counts = new Map<string, number>();
@@ -164,7 +169,7 @@ export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): 
     for (const p of Array.isArray(section.points) ? section.points : []) {
       if (!p || typeof p !== 'object') continue;
       const point = p as Record<string, unknown>;
-      const pointText = text(point.text);
+      const pointText = line(point.text);
       const sec = snapToTranscript(point.sec, offsets);
       if (pointText && sec !== null) points.push({ text: pointText, sec });
     }
@@ -188,7 +193,7 @@ export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): 
   for (const t of Array.isArray(data.todos) ? data.todos : []) {
     if (!t || typeof t !== 'object') continue;
     const todo = t as Record<string, unknown>;
-    const task = text(todo.task);
+    const task = line(todo.task);
     const sec = snapToTranscript(todo.sec, offsets);
     if (!task || sec === null) continue;
     const ownerRaw = text(todo.owner);
