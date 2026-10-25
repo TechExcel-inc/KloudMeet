@@ -1,5 +1,5 @@
-/* Recording replay page (2026-10 v3 layout): read on the left (summary / transcript / info),
-   watch on the right (video, chapters, speakers). Colours come from --km-* tokens, so the page
+/* Recording replay page (2026-10 v3 layout): watch on the left (video, chapters, speakers),
+   read on the right (summary / transcript / info). Colours come from --km-* tokens, so the page
    follows html[data-theme] like the other pre-meeting pages; the video stage stays dark. */
 
 .page {
@@ -48,9 +48,12 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   flex: none;
-  width: 36px;
   height: 36px;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-sm);
   color: var(--km-text);
@@ -226,7 +229,7 @@
 /* ───────────── Layout ───────────── */
 .layout {
   display: grid;
-  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
   align-items: start;
   gap: 16px;
   width: 100%;
@@ -246,7 +249,7 @@
   min-width: 0;
 }
 
-/* Left: reading panel, stays in view while the right column scrolls */
+/* Right: reading panel, stays in view while the left column scrolls */
 .panel {
   position: sticky;
   top: 80px;
@@ -486,7 +489,10 @@
 }
 
 .summaryTitle {
-  display: block;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
   width: 100%;
   margin: 0;
   padding: 0;
@@ -500,6 +506,22 @@
 
 .summaryTitle:hover {
   color: var(--km-primary);
+}
+
+.summaryChevron,
+.summaryChevronOpen {
+  flex: none;
+  margin-top: 3px;
+  fill: none;
+  stroke: var(--km-text-muted);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s;
+}
+
+.summaryChevronOpen {
+  transform: rotate(180deg);
 }
 
 .summaryText {
@@ -712,7 +734,7 @@ button.line:hover {
   font-size: 12px;
 }
 
-/* ───────────── Right: video, chapters, speakers ───────────── */
+/* ───────────── Left: video, chapters, speakers ───────────── */
 .videoCard {
   position: relative;
   overflow: hidden;
@@ -738,7 +760,7 @@ button.line:hover {
 }
 
 .videoSolo {
-  max-height: min(80vh, 1100px);
+  max-height: min(88vh, 1200px);
   min-height: 52vh;
 }
 
@@ -764,31 +786,14 @@ button.line:hover {
 }
 
 .card {
-  padding: 12px 14px 14px;
+  padding: 12px 14px;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-lg);
   background: var(--km-surface);
 }
 
-.cardHead {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
 
-.cardTitle {
-  margin: 0;
-  color: var(--km-text-muted);
-  font-size: 12.5px;
-  font-weight: 600;
-}
 
-.cardHint {
-  margin-left: auto;
-  color: var(--km-text-muted);
-  font-size: 12px;
-}
 
 /* Chapters */
 .chapterRow {
@@ -853,9 +858,17 @@ button.line:hover {
 }
 
 .chapterSpeaker {
-  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 2px;
   color: var(--km-text-muted);
   font-size: 11.5px;
+}
+
+.chapterSpeaker > span:last-child {
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1011,6 +1024,12 @@ button.line:hover {
   }
   .meta {
     display: none;
+  }
+  .backLabel {
+    display: none;
+  }
+  .backBtn {
+    padding: 0 9px;
   }
   .hideNarrow {
     display: none;

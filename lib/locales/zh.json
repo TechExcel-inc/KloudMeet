@@ -862,7 +862,6 @@
   "replay.filterBySpeaker": "按发言人筛选",
   "replay.clearSearch": "清除搜索",
   "replay.summaryAiHint": "AI 生成，点时间跳到原话",
-  "replay.speakersHint": "点色块跳到那一段",
   "replay.metaPeople": "{n} 人参会",
   "replay.metaHost": "主持人 {name}",
   "replay.tabsLabel": "回放内容",

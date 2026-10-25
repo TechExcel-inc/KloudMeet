@@ -228,9 +228,6 @@ function ChapterCardsCarousel({
 
   return (
     <section className={s.card} aria-label={t('replay.chapters')}>
-      <div className={s.cardHead}>
-        <h2 className={s.cardTitle}>{t('replay.chapters')}</h2>
-      </div>
       <div className={s.chapterRow}>
         {canLeft && (
           <button
@@ -257,7 +254,10 @@ function ChapterCardsCarousel({
               >
                 <span className={s.chapterTime}>{ch.timeRange}</span>
                 <span className={s.chapterTopic}>{ch.topic}</span>
-                {ch.speaker && <span className={s.chapterSpeaker}>{ch.speaker}</span>}
+                <span className={s.chapterSpeaker}>
+                  <Avatar name={ch.speaker} className={s.dot} />
+                  <span>{ch.speaker}</span>
+                </span>
               </button>
             );
           })}
@@ -293,10 +293,6 @@ function SpeakerSegmentTimeline({
   const pct = (secs: number) => `${((secs / duration) * 100).toFixed(2)}%`;
   return (
     <section className={s.card} aria-label={t('replay.speakers')}>
-      <div className={s.cardHead}>
-        <h2 className={s.cardTitle}>{t('replay.speakers')}</h2>
-        <span className={s.cardHint}>{t('replay.speakersHint')}</span>
-      </div>
       <div className={s.lanes}>
         {speakers.map((sp) => (
           <div key={sp.name} className={s.lane}>
@@ -315,7 +311,7 @@ function SpeakerSegmentTimeline({
                 <div
                   key={i}
                   className={s.laneSeg}
-                  title={`${fmtTime(start)} – ${fmtTime(end)}`}
+                  title={`${fmtTime(start)} – ${fmtTime(end)}  点击跳转`}
                   style={{ left: pct(start), width: pct(end - start), background: sp.color }}
                   onClick={(ev) => {
                     ev.stopPropagation();
@@ -348,19 +344,22 @@ function SummaryPanel({
   onSeek: (secs: number) => void;
   meetingId: number;
   kloudMeetingId: number | null;
-  /** 外部点击章节卡片时滚动到对应摘要 */
+  /** 外部点击章节卡片时展开并滚动到对应摘要 */
   focusId?: number | null;
   speakerById: Record<number, string>;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [localItems, setLocalItems] = useState<SummaryItem[]>(items);
+  const [expanded, setExpanded] = useState<number | null>(null);
   const itemRefs = useRef<Record<number, HTMLElement | null>>({});
 
   useEffect(() => setLocalItems(items), [items]);
 
+  // 外部点击章节卡片时强制展开对应摘要
   useEffect(() => {
     if (focusId === undefined || focusId === null) return;
+    setExpanded(focusId);
     itemRefs.current[focusId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [focusId]);
 
@@ -419,6 +418,7 @@ function SummaryPanel({
       {localItems.map((item, idx) => {
         const start = offsetToSecs(item.timeOffset);
         const speaker = speakerById[item.id] || '';
+        const isOpen = expanded === item.id;
         return (
           <article
             key={item.id}
@@ -428,10 +428,21 @@ function SummaryPanel({
             className={idx === activeIdx ? s.summaryItemOn : s.summaryItem}
           >
             <span className={s.summaryIndex} aria-hidden="true">{idx + 1}</span>
-            <button type="button" className={s.summaryTitle} onClick={() => onSeek(start)}>
-              {item.title}
+            <button
+              type="button"
+              className={s.summaryTitle}
+              aria-expanded={isOpen}
+              onClick={() => {
+                onSeek(start);
+                setExpanded(isOpen ? null : item.id);
+              }}
+            >
+              <span>{item.title}</span>
+              <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
             </button>
-            {item.content && <p className={s.summaryText}>{item.content}</p>}
+            {isOpen && item.content && <p className={s.summaryText}>{item.content}</p>}
             <div className={s.summaryFoot}>
               <button type="button" className={s.timeLink} onClick={() => onSeek(start)}>
                 {item.timeOffset}
@@ -621,6 +632,146 @@ function InfoPanel({
     </div>
   );
 }
+
+/** 参与者发言进度条 */
+function ParticipantTimeline({
+  transcripts,
+  participants,
+  duration,
+  currentTime,
+  onSeek,
+}: {
+  transcripts: Transcript[];
+  participants: Participant[];
+  duration: number;
+  currentTime: number;
+  onSeek: (secs: number) => void;
+}) {
+  if (!duration || !transcripts.length) return null;
+
+  // 聚合：每个发言人的发言时段
+  const speakerMap: Record<string, number[]> = {};
+  for (const t of transcripts) {
+    if (t.offsetSeconds === null) continue;
+    if (!speakerMap[t.speakerName]) speakerMap[t.speakerName] = [];
+    speakerMap[t.speakerName].push(t.offsetSeconds);
+  }
+
+  const speakers = Object.keys(speakerMap).slice(0, 6); // 最多显示6人
+
+  return (
+    <div style={timelineStyles.timelineContainer}>
+      {speakers.map((name) => {
+        const offsets = speakerMap[name];
+        return (
+          <div key={name} style={timelineStyles.timelineRow}>
+            <div style={timelineStyles.timelineLabel} title={name}>
+              <div
+                style={{
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  background: speakerColor(name),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 9,
+                  color: '#fff',
+                  fontWeight: 700,
+                  flexShrink: 0,
+                }}
+              >
+                {getInitials(name)}
+              </div>
+              <span
+                style={{
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: 11,
+                }}
+              >
+                {name}
+              </span>
+            </div>
+            <div style={timelineStyles.timelineBar}>
+              {offsets.map((sec, i) => {
+                const left = `${(sec / duration) * 100}%`;
+                return (
+                  <div
+                    key={i}
+                    title={fmtTime(sec)}
+                    style={{
+                      position: 'absolute',
+                      left,
+                      top: 2,
+                      width: 4,
+                      height: 'calc(100% - 4px)',
+                      borderRadius: 2,
+                      background: speakerColor(name),
+                      opacity: 0.85,
+                      cursor: 'pointer',
+                    }}
+                    onClick={() => onSeek(sec)}
+                  />
+                );
+              })}
+              {/* 当前播放位置 */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${(currentTime / duration) * 100}%`,
+                  top: 0,
+                  width: 2,
+                  height: '100%',
+                  background: '#818cf8',
+                  opacity: 0.7,
+                  pointerEvents: 'none',
+                }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* Styles for ParticipantTimeline (kept from the previous replay page) */
+const timelineStyles: Record<string, React.CSSProperties> = {
+  timelineContainer: {
+    padding: '10px 16px',
+    background: '#0f172a',
+    borderTop: '1px solid #1e293b',
+    flexShrink: 0,
+  },
+  timelineRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+    height: 22,
+  },
+  timelineLabel: {
+    width: 100,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
+    color: '#94a3b8',
+    fontSize: 11,
+  },
+  timelineBar: {
+    flex: 1,
+    height: 18,
+    background: 'rgba(255,255,255,0.05)',
+    borderRadius: 4,
+    position: 'relative',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+
+};
 
 /** AI 生成进度（模拟） */
 function GenerateProgress({ pct }: { pct: number }) {
@@ -909,6 +1060,7 @@ export default function ReplayPage() {
   const metaParts = [
     meeting?.actualStartedAt
       ? new Date(meeting.actualStartedAt).toLocaleString(locale, {
+          year: 'numeric',
           month: 'short',
           day: 'numeric',
           hour: '2-digit',
@@ -932,9 +1084,11 @@ export default function ReplayPage() {
       {/* ── Header ── */}
       <header className={s.header}>
         <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
           </svg>
+          <span className={s.backLabel}>{t('replay.back')}</span>
         </Link>
         <div className={s.titleBlock}>
           <h1 className={s.title} title={meetingTitle}>{meetingTitle}</h1>
@@ -952,8 +1106,8 @@ export default function ReplayPage() {
               title={panelVisible ? t('replay.hidePanel') : t('replay.showPanel')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="4" width="18" height="16" rx="2" />
-                <line x1="9" y1="4" x2="9" y2="20" />
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                {panelVisible ? <line x1="9" y1="3" x2="9" y2="21" /> : <line x1="15" y1="3" x2="15" y2="21" />}
               </svg>
             </button>
           )}
@@ -989,9 +1143,10 @@ export default function ReplayPage() {
                 <line x1="3" y1="12" x2="21" y2="12" />
                 <path d="M12 3a14 14 0 014 9 14 14 0 01-4 9 14 14 0 01-4-9 14 14 0 014-9z" />
               </svg>
-              <span className={s.hideNarrow}>
-                {LOCALE_OPTIONS.find((l) => l.code === locale)?.shortCode || 'EN'}
-              </span>
+              <span>{LOCALE_OPTIONS.find((l) => l.code === locale)?.shortCode || 'EN'}</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
             </button>
             {langMenuOpen && (
               <div className={s.menu} role="menu">
@@ -1083,8 +1238,65 @@ export default function ReplayPage() {
         </div>
       </header>
 
-      {/* ── Main: read on the left, watch on the right ── */}
+      {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
+        <section className={s.stage}>
+          <div className={s.videoCard}>
+            <video
+              ref={videoRef}
+              src={recording.streamUrl!}
+              controls
+              className={`${s.video}${videoClass ? ` ${videoClass}` : ''}`}
+              onTimeUpdate={(e) => {
+                const el = e.currentTarget;
+                // Recording was paused here: the file shows a "paused" slate, so skip past it
+                const target = skipPaused(el.currentTime, recording.pausedRanges ?? []);
+                if (target !== el.currentTime) el.currentTime = Math.min(target, el.duration || target);
+                setCurrentTime(el.currentTime);
+              }}
+              onPlay={() => setPlaying(true)}
+              onPause={() => setPlaying(false)}
+            />
+            {/* Fit toggle */}
+            <button
+              type="button"
+              className={s.fitBtn}
+              onClick={() => setVideoFit(videoFit === 'width' ? 'height' : 'width')}
+              title={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
+              aria-label={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
+            >
+              {videoFit === 'width' ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="15 3 21 3 21 9" />
+                  <polyline points="9 21 3 21 3 15" />
+                  <line x1="21" y1="3" x2="14" y2="10" />
+                  <line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polyline points="3 8 3 3 8 3" />
+                  <polyline points="21 16 21 21 16 21" />
+                  <line x1="3" y1="3" x2="10" y2="10" />
+                  <line x1="21" y1="21" x2="14" y2="14" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {hasTranscripts && realChapters.length > 0 && (
+            <ChapterCardsCarousel
+              chapters={realChapters}
+              currentTime={currentTime}
+              selectedId={selectedChapterId}
+              onSelect={handleChapterSelect}
+            />
+          )}
+
+          {hasTranscripts && realSpeakerSegments.length > 0 && (
+            <SpeakerSegmentTimeline speakers={realSpeakerSegments} duration={realDuration} onSeek={seekTo} />
+          )}
+        </section>
+
         {showPanel && (
           <aside className={s.panel} aria-label={t('replay.tabsLabel')}>
             <div className={s.tabs} role="tablist" aria-label={t('replay.tabsLabel')}>
@@ -1179,63 +1391,6 @@ export default function ReplayPage() {
             </div>
           </aside>
         )}
-
-        <section className={s.stage}>
-          <div className={s.videoCard}>
-            <video
-              ref={videoRef}
-              src={recording.streamUrl!}
-              controls
-              className={`${s.video}${videoClass ? ` ${videoClass}` : ''}`}
-              onTimeUpdate={(e) => {
-                const el = e.currentTarget;
-                // Recording was paused here: the file shows a "paused" slate, so skip past it
-                const target = skipPaused(el.currentTime, recording.pausedRanges ?? []);
-                if (target !== el.currentTime) el.currentTime = Math.min(target, el.duration || target);
-                setCurrentTime(el.currentTime);
-              }}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-            />
-            {/* Fit toggle */}
-            <button
-              type="button"
-              className={s.fitBtn}
-              onClick={() => setVideoFit(videoFit === 'width' ? 'height' : 'width')}
-              title={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
-              aria-label={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
-            >
-              {videoFit === 'width' ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="15 3 21 3 21 9" />
-                  <polyline points="9 21 3 21 3 15" />
-                  <line x1="21" y1="3" x2="14" y2="10" />
-                  <line x1="3" y1="21" x2="10" y2="14" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="3 8 3 3 8 3" />
-                  <polyline points="21 16 21 21 16 21" />
-                  <line x1="3" y1="3" x2="10" y2="10" />
-                  <line x1="21" y1="21" x2="14" y2="14" />
-                </svg>
-              )}
-            </button>
-          </div>
-
-          {hasTranscripts && realChapters.length > 0 && (
-            <ChapterCardsCarousel
-              chapters={realChapters}
-              currentTime={currentTime}
-              selectedId={selectedChapterId}
-              onSelect={handleChapterSelect}
-            />
-          )}
-
-          {hasTranscripts && realSpeakerSegments.length > 0 && (
-            <SpeakerSegmentTimeline speakers={realSpeakerSegments} duration={realDuration} onSeek={seekTo} />
-          )}
-        </section>
       </main>
 
       {canAskTranscribe && meeting && (!hasTranscripts || unfinished) && (
