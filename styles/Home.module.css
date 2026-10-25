@@ -109,7 +109,6 @@
 
 .btn:focus-visible,
 .iconBtn:focus-visible,
-.iconBtnDanger:focus-visible,
 .topNavIconBtn:focus-visible,
 .avatarBtn:focus-visible,
 .linkBtn:focus-visible,
@@ -128,11 +127,7 @@
 .downloadBtn:focus-visible,
 .navLogo:focus-visible,
 .conflictBtnPrimary:focus-visible,
-.conflictBtnCancel:focus-visible,
-.mobileJoinBtn:focus-visible,
-.mobileStartBtn:focus-visible,
-.mobileCopyBtn:focus-visible,
-.mobileDeleteBtn:focus-visible {
+.conflictBtnCancel:focus-visible {
   outline: none;
   box-shadow: var(--km-focus-ring);
 }
@@ -390,8 +385,7 @@
 }
 
 /* Small round icon button (rows, nav back button, dialogs) */
-.iconBtn,
-.iconBtnDanger {
+.iconBtn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -410,11 +404,6 @@
 .iconBtn:hover {
   background: var(--km-hover);
   color: var(--km-text);
-}
-
-.iconBtnDanger:hover {
-  background: var(--km-danger-bg);
-  color: var(--km-danger-text);
 }
 
 /* Avatar (lib/UserAvatarMenu) */
@@ -475,6 +464,10 @@
   background: var(--km-hover);
 }
 
+.dropdownItemDanger {
+  color: var(--km-danger-text);
+}
+
 .dropdownItemActive {
   background: var(--km-tonal);
   color: var(--km-on-tonal);
@@ -497,11 +490,6 @@
 .inviteMenu {
   min-width: 180px;
   top: calc(100% + 4px);
-}
-
-.inviteMenuLeft {
-  right: auto;
-  left: 0;
 }
 
 a.dropdownItem {
@@ -1918,7 +1906,6 @@ a.dropdownItem:focus-visible {
   box-shadow: var(--km-focus-ring);
 }
 
-
 .replayPlay {
   display: flex;
   align-items: center;
@@ -2188,6 +2175,24 @@ a.dropdownItem:focus-visible {
   border-top: 1px solid var(--dash-line);
 }
 
+.meetingSectionLabel {
+  display: flex;
+  align-items: center;
+  color: var(--dash-ink-2);
+}
+
+.meetingSectionCount {
+  margin-left: auto;
+  color: var(--dash-faint);
+  font-weight: 500;
+}
+
+/* Days inside the history: a lighter band */
+.meetingDaySubLabel {
+  background: transparent;
+  font-weight: 500;
+}
+
 .meetingDateSub {
   margin-left: 6px;
   color: var(--dash-faint);
@@ -2203,11 +2208,13 @@ a.dropdownItem:focus-visible {
 .meetingCard,
 .meetingCardLive {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto auto;
+  grid-template-areas: 'time title meta actions';
   align-items: center;
-  gap: 12px 16px;
-  padding: 16px 16px 16px 20px;
+  column-gap: 16px;
+  min-height: 62px;
+  padding: 8px 12px 8px 20px;
   border-bottom: 1px solid var(--dash-line);
   transition: background-color 0.15s ease;
 }
@@ -2257,13 +2264,12 @@ a.dropdownItem:focus-visible {
 }
 
 .meetingCardTime {
-  flex: none;
-  width: 84px;
+  grid-area: time;
 }
 
 .meetingCardClock {
   color: var(--dash-ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
@@ -2275,36 +2281,41 @@ a.dropdownItem:focus-visible {
   font-size: 12px;
 }
 
-.meetingCardInfo {
-  flex: 1 1 280px;
+.meetingCardTitleRow {
+  grid-area: title;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   min-width: 0;
 }
 
-.meetingCardTitleRow {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-}
-
 .meetingCardTitle {
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--dash-ink);
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.005em;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* Instant meetings have no name of their own */
+.meetingCardTitleQuiet {
+  color: var(--dash-ink-2);
+  font-weight: 500;
 }
 
 /* Host · people · code, separated by small dots */
 .meetingCardMeta {
+  grid-area: meta;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 4px 8px;
-  margin-top: 4px;
   color: var(--dash-muted);
-  font-size: 13px;
+  font-size: 12.5px;
+  white-space: nowrap;
 }
 
 .meetingCardMeta > * + *::before {
@@ -2397,40 +2408,7 @@ a.dropdownItem:focus-visible {
   100% { box-shadow: 0 0 0 0 rgba(15, 166, 116, 0); }
 }
 
-/* Replay and who can watch it */
-.meetingReplay {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.recordingPrivateBadge,
-.recordingPublicBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  height: 28px;
-  color: var(--dash-faint);
-  font-size: 12px;
-  white-space: nowrap;
-  cursor: default;
-}
-
-.recordingProcessing {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 6px;
-  background: var(--km-warning-bg);
-  color: var(--km-warning);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-/* One primary action per row, always the same size; the rest are quiet icons */
+/* One main action per row, always the same size; the rest live in the ⋯ menu */
 .rowAction {
   display: inline-flex;
   align-items: center;
@@ -2477,40 +2455,29 @@ a.dropdownItem:focus-visible {
 }
 
 .meetingCardActions {
+  grid-area: actions;
   display: flex;
   align-items: center;
-  gap: 2px;
-  margin-left: auto;
+  gap: 4px;
 }
 
-.meetingCardActions > .rowAction {
-  margin-right: 8px;
+/* Same width on every row, so the main actions line up; a row without one keeps the space */
+.meetingCardActions > .rowAction,
+.rowActionSpacer {
+  width: 88px;
+  min-width: 0;
+  padding: 0 10px;
 }
 
-.meetingCardActions .iconBtn,
-.meetingCardActions .iconBtnDanger {
+.rowActionSpacer {
+  display: inline-block;
+}
+
+.meetingCardActions .iconBtn {
   width: 32px;
   height: 32px;
   border-radius: var(--km-radius-sm);
   color: var(--dash-faint);
-}
-
-/* Secondary actions appear on hover, selection or keyboard focus; the primary action stays visible */
-@media (hover: hover) {
-  .meetingCardActions > .iconBtn,
-  .meetingCardActions > .iconBtnDanger,
-  .meetingCardActions > .anchor {
-    opacity: 0;
-    transition: opacity 0.15s ease;
-  }
-
-  .meetingCard:hover .meetingCardActions > *,
-  .meetingCardLive:hover .meetingCardActions > *,
-  .meetingCardSelected .meetingCardActions > *,
-  .meetingCardInviteMenuOpen .meetingCardActions > *,
-  .meetingCardActions:focus-within > * {
-    opacity: 1;
-  }
 }
 
 .meetingCardActions .iconBtn:hover {
@@ -2518,53 +2485,8 @@ a.dropdownItem:focus-visible {
   color: var(--dash-ink);
 }
 
-.meetingCardActions .iconBtnDanger:hover {
-  background: var(--km-danger-bg);
-  color: var(--km-danger-text);
-}
-
 .anchor {
   position: relative;
-}
-
-/* Mobile-only action bar (≤640px) */
-.meetingCardMobileActions {
-  display: none;
-}
-
-.mobileJoinBtn,
-.mobileStartBtn,
-.mobileCopyBtn,
-.mobileDeleteBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: var(--km-radius-sm);
-  font: 600 13px/1 var(--km-font);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.mobileJoinBtn {
-  border: 0;
-  background: var(--km-primary);
-  color: var(--km-on-primary);
-}
-
-.mobileStartBtn,
-.mobileCopyBtn {
-  border: 1px solid var(--dash-line-2);
-  background: var(--dash-surface);
-  color: var(--dash-ink-2);
-}
-
-.mobileDeleteBtn {
-  border: 1px solid transparent;
-  background: var(--km-danger-bg);
-  color: var(--km-danger-text);
 }
 
 /* Loading / empty */
@@ -3175,38 +3097,28 @@ a.dropdownItem:focus-visible {
     padding-left: 14px;
   }
 
+  /* Phones: info drops under the title; the actions stay on the right */
   .meetingCard,
   .meetingCardLive {
-    align-items: flex-start;
-    padding: 14px;
-    gap: 10px 12px;
+    grid-template-columns: 56px minmax(0, 1fr) auto;
+    grid-template-areas:
+      'time title actions'
+      'time meta actions';
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 10px 8px 10px 14px;
   }
 
-  .meetingCardTime {
-    width: 64px;
-  }
-
-  .meetingCardClock {
-    font-size: 15px;
-  }
-
-  .meetingCardInfo {
-    flex-basis: calc(100% - 80px);
-  }
-
-  .meetingReplay {
-    flex-basis: 100%;
-  }
-
-  .meetingCardActions {
-    display: none;
-  }
-
-  .meetingCardMobileActions {
-    display: flex;
+  /* The title gets the full width; the status chip drops to its own line when it doesn't fit */
+  .meetingCardTitleRow {
     flex-wrap: wrap;
-    gap: 8px;
-    flex-basis: 100%;
+    row-gap: 4px;
+  }
+
+  .meetingCardActions > .rowAction,
+  .rowActionSpacer {
+    width: 72px;
+    padding: 0 8px;
   }
 
   .toast {
