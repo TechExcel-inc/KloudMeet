@@ -47,6 +47,9 @@ export interface SummaryTranscriptLine {
 /** How far (seconds) a model-given time may be from a transcript line and still count as that line. */
 const SNAP_TOLERANCE_SEC = 60;
 
+/** A section point this close (seconds) to a to-do is treated as the same assignment. */
+const TODO_ECHO_SEC = 5;
+
 /** Names that stand for "we don't know who" in transcripts. */
 const ANONYMOUS_SPEAKERS = new Set(['', 'unknown', 'speaker 1']);
 
@@ -67,9 +70,11 @@ Return ONLY a JSON object:
 Rules:
 - Write in the same language as the transcript. No emoji anywhere.
 - Split into 3-8 sections by topic, in time order. Each section has 1-5 points.
+- Sections are about what was discussed and decided. Do not repeat to-dos or assignments as points, and do not add a section that only lists who does what; those go in "todos".
 - Each point is one sentence of at most 60 characters (Chinese) or 25 words, stating a fact, decision or number that was said.
 - "sec" and "startSec" must be the [seconds] of the transcript line the point comes from. Never invent a time.
 - To-dos: only things someone clearly agreed or was asked to do. Owner is the speaker who took it on or the person named; if nobody was named use null. Due is the deadline in the speaker's words (e.g. "by Friday"); if none was said use null. Do not guess.
+- One to-do per task: if the same task comes up more than once (offered, then confirmed, or asked again), merge it into one item with the earliest "sec" where it was taken on, the owner, and the clearest deadline that was said.
 - If there are no to-dos, return an empty array.`;
 
 /** "[1000] Alex Chen: text" lines for the prompt. */
@@ -142,8 +147,9 @@ function dominantSpeaker(lines: SummaryTranscriptLine[], startSec: number, endSe
 
 /**
  * Turns the model's JSON into a summary we can trust: times snapped to real transcript lines,
- * unplaceable points and to-dos dropped, owners kept only if that name appears in the meeting.
- * Returns null when nothing usable is left.
+ * unplaceable points and to-dos dropped, owners kept only if that name appears in the meeting,
+ * and points that only repeat a to-do left out of the sections. Returns null when nothing usable
+ * is left.
  */
 export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): StructuredSummary | null {
   if (!raw || typeof raw !== 'object') return null;
@@ -157,37 +163,6 @@ export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): 
   const speakers = speakersByTalk(lines);
   const speakerByLower = new Map(speakers.map((name) => [name.toLowerCase(), name]));
   const allText = lines.map((line) => `${line.speakerName} ${line.content}`).join('\n').toLowerCase();
-
-  const sections: SummarySection[] = [];
-  for (const item of Array.isArray(data.sections) ? data.sections : []) {
-    if (!item || typeof item !== 'object') continue;
-    const section = item as Record<string, unknown>;
-    const title = text(section.title);
-    if (!title) continue;
-
-    const points: SummaryPoint[] = [];
-    for (const p of Array.isArray(section.points) ? section.points : []) {
-      if (!p || typeof p !== 'object') continue;
-      const point = p as Record<string, unknown>;
-      const pointText = line(point.text);
-      const sec = snapToTranscript(point.sec, offsets);
-      if (pointText && sec !== null) points.push({ text: pointText, sec });
-    }
-    if (points.length === 0) continue;
-    points.sort((a, b) => a.sec - b.sec);
-
-    const startSec = snapToTranscript(section.startSec, offsets) ?? points[0].sec;
-    const named = speakerByLower.get(text(section.speaker).toLowerCase()) ?? null;
-    sections.push({ title, startSec: Math.min(startSec, points[0].sec), endSec: totalSec, speaker: named, points });
-  }
-  if (sections.length === 0) return null;
-
-  sections.sort((a, b) => a.startSec - b.startSec);
-  sections.forEach((section, idx) => {
-    const next = sections[idx + 1];
-    section.endSec = next ? Math.max(next.startSec, section.startSec) : Math.max(totalSec, section.startSec);
-    if (!section.speaker) section.speaker = dominantSpeaker(lines, section.startSec, section.endSec || section.startSec + 1);
-  });
 
   const todos: SummaryTodo[] = [];
   for (const t of Array.isArray(data.todos) ? data.todos : []) {
@@ -206,6 +181,41 @@ export function normalizeSummary(raw: unknown, lines: SummaryTranscriptLine[]): 
     todos.push({ task, owner, due, sec });
   }
   todos.sort((a, b) => a.sec - b.sec);
+
+  // A point said at the same moment as a to-do is that assignment again: it belongs in the to-dos
+  const isTodoMoment = (sec: number) => todos.some((todo) => Math.abs(todo.sec - sec) <= TODO_ECHO_SEC);
+
+  const sections: SummarySection[] = [];
+  for (const item of Array.isArray(data.sections) ? data.sections : []) {
+    if (!item || typeof item !== 'object') continue;
+    const section = item as Record<string, unknown>;
+    const title = text(section.title);
+    if (!title) continue;
+
+    const points: SummaryPoint[] = [];
+    for (const p of Array.isArray(section.points) ? section.points : []) {
+      if (!p || typeof p !== 'object') continue;
+      const point = p as Record<string, unknown>;
+      const pointText = line(point.text);
+      const sec = snapToTranscript(point.sec, offsets);
+      if (pointText && sec !== null && !isTodoMoment(sec)) points.push({ text: pointText, sec });
+    }
+    if (points.length === 0) continue;
+    points.sort((a, b) => a.sec - b.sec);
+
+    const startSec = snapToTranscript(section.startSec, offsets) ?? points[0].sec;
+    const named = speakerByLower.get(text(section.speaker).toLowerCase()) ?? null;
+    sections.push({ title, startSec: Math.min(startSec, points[0].sec), endSec: totalSec, speaker: named, points });
+  }
+  if (sections.length === 0) return null;
+
+  sections.sort((a, b) => a.startSec - b.startSec);
+  sections.forEach((section, idx) => {
+    const next = sections[idx + 1];
+    section.endSec = next ? Math.max(next.startSec, section.startSec) : Math.max(totalSec, section.startSec);
+    if (!section.speaker) section.speaker = dominantSpeaker(lines, section.startSec, section.endSec || section.startSec + 1);
+  });
+
 
   return {
     topic: text(data.topic),

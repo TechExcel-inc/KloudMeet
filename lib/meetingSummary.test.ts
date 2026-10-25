@@ -105,6 +105,24 @@ describe('normalizeSummary', () => {
     expect(s.todos[0].task).toBe('发出目标表');
   });
 
+  it('keeps assignments in to-dos only, dropping a section that just repeats them', () => {
+    const s = normalizeSummary(
+      {
+        sections: [
+          { title: '目标', startSec: 1000, points: [{ text: '每家两个案例', sec: 1000 }] },
+          { title: '分工', startSec: 1800, points: [{ text: 'Alex 周五前发目标表', sec: 1870 }, { text: '回放谁来发待定', sec: 1474 }] },
+        ],
+        todos: [
+          { task: '发出伙伴目标表', owner: 'Alex Chen', due: '周五前', sec: 1870 },
+          { task: '把回放发给缺席的伙伴', owner: null, due: null, sec: 1470 },
+        ],
+      },
+      lines,
+    )!;
+    expect(s.sections.map((x) => x.title)).toEqual(['目标']);
+    expect(s.todos).toHaveLength(2);
+  });
+
   it('returns null when no section survives', () => {
     expect(normalizeSummary({ sections: [{ title: 'x', points: [{ text: 'y', sec: 9999 }] }] }, lines)).toBeNull();
     expect(normalizeSummary('not json', lines)).toBeNull();
