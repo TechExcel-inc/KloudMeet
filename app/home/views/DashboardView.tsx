@@ -1240,16 +1240,59 @@ export function DashboardView({
                                 </button>
                               )}
 
-                              {/* Recording state — quiet tag next to the code */}
+                              {/* Recording: Play button + Private/Public badge */}
                               {recording && (
-                                <span className={styles.meetingMetaTag}>
-                                  {recording.visibility === 'PUBLIC'
-                                    ? t('dash.recordingPublic')
-                                    : t('dash.recordingPrivate')}
-                                </span>
+                                <>
+                                  <button
+                                    className={styles.playRecordingBtn}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const key = recording.shareKey as string | undefined;
+                                      window.open(
+                                        key
+                                          ? recordingReplayPath(key)
+                                          : `/recordings/${recording.id}`,
+                                        '_blank',
+                                      );
+                                    }}
+                                    title={t('dash.replayTitle')}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                      width="13"
+                                      height="13"
+                                    >
+                                      <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    {t('dash.replay')}
+                                  </button>
+                                  <span
+                                    className={
+                                      recording.visibility === 'PUBLIC'
+                                        ? styles.recordingPublicBadge
+                                        : styles.recordingPrivateBadge
+                                    }
+                                  >
+                                    {recording.visibility === 'PUBLIC'
+                                      ? t('dash.recordingPublic')
+                                      : t('dash.recordingPrivate')}
+                                  </span>
+                                </>
                               )}
                               {processingRecording && (
-                                <span className={styles.meetingMetaTag}>
+                                <span className={styles.recordingProcessing}>
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="13"
+                                    height="13"
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
                                   {t('common.processing')}
                                 </span>
                               )}
@@ -1277,6 +1320,47 @@ export function DashboardView({
                                     <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                                   </svg>
                                 </button>
+                              )}
+
+                              {/* Mobile: Play + Private/Public badge after code */}
+                              {recording && (
+                                <span className={styles.mobileRecordingRow}>
+                                  <button
+                                    className={styles.playRecordingBtn}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const key = recording.shareKey as string | undefined;
+                                      window.open(
+                                        key
+                                          ? recordingReplayPath(key)
+                                          : `/recordings/${recording.id}`,
+                                        '_blank',
+                                      );
+                                    }}
+                                    title={t('dash.replayTitle')}
+                                  >
+                                    <svg
+                                      viewBox="0 0 24 24"
+                                      fill="currentColor"
+                                      width="13"
+                                      height="13"
+                                    >
+                                      <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                    {t('dash.replay')}
+                                  </button>
+                                  <span
+                                    className={
+                                      recording.visibility === 'PUBLIC'
+                                        ? styles.recordingPublicBadge
+                                        : styles.recordingPrivateBadge
+                                    }
+                                  >
+                                    {recording.visibility === 'PUBLIC'
+                                      ? t('dash.recordingPublic')
+                                      : t('dash.recordingPrivate')}
+                                  </span>
+                                </span>
                               )}
                             </div>
                           </div>

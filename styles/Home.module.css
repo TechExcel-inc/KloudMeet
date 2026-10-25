@@ -2867,6 +2867,13 @@
   font-weight: 500;
 }
 
+.mobileRecordingRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 /* Empty state */
 .meetingLoadingState {
   display: flex;
@@ -3809,6 +3816,20 @@
 :global(html[data-theme='dark']) .recordingPublicBadge {
   background: rgba(16, 185, 129, 0.16);
   color: #6ee7b7;
+}
+
+:global(html[data-theme='dark']) .playRecordingBtn {
+  background: rgba(99, 102, 241, 0.15);
+  color: #a5b4fc;
+}
+
+:global(html[data-theme='dark']) .playRecordingBtn:hover {
+  background: rgba(99, 102, 241, 0.25);
+}
+
+:global(html[data-theme='dark']) .recordingProcessing {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
 }
 
 :global(html[data-theme='dark']) .orgDropdownIdentity {
