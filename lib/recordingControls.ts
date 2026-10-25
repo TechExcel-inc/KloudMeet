@@ -11,6 +11,14 @@ export function isRecordingMode(value: unknown): value is RecordingMode {
   return typeof value === 'string' && (RECORDING_MODES as readonly string[]).includes(value);
 }
 
+/** Pre-join Recording choice (Meeting.recordingOption). */
+export const RECORDING_OPTIONS = ['none', 'ai_smart', 'livedoc_full', 'screen_share'] as const;
+export type RecordingOption = (typeof RECORDING_OPTIONS)[number];
+
+export function isRecordingOption(value: unknown): value is RecordingOption {
+  return typeof value === 'string' && (RECORDING_OPTIONS as readonly string[]).includes(value);
+}
+
 /** What everyone in the meeting needs to know about recording. */
 export interface RecordingState {
   active: boolean;
@@ -21,6 +29,10 @@ export interface RecordingState {
   hostOnly: boolean;
   /** Transcribe automatically once the recording is ready */
   syncTranscript: boolean;
+  /** The meeting's pre-join Recording choice (absent from older clients' broadcasts) */
+  option?: RecordingOption;
+  /** Kloud recording id while a livedoc_full recording runs */
+  livedocRecordingId?: number | null;
 }
 
 export const IDLE_RECORDING_STATE: RecordingState = {

@@ -12,6 +12,7 @@ import { onRecordingReady } from '@/lib/billing/limits';
 import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
 import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
+import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -65,6 +66,14 @@ export async function POST(request: NextRequest) {
       });
 
       if (recording) {
+        // LiveDoc Full Recording: the media has ended, so Kloud stops saving actions too.
+        if (recording.kind === 'livedoc_full') {
+          const meeting = await prisma.meeting.findUnique({
+            where: { id: recording.meetingId },
+            select: { kloudMeetingId: true },
+          });
+          await finishLivedocRecording(recording, meeting?.kloudMeetingId ?? null);
+        }
         if (error) {
           await prisma.recording.update({
             where: { id: recording.id },
@@ -143,6 +152,13 @@ export async function POST(request: NextRequest) {
         await markMeetingIdleFromEmptyRoom(meeting.id);
       }
       if (meeting) {
+        // LiveDoc Full Recording: everyone left, so end Kloud's recording (stop may never come).
+        const livedocRecordings = await prisma.recording.findMany({
+          where: { meetingId: meeting.id, kind: 'livedoc_full', livedocToken: { not: null } },
+        });
+        for (const rec of livedocRecordings) {
+          await finishLivedocRecording(rec, meeting.kloudMeetingId);
+        }
         // Billing (no-op when disabled): caption minutes × 60 → host account, idempotent on cap:<meetingId>.
         await meterSafely(`cap:${meeting.id}`, () => meterCaptions(meeting));
       }

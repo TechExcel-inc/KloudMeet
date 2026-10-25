@@ -658,6 +658,7 @@ export function PageClientImpl(props: {
         }
         if (isMeetingCreator && !isSameTabRefresh) {
           url.searchParams.append('participantLiveDocAi', participantLiveDocShow ? '1' : '0');
+          url.searchParams.append('recordingOption', recordingOption);
         }
         const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
@@ -737,6 +738,7 @@ export function PageClientImpl(props: {
       t,
       personalRoomSwitching,
       participantLiveDocShow,
+      recordingOption,
     ],
   );
   // KloudPreJoin shows camera/mic failures (blocked, in use, not found) next to the preview,

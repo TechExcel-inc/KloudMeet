@@ -126,6 +126,7 @@ import {
   type ChatMsg,
   type ChatWireMessage,
 } from '@/lib/chatProtocol';
+import { useLivedocRecordingBridge } from '@/lib/useLivedocRecordingBridge';
 import { getInitials } from '@/lib/getInitials';
 import {
   ParticipantRoleMenuProvider,
@@ -448,6 +449,11 @@ export function VideoConferenceComponent(props: {
     setRecordingState(state);
     if (broadcast) broadcastRecordingStateRef.current(state);
   }, []);
+  useLivedocRecordingBridge({
+    state: recordingState,
+    startedHereRef: startedRecordingHereRef,
+    screenShareOn: activeView === 'shareScreen',
+  });
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -484,10 +490,16 @@ export function VideoConferenceComponent(props: {
       const pageUrlStr = window.location.href;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
 
+      // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login.
+      const livedocToken =
+        recordingState.option === 'livedoc_full'
+          ? await createOrUpdateInstantAccount(props.userChoices.username).catch(() => null)
+          : null;
+
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ action, pageUrl: pageUrlStr, mode: recordingState.mode }),
+        body: JSON.stringify({ action, pageUrl: pageUrlStr, mode: recordingState.mode, livedocToken }),
       });
 
       const data = await res.json();

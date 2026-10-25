@@ -6,9 +6,11 @@ import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { checkReplayQuota } from '@/lib/billing/limits';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
+import { endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
 import {
   closePause,
   isRecordingMode,
+  isRecordingOption,
   memberMayRecord,
   memberMayReportRoles,
   parseMeetingRoles,
@@ -45,6 +47,8 @@ function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingSta
     mode: isRecordingMode(mode) ? mode : 'follow',
     hostOnly: meeting.recordingHostOnly,
     syncTranscript: meeting.recordingSyncTranscript,
+    option: isRecordingOption(meeting.recordingOption) ? meeting.recordingOption : 'screen_share',
+    livedocRecordingId: active?.livedocRecordingId ?? null,
   };
 }
 
@@ -84,6 +88,8 @@ export async function POST(
 
     const body = await request.json();
     const { action, pageUrl } = body;
+    // LiveDoc Full Recording: the Kloud user token of whoever starts / stops (their LiveDoc login)
+    const livedocToken = typeof body.livedocToken === 'string' && body.livedocToken ? body.livedocToken : null;
     const teamMemberId = member.id;
 
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
@@ -185,6 +191,7 @@ export async function POST(
         } catch (e) {
           console.error('Failed to stop egress', rec.storageKey, e);
         }
+        await finishLivedocRecording(rec, meeting.kloudMeetingId, livedocToken);
       }
       
       return NextResponse.json({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
@@ -244,21 +251,53 @@ export async function POST(
 
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
-    const mode = isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
+    // LiveDoc Full Recording: Kloud saves the LiveDoc actions; the media is the meeting's voice,
+    // recorded for now with the audio-only web egress (later its own voice and screen sections).
+    const livedocFull = meeting.recordingOption === 'livedoc_full';
+    let livedocRecordingId: number | null = null;
+    let livedocStartedAt: Date | null = null;
+    if (livedocFull) {
+      if (!meeting.kloudMeetingId) {
+        return NextResponse.json({ error: 'LiveDoc is not ready in this meeting yet', code: 'LIVEDOC_NOT_READY' }, { status: 409 });
+      }
+      if (!livedocToken) {
+        return NextResponse.json({ error: 'livedocToken is required for LiveDoc Full Recording' }, { status: 400 });
+      }
+      try {
+        livedocRecordingId = await startKloudRecording(meeting.kloudMeetingId, livedocToken);
+      } catch (e) {
+        console.error('[meetings record] Kloud start_recording failed', e);
+        return NextResponse.json({ error: 'LiveDoc recording could not start', code: 'LIVEDOC_RECORDING_FAILED' }, { status: 502 });
+      }
+      livedocStartedAt = new Date();
+    }
+
+    const mode = livedocFull
+      ? 'audio'
+      : isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
     const activityToken = newShareKey();
     const parsedUrl = new URL(pageUrl);
     parsedUrl.searchParams.set('isBot', 'true');
     parsedUrl.searchParams.set(SPEAK_TOKEN_PARAM, activityToken);
     const targetUrl = parsedUrl.toString();
 
-    const info = await egressClient.startWebEgress(
-      targetUrl,
-      fileOutput, // The new standard requires passing the output definition object natively here
-      {
-        audioOnly: mode === 'audio',
-        videoOnly: false,
+    let info;
+    try {
+      info = await egressClient.startWebEgress(
+        targetUrl,
+        fileOutput, // The new standard requires passing the output definition object natively here
+        {
+          audioOnly: mode === 'audio',
+          videoOnly: false,
+        }
+      );
+    } catch (e) {
+      // Don't leave Kloud recording a meeting that has no media.
+      if (livedocRecordingId && meeting.kloudMeetingId && livedocToken) {
+        await endKloudRecording(meeting.kloudMeetingId, livedocToken);
       }
-    );
+      throw e;
+    }
 
     // Create tracking record
     const recording = await prisma.recording.create({
@@ -274,9 +313,12 @@ export async function POST(
         activityToken,
         mode,
         syncTranscript: meeting.recordingSyncTranscript,
+        ...(livedocFull
+          ? { kind: 'livedoc_full', livedocRecordingId, livedocStartedAt, livedocToken }
+          : {}),
       }
     });
-    if (meeting.recordingMode !== mode) {
+    if (!livedocFull && meeting.recordingMode !== mode) {
       await prisma.meeting.update({ where: { id: meeting.id }, data: { recordingMode: mode } });
     }
 

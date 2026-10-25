@@ -4,8 +4,9 @@ import React from 'react';
 import { CircleOff, FileVideo, MonitorUp, Sparkles } from 'lucide-react';
 import { PrejoinSelect } from './PrejoinSelect';
 import { useI18n } from './i18n';
+import type { RecordingOption } from './recordingControls';
 
-export type RecordingOption = 'none' | 'ai_smart' | 'livedoc_full' | 'screen_share';
+export type { RecordingOption };
 
 export interface PrejoinRecordingOptionSelectProps {
   value: RecordingOption;

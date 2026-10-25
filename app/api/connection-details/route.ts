@@ -18,6 +18,7 @@ import {
 import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
 import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoomView';
 import { prisma } from '@/lib/db';
+import { isRecordingOption } from '@/lib/recordingControls';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
 import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlements';
@@ -198,6 +199,18 @@ export async function GET(request: NextRequest) {
     ) {
       await setParticipantLiveDocAi(livekitRoomName, requestedLiveDoc);
       participantLiveDocAi = requestedLiveDoc;
+    }
+    // The host's pre-join Recording choice decides how this meeting records.
+    const recordingOptionParam = request.nextUrl.searchParams.get('recordingOption');
+    if (
+      isRecordingOption(recordingOptionParam) &&
+      member &&
+      member.id === meeting.createdByMemberId
+    ) {
+      await prisma.meeting.update({
+        where: { id: meeting.id },
+        data: { recordingOption: recordingOptionParam },
+      });
     }
     const livedocBind = await prisma.meeting.findUnique({
       where: { id: meeting.id },

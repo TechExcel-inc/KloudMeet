@@ -108,6 +108,9 @@ model Meeting {
   recordingHostOnly       Boolean                  @default(true)
   recordingMode           String                   @default("follow")
   recordingSyncTranscript Boolean                  @default(true)
+  /// Pre-join Recording choice: none | ai_smart | livedoc_full | screen_share. Only livedoc_full
+  /// changes how the record API works today; the others use the screen share recording.
+  recordingOption         String                   @default("screen_share")
   /// Who is host / co-host / presenter right now, as reported by the current host's client:
   /// { host, cohosts[], presenters[] } (LiveKit identities). Used to check recording permission.
   meetingRoles            Json?
@@ -283,45 +286,78 @@ model MeetUser {
 }
 
 model Recording {
-  id              Int                      @id @default(autoincrement())
-  shareKey        String?                  @unique(map: "Recording_shareKey_key")
-  visibility      String                   @default("PRIVATE")
-  meetingId       Int
-  teamMemberId    Int
-  fileName        String
-  storageProvider String                   @default("LOCAL")
-  storageKey      String
-  storageUrl      String?
-  fileSizeBytes   Int?
-  durationSeconds Int?
-  mimeType        String?
-  status          String                   @default("UPLOADING")
-  mediaStartedAt  DateTime?
-  activityToken   String?                  @unique(map: "Recording_activityToken_key")
-  sttTaskId       String?
-  sttStatus       String?
-  sttStartedAt    DateTime?
-  sttError        String?                  @db.Text
+  id                 Int                      @id @default(autoincrement())
+  shareKey           String?                  @unique(map: "Recording_shareKey_key")
+  visibility         String                   @default("PRIVATE")
+  meetingId          Int
+  teamMemberId       Int
+  fileName           String
+  storageProvider    String                   @default("LOCAL")
+  storageKey         String
+  storageUrl         String?
+  fileSizeBytes      Int?
+  durationSeconds    Int?
+  mimeType           String?
+  status             String                   @default("UPLOADING")
+  mediaStartedAt     DateTime?
+  activityToken      String?                  @unique(map: "Recording_activityToken_key")
+  sttTaskId          String?
+  sttStatus          String?
+  sttStartedAt       DateTime?
+  sttError           String?                  @db.Text
   /// Layout recorded: follow | gallery | speaker | audio
-  mode            String                   @default("follow")
+  mode               String                   @default("follow")
   /// Set while the recording is paused (pause = the recorder shows a "paused" slate and is silent)
-  pausedAt        DateTime?
+  pausedAt           DateTime?
   /// Closed pauses as [{ "from": ISO, "to": ISO }] — skipped on replay and not billed
-  pauseSpans      Json?
+  pauseSpans         Json?
   /// Transcribe automatically once the file is ready (copied from the meeting at start)
-  syncTranscript  Boolean                  @default(true)
-  createdAt       DateTime                 @default(now())
-  createdBy       String?
-  deletedAt       DateTime?
-  deletedBy       String?
-  meeting         Meeting                  @relation(fields: [meetingId], references: [id], map: "Recording_meetingId_fkey")
-  teamMember      TeamMember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
-  accessRequests  RecordingAccessRequest[]
-  speakIntervals  RecordingSpeakInterval[]
+  syncTranscript     Boolean                  @default(true)
+  /// screen_share (the web egress video, as before) | livedoc_full (Kloud saves the LiveDoc actions)
+  kind               String                   @default("screen_share")
+  /// Kloud recording id (MeetingServer recording/start_recording) for livedoc_full
+  livedocRecordingId Int?
+  /// When Kloud started saving actions: time zero of the LiveDoc timeline
+  livedocStartedAt   DateTime?
+  /// Kloud user token that started it, kept only until Kloud's recording is ended (room may empty first)
+  livedocToken       String?                  @db.Text
+  createdAt          DateTime                 @default(now())
+  createdBy          String?
+  deletedAt          DateTime?
+  deletedBy          String?
+  meeting            Meeting                  @relation(fields: [meetingId], references: [id], map: "Recording_meetingId_fkey")
+  teamMember         TeamMember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
+  accessRequests     RecordingAccessRequest[]
+  speakIntervals     RecordingSpeakInterval[]
+  sections           RecordingSection[]
 
   @@index([meetingId], map: "Recording_meetingId_fkey")
   @@index([teamMemberId], map: "Recording_teamMemberId_fkey")
   @@map("Recording")
+}
+
+/// One media file of a livedoc_full recording (voice, a screen share), placed on the LiveDoc timeline.
+model RecordingSection {
+  id          Int       @id @default(autoincrement())
+  recordingId Int
+  /// voice | screen | (later) camera
+  kind        String
+  /// File in the recording bucket; the egress id until the file is ready
+  storageKey  String
+  status      String    @default("PROCESSING")
+  /// Milliseconds from Recording.livedocStartedAt
+  startMs     Int?
+  endMs       Int?
+  /// Sharer / speaker (LiveKit identity), when known
+  userId      String?
+  /// Provider handle (LiveKit egress id)
+  providerRef String
+  createdAt   DateTime  @default(now())
+  recording   Recording @relation(fields: [recordingId], references: [id], map: "RecordingSection_recordingId_fkey")
+
+  @@index([recordingId], map: "RecordingSection_recordingId_fkey")
+  @@index([providerRef], map: "RecordingSection_providerRef_idx")
+  @@map("RecordingSection")
 }
 
 model RecordingSpeakInterval {
