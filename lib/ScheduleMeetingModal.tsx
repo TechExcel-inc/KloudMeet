@@ -23,10 +23,8 @@ import {
   reminderEmail,
 } from '@/lib/meetingInvites';
 
-/** Email / AI assistant / linked-event tabs (enterprise features; shown as before — not saved yet). */
-const SHOW_ENTERPRISE_TABS = true;
-
-type TabType = 'general' | 'emails' | 'ai' | 'linked';
+/** AI assistant / repeat / linked events (enterprise features; shown under "More options" — not saved yet). */
+const SHOW_ENTERPRISE_OPTIONS = true;
 
 interface ScheduleMeetingModalProps {
   user: any;
@@ -64,13 +62,30 @@ function getUserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 }
 
-function formatTimezoneLabel(timezone: string): string {
+/** "GMT+09:00" */
+function gmtOffsetLabel(timezone: string): string {
   const offset = getTimezoneOffsetMinutes(timezone, new Date());
   const sign = offset >= 0 ? '+' : '-';
   const abs = Math.abs(offset);
   const hh = String(Math.floor(abs / 60)).padStart(2, '0');
   const mm = String(abs % 60).padStart(2, '0');
-  return `(GMT${sign}${hh}:${mm}) ${timezone}`;
+  return `GMT${sign}${hh}:${mm}`;
+}
+
+function formatTimezoneLabel(timezone: string): string {
+  return `(${gmtOffsetLabel(timezone)}) ${timezone}`;
+}
+
+/** "Korean Standard Time (GMT+09:00)", in the UI language when the browser knows the zone's name. */
+function friendlyTimezone(timezone: string, locale: string): string {
+  let name = timezone;
+  try {
+    const part = new Intl.DateTimeFormat(locale, { timeZone: timezone, timeZoneName: 'long' })
+      .formatToParts(new Date())
+      .find((p) => p.type === 'timeZoneName');
+    if (part?.value && !/^GMT/.test(part.value)) name = part.value;
+  } catch {}
+  return `${name} (${gmtOffsetLabel(timezone)})`;
 }
 
 function formatInviteDateTime(scheduledFor?: string, timezone?: string): string {
@@ -97,6 +112,11 @@ const REMINDER_AMOUNTS: Record<ReminderUnit, number[]> = {
   days: [1, 2, 3, 7],
 };
 const MAX_REMINDERS = 5;
+/** Every offset the "+ Add" menu offers, in minutes, nearest first. */
+const REMINDER_CHOICES = [
+  ...REMINDER_AMOUNTS.hours.map((n) => n * 60),
+  ...REMINDER_AMOUNTS.days.map((n) => n * 1440),
+];
 
 function offsetsToRows(offsets: number[]): ReminderRow[] {
   return offsets.map((minutes) =>
@@ -118,15 +138,22 @@ function splitEmails(text: string): string[] {
     .filter(Boolean);
 }
 
-/** "90min(1.5h)" → 90 */
-function durationMinutesFrom(durationStr: string): number {
-  const match = /^(\d+)min/.exec(durationStr);
-  return match ? Number(match[1]) : 30;
+const QUICK_DURATIONS = [30, 45, 60];
+const DURATION_CHOICES = [15, 30, 45, 60, 90, 120, 180, 240, 300, 360, 420];
+
+/** "14:00" + 45 → "14:45"; past midnight gets "(+1)". */
+function endTimeFrom(time: string, minutes: number): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(time);
+  if (!match) return '';
+  const total = Number(match[1]) * 60 + Number(match[2]) + minutes;
+  const days = Math.floor(total / 1440);
+  const rest = total % 1440;
+  const text = `${String(Math.floor(rest / 60)).padStart(2, '0')}:${String(rest % 60).padStart(2, '0')}`;
+  return days > 0 ? `${text} (+${days})` : text;
 }
 
 export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }: ScheduleMeetingModalProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('general');
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   /** Translation with an English fallback for keys not yet added to the locale files. */
   const tf = (key: string, fallback: string, params?: Record<string, string | number>) => {
     const value = t(key, params);
@@ -138,6 +165,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const inviteMenuRef = useRef<HTMLDivElement | null>(null);
   const [showCalendarMenu, setShowCalendarMenu] = useState(false);
   const calendarMenuRef = useRef<HTMLDivElement | null>(null);
+  const attendeeInputRef = useRef<HTMLInputElement | null>(null);
+  const [showTimezone, setShowTimezone] = useState(false);
+  const [showMore, setShowMore] = useState(false);
   /** Set after a successful create/update: the dialog switches to the "add to calendar" step. */
   const [savedMeeting, setSavedMeeting] = useState<any>(null);
   const [savedKind, setSavedKind] = useState<'created' | 'updated'>('created');
@@ -167,20 +197,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
 
   const [date, setDate] = useState(initDate);
   const [time, setTime] = useState(initTime);
-  
-  let initDurStr = '30min';
-  if (existingMeeting?.durationMinutes) {
-     if (existingMeeting.durationMinutes === 15) initDurStr = '15min';
-     if (existingMeeting.durationMinutes === 30) initDurStr = '30min';
-     if (existingMeeting.durationMinutes === 45) initDurStr = '45min';
-     if (existingMeeting.durationMinutes === 60) initDurStr = '60min';
-     if (existingMeeting.durationMinutes === 90) initDurStr = '90min(1.5h)';
-     if (existingMeeting.durationMinutes === 120) initDurStr = '120min(2h)';
-     if (existingMeeting.durationMinutes === 180) initDurStr = '180min(3h)';
-     if (existingMeeting.durationMinutes === 240) initDurStr = '240min(4h)';
-  }
-  const [durationStr, setDurationStr] = useState(initDurStr);
-  
+  const [durationMinutes, setDurationMinutes] = useState<number>(
+    Number(existingMeeting?.durationMinutes) > 0 ? Number(existingMeeting.durationMinutes) : 30,
+  );
+
   const [isSaving, setIsSaving] = useState(false);
 
   const isFinished = existingMeeting?.status === 'ENDED' || existingMeeting?.status === 'FINISHED';
@@ -191,8 +211,10 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     recording?.visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
   );
 
-  // Attendees (AI tab) and invitation / reminder emails (Emails tab); saved after the meeting.
+  // Attendees and invitation / reminder emails; saved after the meeting.
   const [attendees, setAttendees] = useState<string[]>([]);
+  /** Attendees as loaded, to tell whether saving will email anyone. */
+  const [savedAttendees, setSavedAttendees] = useState<string[]>([]);
   const [attendeeDraft, setAttendeeDraft] = useState('');
   const [attendeeError, setAttendeeError] = useState('');
   const [inviteEmails, setInviteEmails] = useState(true);
@@ -209,7 +231,9 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (cancelled || !data) return;
-        setAttendees(Array.isArray(data.emails) ? data.emails : []);
+        const emails = Array.isArray(data.emails) ? data.emails : [];
+        setAttendees(emails);
+        setSavedAttendees(emails);
         setInviteEmails(data.inviteEmails !== false);
         setReminderEmails(data.reminderEmails !== false);
         if (Array.isArray(data.reminderOffsets)) setReminders(offsetsToRows(data.reminderOffsets));
@@ -407,8 +431,6 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     setIsSaving(true);
     try {
       const scheduledForIso = zonedDateTimeToUtcIso(date, time, timezone);
-      
-      const durationMinutes = durationMinutesFrom(durationStr);
 
       if (recording?.shareKey && recording.visibility !== recordingVisibility) {
         const visibilityRes = await authFetch(
@@ -482,6 +504,52 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
     }
   };
 
+  const durationLabel = (minutes: number) =>
+    minutes < 60
+      ? tf('schedule.minutesShort', '{n} min', { n: minutes })
+      : tf('schedule.hoursShort', '{n} h', { n: Number((minutes / 60).toFixed(1)) });
+  const reminderLabel = (minutes: number) =>
+    minutes % 1440 === 0
+      ? tf('schedule.daysBefore', '{n}d before', { n: minutes / 1440 })
+      : tf('schedule.hoursBefore', '{n}h before', { n: Math.round(minutes / 60) });
+
+  const reminderOffsets = rowsToOffsets(reminders);
+  const sortedReminderOffsets = [...reminderOffsets].sort((a, b) => b - a);
+  const freeReminderChoices = REMINDER_CHOICES.filter((m) => !reminderOffsets.includes(m));
+
+  // Mirrors the server: invites go to attendees not yet emailed for this start time, if it's still ahead.
+  const startMs = (() => {
+    try {
+      return new Date(zonedDateTimeToUtcIso(date, time, timezone)).getTime();
+    } catch {
+      return NaN;
+    }
+  })();
+  const allAttendees = Array.from(new Set([...attendees, ...splitEmails(attendeeDraft).filter(isValidEmail)]));
+  const startChanged =
+    !!existingMeeting?.scheduledFor &&
+    Math.floor(startMs / 60000) !== Math.floor(new Date(existingMeeting.scheduledFor).getTime() / 60000);
+  const willSendInvites =
+    !isReadOnly &&
+    inviteEmails &&
+    allAttendees.length > 0 &&
+    startMs > Date.now() &&
+    (!existingMeeting || startChanged || allAttendees.some((email) => !savedAttendees.includes(email)));
+
+  const visibilityDesc = recordingVisibility === 'PUBLIC' ? t('schedule.publicDesc') : t('schedule.privateDesc');
+
+  const copyGlyph = (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V5a2 2 0 012-2h10" />
+    </svg>
+  );
+  const chevronGlyph = (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
+
   return (
     <>
       <div className={styles.overlay}>
@@ -493,6 +561,15 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         >
           {/* Header */}
           <div className={styles.header}>
+            <h2 id="kloud-schedule-meeting-title" className={styles.title}>
+              {savedMeeting
+                ? savedKind === 'updated'
+                  ? t('calendar.updatedTitle')
+                  : t('calendar.scheduledTitle')
+                : existingMeeting
+                  ? t('schedule.editMeeting')
+                  : tf('schedule.scheduleMeeting', 'Schedule meeting')}
+            </h2>
             <button
               type="button"
               className={styles.iconBtn}
@@ -501,144 +578,11 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               aria-label={t('common.close')}
               title={t('common.close')}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
                 <path d="M6 6l12 12M18 6L6 18" />
               </svg>
             </button>
-            <h2 id="kloud-schedule-meeting-title" className={styles.title}>
-              {savedMeeting
-                ? savedKind === 'updated'
-                  ? t('calendar.updatedTitle')
-                  : t('calendar.scheduledTitle')
-                : existingMeeting
-                  ? t('schedule.editMeeting')
-                  : t('schedule.newMeeting')}
-            </h2>
-            {savedMeeting ? (
-            <div className={styles.headerActions}>
-              <button type="button" className={styles.btnOutline} onClick={() => copyMeetingInvite(savedMeeting)}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                  <rect x="9" y="9" width="11" height="11" rx="2" />
-                  <path d="M5 15V5a2 2 0 012-2h10" />
-                </svg>
-                <span className={styles.hideNarrow}>{t('schedule.copyInvite')}</span>
-              </button>
-              <button type="button" className={styles.btnSolid} onClick={onSave}>
-                {t('calendar.done')}
-              </button>
-            </div>
-            ) : (
-            <div className={styles.headerActions}>
-              {existingMeeting && calendarItemsFor(existingMeeting).length > 0 && (
-                <div ref={calendarMenuRef} className={styles.menuAnchor}>
-                  <button
-                    className={styles.btnOutline}
-                    onClick={() => {
-                      setShowInviteMenu(false);
-                      setShowCalendarMenu((prev) => !prev);
-                    }}
-                    type="button"
-                    aria-haspopup="menu"
-                    aria-expanded={showCalendarMenu}
-                    aria-label={t('calendar.addToCalendar')}
-                    title={t('calendar.addToCalendar')}
-                  >
-                    <CalendarGlyph size={16} />
-                    <span className={styles.hideNarrow}>{t('calendar.addToCalendar')}</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {showCalendarMenu && (
-                    <div className={styles.menu} role="menu">
-                      {calendarItemsFor(existingMeeting).map((item) => (
-                        <a
-                          key={item.key}
-                          role="menuitem"
-                          className={styles.menuItem}
-                          href={item.href}
-                          {...(item.download
-                            ? { download: true }
-                            : { target: '_blank', rel: 'noopener noreferrer' })}
-                          onClick={() => setShowCalendarMenu(false)}
-                        >
-                          {item.label}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {existingMeeting && !isCanceled && (
-                <div ref={inviteMenuRef} className={styles.menuAnchor}>
-                  <button
-                    className={styles.btnOutline}
-                    onClick={() => {
-                      setShowCalendarMenu(false);
-                      setShowInviteMenu((prev) => !prev);
-                    }}
-                    type="button"
-                    aria-haspopup="menu"
-                    aria-expanded={showInviteMenu}
-                    aria-label={t('schedule.copyInvite')}
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16" aria-hidden="true">
-                      <rect x="9" y="9" width="11" height="11" rx="2" />
-                      <path d="M5 15V5a2 2 0 012-2h10" />
-                    </svg>
-                    <span className={styles.hideNarrow}>{t('schedule.copyInvite')}</span>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" width="14" height="14" aria-hidden="true">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {showInviteMenu && (
-                    <div className={styles.menu} role="menu">
-                      <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingLink()}>
-                        {t('schedule.copyLink')}
-                      </button>
-                      <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingInvite()}>
-                        {t('schedule.copyInvite')}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-              <button type="button" className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
-                {isSaving ? t('common.saving') : t('common.save')}
-              </button>
-            </div>
-            )}
           </div>
-          
-          {/* Tabs — enterprise tabs stay hidden until there is a paid plan to upgrade to. */}
-          {SHOW_ENTERPRISE_TABS && !savedMeeting && (
-          <div className={styles.tabContainer}>
-            <button 
-              className={activeTab === 'general' ? styles.tabActive : styles.tab} 
-              onClick={() => setActiveTab('general')}
-            >
-              {t('schedule.general')}
-            </button>
-            <button 
-              className={activeTab === 'emails' ? styles.tabActive : styles.tab} 
-              onClick={() => setActiveTab('emails')}
-            >
-              {t('schedule.emails')}
-            </button>
-            <button 
-              className={activeTab === 'ai' ? styles.tabActive : styles.tab} 
-              onClick={() => setActiveTab('ai')}
-            >
-              {t('schedule.aiAssistant')}
-            </button>
-            <button 
-              className={activeTab === 'linked' ? styles.tabActive : styles.tab} 
-              onClick={() => setActiveTab('linked')}
-            >
-              {t('schedule.linkedEvents')}
-            </button>
-          </div>
-          )}
 
           <div className={styles.bodyScroll}>
           {/* After save: offer to put the meeting on the user's calendar. */}
@@ -656,9 +600,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 </div>
                 {inviteResultText(inviteResult) && (
                   <p
-                    className={styles.hint}
+                    className={`${styles.hint}${inviteResult?.error || inviteResult?.failed.length ? ` ${styles.hintError}` : ''}`}
                     role="status"
-                    style={inviteResult?.error || inviteResult?.failed.length ? { color: '#b91c1c' } : undefined}
                   >
                     {inviteResultText(inviteResult)}
                   </p>
@@ -685,197 +628,329 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               </div>
             </div>
           )}
-          {/* Tab Content: General Information */}
-          {!savedMeeting && activeTab === 'general' && (
+
+          {!savedMeeting && (
             <div className={styles.content}>
               {/* Title */}
-              <div className={styles.row}>
-                <span className={styles.rowIcon} aria-hidden="true" />
-                <input
-                  type="text"
-                  className={styles.titleInput}
-                  placeholder={t('schedule.titlePlaceholder')}
-                  aria-label={t('schedule.title')}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                />
-              </div>
+              <input
+                type="text"
+                className={styles.titleInput}
+                placeholder={t('schedule.titlePlaceholder')}
+                aria-label={t('schedule.title')}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
 
               {existingMeeting && (
-                <div className={styles.row}>
-                  <span className={styles.rowIcon} aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                      <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />
-                    </svg>
+                <div className={styles.metaLine}>
+                  <span className={styles.metaLabel}>{t('schedule.meetingId')}</span>
+                  <span className={styles.meetingId}>{existingMeeting.roomName}</span>
+                  <span className={styles.srOnly}>{t('schedule.status')}:</span>
+                  <span
+                    className={`${styles.statusChip} ${
+                      existingMeeting.status === 'ENDED' ? styles.statusEnded :
+                      existingMeeting.status === 'CANCELED' ? styles.statusCanceled :
+                      existingMeeting.status === 'PAST_DUE' ? styles.statusPastDue :
+                      existingMeeting.status === 'ACTIVE' ? styles.statusActive : styles.statusNeutral
+                    }`}
+                  >
+                    {existingMeeting.status === 'ENDED' ? 'Finished' :
+                     existingMeeting.status === 'PAST_DUE' ? 'Past Due' :
+                     existingMeeting.status === 'ACTIVE' ? (new Date(existingMeeting.startedAt) > new Date(existingMeeting.createdAt) ? 'In Progress' : 'Scheduled') :
+                     existingMeeting.status || 'Scheduled'}
                   </span>
-                  <div className={styles.metaLine}>
-                    <span className={styles.metaLabel}>{t('schedule.meetingId')}</span>
-                    <span className={styles.meetingId}>{existingMeeting.roomName}</span>
-                    <span className={styles.srOnly}>{t('schedule.status')}:</span>
-                    <span
-                      className={`${styles.statusChip} ${
-                        existingMeeting.status === 'ENDED' ? styles.statusEnded :
-                        existingMeeting.status === 'CANCELED' ? styles.statusCanceled :
-                        existingMeeting.status === 'PAST_DUE' ? styles.statusPastDue :
-                        existingMeeting.status === 'ACTIVE' ? styles.statusActive : styles.statusNeutral
-                      }`}
-                    >
-                      {existingMeeting.status === 'ENDED' ? 'Finished' : 
-                       existingMeeting.status === 'PAST_DUE' ? 'Past Due' : 
-                       existingMeeting.status === 'ACTIVE' ? (new Date(existingMeeting.startedAt) > new Date(existingMeeting.createdAt) ? 'In Progress' : 'Scheduled') : 
-                       existingMeeting.status || 'Scheduled'}
-                    </span>
-                  </div>
                 </div>
               )}
 
               {/* Time */}
               <div className={styles.row}>
-                <span className={styles.rowIcon} aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <circle cx="12" cy="12" r="9" />
-                    <path d="M12 7v5l3 2" />
-                  </svg>
-                </span>
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 7v5l3 2" />
+                </svg>
                 <div className={styles.stack}>
                   <span className={styles.srOnly}>{t('schedule.setTime')}</span>
                   <div className={styles.timeRow}>
-                    <input 
-                      type="date" 
-                      className={`${styles.input} ${styles.timeInput}`} 
+                    <input
+                      type="date"
+                      className={`${styles.field} ${styles.dateField}`}
                       aria-label={tf('schedule.date', 'Date')}
                       value={date}
                       onChange={(e) => setDate(e.target.value)}
                       disabled={isReadOnly}
                     />
-                    <input 
-                      type="time" 
-                      className={`${styles.input} ${styles.timeInput}`} 
-                      aria-label={tf('schedule.startTime', 'Start time')}
-                      value={time}
-                      onChange={(e) => setTime(e.target.value)}
-                      disabled={isReadOnly}
-                    />
-                    <select 
-                      className={`${styles.input} ${styles.select} ${styles.timeInput}`}
-                      aria-label={tf('schedule.duration', 'Duration')}
-                      value={durationStr}
-                      onChange={(e) => setDurationStr(e.target.value)}
-                      disabled={isReadOnly}
-                    >
-                      <option value="15min">15min</option>
-                      <option value="30min">30min</option>
-                      <option value="45min">45min</option>
-                      <option value="60min">60min</option>
-                      <option value="90min(1.5h)">90min(1.5h)</option>
-                      <option value="120min(2h)">120min(2h)</option>
-                      <option value="180min(3h)">180min(3h)</option>
-                      <option value="240min(4h)">240min(4h)</option>
-                      <option value="300min(5h)">300min(5h)</option>
-                      <option value="360min(6h)">360min(6h)</option>
-                      <option value="420min(7h)">420min(7h)</option>
-                    </select>
-                  </div>
-                  <label className={styles.inlineField}>
-                    <span className={styles.inlineLabel}>{t('schedule.timeZone')}</span>
-                    <select
-                      className={`${styles.input} ${styles.select} ${styles.inputCompact}`}
-                      value={timezone}
-                      onChange={(e) => setTimezone(e.target.value)}
-                      disabled={isReadOnly}
-                    >
-                      {timezoneOptions.map((tz) => (
-                        <option key={tz} value={tz}>
-                          {formatTimezoneLabel(tz)}
-                        </option>
+                    <span className={styles.timeRange}>
+                      <input
+                        type="time"
+                        className={`${styles.field} ${styles.timeField}`}
+                        aria-label={tf('schedule.startTime', 'Start time')}
+                        value={time}
+                        onChange={(e) => setTime(e.target.value)}
+                        disabled={isReadOnly}
+                      />
+                      <span className={styles.timeArrow} aria-hidden="true">→</span>
+                      <span className={styles.endTime}>{endTimeFrom(time, durationMinutes)}</span>
+                    </span>
+                    <span className={styles.segmented} role="radiogroup" aria-label={tf('schedule.duration', 'Duration')}>
+                      {QUICK_DURATIONS.map((minutes) => (
+                        <button
+                          key={minutes}
+                          type="button"
+                          role="radio"
+                          aria-checked={durationMinutes === minutes}
+                          className={durationMinutes === minutes ? styles.segmentOn : styles.segment}
+                          onClick={() => setDurationMinutes(minutes)}
+                          disabled={isReadOnly}
+                        >
+                          {durationLabel(minutes)}
+                        </button>
                       ))}
-                    </select>
-                  </label>
+                      <select
+                        className={`${styles.segmentSelect}${QUICK_DURATIONS.includes(durationMinutes) ? '' : ` ${styles.segmentSelectOn}`}`}
+                        aria-label={tf('schedule.duration', 'Duration')}
+                        value={QUICK_DURATIONS.includes(durationMinutes) ? '' : String(durationMinutes)}
+                        onChange={(e) => e.target.value && setDurationMinutes(Number(e.target.value))}
+                        disabled={isReadOnly}
+                      >
+                        <option value="" disabled hidden>{tf('schedule.durationMore', 'More')}</option>
+                        {Array.from(new Set([...DURATION_CHOICES, durationMinutes]))
+                          .sort((a, b) => a - b)
+                          .map((minutes) => (
+                            <option key={minutes} value={minutes}>{durationLabel(minutes)}</option>
+                          ))}
+                      </select>
+                    </span>
+                  </div>
+                  {showTimezone ? (
+                    <label className={styles.inlineField}>
+                      <span className={styles.inlineLabel}>{t('schedule.timeZone')}</span>
+                      <select
+                        className={`${styles.field} ${styles.select}`}
+                        value={timezone}
+                        onChange={(e) => setTimezone(e.target.value)}
+                        disabled={isReadOnly}
+                      >
+                        {timezoneOptions.map((tz) => (
+                          <option key={tz} value={tz}>
+                            {formatTimezoneLabel(tz)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : (
+                    <div className={styles.hint}>
+                      {friendlyTimezone(timezone, locale)}
+                      {!isReadOnly && (
+                        <>
+                          {' · '}
+                          <button type="button" className={styles.linkBtn} onClick={() => setShowTimezone(true)}>
+                            {tf('schedule.changeTimezone', 'Change time zone')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Attendees */}
+              <div className={styles.row}>
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="9" cy="8" r="3.5" />
+                  <path d="M2.5 20v-1a6 6 0 0113 0v1M16 4.5a3.5 3.5 0 010 7M21.5 20v-1a6 6 0 00-4-5.6" />
+                </svg>
+                <div className={styles.stack}>
+                  <div
+                    className={`${styles.chipField}${attendeeError ? ` ${styles.chipFieldError}` : ''}${isReadOnly ? ` ${styles.chipFieldReadOnly}` : ''}`}
+                    onClick={() => attendeeInputRef.current?.focus()}
+                  >
+                    {attendees.map((email) => (
+                      <span key={email} className={styles.chip}>
+                        <span className={styles.chipAvatar} aria-hidden="true">{email.charAt(0).toUpperCase()}</span>
+                        {email}
+                        {!isReadOnly && (
+                          <button
+                            type="button"
+                            className={styles.chipRemove}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeAttendee(email);
+                            }}
+                            aria-label={`${tf('schedule.removeAttendee', 'Remove')} ${email}`}
+                            title={tf('schedule.removeAttendee', 'Remove')}
+                          >×</button>
+                        )}
+                      </span>
+                    ))}
+                    {!isReadOnly && attendees.length < MAX_INVITEES && (
+                      <input
+                        ref={attendeeInputRef}
+                        type="email"
+                        className={styles.chipInput}
+                        placeholder={attendees.length === 0 ? tf('schedule.attendeesPlaceholder', 'Add attendee emails, press Enter') : ''}
+                        aria-label={t('schedule.addAttendee')}
+                        aria-invalid={attendeeError ? true : undefined}
+                        value={attendeeDraft}
+                        onChange={(e) => {
+                          setAttendeeDraft(e.target.value);
+                          if (attendeeError) setAttendeeError('');
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
+                            e.preventDefault();
+                            addAttendees(attendeeDraft);
+                          } else if (e.key === 'Backspace' && !attendeeDraft && attendees.length > 0) {
+                            removeAttendee(attendees[attendees.length - 1]);
+                          }
+                        }}
+                        onBlur={() => {
+                          if (attendeeDraft.trim()) addAttendees(attendeeDraft);
+                        }}
+                      />
+                    )}
+                    {isReadOnly && attendees.length === 0 && (
+                      <span className={styles.chipPlaceholder}>{tf('schedule.inviteNoRecipients', 'No attendees yet.')}</span>
+                    )}
+                  </div>
+                  {attendeeError ? (
+                    <p role="alert" className={`${styles.hint} ${styles.hintError}`}>{attendeeError}</p>
+                  ) : (
+                    <p className={styles.hint}>
+                      {tf('schedule.attendeeHintHost', "You're the host · attendees get the invitation and reminder emails")}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Invitation and reminder emails */}
+              <div className={styles.row}>
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                  <path d="M3.5 7l8.5 6 8.5-6" />
+                </svg>
+                <div className={styles.stack}>
+                  <div className={styles.toggleLine}>
+                    <Switch
+                      checked={inviteEmails}
+                      disabled={isReadOnly}
+                      label={tf('schedule.sendInviteToggle', 'Email the invitation to attendees when you save')}
+                      onChange={(next) => {
+                        setInviteEmails(next);
+                        setInvitesTouched(true);
+                      }}
+                    />
+                    <button type="button" className={styles.linkBtn} onClick={() => setSubModal('invite')}>
+                      {tf('schedule.preview', 'Preview')}
+                    </button>
+                  </div>
+                  <div className={styles.toggleLine}>
+                    <Switch
+                      checked={reminderEmails}
+                      disabled={isReadOnly}
+                      label={tf('schedule.reminderToggle', 'Reminder before the meeting')}
+                      onChange={(next) => {
+                        setReminderEmails(next);
+                        setInvitesTouched(true);
+                      }}
+                    />
+                    <button type="button" className={styles.linkBtn} onClick={() => setSubModal('reminder')}>
+                      {tf('schedule.preview', 'Preview')}
+                    </button>
+                  </div>
+                  {reminderEmails && (
+                    <div className={styles.reminderChips}>
+                      {sortedReminderOffsets.map((minutes) => (
+                        <span key={minutes} className={styles.reminderChip}>
+                          {reminderLabel(minutes)}
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              className={styles.chipRemove}
+                              aria-label={`${tf('schedule.removeReminder', 'Remove reminder')} ${reminderLabel(minutes)}`}
+                              title={tf('schedule.removeReminder', 'Remove reminder')}
+                              onClick={() => updateReminders(offsetsToRows(reminderOffsets.filter((m) => m !== minutes)))}
+                            >×</button>
+                          )}
+                        </span>
+                      ))}
+                      {!isReadOnly && reminders.length < MAX_REMINDERS && freeReminderChoices.length > 0 && (
+                        <span className={styles.addReminder}>
+                          <span aria-hidden="true">+ {tf('schedule.addReminderShort', 'Add')}</span>
+                          <select
+                            aria-label={t('schedule.addReminder')}
+                            value=""
+                            onChange={(e) => {
+                              const minutes = Number(e.target.value);
+                              if (minutes) updateReminders(offsetsToRows([...reminderOffsets, minutes]));
+                            }}
+                          >
+                            <option value="" disabled hidden>{t('schedule.addReminder')}</option>
+                            {freeReminderChoices.map((minutes) => (
+                              <option key={minutes} value={minutes}>{reminderLabel(minutes)}</option>
+                            ))}
+                          </select>
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Description */}
               <div className={styles.row}>
-                <span className={styles.rowIcon} aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <path d="M4 6h16M4 10h16M4 14h10M4 18h7" />
-                  </svg>
-                </span>
-                <textarea 
-                  className={styles.textarea} 
-                  placeholder={t('schedule.descPlaceholder')} 
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 6h16M4 11h16M4 16h10" />
+                </svg>
+                <textarea
+                  className={`${styles.field} ${styles.textarea}`}
+                  placeholder={tf('schedule.descOptional', 'Add an agenda or notes (optional)')}
                   aria-label={t('schedule.description')}
-                  rows={4} 
+                  rows={2}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
 
-              {/* Access option (recording visibility) */}
+              {/* Recording replay visibility */}
               <div className={styles.row}>
-                <span className={styles.rowIcon} aria-hidden="true">
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
-                    <rect x="5" y="11" width="14" height="10" rx="2" />
-                    <path d="M8 11V8a4 4 0 018 0v3" />
-                  </svg>
-                </span>
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="10" rx="2" />
+                  <path d="M8 11V8a4 4 0 018 0v3" />
+                </svg>
                 <div className={styles.stack}>
-                  <span className={styles.sectionLabel} id="kloud-schedule-access-label">
-                    {t('schedule.accessOption')}{' '}
-                    <span className={styles.sectionLabelMeta}>· {t('schedule.recordings')}</span>
-                  </span>
-                  <div className={styles.optionGrid} role="radiogroup" aria-labelledby="kloud-schedule-access-label">
-                    <label
-                      className={`${styles.optionCard}${recordingVisibility === 'PUBLIC' ? ` ${styles.optionCardOn}` : ''}${!recording?.shareKey ? ` ${styles.optionCardDisabled}` : ''}`}
-                    >
-                      <span className={styles.optionHead}>
-                        <input
-                          type="radio"
-                          name="access"
-                          value="public"
-                          className={styles.radio}
-                          checked={recordingVisibility === 'PUBLIC'}
-                          onChange={() => setRecordingVisibility('PUBLIC')}
-                          disabled={!recording?.shareKey}
-                        />
-                        {t('schedule.public')}
-                      </span>
-                      <span className={styles.optionDesc}>{t('schedule.publicDesc')}</span>
-                    </label>
-                    <label
-                      className={`${styles.optionCard}${recordingVisibility === 'PRIVATE' ? ` ${styles.optionCardOn}` : ''}${!recording?.shareKey ? ` ${styles.optionCardDisabled}` : ''}`}
-                    >
-                      <span className={styles.optionHead}>
-                        <input
-                          type="radio"
-                          name="access"
-                          value="private"
-                          className={styles.radio}
-                          checked={recordingVisibility === 'PRIVATE'}
-                          onChange={() => setRecordingVisibility('PRIVATE')}
-                          disabled={!recording?.shareKey}
-                        />
-                        {t('schedule.private')}
-                      </span>
-                      <span className={styles.optionDesc}>{t('schedule.privateDesc')}</span>
-                    </label>
-                  </div>
-                  {!recording?.shareKey && (
-                    <span className={styles.hint}>
-                      {tf('schedule.accessNeedsRecording', 'You can change this once a recording is ready.')}
+                  <div className={styles.toggleLine}>
+                    <span className={styles.fieldLabel} id="kloud-schedule-access-label">
+                      {tf('schedule.replayAccess', 'Replay')}
                     </span>
-                  )}
+                    <span className={styles.segmented} role="radiogroup" aria-labelledby="kloud-schedule-access-label">
+                      {(['PRIVATE', 'PUBLIC'] as const).map((value) => (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={recordingVisibility === value}
+                          className={recordingVisibility === value ? styles.segmentOn : styles.segment}
+                          onClick={() => setRecordingVisibility(value)}
+                          disabled={!recording?.shareKey}
+                        >
+                          {value === 'PRIVATE' ? t('schedule.private') : t('schedule.public')}
+                        </button>
+                      ))}
+                    </span>
+                  </div>
+                  <p className={styles.hint}>
+                    {visibilityDesc}
+                    {!recording?.shareKey && ` ${tf('schedule.accessNeedsRecording', 'You can change this once a recording is ready.')}`}
+                  </p>
                 </div>
               </div>
 
               {isFinished && existingMeeting?.recordings && existingMeeting.recordings.length > 0 && (
                 <div className={styles.row}>
-                  <span className={styles.rowIcon} aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="6" width="12" height="12" rx="3" />
-                      <path d="M15 10l6-3v10l-6-3z" />
-                    </svg>
-                  </span>
+                  <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                    <rect x="3" y="6" width="12" height="12" rx="3" />
+                    <path d="M15 10l6-3v10l-6-3z" />
+                  </svg>
                   <div className={styles.stack}>
                     <span className={styles.srOnly}>{t('schedule.recordings')}</span>
                     {existingMeeting.recordings.map((r: any) => (
@@ -898,6 +973,46 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 </div>
               )}
 
+              {/* Enterprise options — shown as before, not saved yet. */}
+              {SHOW_ENTERPRISE_OPTIONS && (
+                <div className={styles.moreSection}>
+                  <button
+                    type="button"
+                    className={styles.moreToggle}
+                    aria-expanded={showMore}
+                    onClick={() => setShowMore((prev) => !prev)}
+                  >
+                    <svg className={showMore ? styles.moreChevronOpen : styles.moreChevron} viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                      <path d="M9 6l6 6-6 6" />
+                    </svg>
+                    {tf('schedule.moreOptions', 'More options: AI assistant, repeat, linked events')}
+                    <span className={styles.badge}>{tf('schedule.enterpriseBadge', 'Enterprise')}</span>
+                  </button>
+                  {showMore && (
+                    <div className={styles.morePanel}>
+                      <div className={styles.moreRow}>
+                        <span className={styles.fieldLabel}>{t('schedule.aiAssistant')}</span>
+                        <button type="button" className={styles.btnOutlineSmall}>{t('common.add')}</button>
+                      </div>
+                      <div className={styles.moreRow}>
+                        <span className={styles.fieldLabel}>{t('schedule.occurrence')}</span>
+                        <select className={`${styles.field} ${styles.select} ${styles.moreSelect}`} aria-label={t('schedule.occurrence')}>
+                          <option>{t('schedule.oneTime')}</option>
+                          <option>{t('schedule.daily')}</option>
+                          <option>{t('schedule.weekly')}</option>
+                        </select>
+                      </div>
+                      <div className={styles.moreRow}>
+                        <span className={styles.fieldLabel}>{t('schedule.linkedEvents')}</span>
+                        <span className={styles.hint}>
+                          <strong className={styles.moreStrong}>{t('schedule.workflowTitle')}</strong> · {t('schedule.workflowDesc')}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {existingMeeting && (
                 <div className={styles.dangerZone}>
                   {!isFinished && !isCanceled && (
@@ -912,280 +1027,112 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
               )}
             </div>
           )}
+          </div>
 
-          {/* Tab Content: Automated Emails */}
-          {!savedMeeting && activeTab === 'emails' && (
-            <div className={styles.content}>
-              <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '0.5rem', fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                </svg>
-                {t('schedule.enterpriseOnly')}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                
-                {/* Invitation Email */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={inviteEmails}
-                      disabled={isReadOnly}
-                      onChange={(e) => {
-                        setInviteEmails(e.target.checked);
-                        setInvitesTouched(true);
+          {/* Footer */}
+          <div className={styles.footer}>
+            {savedMeeting ? (
+              <>
+                <button type="button" className={styles.btnGhost} onClick={() => copyMeetingInvite(savedMeeting)}>
+                  {copyGlyph}
+                  {t('schedule.copyInvite')}
+                </button>
+                <span className={styles.footerSpacer} />
+                <button type="button" className={styles.btnSolid} onClick={onSave}>
+                  {t('calendar.done')}
+                </button>
+              </>
+            ) : (
+              <>
+                {existingMeeting && !isCanceled && (
+                  <div ref={inviteMenuRef} className={styles.menuAnchor}>
+                    <button
+                      className={styles.btnGhost}
+                      onClick={() => {
+                        setShowCalendarMenu(false);
+                        setShowInviteMenu((prev) => !prev);
                       }}
-                      aria-label={t('schedule.invitationEmail')}
-                      style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }}
-                    />
-                    <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.invitationEmail')}</span>
-                    <button type="button" className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '2rem' }} onClick={() => setSubModal('invite')}>{t('common.view')}</button>
-                  </div>
-                  <p style={{ margin: '0.4rem 0 0 2.25rem', fontSize: '0.85rem', color: '#6b7280' }}>
-                    {attendees.length > 0
-                      ? tf('schedule.inviteRecipients', 'Sent to {n} attendee(s) when you save.', { n: attendees.length })
-                      : tf('schedule.inviteNoRecipients', 'No attendees yet.')}{' '}
-                    {!isReadOnly && (
-                      <button type="button" className={styles.linkBtn} style={{ display: 'inline', padding: 0, fontSize: 'inherit' }} onClick={() => setActiveTab('ai')}>
-                        {t('schedule.addAttendee')}
-                      </button>
-                    )}
-                  </p>
-                </div>
-
-                {/* Reminder Email */}
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={reminderEmails}
-                      disabled={isReadOnly}
-                      onChange={(e) => {
-                        setReminderEmails(e.target.checked);
-                        setInvitesTouched(true);
-                      }}
-                      aria-label={t('schedule.reminderEmail')}
-                      style={{ width: '18px', height: '18px', accentColor: '#4f46e5' }}
-                    />
-                    <span style={{ fontSize: '0.95rem', color: '#4b5563' }}>{t('schedule.reminderEmail')}</span>
-                    <button type="button" className={styles.linkBtn} style={{ color: '#3b82f6', fontWeight: 500, paddingLeft: '1.9rem' }} onClick={() => setSubModal('reminder')}>{t('common.view')}</button>
-                  </div>
-
-                  <div style={{ marginLeft: '2.25rem', marginTop: '1rem', opacity: reminderEmails ? 1 : 0.5 }}>
-                    <p style={{ fontSize: '0.95rem', color: '#374151', margin: '0 0 1rem 0', fontWeight: 600 }}>{t('schedule.sendBefore')}</p>
-
-                    {reminders.map((row, index) => (
-                      <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                        <select
-                          className={`${styles.input} ${styles.select}`}
-                          style={{ width: '80px', padding: '0.5rem' }}
-                          value={row.amount}
-                          disabled={isReadOnly || !reminderEmails}
-                          aria-label={t('schedule.sendBefore')}
-                          onChange={(e) =>
-                            updateReminders(reminders.map((r, i) => (i === index ? { ...r, amount: Number(e.target.value) } : r)))
-                          }
-                        >
-                          {Array.from(new Set([...REMINDER_AMOUNTS[row.unit], row.amount]))
-                            .sort((x, y) => x - y)
-                            .map((n) => (
-                              <option key={n} value={n}>{n}</option>
-                            ))}
-                        </select>
-                        <select
-                          className={`${styles.input} ${styles.select}`}
-                          style={{ width: '130px', padding: '0.5rem' }}
-                          value={row.unit}
-                          disabled={isReadOnly || !reminderEmails}
-                          aria-label={`${t('schedule.hours')} / ${t('schedule.days')}`}
-                          onChange={(e) => {
-                            const unit = e.target.value as ReminderUnit;
-                            const amount = REMINDER_AMOUNTS[unit].includes(row.amount) ? row.amount : 1;
-                            updateReminders(reminders.map((r, i) => (i === index ? { amount, unit } : r)));
-                          }}
-                        >
-                          <option value="hours">{t('schedule.hours')}</option>
-                          <option value="days">{t('schedule.days')}</option>
-                        </select>
-                        <button
-                          type="button"
-                          aria-label={tf('schedule.removeReminder', 'Remove reminder')}
-                          title={tf('schedule.removeReminder', 'Remove reminder')}
-                          disabled={isReadOnly || !reminderEmails}
-                          onClick={() => updateReminders(reminders.filter((_, i) => i !== index))}
-                          style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '1.5rem', display: 'flex', alignItems: 'center' }}
-                        >×</button>
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={showInviteMenu}
+                      aria-label={t('schedule.copyInvite')}
+                    >
+                      {copyGlyph}
+                      <span className={styles.hideNarrow}>{t('schedule.copyInvite')}</span>
+                      {chevronGlyph}
+                    </button>
+                    {showInviteMenu && (
+                      <div className={styles.menu} role="menu">
+                        <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingLink()}>
+                          {t('schedule.copyLink')}
+                        </button>
+                        <button type="button" role="menuitem" className={styles.menuItem} onClick={() => copyMeetingInvite()}>
+                          {t('schedule.copyInvite')}
+                        </button>
                       </div>
-                    ))}
-
-                    {reminders.length < MAX_REMINDERS && (
-                      <button
-                        type="button"
-                        className={styles.linkBtn}
-                        disabled={isReadOnly || !reminderEmails}
-                        onClick={() => {
-                          const used = rowsToOffsets(reminders);
-                          const next =
-                            [60, 120, 1440, 240, 2880].find((m) => !used.includes(m)) ?? 180;
-                          updateReminders([...reminders, ...offsetsToRows([next])]);
-                        }}
-                        style={{ marginTop: '0.25rem', display: 'flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                          <line x1="12" y1="5" x2="12" y2="19"></line>
-                          <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                        {t('schedule.addReminder')}
-                      </button>
                     )}
                   </div>
-                </div>
-
-              </div>
-            </div>
-          )}
-
-          {/* Tab Content: AI Assistant */}
-          {!savedMeeting && activeTab === 'ai' && (
-            <div className={styles.content}>
-              <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.75rem 1rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '0.95rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="18" height="18">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                </svg>
-                {t('schedule.enterpriseOnly')}
-              </div>
-              
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.aiAssistant')}</label>
-                <div className={styles.inputWrapper}>
-                  <button className={styles.addBtn}>{t('common.add')}</button>
-                </div>
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.attendee')}</label>
-                <div className={styles.inputWrapper}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
-                    {/* Host User block */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#f8fafc', padding: '0.4rem 0.75rem', borderRadius: '24px', border: '1px solid #e2e8f0' }}>
-                      <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <svg viewBox="0 0 24 24" fill="#9ca3af" width="16" height="16">
-                          <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
-                        </svg>
+                )}
+                {existingMeeting && calendarItemsFor(existingMeeting).length > 0 && (
+                  <div ref={calendarMenuRef} className={styles.menuAnchor}>
+                    <button
+                      className={styles.btnGhost}
+                      onClick={() => {
+                        setShowInviteMenu(false);
+                        setShowCalendarMenu((prev) => !prev);
+                      }}
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={showCalendarMenu}
+                      aria-label={t('calendar.addToCalendar')}
+                      title={t('calendar.addToCalendar')}
+                    >
+                      <CalendarGlyph size={16} />
+                      {chevronGlyph}
+                    </button>
+                    {showCalendarMenu && (
+                      <div className={styles.menu} role="menu">
+                        {calendarItemsFor(existingMeeting).map((item) => (
+                          <a
+                            key={item.key}
+                            role="menuitem"
+                            className={styles.menuItem}
+                            href={item.href}
+                            {...(item.download
+                              ? { download: true }
+                              : { target: '_blank', rel: 'noopener noreferrer' })}
+                            onClick={() => setShowCalendarMenu(false)}
+                          >
+                            {item.label}
+                          </a>
+                        ))}
                       </div>
-                      <div style={{ fontSize: '0.85rem', lineHeight: '1.2' }}>
-                        <strong style={{ color: '#111827' }}>{t('schedule.hostUser')}</strong>
-                      </div>
-                    </div>
-                    
-                    {attendees.map((email) => (
-                      <span
-                        key={email}
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', background: '#eef2ff', color: '#3730a3', padding: '0.35rem 0.4rem 0.35rem 0.75rem', borderRadius: '24px', border: '1px solid #e0e7ff', fontSize: '0.85rem' }}
-                      >
-                        {email}
-                        {!isReadOnly && (
-                          <button
-                            type="button"
-                            onClick={() => removeAttendee(email)}
-                            aria-label={`${tf('schedule.removeAttendee', 'Remove')} ${email}`}
-                            title={tf('schedule.removeAttendee', 'Remove')}
-                            style={{ width: '22px', height: '22px', borderRadius: '50%', border: 'none', background: 'transparent', color: '#6366f1', cursor: 'pointer', fontSize: '1rem', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                          >×</button>
-                        )}
-                      </span>
-                    ))}
+                    )}
                   </div>
-                  {!isReadOnly && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.75rem' }}>
-                      <input
-                        type="email"
-                        className={styles.input}
-                        style={{ maxWidth: '300px' }}
-                        placeholder={tf('schedule.attendeePlaceholder', 'name@company.com')}
-                        aria-label={t('schedule.addAttendee')}
-                        aria-invalid={attendeeError ? true : undefined}
-                        value={attendeeDraft}
-                        onChange={(e) => {
-                          setAttendeeDraft(e.target.value);
-                          if (attendeeError) setAttendeeError('');
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ',' || e.key === ';') {
-                            e.preventDefault();
-                            addAttendees(attendeeDraft);
-                          } else if (e.key === 'Backspace' && !attendeeDraft && attendees.length > 0) {
-                            removeAttendee(attendees[attendees.length - 1]);
-                          }
-                        }}
-                        onBlur={() => {
-                          if (attendeeDraft.trim()) addAttendees(attendeeDraft);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className={styles.addBtn}
-                        style={{ borderRadius: '50%', width: '36px', height: '36px', padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                        title={t('schedule.addAttendee')}
-                        aria-label={t('schedule.addAttendee')}
-                        onClick={() => addAttendees(attendeeDraft)}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="20" height="20">
-                          <line x1="12" y1="5" x2="12" y2="19"></line>
-                          <line x1="5" y1="12" x2="19" y2="12"></line>
-                        </svg>
-                      </button>
-                    </div>
+                )}
+                <span className={styles.footerSpacer} />
+                <button type="button" className={styles.btnOutline} onClick={onClose} disabled={isSaving}>
+                  {t('common.cancel')}
+                </button>
+                <button type="button" className={styles.btnSolid} onClick={handleSave} disabled={isSaving}>
+                  {willSendInvites && !isSaving && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden="true">
+                      <path d="M4 12l16-8-6 16-2.5-6.5z" />
+                    </svg>
                   )}
-                  {attendeeError && (
-                    <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', margin: '0.4rem 0 0' }}>{attendeeError}</p>
-                  )}
-                  <p style={{ color: '#6b7280', fontSize: '0.85rem', margin: '0.5rem 0 0' }}>
-                    {tf('schedule.attendeeHint', 'Attendees get the invitation and reminder emails set in the Emails tab.')}
-                  </p>
-                </div>
-              </div>
-
-              <div className={styles.formRow}>
-                <label className={styles.label}>{t('schedule.occurrence')}</label>
-                <div className={styles.inputWrapper}>
-                  <select className={`${styles.input} ${styles.select}`} style={{ maxWidth: '300px' }}>
-                    <option>{t('schedule.oneTime')}</option>
-                    <option>{t('schedule.daily')}</option>
-                    <option>{t('schedule.weekly')}</option>
-                  </select>
-                </div>
-              </div>
-
-            </div>
-          )}
-
-          {/* Tab Content: Linked Event */}
-          {!savedMeeting && activeTab === 'linked' && (
-            <div className={styles.content} style={{ minHeight: '300px', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
-              <div style={{ background: '#eef2ff', color: '#4f46e5', padding: '0.5rem 1rem', borderRadius: '8px', marginBottom: '2rem', fontSize: '0.9rem', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16">
-                  <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>
-                </svg>
-                {t('schedule.enterpriseOnly')}
-              </div>
-              <div style={{ width: '72px', height: '72px', background: '#f8fafc', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
-                <svg viewBox="0 0 24 24" fill="none" stroke="#4f46e5" strokeWidth="2" width="36" height="36">
-                  <path d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </div>
-              <h3 style={{ fontSize: '1.25rem', color: '#111827', margin: '0 0 1rem 0' }}>{t('schedule.workflowTitle')}</h3>
-              <p style={{ color: '#4b5563', fontSize: '1rem', maxWidth: '500px', lineHeight: '1.6' }}>
-                {t('schedule.workflowDesc')}
-              </p>
-            </div>
-          )}
+                  {isSaving
+                    ? t('common.saving')
+                    : willSendInvites
+                      ? tf('schedule.saveAndSend', 'Save & send invites')
+                      : t('common.save')}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Sub Modals for Emails */}
+      {/* Email previews */}
       {subModal && (() => {
         const tz = timezone || getUserTimezone();
         let scheduledFor = new Date();
@@ -1197,7 +1144,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
           title,
           description,
           scheduledFor,
-          durationMinutes: durationMinutesFrom(durationStr),
+          durationMinutes,
           timezone: tz,
           hostName: hostDisplayName(existingMeeting),
         };
@@ -1205,7 +1152,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         const mail =
           subModal === 'invite'
             ? invitationEmail(to, preview, window.location.origin, 'new')
-            : reminderEmail(to, preview, window.location.origin, rowsToOffsets(reminders)[0] ?? DEFAULT_REMINDER_OFFSETS[0]);
+            : reminderEmail(to, preview, window.location.origin, sortedReminderOffsets[0] ?? DEFAULT_REMINDER_OFFSETS[0]);
         return (
           <EmailPreviewModal
             type={subModal === 'invite' ? t('schedule.invitationEmail') : t('schedule.reminderEmail')}
@@ -1215,7 +1162,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 title={mail.subject}
                 srcDoc={mail.html}
                 sandbox=""
-                style={{ width: '100%', height: '340px', border: 0, background: '#fff', borderRadius: '4px' }}
+                className={styles.previewFrame}
               />
             }
             onClose={() => setSubModal(null)}
@@ -1223,6 +1170,27 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
         );
       })()}
     </>
+  );
+}
+
+function Switch({ checked, disabled, label, onChange }: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: (next: boolean) => void;
+}) {
+  return (
+    <label className={`${styles.switchLabel}${disabled ? ` ${styles.switchLabelDisabled}` : ''}`}>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        className={checked ? styles.switchOn : styles.switch}
+        disabled={disabled}
+        onClick={() => onChange(!checked)}
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
@@ -1247,25 +1215,28 @@ function EmailPreviewModal({ type, title, body, onClose }: any) {
   const { t } = useI18n();
   return (
     <div className={styles.overlay} style={{ zIndex: 10000 }}>
-      <div className={styles.modal} style={{ maxWidth: '650px', padding: '2.5rem' }}>
-        <h2 style={{ margin: '0 0 2rem 0', color: '#1e1e2e', fontSize: '1.5rem', fontWeight: 600 }}>{type}</h2>
-        
-        <div style={{ marginBottom: '2rem' }}>
-          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>{t('schedule.emailTitle')}</h4>
-          <p style={{ margin: 0, color: '#4b5563', fontSize: '1rem', padding: '0.75rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>{title}</p>
+      <div className={`${styles.modal} ${styles.previewModal}`} role="dialog" aria-modal="true" aria-label={type}>
+        <div className={styles.header}>
+          <h2 className={styles.title}>{type}</h2>
+          <button type="button" className={styles.iconBtn} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
         </div>
-
-        <div style={{ marginBottom: '3rem' }}>
-          <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.05rem', color: '#374151' }}>{t('schedule.emailBody')}</h4>
-          <div style={{ color: '#4b5563', fontSize: '1rem', lineHeight: '1.7', padding: '1rem', background: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
-            {body}
+        <div className={styles.bodyScroll}>
+          <div className={styles.previewBody}>
+            <div className={styles.fieldLabel}>{t('schedule.emailTitle')}</div>
+            <p className={styles.previewSubject}>{title}</p>
+            <div className={styles.fieldLabel}>{t('schedule.emailBody')}</div>
+            <div className={styles.previewMail}>{body}</div>
           </div>
         </div>
-
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem' }}>
-          <button className={styles.btnSolid} style={{ background: '#4f46e5' }}>{t('common.reset')}</button>
-          <button className={styles.btnSolid} style={{ background: '#4338ca' }}>{t('common.edit')}</button>
-          <button className={styles.btnOutline} onClick={onClose}>{t('common.close')}</button>
+        <div className={styles.footer}>
+          <span className={styles.footerSpacer} />
+          <button type="button" className={styles.btnGhost}>{t('common.reset')}</button>
+          <button type="button" className={styles.btnOutline}>{t('common.edit')}</button>
+          <button type="button" className={styles.btnSolid} onClick={onClose}>{t('common.close')}</button>
         </div>
       </div>
     </div>
