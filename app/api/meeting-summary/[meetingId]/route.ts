@@ -25,7 +25,11 @@ export async function GET(
     });
 
     if (localItems.length > 0) {
-      return NextResponse.json({ items: localItems, source: 'local' });
+      const summary = await prisma.meetingSummary.findUnique({
+        where: { meetingId: localMeetingId },
+        select: { topic: true, overview: true, speakers: true, todos: true },
+      });
+      return NextResponse.json({ items: localItems, summary, source: 'local' });
     }
 
     // 2. 查 kloudMeetingId → 去 Java Server 拉取

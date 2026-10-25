@@ -35,7 +35,17 @@ interface SummaryItem {
   timeOffset: string; // HH:mm:ss
   /** AI 生成时写入；旧数据可能为空 */
   speaker?: string | null;
+  /** 本节要点及原话时间；旧版摘要没有 */
+  points?: { text: string; sec: number }[] | null;
   sortOrder: number;
+}
+
+/** Structured summary head: topic, overview, who spoke, to-dos (null for older summaries) */
+interface SummaryHead {
+  topic: string | null;
+  overview: string | null;
+  speakers: string[] | null;
+  todos: { task: string; owner: string | null; due: string | null; sec: number }[] | null;
 }
 
 interface Transcript {
@@ -75,6 +85,7 @@ interface ReplayData {
     createdBy: { fullName: string | null; username: string } | null;
     participants: Participant[];
     summaryItems: SummaryItem[];
+    summary?: SummaryHead | null;
     transcripts: Transcript[];
   } | null;
 }
@@ -421,6 +432,7 @@ function SummaryPanel({
   kloudMeetingId,
   focus,
   canManage,
+  head,
 }: {
   items: SummaryItem[];
   currentTime: number;
@@ -431,6 +443,7 @@ function SummaryPanel({
   focus?: { id: number; n: number } | null;
   /** 只有能管理录制的人才能去拉取 / 生成纪要 */
   canManage: boolean;
+  head?: SummaryHead | null;
 }) {
   const { t, locale } = useI18n();
   const [loading, setLoading] = useState(false);
@@ -438,6 +451,7 @@ function SummaryPanel({
   // 默认全部展开，方便直接阅读；只记录被收起的条目
   const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const itemRefs = useRef<Record<number, HTMLElement | null>>({});
+  const [overviewOpen, setOverviewOpen] = useState(false);
 
   useEffect(() => setLocalItems(items), [items]);
 
@@ -511,60 +525,200 @@ function SummaryPanel({
     );
   }
 
+  const structured = localItems.some((item) => Array.isArray(item.points) && item.points.length > 0);
+  if (!structured) return renderLegacy();
+
+  // The point being played: the last one whose time has passed
+  const allPoints = localItems.flatMap((item) => item.points ?? []);
+  const nowSec = allPoints.reduce((acc, p) => (p.sec <= currentTime && p.sec > acc ? p.sec : acc), -1);
+  const speakers = head?.speakers ?? [];
+  const todos = head?.todos ?? [];
+  const overview = head?.overview ?? '';
+  const longOverview = overview.length > 140;
+  const timeButton = (sec: number) => (
+    <button type="button" className={s.timeLink} onClick={() => onSeek(sec)} title={t('replay.jumpHere')}>
+      {fmtTime(sec)}
+    </button>
+  );
+
   return (
     <div className={s.tabBody}>
       <div className={s.scroll}>
+        {(head?.topic || speakers.length > 0 || overview) && (
+          <dl className={s.summaryMeta}>
+            {head?.topic && (
+              <>
+                <dt>{t('replay.topic')}</dt>
+                <dd>{head.topic}</dd>
+              </>
+            )}
+            {speakers.length > 0 && (
+              <>
+                <dt>{t('replay.speakers')}</dt>
+                <dd className={s.speakerChips}>
+                  {speakers.map((name) => (
+                    <span key={name} className={s.speakerChip}>
+                      <Avatar name={name} className={s.chipAvatar} />
+                      {name}
+                    </span>
+                  ))}
+                </dd>
+              </>
+            )}
+            {overview && (
+              <>
+                <dt>{t('replay.overview')}</dt>
+                <dd>
+                  <span className={longOverview && !overviewOpen ? s.overviewClamp : undefined}>{overview}</span>
+                  {longOverview && (
+                    <button type="button" className={s.moreBtn} onClick={() => setOverviewOpen((v) => !v)}>
+                      {overviewOpen ? t('replay.showLess') : t('replay.showMore')}
+                    </button>
+                  )}
+                </dd>
+              </>
+            )}
+          </dl>
+        )}
+
         {localItems.map((item, idx) => {
           const start = offsetToSecs(item.timeOffset);
           const isOpen = !collapsed.has(item.id);
-          const timeLink = (
-            <button type="button" className={s.timeLink} onClick={() => onSeek(start)} title={t('replay.jumpHere')}>
-              {fmtTime(start)}
-            </button>
-          );
+          const points = item.points ?? [];
           return (
-            <article
+            <section
               key={item.id}
               ref={(el) => {
                 itemRefs.current[item.id] = el;
               }}
-              className={idx === activeIdx ? s.noteOn : s.note}
+              className={s.section}
             >
               <div className={s.summaryHead}>
                 <button type="button" className={s.summaryTitle} onClick={() => onSeek(start)}>
                   <span className={s.summaryNo}>{sectionNumber(idx + 1, locale)}</span>
                   {item.title}
                 </button>
-                {item.content && (
-                  <button
-                    type="button"
-                    className={s.foldBtn}
-                    aria-expanded={isOpen}
-                    aria-label={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
-                    title={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
-                    onClick={() => toggle(item.id)}
-                  >
-                    <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
+                {item.speaker && (
+                  <span className={s.sectionWho}>
+                    <Avatar name={item.speaker} className={s.chipAvatar} />
+                    {item.speaker}
+                  </span>
                 )}
+                {!isOpen && timeButton(start)}
+                <button
+                  type="button"
+                  className={s.foldBtn}
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                  title={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                  onClick={() => toggle(item.id)}
+                >
+                  <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
               </div>
-              {isOpen && item.content ? (
-                <p className={s.summaryText}>
-                  {item.content}
-                  {timeLink}
-                </p>
-              ) : (
-                <div className={s.summaryFoot}>{timeLink}</div>
+              {isOpen && (
+                <ul className={s.points}>
+                  {points.map((point, pi) => (
+                    <li key={pi} className={point.sec === nowSec ? s.pointNow : s.point}>
+                      {point.text}
+                      {timeButton(point.sec)}
+                    </li>
+                  ))}
+                </ul>
               )}
-            </article>
+            </section>
           );
         })}
+
+        {todos.length > 0 && (
+          <section className={s.todos}>
+            <h3 className={s.todosTitle}>
+              {t('replay.todos')} <span className={s.todosCount}>{todos.length}</span>
+            </h3>
+            {todos.map((todo, ti) => (
+              <div key={ti} className={s.todo}>
+                {todo.owner ? (
+                  <Avatar name={todo.owner} className={s.chipAvatar} />
+                ) : (
+                  <span className={`${s.chipAvatar} ${s.noOwnerAvatar}`} aria-hidden="true">?</span>
+                )}
+                <div className={s.todoBody}>
+                  <div className={s.todoTask}>{todo.task}</div>
+                  <div className={s.todoMeta}>
+                    {todo.owner ? <span>{todo.owner}</span> : <span className={s.noOwner}>{t('replay.noOwner')}</span>}
+                    {todo.due && <span className={s.due}>{todo.due}</span>}
+                  </div>
+                </div>
+                {timeButton(todo.sec)}
+              </div>
+            ))}
+          </section>
+        )}
       </div>
       <p className={s.panelFoot}>{t('replay.aiNote')}</p>
     </div>
   );
+
+  /** 旧版摘要（只有分章，没有要点时间）照原样显示 */
+  function renderLegacy() {
+    return (
+      <div className={s.tabBody}>
+        <div className={s.scroll}>
+          {canManage && <p className={s.legacyNote}><SparkGlyph />{t('replay.legacySummary')}</p>}
+          {localItems.map((item, idx) => {
+            const start = offsetToSecs(item.timeOffset);
+            const isOpen = !collapsed.has(item.id);
+            const timeLink = (
+              <button type="button" className={s.timeLink} onClick={() => onSeek(start)} title={t('replay.jumpHere')}>
+                {fmtTime(start)}
+              </button>
+            );
+            return (
+              <article
+                key={item.id}
+                ref={(el) => {
+                  itemRefs.current[item.id] = el;
+                }}
+                className={idx === activeIdx ? s.noteOn : s.note}
+              >
+                <div className={s.summaryHead}>
+                  <button type="button" className={s.summaryTitle} onClick={() => onSeek(start)}>
+                    <span className={s.summaryNo}>{sectionNumber(idx + 1, locale)}</span>
+                    {item.title}
+                  </button>
+                  {item.content && (
+                    <button
+                      type="button"
+                      className={s.foldBtn}
+                      aria-expanded={isOpen}
+                      aria-label={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                      title={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                      onClick={() => toggle(item.id)}
+                    >
+                      <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {isOpen && item.content ? (
+                  <p className={s.summaryText}>
+                    {item.content}
+                    {timeLink}
+                  </p>
+                ) : (
+                  <div className={s.summaryFoot}>{timeLink}</div>
+                )}
+              </article>
+            );
+          })}
+        </div>
+        <p className={s.panelFoot}>{t('replay.aiNote')}</p>
+      </div>
+    );
+  }
 }
 
 /** 逐字稿面板 */
@@ -762,6 +916,24 @@ function GenerateProgress({ pct }: { pct: number }) {
   );
 }
 
+/** While the summary is being written: progress, then the outline of what will appear */
+function SummarySkeleton({ pct }: { pct: number }) {
+  const { t } = useI18n();
+  return (
+    <div className={s.tabBody}>
+      <div className={s.scroll}>
+        <GenerateProgress pct={pct} />
+        <div className={s.skeleton} aria-hidden="true">
+          {[40, 100, 85, 30, 92, 70, 30, 88].map((w, i) => (
+            <span key={i} className={i === 0 || i === 3 || i === 6 ? s.skelHead : s.skelLine} style={{ width: `${w}%` }} />
+          ))}
+        </div>
+      </div>
+      <p className={s.panelFoot}>{t('replay.aiNote')}</p>
+    </div>
+  );
+}
+
 /* ─── Main Page ──────────────────────────────────────────── */
 export default function ReplayPage() {
   const params = useParams();
@@ -912,7 +1084,7 @@ export default function ReplayPage() {
       // 将新生成的摘要写回 data state，触发页面更新
       setData((prev) =>
         prev && prev.meeting
-          ? { ...prev, meeting: { ...prev.meeting, summaryItems: json.items } }
+          ? { ...prev, meeting: { ...prev.meeting, summaryItems: json.items, summary: json.summary ?? null } }
           : prev,
       );
       setChapterFocus(null);
@@ -1350,7 +1522,7 @@ export default function ReplayPage() {
                     <polyline points="1 20 1 14 7 14" />
                     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                   </svg>
-                  {t('replay.regenerateSummary')}
+                  {t('replay.regenerateShort')}
                 </button>
               )}
             </div>
@@ -1358,13 +1530,11 @@ export default function ReplayPage() {
             <div className={s.tabBody} role="tabpanel">
               {tab === 'summary' &&
                 (summaryItems.length > 0 ? (
+                  generating ? (
+                    <SummarySkeleton pct={genProgress} />
+                  ) : (
                   <>
-                    {generating && (
-                      <div className={s.toolbar}>
-                        <GenerateProgress pct={genProgress} />
-                      </div>
-                    )}
-                    {generateError && !generating && (
+                    {generateError && (
                       <p className={s.error} style={{ padding: '8px 14px 0' }}>{generateError}</p>
                     )}
                     <SummaryPanel
@@ -1375,12 +1545,12 @@ export default function ReplayPage() {
                       kloudMeetingId={meeting?.kloudMeetingId ?? null}
                       focus={chapterFocus}
                       canManage={canManage}
+                      head={meeting?.summary ?? null}
                     />
                   </>
+                  )
                 ) : generating ? (
-                  <div className={s.empty}>
-                    <GenerateProgress pct={genProgress} />
-                  </div>
+                  <SummarySkeleton pct={genProgress} />
                 ) : transcripts.length > 0 && canManage ? (
                   <div className={s.empty}>
                     <span className={s.emptyIcon} aria-hidden="true">

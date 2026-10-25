@@ -123,6 +123,7 @@ model Meeting {
   participants            MeetingParticipant[]
   chatMessages            MeetingChatMessage[]
   summaryItems            MeetingSummaryItem[]
+  summary                 MeetingSummary?
   transcripts             MeetingTranscript[]
   recordings              Recording[]
   recordingAccessRequests RecordingAccessRequest[]
@@ -195,12 +196,32 @@ model MeetingSummaryItem {
   timeOffset String
   /// 章节主讲人显示名；AI 生成时写入，回放卡片头像用其缩写
   speaker    String?
+  /// Key points of this section: [{ text, sec }] — sec is where it was said; null for older summaries
+  points     Json?
   sortOrder  Int      @default(0)
   createdAt  DateTime @default(now())
   meeting    Meeting  @relation(fields: [meetingId], references: [id], map: "MeetingSummaryItem_meetingId_fkey")
 
   @@index([meetingId, sortOrder], map: "MeetingSummaryItem_meetingId_sortOrder_idx")
   @@map("MeetingSummaryItem")
+}
+
+/// AI summary of a meeting: one-line topic, overview, who spoke, and to-dos
+/// (sections and their points live in MeetingSummaryItem)
+model MeetingSummary {
+  id        Int      @id @default(autoincrement())
+  meetingId Int      @unique(map: "MeetingSummary_meetingId_key")
+  topic     String?  @db.VarChar(500)
+  overview  String?  @db.Text
+  /// Names of people who spoke, most talk first
+  speakers  Json?
+  /// [{ task, owner, due, sec }] — owner / due are null when nobody said
+  todos     Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingSummary_meetingId_fkey")
+
+  @@map("MeetingSummary")
 }
 
 model MeetingTranscript {

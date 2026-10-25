@@ -1,16 +1,23 @@
 /**
  * POST /api/meeting-summary/[meetingId]/generate
  *
- * 从字幕自动生成会议摘要章节：
+ * 从字幕生成结构化会议摘要：
  *   1. 读取该会议所有 MeetingTranscript（按时间排序）
- *   2. 构建 prompt，调用 OpenAI（或 DeepSeek 备用）分析
- *   3. AI 自主决定章节数量（基于内容语义）
- *   4. 写入 MeetingSummaryItem，返回结果
+ *   2. 调用 DeepSeek（OpenAI 备用）按 lib/meetingSummary 的规则起草：主题、概览、分节要点、待办
+ *   3. normalizeSummary 把每个时间对到真实字幕，对不上的要点 / 待办丢掉
+ *   4. 每节写一行 MeetingSummaryItem（章节卡片也用它），主题 / 概览 / 待办写 MeetingSummary
  */
 import { NextRequest, NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { meterAiSummary, meterSafely } from '@/lib/billing/usage';
+import {
+  SUMMARY_SYSTEM_PROMPT,
+  buildSummaryPrompt,
+  normalizeSummary,
+  sectionContent,
+} from '@/lib/meetingSummary';
 
 // ── Auth helper ──────────────────────────────────────────────
 async function getSession(req: NextRequest) {
@@ -31,92 +38,40 @@ function secsToHMS(secs: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-// ── Call AI (OpenAI first, DeepSeek fallback) ────────────────
-interface AIChapter {
-  title: string;
-  content: string;
-  startSec: number;
-  endSec: number;
-  speaker: string;
+// ── Call AI (DeepSeek first, OpenAI fallback); returns the parsed JSON object ──
+async function chat(url: string, key: string, model: string, prompt: string): Promise<unknown> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+        { role: 'user', content: prompt },
+      ],
+      temperature: 0.2,
+      max_tokens: 6000,
+      response_format: { type: 'json_object' },
+    }),
+    signal: AbortSignal.timeout(90000),
+  });
+  if (!res.ok) throw new Error(`${model} error: ${await res.text()}`);
+  const data = await res.json();
+  return JSON.parse(data.choices?.[0]?.message?.content || '{}');
 }
 
-async function callAI(prompt: string): Promise<AIChapter[]> {
-  const systemPrompt = `You are a professional meeting analyst. Analyze the transcript and split it into logical chapters based on topic changes — NOT fixed time intervals. 
-Return a JSON object with a "chapters" key containing an array. Each chapter has:
-- title: concise chapter title (with relevant emoji prefix, in the same language as the transcript)
-- content: paragraph summary of what was discussed (2-5 sentences, in the same language as the transcript)  
-- startSec: start time in seconds (integer)
-- endSec: end time in seconds (integer)
-- speaker: the main speaker in this chapter (pick the one with most lines)
-
-Rules:
-- Decide chapter count based on content — typically 3-8 chapters for a normal meeting
-- Each chapter should cover a cohesive topic/discussion
-- Return ONLY a valid JSON object like {"chapters": [...]}`;
-
-  // Try DeepSeek first (default)
+async function callAI(prompt: string): Promise<unknown> {
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
     try {
-      const res = await fetch('https://api.deepseek.com/v1/chat/completions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${deepseekKey}` },
-        body: JSON.stringify({
-          model: 'deepseek-chat',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.3,
-          max_tokens: 4000,
-          response_format: { type: 'json_object' },
-        }),
-        signal: AbortSignal.timeout(60000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const raw = data.choices?.[0]?.message?.content || '{}';
-        const parsed = JSON.parse(raw);
-        const chapters: AIChapter[] = Array.isArray(parsed)
-          ? parsed
-          : (parsed.chapters || parsed.result || Object.values(parsed)[0] || []);
-        if (chapters.length > 0) return chapters;
-      } else {
-        console.warn('[generate] DeepSeek error:', await res.text());
-      }
+      return await chat('https://api.deepseek.com/v1/chat/completions', deepseekKey, 'deepseek-chat', prompt);
     } catch (e) {
       console.warn('[generate] DeepSeek failed, trying OpenAI:', e);
     }
   }
-
-  // Fallback: OpenAI
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error('No AI API key configured');
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openaiKey}` },
-    body: JSON.stringify({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 4000,
-      response_format: { type: 'json_object' },
-    }),
-    signal: AbortSignal.timeout(60000),
-  });
-  if (!res.ok) throw new Error(`OpenAI error: ${await res.text()}`);
-  const data = await res.json();
-  const raw = data.choices?.[0]?.message?.content || '{}';
-  const parsed = JSON.parse(raw);
-  const chapters: AIChapter[] = Array.isArray(parsed)
-    ? parsed
-    : (parsed.chapters || parsed.result || Object.values(parsed)[0] || []);
-
-  return chapters;
+  return chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', prompt);
 }
 
 // ── Main handler ─────────────────────────────────────────────
@@ -157,77 +112,58 @@ export async function POST(
     const quotaError = await checkAiSummaryQuota(session.teamMemberId);
     if (quotaError) return quotaError;
 
-    // Build prompt
     const meetingName = meeting.title || meeting.roomName || `Meeting #${localMeetingId}`;
-    const lines = transcripts
-      .map((t) => `[${secsToHMS(t.offsetSeconds ?? 0)}] ${t.speakerName}: ${t.content}`)
-      .join('\n');
+    const prompt = buildSummaryPrompt(meetingName, transcripts);
 
-    const totalSec = transcripts.reduce((max, t) => {
-      const s = t.offsetSeconds ?? 0;
-      return s > max ? s : max;
-    }, 0);
-
-    const prompt = `Meeting: ${meetingName}\nDuration: ~${Math.round(totalSec / 60)} min\nTranscript:\n\n${lines}\n\nPlease analyze and generate chapters.`;
-
-    // Call AI
-    let chapters: AIChapter[];
+    let raw: unknown;
     try {
-      chapters = await callAI(prompt);
+      raw = await callAI(prompt);
     } catch (e: any) {
       console.error('[generate] AI call failed:', e);
       return NextResponse.json({ error: 'The AI service failed. Please try again.' }, { status: 502 });
     }
 
-    if (!chapters || chapters.length === 0) {
-      return NextResponse.json({ error: 'The AI service returned no usable chapters. Please try again.' }, { status: 502 });
+    // Every point and to-do must land on a real transcript line; the rest is dropped
+    const summary = normalizeSummary(raw, transcripts);
+    if (!summary) {
+      return NextResponse.json({ error: 'The AI service returned no usable summary. Please try again.' }, { status: 502 });
     }
 
-    // Normalize
-    chapters = chapters
-      .filter((c) => c.title && c.content)
-      .map((c) => ({
-        ...c,
-        startSec: typeof c.startSec === 'number' ? c.startSec : 0,
-        endSec: typeof c.endSec === 'number' ? c.endSec : totalSec,
-        speaker: c.speaker || '',
-        title: c.title.trim(),
-        content: c.content.trim(),
-      }))
-      .sort((a, b) => a.startSec - b.startSec);
-
-    // Save to DB
-    await prisma.meetingSummaryItem.deleteMany({ where: { meetingId: localMeetingId } });
-    await prisma.meetingSummaryItem.createMany({
-      data: chapters.map((c, idx) => ({
-        meetingId: localMeetingId,
-        title: c.title,
-        content: c.content,
-        timeOffset: secsToHMS(c.startSec),
-        speaker: (c.speaker || '').trim() || null,
-        sortOrder: idx,
-      })),
-    });
-
-    const saved = await prisma.meetingSummaryItem.findMany({
-      where: { meetingId: localMeetingId },
-      orderBy: { sortOrder: 'asc' },
+    const saved = await prisma.$transaction(async (tx) => {
+      await tx.meetingSummaryItem.deleteMany({ where: { meetingId: localMeetingId } });
+      await tx.meetingSummaryItem.createMany({
+        data: summary.sections.map((section, idx) => ({
+          meetingId: localMeetingId,
+          title: section.title,
+          content: sectionContent(section),
+          timeOffset: secsToHMS(section.startSec),
+          speaker: section.speaker,
+          points: section.points as unknown as Prisma.InputJsonValue,
+          sortOrder: idx,
+        })),
+      });
+      const fields = {
+        topic: summary.topic || null,
+        overview: summary.overview || null,
+        speakers: summary.speakers as unknown as Prisma.InputJsonValue,
+        todos: summary.todos as unknown as Prisma.InputJsonValue,
+      };
+      const head = await tx.meetingSummary.upsert({
+        where: { meetingId: localMeetingId },
+        create: { meetingId: localMeetingId, ...fields },
+        update: fields,
+        select: { topic: true, overview: true, speakers: true, todos: true },
+      });
+      const items = await tx.meetingSummaryItem.findMany({
+        where: { meetingId: localMeetingId },
+        orderBy: { sortOrder: 'asc' },
+      });
+      return { items, head };
     });
 
     await meterSafely(`ai:${localMeetingId}`, () => meterAiSummary(session.teamMemberId, localMeetingId));
 
-    return NextResponse.json({
-      success: true,
-      items: saved,
-      chapters: chapters.map((c, idx) => ({
-        id: saved[idx]?.id ?? -(idx + 1),
-        startSec: c.startSec,
-        endSec: c.endSec,
-        speaker: c.speaker,
-        title: c.title,
-        timeRange: `${secsToHMS(c.startSec)}-${secsToHMS(c.endSec)}`,
-      })),
-    });
+    return NextResponse.json({ success: true, items: saved.items, summary: saved.head });
   } catch (err) {
     console.error('[meeting-summary generate]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

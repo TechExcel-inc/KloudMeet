@@ -70,6 +70,7 @@ export async function GET(
                 orderBy: { joinedAt: 'asc' },
               },
               summaryItems: { orderBy: { sortOrder: 'asc' } },
+              summary: { select: { topic: true, overview: true, speakers: true, todos: true } },
               transcripts: {
                 orderBy: { captionTime: 'asc' },
                 take: 500,
@@ -136,6 +137,8 @@ export async function GET(
               member: p.teamMember,
             })),
             summaryItems: recording.meeting.summaryItems,
+            // Topic / overview / speakers / to-dos of the structured summary; null for older summaries
+            summary: recording.meeting.summary,
             transcripts: recording.meeting.transcripts,
           }
         : null,
