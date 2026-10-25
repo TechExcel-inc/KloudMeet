@@ -904,7 +904,6 @@
   "dash.joinCodePlaceholder": "会议码或链接",
   "dash.meetingListTagline": "AI 能与你的团队和客户共同学习与协作。",
   "dash.joinAnyCode": "输入会议码、链接或个人会议号",
-  "dash.pageTitle": "会议",
   "dash.summaryLive": "{n} 场进行中",
   "dash.summarySoon": "{n} 场即将开始",
   "dash.listSep": "，",

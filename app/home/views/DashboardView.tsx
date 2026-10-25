@@ -666,6 +666,13 @@ export function DashboardView({
 
 
   /* ── Display helpers (presentation only) ── */
+  const greetingHour = new Date(currentTime).getHours();
+  const greeting =
+    greetingHour < 12
+      ? tx('dash.greeting.morning', 'Good morning, {name}', { name: user.displayName })
+      : greetingHour < 18
+        ? tx('dash.greeting.afternoon', 'Good afternoon, {name}', { name: user.displayName })
+        : tx('dash.greeting.evening', 'Good evening, {name}', { name: user.displayName });
   const todayLabel = new Date(currentTime).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
   // Today's line under the title, from the meetings on this page of the list.
   const liveCount = dbMeetings.filter((m) => m.isActive).length;
@@ -772,7 +779,7 @@ export function DashboardView({
         {/* ── Join with a code (or a personal meeting ID) first, then start a new meeting ── */}
         <section className={styles.dashHero}>
           <div className={styles.dashTitleBlock}>
-            <h1 className={styles.dashTitle}>{tx('dash.pageTitle', 'Meetings')}</h1>
+            <h1 className={styles.dashTitle}>{greeting}</h1>
             <p className={styles.dashSummary}>
               {todayLabel}
               {summaryParts.length > 0 && (
