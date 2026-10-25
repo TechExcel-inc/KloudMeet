@@ -87,7 +87,9 @@
   color: var(--km-text-muted);
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 0.15s, color 0.15s;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
 }
 
 .iconBtn:hover {
@@ -441,7 +443,11 @@
   background-image: none;
   color: #ffffff;
   cursor: pointer;
-  transition: border-radius 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, box-shadow 90ms linear;
+  transition:
+    border-radius 0.2s ease,
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 90ms linear;
   backdrop-filter: blur(2px);
 }
 
@@ -468,7 +474,9 @@
 
 .previewControls .roundToggle[aria-pressed]:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px #ffffff, 0 0 0 6px var(--km-primary);
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 6px var(--km-primary);
 }
 
 .previewControls .roundToggle[aria-pressed]:disabled {
@@ -630,18 +638,30 @@
   background: var(--km-hover);
 }
 
-.chipWrap :global(.lk-device-menu) :global(.lk-media-device-select) li > :global(.lk-button):focus-visible {
+.chipWrap
+  :global(.lk-device-menu)
+  :global(.lk-media-device-select)
+  li
+  > :global(.lk-button):focus-visible {
   outline: none;
   box-shadow: inset 0 0 0 2px var(--km-primary);
 }
 
-.chipWrap :global(.lk-device-menu) :global(.lk-media-device-select) li[data-lk-active='true'] > :global(.lk-button) {
+.chipWrap
+  :global(.lk-device-menu)
+  :global(.lk-media-device-select)
+  li[data-lk-active='true']
+  > :global(.lk-button) {
   background: var(--km-tonal);
   color: var(--km-on-tonal);
   font-weight: 700;
 }
 
-.chipWrap :global(.lk-device-menu) :global(.lk-media-device-select) li[data-lk-active='true'] > :global(.lk-button)::before {
+.chipWrap
+  :global(.lk-device-menu)
+  :global(.lk-media-device-select)
+  li[data-lk-active='true']
+  > :global(.lk-button)::before {
   content: '';
   position: absolute;
   left: 20px;
@@ -665,6 +685,13 @@
   font-size: 14px;
   font-weight: 600;
   line-height: 1.45;
+}
+
+.nobodyHere {
+  margin: 14px 0 0;
+  color: var(--km-text-muted);
+  font-size: 15px;
+  font-weight: 500;
 }
 
 /* ───────────── Right column ───────────── */
@@ -726,7 +753,9 @@
   color: var(--km-text);
   font: 600 16px var(--km-font);
   outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
 }
 
 .fieldInput:hover {
@@ -846,7 +875,9 @@
 
 .joinBtn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 3px var(--km-bg), 0 0 0 6px var(--km-primary);
+  box-shadow:
+    0 0 0 3px var(--km-bg),
+    0 0 0 6px var(--km-primary);
 }
 
 .joinBtn:disabled {
@@ -929,6 +960,77 @@
 
 .copyBtnDone {
   color: var(--km-success);
+}
+
+.shareMenuWrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.copyMenuBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 38px;
+  border: 0;
+  border-radius: var(--km-radius-sm);
+  background: transparent;
+  color: var(--km-text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.copyMenuBtn:hover {
+  background: var(--km-hover);
+  color: var(--km-text);
+}
+
+.copyMenuBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.shareMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 180px;
+  padding: 6px 0;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-surface);
+  box-shadow: var(--km-shadow);
+  border: 1px solid var(--km-border);
+  overflow: hidden;
+  animation: kmMenuIn 0.15s ease;
+}
+
+.shareMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--km-text);
+  font: 500 14px var(--km-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+.shareMenuItem:hover {
+  background: var(--km-hover);
+}
+
+.shareMenuItem:focus-visible {
+  outline: none;
+  background: var(--km-hover);
+  box-shadow: inset 0 0 0 2px var(--km-primary);
 }
 
 /* Desktop app */

@@ -14,6 +14,11 @@ import { MyProfileModal } from '@/lib/MyProfileModal';
 import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import { PrejoinParticipantLiveDocSelect } from '@/lib/PrejoinParticipantLiveDocSelect';
+import { PrejoinAccessLevelSelect, type AccessLevel } from '@/lib/PrejoinAccessLevelSelect';
+import {
+  PrejoinRecordingOptionSelect,
+  type RecordingOption,
+} from '@/lib/PrejoinRecordingOptionSelect';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
@@ -60,7 +65,17 @@ import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowLeft, Check, ChevronDown, CircleHelp, Globe, Info, Monitor, Moon, Sun } from 'lucide-react';
+import {
+  ArrowLeft,
+  Check,
+  ChevronDown,
+  CircleHelp,
+  Globe,
+  Info,
+  Monitor,
+  Moon,
+  Sun,
+} from 'lucide-react';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { ChatPanel, AttendeePanel, chatAndAttendeeStyles } from '@/lib/ChatAndAttendeePanel';
@@ -69,10 +84,7 @@ import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { VideoConferenceComponent } from './VideoConferenceComponent';
 import { connectionDetailsFetchInit, authHeaders } from '@/lib/kloudSession';
-import {
-  fetchPersonalRoomResolve,
-  getResolvedLiveRoomName,
-} from '@/lib/personalRoomResolveClient';
+import { fetchPersonalRoomResolve, getResolvedLiveRoomName } from '@/lib/personalRoomResolveClient';
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
 import { RoomEntryLoading } from '@/lib/RoomEntryLoading';
@@ -118,9 +130,7 @@ export function PageClientImpl(props: {
   const [entryLoadError, setEntryLoadError] = React.useState<string | null>(null);
   const [resolveEpoch, setResolveEpoch] = React.useState(0);
   /** 个人房入口解析出的真实会场；非 null 时访客一次 Join 直连该 room */
-  const [resolvedLiveRoom, setResolvedLiveRoom] = React.useState<string | null>(
-    null,
-  );
+  const [resolvedLiveRoom, setResolvedLiveRoom] = React.useState<string | null>(null);
   /** 地址栏 / PreJoin 当前生效会议号（replaceState 后与 Next 路由 props.roomName 可能不同）。 */
   const [effectiveRoomName, setEffectiveRoomName] = React.useState(props.roomName);
   const routeRoomName = props.roomName;
@@ -188,6 +198,8 @@ export function PageClientImpl(props: {
   const [personalRoomSwitching, setPersonalRoomSwitching] = React.useState(false);
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
+  const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
+  const [recordingOption, setRecordingOption] = React.useState<RecordingOption>('none');
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -338,10 +350,7 @@ export function PageClientImpl(props: {
               if (!cancelled) setCurrentUser(kloudUser as AuthUser);
             }
             const activeRoom = sessionStorage.getItem('activeKloudRoom');
-            if (
-              activeRoom &&
-              activeRoom.toLowerCase() === routeRoomName.toLowerCase()
-            ) {
+            if (activeRoom && activeRoom.toLowerCase() === routeRoomName.toLowerCase()) {
               if (!cancelled) setIsSameTabRefresh(true);
             }
           } catch {
@@ -363,9 +372,7 @@ export function PageClientImpl(props: {
 
         setResolvedLiveRoom(getResolvedLiveRoomName(props.roomName, resolved));
         const infoRoom =
-          resolved?.kind === 'join_live'
-            ? resolved.effectiveRoomName
-            : props.roomName;
+          resolved?.kind === 'join_live' ? resolved.effectiveRoomName : props.roomName;
         if (
           infoRoom.toLowerCase() !== props.roomName.toLowerCase() ||
           !initialMeeting?.createdByMemberId
@@ -546,10 +553,7 @@ export function PageClientImpl(props: {
           return;
         }
         // 个人房入口取消勾选后不应把个人房号当作「原始房间」恢复（否则会覆盖新建随机会议 URL）
-        if (
-          routeRoomName.toLowerCase() === personalKey &&
-          original.toLowerCase() === personalKey
-        ) {
+        if (routeRoomName.toLowerCase() === personalKey && original.toLowerCase() === personalKey) {
           sessionStorage.removeItem(PREJOIN_ORIGINAL_ROOM_SESSION_KEY);
           return;
         }
@@ -585,14 +589,17 @@ export function PageClientImpl(props: {
   const isActive = meetingInfo?.isActive === true;
 
   const preJoinTitle = React.useMemo(() => {
-    if (isHost && !isActive) return t('prejoin.startingMeeting');
+    if (isHost && !isActive) return undefined;
     if (isHost && isActive) return t('prejoin.activeMeeting');
-    if (meetingInfo?.createdByMember) return t('prejoin.joiningUser', { name: meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username });
+    if (meetingInfo?.createdByMember)
+      return t('prejoin.joiningUser', {
+        name: meetingInfo.createdByMember.fullName || meetingInfo.createdByMember.username,
+      });
     return t('prejoin.joiningMeeting');
   }, [isHost, isActive, meetingInfo, t]);
 
   const preJoinSubtitle = React.useMemo(() => {
-    if (isHost && !isActive) return t('prejoin.nobodyHereYet');
+    if (isHost && !isActive) return undefined;
     if (isHost && isActive) return t('prejoin.alreadyHosting');
     if (meetingInfo?.startedAt) return t('prejoin.inProgress', { time: elapsedTime || '00:00' });
     return t('prejoin.checkDevices');
@@ -839,7 +846,11 @@ export function PageClientImpl(props: {
           <div className={prejoinStyles.toolbarLeft}>
             <Link href="/" className={prejoinStyles.logoLink}>
               <Image
-                src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
+                src={
+                  theme === 'dark'
+                    ? '/images/kloud-header-logo-white.svg'
+                    : '/images/kloud-header-logo.svg'
+                }
                 alt="Kloud Meet"
                 width={120}
                 height={36}
@@ -855,12 +866,30 @@ export function PageClientImpl(props: {
               aria-hidden="true"
             >
               {meetingEnded ? (
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="38"
+                  height="38"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="3" y="5" width="18" height="16" rx="3" />
                   <path d="M3 10h18M8 3v4M16 3v4M9 15.5l2 2 4-4" />
                 </svg>
               ) : (
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="38"
+                  height="38"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="3" y="5" width="18" height="16" rx="3" />
                   <path d="M3 10h18M8 3v4M16 3v4M9.5 14l5 5M14.5 14l-5 5" />
                 </svg>
@@ -889,181 +918,210 @@ export function PageClientImpl(props: {
     <main style={{ height: '100%' }}>
       {connectionDetails === undefined || preJoinChoices === undefined ? (
         canShowPreJoin && !isSameTabRefresh ? (
-        <div
-          className={`${prejoinStyles.page}${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
-          style={{
-            display: isBot ? 'none' : undefined,
-          }}
-        >
-          <header className={prejoinStyles.toolbar}>
-            <div className={prejoinStyles.toolbarLeft}>
-              <Link href="/" className={prejoinStyles.iconBtn} title={t('common.back')} aria-label={t('common.back')}>
-                <ArrowLeft size={22} aria-hidden="true" />
-              </Link>
-              <Link href="/" className={prejoinStyles.logoLink}>
-                <Image
-                  src={theme === 'dark' ? '/images/kloud-header-logo-white.svg' : '/images/kloud-header-logo.svg'}
-                  alt="KloudMeet"
-                  width={120}
-                  height={36}
-                  style={{ display: 'block', transform: 'translateY(4px)' }}
-                />
-              </Link>
-            </div>
-
-            <div className={prejoinStyles.toolbarRight}>
-              <button
-                type="button"
-                className={`${prejoinStyles.iconBtn}${theme === 'dark' ? ` ${prejoinStyles.iconBtnActive}` : ''}`}
-                title={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
-                aria-label={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
-                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              >
-                {theme === 'dark' ? <Sun size={20} aria-hidden="true" /> : <Moon size={20} aria-hidden="true" />}
-              </button>
-
-              {/* Help Button */}
-              <button
-                type="button"
-                className={prejoinStyles.iconBtn}
-                title={t('nav.help')}
-                aria-label={t('nav.help')}
-                onClick={() => { setShowLangMenu(false); setShowHelp(true); }}
-              >
-                <CircleHelp size={20} aria-hidden="true" />
-              </button>
-
-              {/* Language Pill Button */}
-              <div className={prejoinStyles.dropdown}>
-                <button
-                  type="button"
-                  className={`${prejoinStyles.pillBtn}${showLangMenu ? ` ${prejoinStyles.pillBtnActive}` : ''}`}
-                  onClick={() => setShowLangMenu(!showLangMenu)}
-                  aria-haspopup="menu"
-                  aria-expanded={showLangMenu}
-                  aria-label={t('nav.selectLanguage')}
+          <div
+            className={`${prejoinStyles.page}${personalRoomSwitching ? ' kloud-prejoin-room-switching' : ''}`}
+            style={{
+              display: isBot ? 'none' : undefined,
+            }}
+          >
+            <header className={prejoinStyles.toolbar}>
+              <div className={prejoinStyles.toolbarLeft}>
+                <Link
+                  href="/"
+                  className={prejoinStyles.iconBtn}
+                  title={t('common.back')}
+                  aria-label={t('common.back')}
                 >
-                  {languageIcon(16)}
-                  <span>{LOCALE_OPTIONS.find(l => l.code === locale)?.shortCode || 'EN'}</span>
-                  <ChevronDown size={14} aria-hidden="true" />
-                </button>
-                {showLangMenu && (
-                  <div className={prejoinStyles.menu} role="menu">
-                    <div className={prejoinStyles.menuHeader}>
-                      {languageIcon(14)}
-                      {t('nav.selectLanguage')}
-                    </div>
-                    {LOCALE_OPTIONS.map(opt => (
-                      <button
-                        type="button"
-                        role="menuitemradio"
-                        aria-checked={locale === opt.code}
-                        key={opt.code}
-                        className={`${prejoinStyles.menuItem}${locale === opt.code ? ` ${prejoinStyles.menuItemActive}` : ''}`}
-                        onClick={() => { setLocale(opt.code); setShowLangMenu(false); }}
-                      >
-                        {languageIcon(16)}
-                        {opt.label}
-                        <span className={prejoinStyles.menuCode}>
-                          {opt.shortCode}
-                          {locale === opt.code && <Check size={14} aria-hidden="true" />}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+                  <ArrowLeft size={22} aria-hidden="true" />
+                </Link>
+                <Link href="/" className={prejoinStyles.logoLink}>
+                  <Image
+                    src={
+                      theme === 'dark'
+                        ? '/images/kloud-header-logo-white.svg'
+                        : '/images/kloud-header-logo.svg'
+                    }
+                    alt="KloudMeet"
+                    width={120}
+                    height={36}
+                    style={{ display: 'block', transform: 'translateY(4px)' }}
+                  />
+                </Link>
               </div>
 
-              {currentUser && (
-                <UserAvatarMenu
-                  user={{
-                    displayName: currentUser.displayName || currentUser.username,
-                    avatarUrl: currentUser.avatarUrl,
-                    email: currentUser.email,
-                  }}
-                  onOpenProfile={() => setShowProfileModal(true)}
-                  onOpenSettings={() => setShowSettingsModal(true)}
-                  onOpenDesktopApp={() => openDesktopEntry('prejoin')}
-                  onSignOut={handlePrejoinSignOut}
-                />
-              )}
-            </div>
-          </header>
+              <div className={prejoinStyles.toolbarRight}>
+                <button
+                  type="button"
+                  className={`${prejoinStyles.iconBtn}${theme === 'dark' ? ` ${prejoinStyles.iconBtnActive}` : ''}`}
+                  title={theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')}
+                  aria-label={
+                    theme === 'dark' ? t('nav.switchLightTheme') : t('nav.switchDarkTheme')
+                  }
+                  onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                >
+                  {theme === 'dark' ? (
+                    <Sun size={20} aria-hidden="true" />
+                  ) : (
+                    <Moon size={20} aria-hidden="true" />
+                  )}
+                </button>
 
-          {!isBot && prejoinReady && (
-            <KloudPreJoin
-              defaults={preJoinDefaults}
-              forceAudioEnabled={isHost}
-              onSubmit={handlePreJoinSubmit}
-              onError={handlePreJoinError}
-              joinLabel={preJoinButtonText}
-              userLabel={t('prejoin.displayMyNameAs')}
-              micLabel={t('prejoin.microphone')}
-              camLabel={t('prejoin.webcam')}
-              mediaUnavailableLabel={t('prejoin.mediaRequiresSecureContext')}
-              joinButtonDisabled={personalRoomSwitching}
-              title={preJoinTitle}
-              subtitle={preJoinSubtitle}
-              subtitleIsNotice={isHost && isActive}
-              joinFooter={
-                isHost && isActive && !isSameTabRefresh ? (
+                {/* Help Button */}
+                <button
+                  type="button"
+                  className={prejoinStyles.iconBtn}
+                  title={t('nav.help')}
+                  aria-label={t('nav.help')}
+                  onClick={() => {
+                    setShowLangMenu(false);
+                    setShowHelp(true);
+                  }}
+                >
+                  <CircleHelp size={20} aria-hidden="true" />
+                </button>
+
+                {/* Language Pill Button */}
+                <div className={prejoinStyles.dropdown}>
                   <button
                     type="button"
-                    className={prejoinStyles.textLink}
-                    onClick={() => { window.location.href = '/'; }}
+                    className={`${prejoinStyles.pillBtn}${showLangMenu ? ` ${prejoinStyles.pillBtnActive}` : ''}`}
+                    onClick={() => setShowLangMenu(!showLangMenu)}
+                    aria-haspopup="menu"
+                    aria-expanded={showLangMenu}
+                    aria-label={t('nav.selectLanguage')}
                   >
-                    {t('prejoin.orStartNew')}
+                    {languageIcon(16)}
+                    <span>{LOCALE_OPTIONS.find((l) => l.code === locale)?.shortCode || 'EN'}</span>
+                    <ChevronDown size={14} aria-hidden="true" />
                   </button>
-                ) : null
-              }
-              footer={
-                <>
-                  <PrejoinMeetingShareLink
-                    active={prejoinReady && !isBot}
-                    roomName={effectiveRoomName}
+                  {showLangMenu && (
+                    <div className={prejoinStyles.menu} role="menu">
+                      <div className={prejoinStyles.menuHeader}>
+                        {languageIcon(14)}
+                        {t('nav.selectLanguage')}
+                      </div>
+                      {LOCALE_OPTIONS.map((opt) => (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={locale === opt.code}
+                          key={opt.code}
+                          className={`${prejoinStyles.menuItem}${locale === opt.code ? ` ${prejoinStyles.menuItemActive}` : ''}`}
+                          onClick={() => {
+                            setLocale(opt.code);
+                            setShowLangMenu(false);
+                          }}
+                        >
+                          {languageIcon(16)}
+                          {opt.label}
+                          <span className={prejoinStyles.menuCode}>
+                            {opt.shortCode}
+                            {locale === opt.code && <Check size={14} aria-hidden="true" />}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {currentUser && (
+                  <UserAvatarMenu
+                    user={{
+                      displayName: currentUser.displayName || currentUser.username,
+                      avatarUrl: currentUser.avatarUrl,
+                      email: currentUser.email,
+                    }}
+                    onOpenProfile={() => setShowProfileModal(true)}
+                    onOpenSettings={() => setShowSettingsModal(true)}
+                    onOpenDesktopApp={() => openDesktopEntry('prejoin')}
+                    onSignOut={handlePrejoinSignOut}
                   />
-                  <div className={prejoinStyles.desktopRow}>
+                )}
+              </div>
+            </header>
+
+            {!isBot && prejoinReady && (
+              <KloudPreJoin
+                defaults={preJoinDefaults}
+                forceAudioEnabled={isHost}
+                onSubmit={handlePreJoinSubmit}
+                onError={handlePreJoinError}
+                joinLabel={preJoinButtonText}
+                userLabel={t('prejoin.displayMyNameAs')}
+                micLabel={t('prejoin.microphone')}
+                camLabel={t('prejoin.webcam')}
+                mediaUnavailableLabel={t('prejoin.mediaRequiresSecureContext')}
+                joinButtonDisabled={personalRoomSwitching}
+                title={preJoinTitle}
+                subtitle={preJoinSubtitle}
+                subtitleIsNotice={isHost && isActive}
+                nobodyHereText={isHost && !isActive ? t('prejoin.nobodyHereYet') : undefined}
+                joinFooter={
+                  isHost && isActive && !isSameTabRefresh ? (
                     <button
                       type="button"
-                      className={prejoinStyles.desktopBtn}
-                      onClick={() => openDesktopEntry('prejoin')}
-                      aria-describedby="kloud-prejoin-desktop-tip"
+                      className={prejoinStyles.textLink}
+                      onClick={() => {
+                        window.location.href = '/';
+                      }}
                     >
-                      <Monitor size={16} aria-hidden="true" />
-                      {t('toolbar.openDesktop.menuItem')}
+                      {t('prejoin.orStartNew')}
                     </button>
-                    <span
-                      className={prejoinStyles.infoDot}
-                      title={t('toolbar.openDesktop.prejoinTip')}
-                      aria-hidden="true"
-                    >
-                      <Info size={16} />
-                    </span>
-                    <span id="kloud-prejoin-desktop-tip" className={prejoinStyles.srOnly}>
-                      {t('toolbar.openDesktop.prejoinTip')}
-                    </span>
+                  ) : null
+                }
+                footer={
+                  <>
+                    <PrejoinMeetingShareLink
+                      active={prejoinReady && !isBot}
+                      roomName={effectiveRoomName}
+                    />
+                    <div className={prejoinStyles.desktopRow}>
+                      <button
+                        type="button"
+                        className={prejoinStyles.desktopBtn}
+                        onClick={() => openDesktopEntry('prejoin')}
+                        aria-describedby="kloud-prejoin-desktop-tip"
+                      >
+                        <Monitor size={16} aria-hidden="true" />
+                        {t('toolbar.openDesktop.menuItem')}
+                      </button>
+                      <span
+                        className={prejoinStyles.infoDot}
+                        title={t('toolbar.openDesktop.prejoinTip')}
+                        aria-hidden="true"
+                      >
+                        <Info size={16} />
+                      </span>
+                      <span id="kloud-prejoin-desktop-tip" className={prejoinStyles.srOnly}>
+                        {t('toolbar.openDesktop.prejoinTip')}
+                      </span>
+                    </div>
+                  </>
+                }
+              >
+                {isHost && (
+                  <div className={prejoinStyles.hostOptions}>
+                    <PrejoinParticipantLiveDocSelect
+                      show={participantLiveDocShow}
+                      onChange={handleParticipantLiveDocChange}
+                    />
+                    <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
+                    <PrejoinRecordingOptionSelect
+                      value={recordingOption}
+                      onChange={setRecordingOption}
+                    />
+                    <PrejoinPersonalRoomCheckbox
+                      active
+                      syncEnabled={personalRoomUrlEnabled}
+                      switching={personalRoomSwitching}
+                      onEnabledChange={handlePersonalRoomEnabledChange}
+                      onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
+                    />
                   </div>
-                </>
-              }
-            >
-              {isHost && (
-                <div className={prejoinStyles.hostOptions}>
-                  <PrejoinParticipantLiveDocSelect
-                    show={participantLiveDocShow}
-                    onChange={handleParticipantLiveDocChange}
-                  />
-                  <PrejoinPersonalRoomCheckbox
-                    active
-                    syncEnabled={personalRoomUrlEnabled}
-                    switching={personalRoomSwitching}
-                    onEnabledChange={handlePersonalRoomEnabledChange}
-                    onPersonalRoomIdLoaded={handlePersonalRoomIdLoaded}
-                  />
-                </div>
-              )}
-            </KloudPreJoin>
-          )}
-        </div>
+                )}
+              </KloudPreJoin>
+            )}
+          </div>
         ) : (
           <RoomEntryLoading
             error={entryLoadError}
@@ -1076,9 +1134,7 @@ export function PageClientImpl(props: {
             connectionDetails={connectionDetails}
             userChoices={preJoinChoices}
             meetingOwnerMemberId={
-              meetingInfo?.createdByMemberId != null
-                ? String(meetingInfo.createdByMemberId)
-                : null
+              meetingInfo?.createdByMemberId != null ? String(meetingInfo.createdByMemberId) : null
             }
             meetingTitle={typeof meetingInfo?.title === 'string' ? meetingInfo.title : undefined}
             region={props.region}
