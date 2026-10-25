@@ -14,6 +14,18 @@ import type {
 import { authFetch } from './kloudSession';
 import styles from '../styles/LiveDocAiPanel.module.css';
 
+/** The design link shown on the meeting stage (Design mode); listed above the LiveDocs. */
+export interface LiveDocDesignItem {
+  /** Figma file name or the site's host */
+  label: string;
+  /** Already translated, e.g. "Figma design" or "Web page" */
+  kindLabel: string;
+  kind: 'figma' | 'web';
+  setByName?: string;
+  /** The stage is showing it right now */
+  showing: boolean;
+}
+
 interface LiveDocAiBubblePos {
   top: number;
   left: number;
@@ -44,6 +56,12 @@ interface LiveDocAiPanelProps {
   canManage?: boolean;
   /** Bump `nonce` to switch the panel to `tab` (e.g. the recording sheet's Live transcript) */
   requestedTab?: { tab: LiveDocAiTab; nonce: number } | null;
+  /** Design mode: the shared link, shown as a row above the documents */
+  designItem?: LiveDocDesignItem | null;
+  /** Switch the stage to the design (only for people who may switch views) */
+  onShowDesign?: () => void;
+  /** "Link" next to the upload options opens "Show a link" (only for people who may switch views) */
+  onAddDesignLink?: () => void;
 }
 
 interface MeetingCaption {
@@ -512,6 +530,9 @@ export function LiveDocAiPanel({
   livekitToken = '',
   canManage = true,
   requestedTab = null,
+  designItem = null,
+  onShowDesign,
+  onAddDesignLink,
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
@@ -929,10 +950,25 @@ export function LiveDocAiPanel({
             </div>
           </main>
         ) : !connected || !state ? (
-          <div className={styles.loading} role="status" aria-live="polite">
-            {!error && <span className={styles.loadingSpinner} aria-hidden />}
-            <span>{t('liveDocAi.connecting')}</span>
-          </div>
+          <>
+            {activeTab === 'file' && designItem && (
+              <div className={styles.designOnly}>
+                <div className={styles.sectionLabel}>{t('liveDocAi.designSection')}</div>
+                <DesignRow item={designItem} onShow={onShowDesign} />
+              </div>
+            )}
+            <div className={styles.loading} role="status" aria-live="polite">
+              {!error && <span className={styles.loadingSpinner} aria-hidden />}
+              <span>{t('liveDocAi.connecting')}</span>
+            </div>
+            {activeTab === 'file' && onAddDesignLink && (
+              <footer className={styles.documentFooter}>
+                <div className={styles.uploadActions}>
+                  <DesignLinkButton onClick={onAddDesignLink} />
+                </div>
+              </footer>
+            )}
+          </>
         ) : (
           <main className={styles.body}>
             {activeTab === 'file' && (
@@ -946,6 +982,13 @@ export function LiveDocAiPanel({
                     aria-label={t('liveDocAi.searchDocuments')}
                   />
                 </div>
+                {designItem && (
+                  <>
+                    <div className={styles.sectionLabel}>{t('liveDocAi.designSection')}</div>
+                    <DesignRow item={designItem} onShow={onShowDesign} />
+                    <div className={styles.sectionLabel}>{t('toolbar.liveDoc')}</div>
+                  </>
+                )}
                 <div className={styles.documentList}>
                   {!filteredDocuments.length && (
                     <div className={styles.empty}>{t('liveDocAi.noDocuments')}</div>
@@ -1063,6 +1106,7 @@ export function LiveDocAiPanel({
                       >
                         {t('liveDocAi.whiteboard')}
                       </button>
+                      {onAddDesignLink && <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />}
                       <div className={styles.menuAnchor}>
                         <button
                           ref={uploadMenuBtnRef}
@@ -1081,6 +1125,12 @@ export function LiveDocAiPanel({
                       </div>
                     </div>
                   </div>
+                  )}
+                  {/* A presenter who can't manage LiveDocs can still show a design link */}
+                  {!canManage && onAddDesignLink && (
+                    <div className={styles.uploadActions}>
+                      <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />
+                    </div>
                   )}
                 </footer>
               </div>
@@ -1659,5 +1709,68 @@ function PickerDialog({
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** The shared design in the Documents tab: click shows it on the stage (for those who may switch views). */
+function DesignRow({ item, onShow }: { item: LiveDocDesignItem; onShow?: () => void }) {
+  const { t } = useI18n();
+  const sub = item.setByName
+    ? `${item.kindLabel} · ${t('liveDocAi.designSharedBy', { name: item.setByName })}`
+    : item.kindLabel;
+  const body = (
+    <>
+      <span className={item.kind === 'figma' ? styles.designThumbFigma : styles.designThumbWeb} aria-hidden="true">
+        {item.kind === 'figma' ? (
+          'F'
+        ) : (
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M3 12h18M12 3a14 14 0 014 9 14 14 0 01-4 9 14 14 0 01-4-9 14 14 0 014-9z" />
+          </svg>
+        )}
+      </span>
+      <span className={styles.designText}>
+        <span className={styles.documentName}>{item.label}</span>
+        <span className={styles.designSub}>{sub}</span>
+      </span>
+      {item.showing ? (
+        <span className={styles.designLive}>{t('liveDocAi.designShowing')}</span>
+      ) : (
+        onShow && <span className={styles.viewAction}>{t('liveDocAi.viewLiveDoc')}</span>
+      )}
+    </>
+  );
+  if (!onShow) {
+    return <div className={`${styles.documentRow} ${styles.designRow}`}>{body}</div>;
+  }
+  return (
+    <div
+      className={`${styles.documentRow} ${styles.designRow} ${item.showing ? styles.documentRowActive : ''}`}
+      role="button"
+      tabIndex={0}
+      onClick={onShow}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onShow();
+        }
+      }}
+    >
+      {body}
+    </div>
+  );
+}
+
+/** "Link" with the upload options: show a Figma or web link to everyone (Design mode). */
+function DesignLinkButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <button type="button" disabled={disabled} onClick={onClick} title={t('liveDocAi.addLinkTip')}>
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+        <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+      </svg>
+      {t('liveDocAi.addLink')}
+    </button>
   );
 }

@@ -11,7 +11,7 @@ import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
-import { LiveDocAiPanel } from './LiveDocAiPanel';
+import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen' | 'design';
@@ -88,8 +88,15 @@ interface KloudMeetToolbarProps {
   hasScreenShare: boolean;
   isDesktop: boolean;
   canSwitchViews: boolean;
-  /** Design mode: show the shared link, or open "Show a link" when there is none */
-  onDesignClick?: () => void;
+  /**
+   * Design mode lives in the LiveDoc panel's Documents tab: the shared link is a row there
+   * (clicking it shows the design), and "Link" sits with the upload options.
+   */
+  designItem?: LiveDocDesignItem | null;
+  /** Switch the stage to the shared design (people who may switch views) */
+  onShowDesign?: () => void;
+  /** Open "Show a link" (people who may switch views) */
+  onAddDesignLink?: () => void;
   /** Webcam 子布局：Tile 宫格 / Spotlight 焦点 */
   webcamLayoutMode?: WebcamLayoutMode;
   onWebcamLayoutChange?: (mode: WebcamLayoutMode) => void;
@@ -199,9 +206,6 @@ const IconChevronUp = () => (
 const IconDoc = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></svg>
 );
-const IconDesign = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11" /><circle cx="14.5" cy="14.5" r="2" /></svg>
-);
 const IconTile = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></svg>
 );
@@ -269,7 +273,9 @@ export function KloudMeetToolbar({
   hasScreenShare,
   isDesktop,
   canSwitchViews,
-  onDesignClick,
+  designItem,
+  onShowDesign,
+  onAddDesignLink,
   webcamLayoutMode: webcamLayoutModeProp,
   onWebcamLayoutChange,
   galleryPrefs,
@@ -1438,28 +1444,6 @@ export function KloudMeetToolbar({
 
       {renderWebcamLayoutMenuItems()}
 
-      {onDesignClick && (
-        <button
-          type="button"
-          role="menuitemradio"
-          aria-checked={activeView === 'design'}
-          className={`${styles.viewModeMenuItem} ${activeView === 'design' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
-          onClick={() => {
-            if (!canSwitchViews) return;
-            onDesignClick();
-            closeViewModeMenu();
-          }}
-        >
-          <IconDesign />
-          <span className={styles.viewModeMenuItemLabel}>{tr('toolbar.design', 'Design')}</span>
-          {activeView === 'design' && (
-            <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          )}
-        </button>
-      )}
-
       {screenShareActive ? (
         <div
           className={`${styles.viewModeMenuItem} ${styles.viewModeShareActiveRow}`}
@@ -1646,24 +1630,6 @@ export function KloudMeetToolbar({
           )}
         </div>
 
-        {onDesignClick && (
-          <button
-            type="button"
-            className={`${styles.seg} ${activeView === 'design' ? styles.segActive : ''} ${lockedClass('design')}`}
-            onClick={() => {
-              if (!showOperatorSegments) return;
-              closeViewModeMenu();
-              onDesignClick();
-            }}
-            aria-pressed={activeView === 'design'}
-            aria-disabled={!showOperatorSegments || undefined}
-            aria-label={tr('toolbar.designTip', 'Show a link to everyone (Figma, web page)')}
-            data-tip={tr('toolbar.designTip', 'Show a link to everyone (Figma, web page)')}
-          >
-            <IconDesign />
-            <span className={styles.segLabel}>{tr('toolbar.design', 'Design')}</span>
-          </button>
-        )}
         </>
         )}
 
@@ -1908,6 +1874,16 @@ export function KloudMeetToolbar({
         onOpenDocument={handleLiveDocDocumentOpen}
         livekitToken={livekitToken}
         requestedTab={liveDocRequestedTab}
+        designItem={designItem}
+        onShowDesign={onShowDesign}
+        onAddDesignLink={
+          onAddDesignLink
+            ? () => {
+                closeLiveDocAiMenu();
+                onAddDesignLink();
+              }
+            : undefined
+        }
       />
 
       {!visible && !syncPlayerActive && (
@@ -2355,7 +2331,6 @@ export function KloudMeetToolbar({
             </div>
             <div className={styles.actionSheetList}>
               <ActiveSheetContent
-              onDesignClick={onDesignClick}
                 activeSheet={activeSheet}
                 activeView={activeView}
                 onViewChange={onViewChange}
@@ -2413,7 +2388,6 @@ export function KloudMeetToolbar({
           </div>
           <div className={styles.desktopPopupMenuList}>
             <ActiveSheetContent
-              onDesignClick={onDesignClick}
               activeSheet={activeSheet}
               activeView={activeView}
               onViewChange={onViewChange}
@@ -2531,7 +2505,6 @@ export function KloudMeetToolbar({
                 ) : (
                   <div className={styles.toolbarBubbleList}>
                     <ActiveSheetContent
-              onDesignClick={onDesignClick}
                       activeSheet={activeSheet}
                       activeView={activeView}
                       onViewChange={onViewChange}
@@ -2765,7 +2738,6 @@ function ActiveSheetContent({
   onOpenDesktopApp,
   isMobile,
   canShowOperatorMenus = false,
-  onDesignClick,
   canDocumentPip = false,
   documentPipEnabled = false,
   onToggleDocumentPip,
@@ -2868,12 +2840,6 @@ function ActiveSheetContent({
             <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               {t('toolbar.webcamGrid')}
-            </button>
-          )}
-          {canShowOperatorMenus && onDesignClick && (
-            <button className={`${styles.actionSheetItem} ${activeView === 'design' ? styles.active : ''}`} onClick={() => { onDesignClick(); setActiveSheet(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M3 9h18M8 9v11" /><circle cx="14.5" cy="14.5" r="2" /></svg>
-              {t('toolbar.design')}
             </button>
           )}
           <button
