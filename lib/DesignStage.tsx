@@ -62,8 +62,14 @@ export function DesignStage({
     setFollowing(true);
     setLocalZoom(1);
     setNoticeOpen(true);
-    const timer = window.setTimeout(() => setNoticeOpen(false), 8000);
-    return () => window.clearTimeout(timer);
+    const noticeTimer = window.setTimeout(() => setNoticeOpen(false), 8000);
+    // Heavy pages (Figma) fire load late and some never do; after a moment let the page show
+    // its own progress instead of covering it.
+    const loadTimer = window.setTimeout(() => setLoaded(true), 6000);
+    return () => {
+      window.clearTimeout(noticeTimer);
+      window.clearTimeout(loadTimer);
+    };
   }, [link.embedUrl]);
 
   React.useEffect(() => {
