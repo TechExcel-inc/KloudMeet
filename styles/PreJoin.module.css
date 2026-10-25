@@ -785,7 +785,22 @@
   gap: 12px;
 }
 
-/* PrejoinSelect: button + listbox */
+/* PrejoinSelect: button + listbox, with an optional hint line under the field */
+.selectGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldHint {
+  margin: 0;
+  padding: 0 16px;
+  color: var(--km-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
 .selectButton {
   flex: 1;
   min-width: 0;
@@ -859,7 +874,7 @@
   align-items: center;
   gap: 12px;
   min-height: 44px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   border-radius: var(--km-radius-sm);
   color: var(--km-text);
   font: 500 15px var(--km-font);
@@ -893,9 +908,23 @@
   color: var(--km-primary);
 }
 
-.selectOptionLabel {
+.selectOptionText {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.selectOptionLabel {
+  line-height: 1.35;
+}
+
+.selectOptionDesc {
+  color: var(--km-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.4;
 }
 
 .selectCheck {
@@ -1352,6 +1381,9 @@
   .stage,
   .panel {
     flex-basis: 100%;
+  }
+  .fieldHint {
+    padding: 0 14px;
   }
   .rowLabel {
     width: 104px;

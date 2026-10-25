@@ -7,6 +7,8 @@ import styles from '../styles/PreJoin.module.css';
 export interface PrejoinSelectOption<T extends string> {
   value: T;
   label: string;
+  /** One short line explaining the choice: shown under the field and in the menu. */
+  description?: string;
   icon: LucideIcon;
 }
 
@@ -28,6 +30,7 @@ export function PrejoinSelect<T extends string>({
   const labelId = `${id}-label`;
   const buttonId = `${id}-button`;
   const listId = `${id}-list`;
+  const hintId = `${id}-hint`;
   const [open, setOpen] = React.useState(false);
   const [activeIndex, setActiveIndex] = React.useState(0);
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -108,65 +111,78 @@ export function PrejoinSelect<T extends string>({
   };
 
   return (
-    <div className={`${styles.rowField} ${styles.selectField}`} ref={rootRef}>
-      <span id={labelId} className={styles.rowLabel}>
-        {label}
-      </span>
-      <button
-        ref={buttonRef}
-        id={buttonId}
-        type="button"
-        className={styles.selectButton}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listId : undefined}
-        aria-labelledby={`${labelId} ${buttonId}`}
-        onClick={() => (open ? close(false) : openList())}
-        onKeyDown={onButtonKeyDown}
-      >
-        <SelectedIcon size={18} className={styles.selectIcon} aria-hidden="true" />
-        <span className={styles.selectValue}>{selected.label}</span>
-        <ChevronDown
-          size={18}
-          className={`${styles.selectChevron}${open ? ` ${styles.selectChevronOpen}` : ''}`}
-          aria-hidden="true"
-        />
-      </button>
-      {open && (
-        <ul
-          ref={listRef}
-          id={listId}
-          role="listbox"
-          tabIndex={-1}
-          aria-labelledby={labelId}
-          aria-activedescendant={`${id}-opt-${activeIndex}`}
-          className={styles.selectMenu}
-          onKeyDown={onListKeyDown}
+    <div className={styles.selectGroup}>
+      <div className={`${styles.rowField} ${styles.selectField}`} ref={rootRef}>
+        <span id={labelId} className={styles.rowLabel}>
+          {label}
+        </span>
+        <button
+          ref={buttonRef}
+          id={buttonId}
+          type="button"
+          className={styles.selectButton}
+          aria-haspopup="listbox"
+          aria-expanded={open}
+          aria-controls={open ? listId : undefined}
+          aria-labelledby={`${labelId} ${buttonId}`}
+          aria-describedby={selected.description ? hintId : undefined}
+          onClick={() => (open ? close(false) : openList())}
+          onKeyDown={onButtonKeyDown}
         >
-          {options.map((option, index) => {
-            const Icon = option.icon;
-            const isSelected = index === selectedIndex;
-            return (
-              <li
-                key={option.value}
-                id={`${id}-opt-${index}`}
-                role="option"
-                aria-selected={isSelected}
-                className={`${styles.selectOption}${index === activeIndex ? ` ${styles.selectOptionActive}` : ''}${isSelected ? ` ${styles.selectOptionSelected}` : ''}`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onClick={() => choose(index)}
-              >
-                <span className={styles.selectOptionIcon}>
-                  <Icon size={18} aria-hidden="true" />
-                </span>
-                <span className={styles.selectOptionLabel}>{option.label}</span>
-                {isSelected && (
-                  <Check size={18} className={styles.selectCheck} aria-hidden="true" />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+          <SelectedIcon size={18} className={styles.selectIcon} aria-hidden="true" />
+          <span className={styles.selectValue}>{selected.label}</span>
+          <ChevronDown
+            size={18}
+            className={`${styles.selectChevron}${open ? ` ${styles.selectChevronOpen}` : ''}`}
+            aria-hidden="true"
+          />
+        </button>
+        {open && (
+          <ul
+            ref={listRef}
+            id={listId}
+            role="listbox"
+            tabIndex={-1}
+            aria-labelledby={labelId}
+            aria-activedescendant={`${id}-opt-${activeIndex}`}
+            className={styles.selectMenu}
+            onKeyDown={onListKeyDown}
+          >
+            {options.map((option, index) => {
+              const Icon = option.icon;
+              const isSelected = index === selectedIndex;
+              return (
+                <li
+                  key={option.value}
+                  id={`${id}-opt-${index}`}
+                  role="option"
+                  aria-selected={isSelected}
+                  className={`${styles.selectOption}${index === activeIndex ? ` ${styles.selectOptionActive}` : ''}${isSelected ? ` ${styles.selectOptionSelected}` : ''}`}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => choose(index)}
+                >
+                  <span className={styles.selectOptionIcon}>
+                    <Icon size={18} aria-hidden="true" />
+                  </span>
+                  <span className={styles.selectOptionText}>
+                    <span className={styles.selectOptionLabel}>{option.label}</span>
+                    {option.description && (
+                      <span className={styles.selectOptionDesc}>{option.description}</span>
+                    )}
+                  </span>
+                  {isSelected && (
+                    <Check size={18} className={styles.selectCheck} aria-hidden="true" />
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+      {selected.description && (
+        <p id={hintId} className={styles.fieldHint}>
+          {selected.description}
+        </p>
       )}
     </div>
   );
