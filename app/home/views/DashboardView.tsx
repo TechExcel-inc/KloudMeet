@@ -45,6 +45,8 @@ function meetingsQuery(
   return qs.toString();
 }
 
+const PAGE_GROUP_SIZE = 5;
+
 export function DashboardView({
   user,
   onSignOut,
@@ -1596,38 +1598,65 @@ export function DashboardView({
                 </span>
               </div>
               <div className={styles.paginationRight}>
-                <button
-                  className={styles.pageArrow}
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  &lt;
-                </button>
                 {(() => {
-                  const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
-                  const pages = [];
-                  for (let i = 1; i <= Math.min(4, totalPages); i++) {
-                    pages.push(
+                  // Pages are shown in groups of PAGE_GROUP_SIZE (1–5, 6–10, …);
+                  // « » jump to the first page of the previous / next group.
+                  const totalPages = Math.max(1, Math.ceil(totalMeetings / pageSize));
+                  const groupStart = Math.floor((page - 1) / PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1;
+                  const groupEnd = Math.min(totalPages, groupStart + PAGE_GROUP_SIZE - 1);
+                  const pageNumbers = [];
+                  for (let i = groupStart; i <= groupEnd; i++) pageNumbers.push(i);
+                  return (
+                    <>
                       <button
-                        key={i}
-                        className={page === i ? styles.pageNumActive : styles.pageNum}
-                        onClick={() => setPage(i)}
+                        className={styles.pageArrow}
+                        disabled={groupStart <= 1}
+                        onClick={() => setPage(groupStart - PAGE_GROUP_SIZE)}
+                        title={`Previous ${PAGE_GROUP_SIZE} pages`}
+                        aria-label={`Previous ${PAGE_GROUP_SIZE} pages`}
                       >
-                        {i}
-                      </button>,
-                    );
-                  }
-                  return pages;
+                        «
+                      </button>
+                      <button
+                        className={styles.pageArrow}
+                        disabled={page <= 1}
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        title="Previous page"
+                        aria-label="Previous page"
+                      >
+                        ‹
+                      </button>
+                      {pageNumbers.map((i) => (
+                        <button
+                          key={i}
+                          className={page === i ? styles.pageNumActive : styles.pageNum}
+                          aria-current={page === i ? 'page' : undefined}
+                          onClick={() => setPage(i)}
+                        >
+                          {i}
+                        </button>
+                      ))}
+                      <button
+                        className={styles.pageArrow}
+                        disabled={page >= totalPages}
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        title="Next page"
+                        aria-label="Next page"
+                      >
+                        ›
+                      </button>
+                      <button
+                        className={styles.pageArrow}
+                        disabled={groupEnd >= totalPages}
+                        onClick={() => setPage(groupEnd + 1)}
+                        title={`Next ${PAGE_GROUP_SIZE} pages`}
+                        aria-label={`Next ${PAGE_GROUP_SIZE} pages`}
+                      >
+                        »
+                      </button>
+                    </>
+                  );
                 })()}
-                <button
-                  className={styles.pageArrow}
-                  disabled={page >= Math.ceil(totalMeetings / pageSize)}
-                  onClick={() =>
-                    setPage((p) => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))
-                  }
-                >
-                  &gt;
-                </button>
               </div>
             </div>
           </div>

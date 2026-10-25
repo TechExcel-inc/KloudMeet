@@ -8,7 +8,11 @@
 .main {
   min-height: 100vh;
   display: flex;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family:
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
   background: transparent;
   color: #1e1e2e;
   overflow: auto;
@@ -48,7 +52,7 @@
   left: 5%;
   width: 60vw;
   height: 60vw;
-  background: radial-gradient(circle, rgba(82,39,211, 0.2) 0%, rgba(82,39,211, 0) 70%);
+  background: radial-gradient(circle, rgba(82, 39, 211, 0.2) 0%, rgba(82, 39, 211, 0) 70%);
   max-width: 900px;
   max-height: 900px;
 }
@@ -65,8 +69,12 @@
 }
 
 @keyframes glowFloat {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(40px, -40px) scale(1.08); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  100% {
+    transform: translate(40px, -40px) scale(1.08);
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -94,7 +102,7 @@
   -webkit-backdrop-filter: blur(24px);
   background: rgba(255, 255, 255, 0.3);
   border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-  box-shadow: 0 1px 12px rgba(82,39,211, 0.04);
+  box-shadow: 0 1px 12px rgba(82, 39, 211, 0.04);
 }
 
 .navInner {
@@ -179,7 +187,9 @@
   background: transparent;
   color: #475569;
   cursor: pointer;
-  transition: background 0.2s, color 0.2s;
+  transition:
+    background 0.2s,
+    color 0.2s;
   font-family: inherit;
   font-size: 0.85rem;
   font-weight: 600;
@@ -187,12 +197,12 @@
 }
 
 .topNavIconBtn:hover {
-  background: rgba(82,39,211, 0.08);
+  background: rgba(82, 39, 211, 0.08);
   color: #4f46e5;
 }
 
 .topNavIconBtnActive {
-  background: rgba(82,39,211, 0.12);
+  background: rgba(82, 39, 211, 0.12);
   color: #4f46e5;
 }
 
@@ -267,14 +277,16 @@
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  background: linear-gradient(135deg, #5227D3 0%, #7C55F1 100%);
+  background: linear-gradient(135deg, #5227d3 0%, #7c55f1 100%);
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
   font-weight: 800;
   font-size: 17px;
-  box-shadow: 0 6px 18px rgba(82,39,211,0.3), inset 0 1px 1px rgba(255,255,255,0.25);
+  box-shadow:
+    0 6px 18px rgba(82, 39, 211, 0.3),
+    inset 0 1px 1px rgba(255, 255, 255, 0.25);
   flex-shrink: 0;
 }
 
@@ -286,7 +298,7 @@
 }
 
 .anonTitle {
-  font-size: 2.0rem;
+  font-size: 2rem;
   font-weight: 800;
   margin: 0 0 1rem;
   text-align: center;
@@ -340,7 +352,10 @@
   border-radius: 14px;
   font-size: 0.97rem;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s,
+    background 0.2s;
   font-family: inherit;
   background: rgba(255, 255, 255, 0.85);
   color: #1e1e2e;
@@ -351,7 +366,7 @@
 }
 
 .anonJoinInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
   background: #fff;
   box-shadow: 0 0 0 4px rgba(82, 39, 211, 0.1);
 }
@@ -365,12 +380,15 @@
   padding: 0.85rem 1.25rem;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(135deg, #5227D3 0%, #7c55f1 100%);
+  background: linear-gradient(135deg, #5227d3 0%, #7c55f1 100%);
   color: #fff;
   font-weight: 700;
   font-size: 0.97rem;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.2s, box-shadow 0.2s;
+  transition:
+    opacity 0.2s,
+    transform 0.2s,
+    box-shadow 0.2s;
   font-family: inherit;
   white-space: nowrap;
   box-shadow: 0 4px 14px rgba(82, 39, 211, 0.35);
@@ -404,7 +422,9 @@
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
-  transition: background 0.2s, box-shadow 0.2s;
+  transition:
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
 .anonSignInBtn:hover {
@@ -452,21 +472,21 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.9rem 1.15rem;
-  border: 1px solid rgba(255,255,255,0.5);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 14px;
   margin-bottom: 0.65rem;
-  background: rgba(255,255,255,0.6);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.03);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
 }
 
 .recentCard:hover {
-  border-color: rgba(82,39,211,0.35);
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 6px 18px rgba(82,39,211,0.1);
+  border-color: rgba(82, 39, 211, 0.35);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 6px 18px rgba(82, 39, 211, 0.1);
   transform: translateY(-2px);
 }
 
@@ -508,7 +528,9 @@
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.8);
   padding: 2rem 2.5rem;
-  box-shadow: 0 20px 40px rgba(17, 24, 39, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+  box-shadow:
+    0 20px 40px rgba(17, 24, 39, 0.08),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.5);
   position: relative;
   overflow: hidden;
 }
@@ -535,18 +557,18 @@
 .fieldInput {
   width: 100%;
   padding: 0.85rem 1.1rem;
-  border: 1.5px solid rgba(226,229,235,0.9);
+  border: 1.5px solid rgba(226, 229, 235, 0.9);
   border-radius: 14px;
   font-size: 0.97rem;
   outline: none;
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
   font-family: inherit;
   margin-bottom: 1.1rem;
   box-sizing: border-box;
-  background: rgba(255,255,255,0.85);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.02);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
   color: #1e1e2e;
 }
 
@@ -555,21 +577,23 @@
 }
 
 .fieldInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
   background: #fff;
-  box-shadow: 0 0 0 4px rgba(82,39,211,0.1), inset 0 2px 4px rgba(0,0,0,0.01);
+  box-shadow:
+    0 0 0 4px rgba(82, 39, 211, 0.1),
+    inset 0 2px 4px rgba(0, 0, 0, 0.01);
 }
 
 .fieldInputError {
   composes: fieldInput;
   border-color: #ef4444;
-  background-color: rgba(254,242,242,0.9);
-  box-shadow: 0 0 0 4px rgba(239,68,68,0.08);
+  background-color: rgba(254, 242, 242, 0.9);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.08);
 }
 
 .fieldInputError:focus {
   border-color: #dc2626;
-  box-shadow: 0 0 0 4px rgba(220,38,38,0.12);
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
 }
 
 .forgotRow {
@@ -581,7 +605,7 @@
 .linkBtn {
   background: none;
   border: none;
-  color: #5227D3;
+  color: #5227d3;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -600,21 +624,25 @@
   padding: 0.9rem;
   border: none;
   border-radius: 14px;
-  background: linear-gradient(135deg, #5227D3 0%, #7C55F1 100%);
+  background: linear-gradient(135deg, #5227d3 0%, #7c55f1 100%);
   color: #fff;
   font-weight: 700;
   font-size: 1rem;
   cursor: pointer;
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
   font-family: inherit;
   margin-bottom: 1.1rem;
-  box-shadow: 0 4px 14px rgba(82,39,211,0.35), inset 0 1px 1px rgba(255,255,255,0.2);
+  box-shadow:
+    0 4px 14px rgba(82, 39, 211, 0.35),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
   letter-spacing: 0.01em;
 }
 
 .loginSubmit:hover {
   transform: translateY(-2px) scale(1.01);
-  box-shadow: 0 8px 22px rgba(82,39,211,0.45), inset 0 1px 1px rgba(255,255,255,0.2);
+  box-shadow:
+    0 8px 22px rgba(82, 39, 211, 0.45),
+    inset 0 1px 1px rgba(255, 255, 255, 0.2);
 }
 
 .loginSubmit:active {
@@ -654,9 +682,9 @@
   align-items: center;
   gap: 0.55rem;
   padding: 0.65rem 1.35rem;
-  border: 1px solid rgba(255,255,255,0.55);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   border-radius: 14px;
-  background: rgba(255,255,255,0.65);
+  background: rgba(255, 255, 255, 0.65);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   color: #374151;
@@ -665,17 +693,17 @@
   font-family: inherit;
   cursor: pointer;
   text-decoration: none;
-  transition: all 0.25s cubic-bezier(0.25,0.8,0.25,1);
+  transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
   white-space: nowrap;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
 }
 
 .downloadBtn:hover {
-  border-color: rgba(82,39,211,0.45);
-  background: rgba(255,255,255,0.95);
-  box-shadow: 0 6px 18px rgba(82,39,211,0.12);
+  border-color: rgba(82, 39, 211, 0.45);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 6px 18px rgba(82, 39, 211, 0.12);
   transform: translateY(-2px);
-  color: #5227D3;
+  color: #5227d3;
 }
 
 .downloadBtnIcon {
@@ -847,7 +875,9 @@
   background: white;
   z-index: 100;
   border-radius: 12px;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  box-shadow:
+    0 10px 15px -3px rgba(0, 0, 0, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
   border: 1px solid #e2e8f0;
   min-width: 250px;
   z-index: 100;
@@ -858,7 +888,7 @@
   padding: 0.5rem 0;
 }
 
-.orgDropdownSection+.orgDropdownSection {
+.orgDropdownSection + .orgDropdownSection {
   border-top: 1px solid #f1f5f9;
 }
 
@@ -929,7 +959,7 @@
 }
 
 .anonLink:hover {
-  border-color: #5227D3;
+  border-color: #5227d3;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -992,7 +1022,7 @@
 .dashSignOut {
   background: none;
   border: none;
-  color: #5227D3;
+  color: #5227d3;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -1019,12 +1049,14 @@
   padding: 0.85rem 1.5rem;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #5227D3, #5227D3);
+  background: linear-gradient(135deg, #5227d3, #5227d3);
   color: #fff;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
-  transition: opacity 0.2s, transform 0.15s;
+  transition:
+    opacity 0.2s,
+    transform 0.15s;
   font-family: inherit;
   white-space: nowrap;
 }
@@ -1054,7 +1086,7 @@
 }
 
 .dashJoinInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
 }
 
 .dashJoinBtn {
@@ -1062,7 +1094,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.85rem 1.5rem;
-  border: 1.5px solid #5227D3;
+  border: 1.5px solid #5227d3;
   border-radius: 0 12px 12px 0;
   background: #1e1e2e;
   color: #fff;
@@ -1111,12 +1143,14 @@
   font-size: 0.9rem;
   outline: none;
   width: 180px;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") 0.65rem center / 16px 16px no-repeat;
+  background: #fff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E")
+    0.65rem center / 16px 16px no-repeat;
   font-family: inherit;
 }
 
 .dashSearchInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
 }
 
 .scheduleBtn {
@@ -1128,7 +1162,7 @@
   padding: 0;
   border: none;
   border-radius: 10px;
-  background: linear-gradient(135deg, #5227D3, #8b5cf6);
+  background: linear-gradient(135deg, #5227d3, #8b5cf6);
   color: #fff;
   cursor: pointer;
   transition: all 0.2s;
@@ -1138,7 +1172,7 @@
 .scheduleBtn:hover {
   opacity: 0.88;
   transform: scale(1.05);
-  box-shadow: 0 4px 14px rgba(82,39,211,0.35);
+  box-shadow: 0 4px 14px rgba(82, 39, 211, 0.35);
 }
 
 /* Row Action Hover Classes */
@@ -1154,7 +1188,9 @@
 .hoverAction {
   opacity: 0;
   transform: translateX(10px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .recentCard:hover .hoverAction,
@@ -1291,7 +1327,9 @@
   padding: 2rem;
   width: 90%;
   max-width: 450px;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  box-shadow:
+    0 20px 25px -5px rgba(0, 0, 0, 0.1),
+    0 10px 10px -5px rgba(0, 0, 0, 0.04);
   border: 1px solid #e2e8f0;
   position: relative;
   animation: modalIn 0.25s ease-out;
@@ -1495,7 +1533,7 @@
   width: 26px;
   height: 26px;
   border-radius: 50%;
-  background: #5227D3;
+  background: #5227d3;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1604,10 +1642,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 1rem 1.5rem;
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.3);
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.75rem 1.25rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   margin-top: 0.5rem;
@@ -1621,71 +1661,143 @@
 }
 
 .pageSizeSelect {
-  padding: 0.35rem 0.5rem;
+  padding: 0.35rem 0.6rem;
   border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
+  font-weight: 500;
   color: #374151;
   background: #fff;
   cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.pageSizeSelect:focus {
+  border-color: #8b5cf6;
 }
 
 .totalFiles {
   font-size: 0.8rem;
+  font-weight: 500;
   color: #6b7280;
+  white-space: nowrap;
 }
 
 .paginationRight {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
+/* ‹ › step one page; « » jump to the previous / next group of pages */
 .pageArrow {
+  min-width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0.4rem;
   background: transparent;
-  border: none;
-  color: #9ca3af;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: #4b5563;
   font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  padding: 0.25rem 0.5rem;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .pageArrow:hover:not(:disabled) {
-  color: #4b5563;
+  background: #f3f4f6;
+  color: #111827;
 }
 
 .pageArrow:disabled {
-  opacity: 0.5;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .pageNum {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 0.35rem;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.8rem;
-  font-weight: 500;
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: inherit;
   color: #4b5563;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
   cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s,
+    border-color 0.15s;
 }
 
 .pageNum:hover {
   background: #f3f4f6;
+  color: #111827;
 }
 
 .pageNumActive {
   composes: pageNum;
-  background: #4f46e5;
+  background: linear-gradient(135deg, #8b5cf6 0%, #5227d3 100%);
   color: #fff;
+  box-shadow: 0 2px 8px rgba(82, 39, 211, 0.3);
 }
 
 .pageNumActive:hover {
-  background: #4338ca;
+  background: linear-gradient(135deg, #8b5cf6 0%, #5227d3 100%);
+  color: #fff;
+}
+
+/* Dark theme pager: dark surface, white text */
+:global(html[data-theme='dark']) .paginationFooter {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(71, 85, 105, 0.58);
+}
+
+:global(html[data-theme='dark']) .pageSizeSelect {
+  background: #0f172a;
+  border-color: #334155;
+  color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .pageSizeSelect option {
+  background: #0f172a;
+  color: #f1f5f9;
+}
+
+:global(html[data-theme='dark']) .totalFiles {
+  color: #cbd5e1;
+}
+
+:global(html[data-theme='dark']) .pageArrow,
+:global(html[data-theme='dark']) .pageNum {
+  color: #e2e8f0;
+}
+
+:global(html[data-theme='dark']) .pageArrow:hover:not(:disabled),
+:global(html[data-theme='dark']) .pageNum:hover {
+  background: #1e293b;
+  border-color: #334155;
+  color: #fff;
+}
+
+:global(html[data-theme='dark']) .pageNumActive,
+:global(html[data-theme='dark']) .pageNumActive:hover {
+  background: linear-gradient(135deg, #8b5cf6 0%, #5227d3 100%);
+  border-color: transparent;
+  color: #fff;
 }
 
 .signupSteps {
@@ -1701,18 +1813,20 @@
   height: 10px;
   border-radius: 50%;
   background: #e2e5eb;
-  transition: background 0.3s, transform 0.3s;
+  transition:
+    background 0.3s,
+    transform 0.3s;
 }
 
 .signupStepDotActive {
   composes: signupStepDot;
-  background: #5227D3;
+  background: #5227d3;
   transform: scale(1.2);
 }
 
 .signupStepDotDone {
   composes: signupStepDot;
-  background: #5227D3;
+  background: #5227d3;
 }
 
 .signupStepLine {
@@ -1724,7 +1838,7 @@
 
 .signupStepLineDone {
   composes: signupStepLine;
-  background: #5227D3;
+  background: #5227d3;
 }
 
 /* Back button */
@@ -1734,7 +1848,7 @@
   gap: 0.35rem;
   background: none;
   border: none;
-  color: #5227D3;
+  color: #5227d3;
   font-weight: 600;
   font-size: 0.85rem;
   cursor: pointer;
@@ -1765,7 +1879,7 @@
 }
 
 .verifyCodeInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
 }
 
 .verifyCodeInput::placeholder {
@@ -1778,7 +1892,7 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #5227D3, #5227D3);
+  background: linear-gradient(135deg, #5227d3, #5227d3);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1931,7 +2045,9 @@
   background: rgba(255, 255, 255, 0.65);
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 20px rgba(82,39,211, 0.07), 0 1px 4px rgba(0,0,0,0.03);
+  box-shadow:
+    0 4px 20px rgba(82, 39, 211, 0.07),
+    0 1px 4px rgba(0, 0, 0, 0.03);
   padding: 0.9rem 1.25rem;
   width: 100%;
   margin: 0 auto 0.75rem;
@@ -1964,7 +2080,7 @@
   font-size: 0.95rem;
   font-family: inherit;
   outline: none;
-  background: rgba(255,255,255,0.6);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(8px);
   color: #1e293b;
   transition: all 0.25s ease;
@@ -1975,9 +2091,9 @@
 }
 
 .quickJoinInput:focus {
-  border-color: #5227D3;
-  background: rgba(255,255,255,0.92);
-  box-shadow: 0 0 0 3px rgba(82,39,211,0.12);
+  border-color: #5227d3;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 3px rgba(82, 39, 211, 0.12);
 }
 
 .quickJoinBtn {
@@ -1990,7 +2106,7 @@
   border: 1.5px solid #a5b4fc;
   border-radius: 12px;
   background: rgba(238, 242, 255, 0.95);
-  color: #5227D3;
+  color: #5227d3;
   font-weight: 800;
   font-size: 0.925rem;
   cursor: pointer;
@@ -2001,9 +2117,9 @@
 
 .quickJoinBtn:hover:not(:disabled) {
   background: rgba(224, 231, 255, 1);
-  border-color: #5227D3;
-  color: #5227D3;
-  box-shadow: 0 2px 10px rgba(82,39,211,0.2);
+  border-color: #5227d3;
+  color: #5227d3;
+  box-shadow: 0 2px 10px rgba(82, 39, 211, 0.2);
 }
 
 .quickJoinBtn:disabled {
@@ -2037,21 +2153,21 @@
   padding: 0 1.5rem;
   border: none;
   border-radius: 12px;
-  background: linear-gradient(135deg, #5227D3 0%, #8b5cf6 100%);
+  background: linear-gradient(135deg, #5227d3 0%, #8b5cf6 100%);
   color: #fff;
   font-weight: 600;
   font-size: 0.95rem;
   cursor: pointer;
   font-family: inherit;
   white-space: nowrap;
-  box-shadow: 0 4px 14px rgba(82,39,211,0.3);
+  box-shadow: 0 4px 14px rgba(82, 39, 211, 0.3);
   transition: all 0.25s ease;
 }
 
 .quickNewBtn:hover {
   opacity: 0.92;
   transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(82,39,211,0.4);
+  box-shadow: 0 8px 20px rgba(82, 39, 211, 0.4);
 }
 
 .quickPersonalRoomBtn {
@@ -2142,8 +2258,8 @@
 
 .meetingTabActive {
   composes: meetingTab;
-  color: #5227D3;
-  border-bottom-color: #5227D3;
+  color: #5227d3;
+  border-bottom-color: #5227d3;
   font-weight: 600;
 }
 
@@ -2187,7 +2303,10 @@
   min-width: 0;
   box-sizing: border-box;
   box-shadow: inset 0 0 1px 1px rgba(255, 255, 255, 0.5);
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition:
+    border-color 0.2s,
+    background 0.2s,
+    box-shadow 0.2s;
 }
 
 .meetingSearchInput::placeholder {
@@ -2195,9 +2314,9 @@
 }
 
 .meetingSearchInput:focus {
-  border-color: #5227D3;
+  border-color: #5227d3;
   background: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 0 0 3px rgba(82,39,211,0.1);
+  box-shadow: 0 0 0 3px rgba(82, 39, 211, 0.1);
 }
 
 /* Filter funnel button */
@@ -2220,13 +2339,13 @@
 .filterBtn:hover {
   background: rgba(255, 255, 255, 0.75);
   border-color: #a5b4fc;
-  color: #5227D3;
+  color: #5227d3;
 }
 
 .filterBtnActive {
   background: rgba(82, 39, 211, 0.1);
-  border-color: #5227D3;
-  color: #5227D3;
+  border-color: #5227d3;
+  color: #5227d3;
 }
 
 .filterWrap {
@@ -2312,7 +2431,7 @@
 }
 
 .filterOptionActive .filterCheck {
-  color: #5227D3;
+  color: #5227d3;
 }
 
 /* ═══════════════════════════════════════════════════
@@ -2376,21 +2495,24 @@
   position: relative;
   scroll-margin-top: 220px;
   scroll-margin-bottom: 16px;
-  background: rgba(255,255,255,0.55);
+  background: rgba(255, 255, 255, 0.55);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(226,232,240,0.65);
+  border: 1px solid rgba(226, 232, 240, 0.65);
   border-radius: 14px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
-  ring: 1px solid rgba(255,255,255,0.75);
-  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  ring: 1px solid rgba(255, 255, 255, 0.75);
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    box-shadow 0.2s;
   cursor: pointer;
 }
 
 .meetingCard:hover {
-  background: rgba(255,255,255,0.75);
-  border-color: rgba(203,213,225,0.85);
-  box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(203, 213, 225, 0.85);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
 }
 
 /* Selected row (click or arrow keys) */
@@ -2402,7 +2524,9 @@
 .meetingCardSelected:hover {
   background: rgba(245, 243, 255, 0.9);
   border-color: #a78bfa;
-  box-shadow: 0 0 0 1px #a78bfa, 0 4px 16px rgba(82, 39, 211, 0.1);
+  box-shadow:
+    0 0 0 1px #a78bfa,
+    0 4px 16px rgba(82, 39, 211, 0.1);
 }
 
 /* Small quiet label on the details line (e.g. recording "Private") */
@@ -2422,9 +2546,11 @@
 /* Live card variant */
 .meetingCardLive {
   composes: meetingCard;
-  background: rgba(255,255,255,0.96) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
   border: 2px solid #c4b5fd !important;
-  box-shadow: 0 8px 24px rgba(139,92,246,0.12), 0 0 0 1px rgba(255,255,255,0.9) !important;
+  box-shadow:
+    0 8px 24px rgba(139, 92, 246, 0.12),
+    0 0 0 1px rgba(255, 255, 255, 0.9) !important;
 }
 
 /* Live badge */
@@ -2437,12 +2563,12 @@
   gap: 5px;
   padding: 3px 10px;
   border-radius: 100px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #5227D3 100%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #5227d3 100%);
   color: #fff;
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  box-shadow: 0 4px 10px rgba(82,39,211,0.3);
+  box-shadow: 0 4px 10px rgba(82, 39, 211, 0.3);
   z-index: 1;
 }
 
@@ -2457,8 +2583,15 @@
 }
 
 @keyframes livePulse {
-  0%, 100% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.3); opacity: 0.6; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.6;
+  }
 }
 
 /* Card inner layout */
@@ -2525,7 +2658,7 @@
 }
 
 .meetingCodeBtn:hover {
-  color: #5227D3;
+  color: #5227d3;
 }
 
 .meetingCardActions {
@@ -2542,7 +2675,9 @@
   gap: 0.4rem;
   opacity: 0;
   transform: translateX(8px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
   pointer-events: none;
 }
 
@@ -2578,7 +2713,7 @@
   border: 1.5px solid #c7d2fe;
   border-radius: 100px;
   background: transparent;
-  color: #5227D3;
+  color: #5227d3;
   font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
@@ -2601,13 +2736,13 @@
   padding: 0 16px;
   border: none;
   border-radius: 100px;
-  background: linear-gradient(135deg, #8b5cf6 0%, #5227D3 100%);
+  background: linear-gradient(135deg, #8b5cf6 0%, #5227d3 100%);
   color: #fff;
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
   font-family: inherit;
-  box-shadow: 0 4px 12px rgba(82,39,211,0.3);
+  box-shadow: 0 4px 12px rgba(82, 39, 211, 0.3);
   transition: all 0.2s;
   white-space: nowrap;
 }
@@ -2615,7 +2750,7 @@
 .joinNowBtn:hover {
   opacity: 0.9;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(82,39,211,0.4);
+  box-shadow: 0 6px 16px rgba(82, 39, 211, 0.4);
 }
 
 /* Play recording button */
@@ -2743,10 +2878,10 @@
   text-align: center;
   color: #cbd5e1;
   font-size: 0.95rem;
-  background: linear-gradient(180deg, rgba(15,23,42,0.82), rgba(30,41,59,0.68));
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.82), rgba(30, 41, 59, 0.68));
   border-radius: 16px;
-  border: 1px solid rgba(71,85,105,0.34);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+  border: 1px solid rgba(71, 85, 105, 0.34);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .meetingLoadingSpinner {
@@ -2754,7 +2889,7 @@
   height: 42px;
   margin-bottom: 0.9rem;
   border-radius: 50%;
-  border: 3px solid rgba(203,213,225,0.16);
+  border: 3px solid rgba(203, 213, 225, 0.16);
   border-top-color: #8b5cf6;
   animation: spin 0.8s linear infinite;
 }
@@ -2790,10 +2925,10 @@
   text-align: center;
   color: #94a3b8;
   font-size: 0.9rem;
-  background: rgba(255,255,255,0.5);
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(8px);
   border-radius: 16px;
-  border: 1px solid rgba(226,232,240,0.6);
+  border: 1px solid rgba(226, 232, 240, 0.6);
 }
 
 .meetingEmptyLogo {
@@ -2816,8 +2951,10 @@
 
 :global(html[data-theme='dark']) .meetingEmptyState {
   background: linear-gradient(180deg, rgba(23, 30, 53, 0.94), rgba(15, 23, 42, 0.86));
-  border: 1px solid rgba(71,85,105,0.48);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 50px rgba(2,6,23,0.26);
+  border: 1px solid rgba(71, 85, 105, 0.48);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 50px rgba(2, 6, 23, 0.26);
 }
 
 :global(html[data-theme='dark']) .meetingEmptyTitle {
@@ -3023,7 +3160,6 @@
    Mobile ≤ 640px — Figma Meeting List Design
    ═══════════════════════════════════════════════════ */
 @media (max-width: 640px) {
-
   /* ── Nav bar ── */
   .navInner {
     height: 56px;
@@ -3086,7 +3222,7 @@
     align-items: center;
     gap: 5px;
     font-size: 0.82rem;
-    color: #5227D3;
+    color: #5227d3;
     background: none;
     border: none;
     padding: 0;
@@ -3157,23 +3293,41 @@
    ═══════════════════════════════════════════════════ */
 
 /* Desktop: org button, help, lang — always visible above 640px */
-.navOrgDesktop  { display: flex; }
-.navHelpDesktop { display: flex; }
-.navLangDesktop { display: block; }
+.navOrgDesktop {
+  display: flex;
+}
+.navHelpDesktop {
+  display: flex;
+}
+.navLangDesktop {
+  display: block;
+}
 
 /* Ensure visible on desktop even if other rules interfere */
 @media (min-width: 641px) {
-  .navOrgDesktop  { display: flex !important; }
-  .navHelpDesktop { display: flex !important; }
-  .navLangDesktop { display: block !important; }
+  .navOrgDesktop {
+    display: flex !important;
+  }
+  .navHelpDesktop {
+    display: flex !important;
+  }
+  .navLangDesktop {
+    display: block !important;
+  }
 }
 
 /* Avatar menu mobile header: hidden on desktop */
-.navAvatarMenuMobileHeader { display: none; }
-.navAvatarMenuOrgName { display: none; }
+.navAvatarMenuMobileHeader {
+  display: none;
+}
+.navAvatarMenuOrgName {
+  display: none;
+}
 
 /* mobileHidden: hide on mobile, visible on desktop */
-.mobileHidden { display: flex; }
+.mobileHidden {
+  display: flex;
+}
 
 /* 宽屏桌面：横排布局 */
 @media (min-width: 901px) {
@@ -3216,7 +3370,6 @@
    Mobile ≤ 640px — TopNav & Misc extras
    ═══════════════════════════════════════════════════ */
 @media (max-width: 640px) {
-
   /* ── NavInner: standard flex, smaller height on mobile ── */
   .navInner {
     display: flex;
@@ -3242,11 +3395,16 @@
     width: auto;
   }
 
-
   /* ── Hide org, help, lang on mobile ── */
-  .navOrgDesktop  { display: none !important; }
-  .navHelpDesktop { display: none !important; }
-  .navLangDesktop { display: none !important; }
+  .navOrgDesktop {
+    display: none !important;
+  }
+  .navHelpDesktop {
+    display: none !important;
+  }
+  .navLangDesktop {
+    display: none !important;
+  }
 
   /* ── Avatar menu: show org name at top on mobile ── */
   .navAvatarMenuMobileHeader {
@@ -3296,7 +3454,7 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.6rem 1rem 0.85rem;
-    border-top: 1px solid rgba(226,232,240,0.6);
+    border-top: 1px solid rgba(226, 232, 240, 0.6);
     flex-wrap: wrap;
   }
 
@@ -3309,7 +3467,7 @@
     border: 1.5px solid #c7d2fe;
     border-radius: 100px;
     background: transparent;
-    color: #5227D3;
+    color: #5227d3;
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
@@ -3515,7 +3673,9 @@
 :global(html[data-theme='dark']) .meetingCardSelected:hover {
   background: rgba(76, 29, 149, 0.28) !important;
   border-color: #8b5cf6 !important;
-  box-shadow: 0 0 0 1px #8b5cf6, 0 8px 20px rgba(2, 6, 23, 0.35) !important;
+  box-shadow:
+    0 0 0 1px #8b5cf6,
+    0 8px 20px rgba(2, 6, 23, 0.35) !important;
 }
 
 :global(html[data-theme='dark']) .meetingMetaTag {
@@ -3659,7 +3819,9 @@
 :global(html[data-theme='dark']) .authCard {
   background: linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(2, 6, 23, 0.92) 100%);
   border: 1px solid rgba(71, 85, 105, 0.78);
-  box-shadow: 0 24px 46px rgba(2, 6, 23, 0.62), inset 0 1px 0 rgba(148, 163, 184, 0.08);
+  box-shadow:
+    0 24px 46px rgba(2, 6, 23, 0.62),
+    inset 0 1px 0 rgba(148, 163, 184, 0.08);
 }
 
 :global(html[data-theme='dark']) .loginTitle {
@@ -3701,7 +3863,9 @@
 :global(html[data-theme='dark']) .verifyCodeInput:focus {
   border-color: #818cf8;
   background: rgba(15, 23, 42, 0.95);
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.24), inset 0 2px 4px rgba(2, 6, 23, 0.2);
+  box-shadow:
+    0 0 0 4px rgba(99, 102, 241, 0.24),
+    inset 0 2px 4px rgba(2, 6, 23, 0.2);
 }
 
 :global(html[data-theme='dark']) .fieldInputError {
