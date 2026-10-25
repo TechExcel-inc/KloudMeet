@@ -2,7 +2,11 @@
 
 import React from 'react';
 import { Track } from 'livekit-client';
-import { MediaDeviceMenu, usePersistentUserChoices, usePreviewTracks } from '@livekit/components-react';
+import {
+  MediaDeviceMenu,
+  usePersistentUserChoices,
+  usePreviewTracks,
+} from '@livekit/components-react';
 import type { LocalUserChoices } from '@livekit/components-react';
 import { ChevronDown, Mic, MicOff, TriangleAlert, Video, VideoOff, Volume2 } from 'lucide-react';
 import styles from '../styles/PreJoin.module.css';
@@ -32,8 +36,12 @@ export interface KloudPreJoinProps {
   joinFooter?: React.ReactNode;
   /** Rendered at the bottom of the right column (share link, desktop app entry). */
   footer?: React.ReactNode;
+  /** Rendered above the name field (host meeting settings). */
+  beforeName?: React.ReactNode;
   /** Rendered between the name field and the join button (host options). */
   children?: React.ReactNode;
+  /** Small note rendered after the device chips, beside the camera (e.g. "No one else is here yet"). */
+  nobodyHereText?: React.ReactNode;
 }
 
 type DeviceStatus = 'off' | 'starting' | 'live' | 'error';
@@ -43,11 +51,18 @@ type DeviceStatus = 'off' | 'starting' | 'live' | 'error';
  * attempt fails or the device is turned off, so "live" is tracked per attempt, not inferred
  * from whether a track exists.
  */
-function useDevicePreview(kind: 'audio' | 'video', enabled: boolean, deviceId: string, onError?: (e: Error) => void) {
+function useDevicePreview(
+  kind: 'audio' | 'video',
+  enabled: boolean,
+  deviceId: string,
+  onError?: (e: Error) => void,
+) {
   const attempt = enabled ? `${kind}:${deviceId}` : 'off';
   const attemptRef = React.useRef(attempt);
   attemptRef.current = attempt;
-  const [result, setResult] = React.useState<{ attempt: string; issue?: DeviceIssue; track?: any }>({ attempt: 'off' });
+  const [result, setResult] = React.useState<{ attempt: string; issue?: DeviceIssue; track?: any }>(
+    { attempt: 'off' },
+  );
 
   const handleError = React.useCallback(
     (error: Error) => {
@@ -66,12 +81,20 @@ function useDevicePreview(kind: 'audio' | 'video', enabled: boolean, deviceId: s
   );
 
   React.useEffect(() => {
-    const track = tracks?.find((t) => t.kind === (kind === 'audio' ? Track.Kind.Audio : Track.Kind.Video));
+    const track = tracks?.find(
+      (t) => t.kind === (kind === 'audio' ? Track.Kind.Audio : Track.Kind.Video),
+    );
     if (track && attemptRef.current !== 'off') setResult({ attempt: attemptRef.current, track });
   }, [tracks, kind]);
 
   const current = result.attempt === attempt ? result : undefined;
-  const status: DeviceStatus = !enabled ? 'off' : current?.issue ? 'error' : current?.track ? 'live' : 'starting';
+  const status: DeviceStatus = !enabled
+    ? 'off'
+    : current?.issue
+      ? 'error'
+      : current?.track
+        ? 'live'
+        : 'starting';
   return { status, issue: current?.issue, track: status === 'live' ? current?.track : undefined };
 }
 
@@ -79,7 +102,10 @@ function useDevicePreview(kind: 'audio' | 'video', enabled: boolean, deviceId: s
  * Writes the microphone's loudness (0–1) to `--km-level` on the given elements, so CSS can
  * animate a speaking ring without re-rendering React on every frame.
  */
-function useMicLevel(mediaStreamTrack: MediaStreamTrack | undefined, targets: React.RefObject<HTMLElement | null>[]) {
+function useMicLevel(
+  mediaStreamTrack: MediaStreamTrack | undefined,
+  targets: React.RefObject<HTMLElement | null>[],
+) {
   React.useEffect(() => {
     const els = () => targets.map((r) => r.current).filter(Boolean) as HTMLElement[];
     const reset = () => els().forEach((el) => el.style.setProperty('--km-level', '0'));
@@ -213,7 +239,9 @@ export function KloudPreJoin({
   subtitleIsNotice = false,
   joinFooter,
   footer,
+  beforeName,
   children,
+  nobodyHereText,
 }: KloudPreJoinProps) {
   const tf = useTextWithFallback();
   const canUseMediaDevices =
@@ -236,9 +264,15 @@ export function KloudPreJoin({
     forceAudioEnabled ? true : initialUserChoices.audioEnabled,
   );
   const [videoEnabled, setVideoEnabled] = React.useState<boolean>(initialUserChoices.videoEnabled);
-  const [audioDeviceId, setAudioDeviceId] = React.useState<string>(initialUserChoices.audioDeviceId);
-  const [videoDeviceId, setVideoDeviceId] = React.useState<string>(initialUserChoices.videoDeviceId);
-  const [outputDeviceId, setOutputDeviceId] = React.useState<string>(() => loadAudioOutputDeviceId() ?? 'default');
+  const [audioDeviceId, setAudioDeviceId] = React.useState<string>(
+    initialUserChoices.audioDeviceId,
+  );
+  const [videoDeviceId, setVideoDeviceId] = React.useState<string>(
+    initialUserChoices.videoDeviceId,
+  );
+  const [outputDeviceId, setOutputDeviceId] = React.useState<string>(
+    () => loadAudioOutputDeviceId() ?? 'default',
+  );
   const [username, setUsername] = React.useState(initialUserChoices.username);
   const hostMicForcedRef = React.useRef(forceAudioEnabled);
 
@@ -249,11 +283,21 @@ export function KloudPreJoin({
     setAudioEnabled(true);
   }, [forceAudioEnabled]);
 
-  React.useEffect(() => { saveAudioInputEnabled(audioEnabled); }, [audioEnabled, saveAudioInputEnabled]);
-  React.useEffect(() => { saveVideoInputEnabled(videoEnabled); }, [videoEnabled, saveVideoInputEnabled]);
-  React.useEffect(() => { saveAudioInputDeviceId(audioDeviceId); }, [audioDeviceId, saveAudioInputDeviceId]);
-  React.useEffect(() => { saveVideoInputDeviceId(videoDeviceId); }, [videoDeviceId, saveVideoInputDeviceId]);
-  React.useEffect(() => { saveUsername(username); }, [username, saveUsername]);
+  React.useEffect(() => {
+    saveAudioInputEnabled(audioEnabled);
+  }, [audioEnabled, saveAudioInputEnabled]);
+  React.useEffect(() => {
+    saveVideoInputEnabled(videoEnabled);
+  }, [videoEnabled, saveVideoInputEnabled]);
+  React.useEffect(() => {
+    saveAudioInputDeviceId(audioDeviceId);
+  }, [audioDeviceId, saveAudioInputDeviceId]);
+  React.useEffect(() => {
+    saveVideoInputDeviceId(videoDeviceId);
+  }, [videoDeviceId, saveVideoInputDeviceId]);
+  React.useEffect(() => {
+    saveUsername(username);
+  }, [username, saveUsername]);
 
   const mic = useDevicePreview('audio', canUseMediaDevices && audioEnabled, audioDeviceId, onError);
   const cam = useDevicePreview('video', canUseMediaDevices && videoEnabled, videoDeviceId, onError);
@@ -290,7 +334,9 @@ export function KloudPreJoin({
       track.unmute();
       track.attach(videoEl.current);
     }
-    return () => { track?.detach(); };
+    return () => {
+      track?.detach();
+    };
   }, [cam.track]);
 
   /** Turning a failed device off and on again makes the preview hook request it afresh. */
@@ -323,11 +369,17 @@ export function KloudPreJoin({
     starting: [tf('prejoin.cameraStarting', 'Starting camera…')],
     blocked: [
       tf('prejoin.cameraBlocked', 'Camera access is blocked'),
-      tf('prejoin.cameraBlockedHint', "Allow camera access in your browser's address bar, then try again."),
+      tf(
+        'prejoin.cameraBlockedHint',
+        "Allow camera access in your browser's address bar, then try again.",
+      ),
     ],
     'in-use': [
       tf('prejoin.cameraInUse', 'Your camera is in use by another app'),
-      tf('prejoin.cameraInUseHint', 'Close the other app or pick a different camera, then try again.'),
+      tf(
+        'prejoin.cameraInUseHint',
+        'Close the other app or pick a different camera, then try again.',
+      ),
     ],
     'not-found': [
       tf('prejoin.cameraNotFound', 'No camera found'),
@@ -339,19 +391,42 @@ export function KloudPreJoin({
     ],
   };
   const micText: Record<DeviceIssue, string> = {
-    blocked: tf('prejoin.micBlocked', "Microphone access is blocked. Allow it in your browser's address bar, then try again."),
-    'in-use': tf('prejoin.micInUse', 'Your microphone is in use by another app. Close it or pick a different mic.'),
-    'not-found': tf('prejoin.micNotFound', 'No microphone found. Connect one or pick a different one below.'),
-    failed: tf('prejoin.micFailed', "Your microphone couldn't start. Pick a different one below, or try again."),
+    blocked: tf(
+      'prejoin.micBlocked',
+      "Microphone access is blocked. Allow it in your browser's address bar, then try again.",
+    ),
+    'in-use': tf(
+      'prejoin.micInUse',
+      'Your microphone is in use by another app. Close it or pick a different mic.',
+    ),
+    'not-found': tf(
+      'prejoin.micNotFound',
+      'No microphone found. Connect one or pick a different one below.',
+    ),
+    failed: tf(
+      'prejoin.micFailed',
+      "Your microphone couldn't start. Pick a different one below, or try again.",
+    ),
   };
-  const [camTitle, camHint] = waitingForPermission && cam.status !== 'error' && cam.status !== 'live'
-    ? [tf('prejoin.allowPermission', 'Allow camera and microphone when your browser asks')]
-    : cameraText[cam.status === 'error' ? cam.issue ?? 'failed' : cam.status === 'starting' ? 'starting' : 'off'];
+  const [camTitle, camHint] =
+    waitingForPermission && cam.status !== 'error' && cam.status !== 'live'
+      ? [tf('prejoin.allowPermission', 'Allow camera and microphone when your browser asks')]
+      : cameraText[
+          cam.status === 'error'
+            ? (cam.issue ?? 'failed')
+            : cam.status === 'starting'
+              ? 'starting'
+              : 'off'
+        ];
 
   const micOn = mic.status !== 'off';
   const camOn = cam.status !== 'off';
-  const micToggleLabel = micOn ? tf('toolbar.muteMic', 'Turn off microphone') : tf('toolbar.unmuteMic', 'Turn on microphone');
-  const camToggleLabel = camOn ? tf('toolbar.turnOffCam', 'Turn off camera') : tf('toolbar.turnOnCam', 'Turn on camera');
+  const micToggleLabel = micOn
+    ? tf('toolbar.muteMic', 'Turn off microphone')
+    : tf('toolbar.unmuteMic', 'Turn on microphone');
+  const camToggleLabel = camOn
+    ? tf('toolbar.turnOffCam', 'Turn off camera')
+    : tf('toolbar.turnOnCam', 'Turn on camera');
 
   return (
     <div className={styles.layout}>
@@ -359,7 +434,9 @@ export function KloudPreJoin({
       <section className={styles.stage}>
         <div
           className={styles.preview}
-          style={cam.status === 'live' ? undefined : { background: tileBackground(trimmedName || '?') }}
+          style={
+            cam.status === 'live' ? undefined : { background: tileBackground(trimmedName || '?') }
+          }
         >
           {cam.status === 'live' ? (
             <video
@@ -376,7 +453,11 @@ export function KloudPreJoin({
                   <TriangleAlert size={28} strokeWidth={1.75} aria-hidden="true" />
                   <span className={styles.camOffText}>{camTitle}</span>
                   {camHint && <span className={styles.camOffHint}>{camHint}</span>}
-                  <button type="button" className={styles.issueBtn} onClick={() => retry(setVideoEnabled)}>
+                  <button
+                    type="button"
+                    className={styles.issueBtn}
+                    onClick={() => retry(setVideoEnabled)}
+                  >
                     {tryAgainLabel}
                   </button>
                 </div>
@@ -429,7 +510,9 @@ export function KloudPreJoin({
               aria-label={micToggleLabel}
               title={micToggleLabel}
               disabled={!canUseMediaDevices}
-              onClick={() => (mic.status === 'error' ? retry(setAudioEnabled) : setAudioEnabled((v) => !v))}
+              onClick={() =>
+                mic.status === 'error' ? retry(setAudioEnabled) : setAudioEnabled((v) => !v)
+              }
             >
               {micOn ? <Mic aria-hidden="true" /> : <MicOff aria-hidden="true" />}
               {mic.status === 'error' && (
@@ -446,7 +529,9 @@ export function KloudPreJoin({
               aria-label={camToggleLabel}
               title={camToggleLabel}
               disabled={!canUseMediaDevices}
-              onClick={() => (cam.status === 'error' ? retry(setVideoEnabled) : setVideoEnabled((v) => !v))}
+              onClick={() =>
+                cam.status === 'error' ? retry(setVideoEnabled) : setVideoEnabled((v) => !v)
+              }
             >
               {camOn ? <Video aria-hidden="true" /> : <VideoOff aria-hidden="true" />}
               {cam.status === 'error' && (
@@ -483,7 +568,12 @@ export function KloudPreJoin({
                   title={micLabel}
                 >
                   <Mic size={18} className={styles.chipIcon} aria-hidden="true" />
-                  <DeviceChipLabel kind="audioinput" deviceId={audioDeviceId} fallback={micLabel} refreshKey={mic.track} />
+                  <DeviceChipLabel
+                    kind="audioinput"
+                    deviceId={audioDeviceId}
+                    fallback={micLabel}
+                    refreshKey={mic.track}
+                  />
                   <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </MediaDeviceMenu>
               </div>
@@ -520,7 +610,12 @@ export function KloudPreJoin({
                   title={camLabel}
                 >
                   <Video size={18} className={styles.chipIcon} aria-hidden="true" />
-                  <DeviceChipLabel kind="videoinput" deviceId={videoDeviceId} fallback={camLabel} refreshKey={cam.track} />
+                  <DeviceChipLabel
+                    kind="videoinput"
+                    deviceId={videoDeviceId}
+                    fallback={camLabel}
+                    refreshKey={cam.track}
+                  />
                   <ChevronDown size={16} className={styles.chipCaret} aria-hidden="true" />
                 </MediaDeviceMenu>
               </div>
@@ -543,6 +638,7 @@ export function KloudPreJoin({
               </div>
             </>
           )}
+          {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
         </div>
         {!canUseMediaDevices && mediaUnavailableLabel && (
           <p className={styles.mediaNote} role="status">
@@ -567,11 +663,17 @@ export function KloudPreJoin({
           </div>
         )}
 
+        {/* Injected settings above the name (host meeting settings) */}
+        {beforeName}
+
         {/* Name field */}
-        <label className={styles.field} htmlFor="kloud-prejoin-username">
+        <div className={styles.rowField}>
+          <label className={styles.rowLabel} htmlFor="kloud-prejoin-username">
+            {userLabel}
+          </label>
           <input
             id="kloud-prejoin-username"
-            className={styles.fieldInput}
+            className={styles.rowInput}
             type="text"
             defaultValue={username}
             autoComplete="off"
@@ -579,8 +681,7 @@ export function KloudPreJoin({
             aria-describedby={!isValid ? 'kloud-prejoin-join-reason' : undefined}
             onChange={(e) => setUsername(e.target.value)}
           />
-          <span className={styles.fieldLabel}>{userLabel}</span>
-        </label>
+        </div>
 
         {/* Injected children: host options */}
         {children}

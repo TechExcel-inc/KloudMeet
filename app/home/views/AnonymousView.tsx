@@ -42,15 +42,27 @@ function SlideArt({ index }: { index: number }) {
           </svg>
           <span className={styles.docCursor}>
             <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M4 3l14 7-6 2-2 6z" fill="#5E5CE6" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+              <path
+                d="M4 3l14 7-6 2-2 6z"
+                fill="#5E5CE6"
+                stroke="#fff"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
             </svg>
             <span className={styles.docCursorTag}>Lily</span>
           </span>
         </div>
         <div className={styles.camStack}>
-          <span className={`${styles.cam} ${styles.camSpeaking}`}><img src={FACE('lily')} alt="" /></span>
-          <span className={styles.cam}><img src={FACE('mark')} alt="" /></span>
-          <span className={styles.cam}><img src={FACE('ana')} alt="" /></span>
+          <span className={`${styles.cam} ${styles.camSpeaking}`}>
+            <img src={FACE('lily')} alt="" />
+          </span>
+          <span className={styles.cam}>
+            <img src={FACE('mark')} alt="" />
+          </span>
+          <span className={styles.cam}>
+            <img src={FACE('ana')} alt="" />
+          </span>
         </div>
       </div>
     );
@@ -61,9 +73,13 @@ function SlideArt({ index }: { index: number }) {
         <div className={styles.replayVideo}>
           <img src="/images/people/sarah-tile.jpg" alt="" />
           <span className={styles.replayPlay}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1F1D3A" aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="#1F1D3A" aria-hidden="true">
+              <path d="M8 5v14l11-7z" />
+            </svg>
           </span>
-          <span className={styles.replayBar}><span className={styles.replayFill} /></span>
+          <span className={styles.replayBar}>
+            <span className={styles.replayFill} />
+          </span>
         </div>
         <div className={styles.replayPanel}>
           <div className={styles.replayRow}>
@@ -82,8 +98,13 @@ function SlideArt({ index }: { index: number }) {
             </span>
           </div>
           <div className={styles.replayAi}>
-            <span className={styles.replaySpark} aria-hidden="true">✦</span>
-            <span className={styles.replayLines}><span /><span /></span>
+            <span className={styles.replaySpark} aria-hidden="true">
+              ✦
+            </span>
+            <span className={styles.replayLines}>
+              <span />
+              <span />
+            </span>
           </div>
         </div>
       </div>
@@ -157,11 +178,17 @@ export function AnonymousView({
     },
     {
       title: tx('anon.carousel.replayTitle', 'Replays with a timeline'),
-      desc: tx('anon.carousel.replayDesc', 'Recordings come back with a speaker timeline, transcript and AI summary.'),
+      desc: tx(
+        'anon.carousel.replayDesc',
+        'Recordings come back with a speaker timeline, transcript and AI summary.',
+      ),
     },
     {
       title: tx('anon.carousel.captionsTitle', 'Captions that translate'),
-      desc: tx('anon.carousel.captionsDesc', 'Turn on Speech to Text and read along in your own language.'),
+      desc: tx(
+        'anon.carousel.captionsDesc',
+        'Turn on Speech to Text and read along in your own language.',
+      ),
     },
   ];
 
@@ -171,7 +198,7 @@ export function AnonymousView({
       const target = new Date(scheduledModalData.scheduledFor).getTime();
       const diffMs = target - Date.now();
       if (diffMs <= 0) {
-        setCountdown("00:00");
+        setCountdown('00:00');
         return;
       }
       const totalSec = Math.floor(diffMs / 1000);
@@ -252,7 +279,7 @@ export function AnonymousView({
 
       // Valid Path (3, 4, 5, 6)
       router.push(roomPathTarget);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       setWarningMessage(t('anon.apiError'));
       setIsJoining(false);
@@ -266,7 +293,13 @@ export function AnonymousView({
 
   return (
     <div className={styles.anonWrapper}>
-      <TopToolbar onSignIn={onSignIn} onSignUp={onSignUp} onOpenHelp={onOpenHelp} hideAvatar={true} showClock />
+      <TopToolbar
+        onSignIn={onSignIn}
+        onSignUp={onSignUp}
+        onOpenHelp={onOpenHelp}
+        hideAvatar={true}
+        showClock
+      />
 
       <div className={styles.anonContainer}>
         {/* ── Left: headline + join ── */}
@@ -274,18 +307,32 @@ export function AnonymousView({
           <h1 className={styles.anonTitle}>
             {tx('anon.heroTitle', 'Meet on the document.')}
             <br />
-            <span className={styles.anonTitleAccent}>{tx('anon.heroAccent', 'Replay it anytime.')}</span>
+            <span className={styles.anonTitleAccent}>
+              {tx('anon.heroAccent', 'Replay it anytime.')}
+            </span>
           </h1>
           <p className={styles.anonSubtitle}>
             {tx(
               'anon.heroSubtitle',
-              'Where AI agents learn from and work with your teams and customers. Join from your browser — no account needed.',
+              'The interactive meeting platform where AI agents learn and work with your teams and customers. Join from your browser — no account needed.',
             )}
           </p>
 
           <div className={styles.anonJoinGroup}>
-            <label className={`${styles.codeField}${warningMessage ? ` ${styles.codeFieldError}` : ''}`}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <label
+              className={`${styles.codeField}${warningMessage ? ` ${styles.codeFieldError}` : ''}`}
+            >
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="2" y="6" width="20" height="12" rx="2.5"></rect>
                 <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"></path>
               </svg>
@@ -311,7 +358,17 @@ export function AnonymousView({
               aria-busy={isJoining}
             >
               {isJoining && (
-                <svg className={styles.spinner} viewBox="0 0 24 24" fill="none" width="18" height="18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  className={styles.spinner}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  width="18"
+                  height="18"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <path d="M21 12a9 9 0 11-6.219-8.56"></path>
                 </svg>
               )}
@@ -322,7 +379,16 @@ export function AnonymousView({
           {/* Join errors — inline instead of a blocking dialog */}
           {warningMessage && (
             <div className={styles.anonAlert} role="alert" id="anon-join-error">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
                 <circle cx="12" cy="12" r="9"></circle>
                 <path d="M12 8v5M12 16h.01"></path>
               </svg>
@@ -334,7 +400,16 @@ export function AnonymousView({
                 aria-label={t('common.close')}
                 title={t('common.close')}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
@@ -345,7 +420,16 @@ export function AnonymousView({
           {scheduledModalData && (
             <div className={styles.scheduledCard} role="status">
               <div className={styles.scheduledEyebrow}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <rect x="3" y="5" width="18" height="16" rx="3"></rect>
                   <path d="M3 10h18M8 3v4M16 3v4"></path>
                 </svg>
@@ -358,15 +442,28 @@ export function AnonymousView({
                 aria-label={t('common.close')}
                 title={t('common.close')}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
               <p className={styles.scheduledTitle}>
-                {t('anon.hostedBy', { title: scheduledModalData.title || scheduledModalData.roomName, host: scheduledModalData.createdByMember?.fullName || 'Host' })}
+                {t('anon.hostedBy', {
+                  title: scheduledModalData.title || scheduledModalData.roomName,
+                  host: scheduledModalData.createdByMember?.fullName || 'Host',
+                })}
               </p>
               <p className={styles.scheduledMeta}>
-                {t('anon.scheduledFor')} <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong>
+                {t('anon.scheduledFor')}{' '}
+                <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong>
               </p>
               {scheduledDiffMs > 60 * 60 * 1000 ? (
                 <p className={styles.scheduledNote}>{t('anon.moreThanHour')}</p>
@@ -414,35 +511,69 @@ export function AnonymousView({
               id="download-desktop-app-btn"
               title="Download Kloud Meet for Windows"
             >
-              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">
+              <svg
+                className={styles.downloadBtnIcon}
+                viewBox="0 0 24 24"
+                width="15"
+                height="15"
+                fill="currentColor"
+                aria-hidden="true"
+              >
                 <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
               </svg>
               <span className={styles.downloadBtnLabel}>Windows App</span>
-              <svg className={styles.downloadBtnArrow} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
+              <svg
+                className={styles.downloadBtnArrow}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                width="13"
+                height="13"
+                aria-hidden="true"
+              >
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
               </svg>
             </a>
 
             {MAC_APP_AVAILABLE && (
-            <a
-              href="/api/download?os=mac"
-              className={styles.downloadBtn}
-              id="download-desktop-app-mac-btn"
-              title="Download Kloud Meet for Mac"
-            >
-              <svg className={styles.downloadBtnIcon} viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-                <circle cx="12" cy="12" r="12" fill="currentColor" />
-                <path d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z" fill="#fff" />
-              </svg>
-              <span className={styles.downloadBtnLabel}>macOS App</span>
-              <svg className={styles.downloadBtnArrow} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
-                <polyline points="7 10 12 15 17 10"/>
-                <line x1="12" y1="15" x2="12" y2="3"/>
-              </svg>
-            </a>
+              <a
+                href="/api/download?os=mac"
+                className={styles.downloadBtn}
+                id="download-desktop-app-mac-btn"
+                title="Download Kloud Meet for Mac"
+              >
+                <svg
+                  className={styles.downloadBtnIcon}
+                  viewBox="0 0 24 24"
+                  width="15"
+                  height="15"
+                  aria-hidden="true"
+                >
+                  <circle cx="12" cy="12" r="12" fill="currentColor" />
+                  <path
+                    d="M13.2 6.5h-2.4l-4.5 11h2.3l1.2-3.2h4.4l1.2 3.2h2.3l-4.5-11zm-2.8 6.2l1.6-4.3 1.6 4.3h-3.2z"
+                    fill="#fff"
+                  />
+                </svg>
+                <span className={styles.downloadBtnLabel}>macOS App</span>
+                <svg
+                  className={styles.downloadBtnArrow}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  width="13"
+                  height="13"
+                  aria-hidden="true"
+                >
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+                  <polyline points="7 10 12 15 17 10" />
+                  <line x1="12" y1="15" x2="12" y2="3" />
+                </svg>
+              </a>
             )}
           </div>
         </section>
@@ -460,7 +591,18 @@ export function AnonymousView({
               onClick={() => goToSlide(slide - 1)}
               aria-label={tx('anon.carousel.prev', 'Previous')}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M15 18l-6-6 6-6" />
+              </svg>
             </button>
             <div className={styles.carouselCircle} aria-hidden="true">
               <div key={slide} className={styles.carouselSlide}>
@@ -473,7 +615,18 @@ export function AnonymousView({
               onClick={() => goToSlide(slide + 1)}
               aria-label={tx('anon.carousel.next', 'Next')}
             >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
             </button>
           </div>
           <div

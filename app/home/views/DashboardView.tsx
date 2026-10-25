@@ -1119,7 +1119,7 @@ export function DashboardView({
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}
         hideAvatar={false} 
-        tagline={tx('dash.meetingListTagline', 'Where AI agents learn from and work with your teams and customers.')}
+        tagline={tx('dash.meetingListTagline', 'The interactive meeting platform where AI agents learn and work with your teams and customers.')}
       />
 
       <div className={styles.dashMain}>

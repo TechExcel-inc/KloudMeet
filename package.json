@@ -11,6 +11,7 @@
     "dev:https": "node scripts/run-next-with-funasr.cjs dev -p 3201 --turbopack --experimental-https --experimental-https-key ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem",
     "build": "next build",
     "build:deploy": "npm run build && npm run electron:prepare-standalone",
+    "deploy": "bash scripts/deploy-meet.sh",
     "electron:ensure": "node scripts/ensure-electron.js",
     "electron:prepare-standalone": "node scripts/prepare-standalone.js",
     "electron:prepare-app": "node scripts/prepare-electron-app.js",
