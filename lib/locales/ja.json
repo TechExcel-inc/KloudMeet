@@ -764,6 +764,10 @@
   "replay.transcribeEmpty": "完了しましたが、録画から音声は認識されませんでした",
   "replay.transcribeClose": "閉じる",
   "replay.noAccess": "この録画を見る権限がありません",
+  "replay.hidePanel": "パネルを隠す",
+  "replay.showPanel": "パネルを表示",
+  "replay.fitWidth": "幅に合わせる",
+  "replay.fitHeight": "高さに合わせる",
 
   "dash.replay": "🎬 再生",
   "dash.replayTitle": "ミーティング録画を再生",

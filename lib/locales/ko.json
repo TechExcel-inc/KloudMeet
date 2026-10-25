@@ -764,6 +764,10 @@
   "replay.transcribeEmpty": "완료되었지만 녹화에서 음성이 인식되지 않았습니다",
   "replay.transcribeClose": "닫기",
   "replay.noAccess": "이 녹화를 볼 권한이 없습니다",
+  "replay.hidePanel": "패널 숨기기",
+  "replay.showPanel": "패널 표시",
+  "replay.fitWidth": "너비 맞추기",
+  "replay.fitHeight": "높이 맞추기",
 
   "dash.replay": "🎬 다시보기",
   "dash.replayTitle": "회의 녹화 재생",

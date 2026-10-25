@@ -749,6 +749,10 @@
   "replay.transcribeEmpty": "解析完成，但录像中未识别到语音内容",
   "replay.transcribeClose": "关闭",
   "replay.noAccess": "你没有权限查看这段录制",
+  "replay.hidePanel": "隐藏面板",
+  "replay.showPanel": "显示面板",
+  "replay.fitWidth": "适应宽度",
+  "replay.fitHeight": "适应高度",
 
   "dash.replay": "🎬 回放",
   "dash.replayTitle": "播放会议录制",

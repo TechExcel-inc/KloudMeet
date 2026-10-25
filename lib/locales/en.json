@@ -763,6 +763,10 @@
   "replay.transcribeEmpty": "Done, but no speech was recognized in this recording",
   "replay.transcribeClose": "Close",
   "replay.noAccess": "You do not have access to this recording",
+  "replay.hidePanel": "Hide panel",
+  "replay.showPanel": "Show panel",
+  "replay.fitWidth": "Fit width",
+  "replay.fitHeight": "Fit height",
 
   "dash.replay": "▶ Play",
   "dash.replayTitle": "Play meeting recording",
