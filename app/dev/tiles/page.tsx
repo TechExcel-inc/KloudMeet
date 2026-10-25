@@ -14,6 +14,10 @@ import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from '@/lib/galleryPrefs';
 import { IDLE_RECORDING_STATE, type RecordingState } from '@/lib/recordingControls';
+import { DesignStage } from '@/lib/DesignStage';
+import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
+import { parseDesignLink, type DesignLink } from '@/lib/designLink';
+import { rememberDesignLink } from '@/lib/designLinkClient';
 
 const BASE_NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
@@ -117,6 +121,22 @@ export default function DevTilesPage() {
   // The toolbar probes media devices, so (as in a real room) it only renders in the browser.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  // Design mode preview: ?design=<link> opens straight on the stage, ?dialog=1 opens "Show a
+  // link", ?as=attendee views as an attendee following a sample presenter view (125%, 1100×620).
+  const [designLink, setDesignLink] = React.useState<DesignLink | null>(null);
+  const [designDialog, setDesignDialog] = React.useState(false);
+  React.useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('as') === 'attendee') setHost(false);
+    if (query.get('dialog') === '1') setDesignDialog(true);
+    const preset = query.get('design');
+    if (!preset) return;
+    const parsed = parseDesignLink(preset, { appOrigin: window.location.origin });
+    if (parsed.ok) {
+      setDesignLink(parsed.link);
+      setView('design');
+    }
+  }, []);
   const gridRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useLayoutEffect(() => {
@@ -160,13 +180,30 @@ export default function DevTilesPage() {
       <div style={{ position: 'relative', height: 56, flex: 'none' }}>
         <MeetingTopBar
           meetingTitle="Weekly product review"
-          modeLabel={view === 'liveDoc' ? 'LiveDoc' : view === 'shareScreen' ? 'Screen share' : 'Video · Grid'}
+          modeLabel={view === 'liveDoc' ? 'LiveDoc' : view === 'shareScreen' ? 'Screen share' : view === 'design' ? 'Design' : 'Video · Grid'}
+          modeDetail={view === 'design' && designLink ? (designLink.kind === 'figma' ? designLink.label : designLink.host) : undefined}
           isRecording={host}
           recordingLabel={rec.paused ? 'Recording paused' : 'Recording'}
           captionsOn
           captionsLabel="Captions on"
         />
       </div>
+      {view === 'design' && designLink ? (
+        <div style={{ flex: 1, minHeight: 0, display: 'flex', paddingBottom: 88 }}>
+          <DesignStage
+            link={designLink}
+            presenterName="ying huang"
+            isDriver={host}
+            canControl={host}
+            remoteViewport={host ? null : { zoom: 1.25, baseWidth: 1100, baseHeight: 620 }}
+            onChangeLink={() => setDesignDialog(true)}
+            onStop={() => {
+              setDesignLink(null);
+              setView('webcam');
+            }}
+          />
+        </div>
+      ) : (
       <div className="lk-grid-layout-wrapper" style={{ flex: 1, minHeight: 0, height: 0, paddingBottom: 88 }}>
         <div className="lk-grid-layout" ref={gridRef} key={`${count}-${pageStart}-${perPage}`} data-lk-pagination={pageCount > 1}>
           {shown.map((name, i) => (
@@ -200,6 +237,20 @@ export default function DevTilesPage() {
           )}
         </div>
       </div>
+      )}
+      {designDialog && (
+        <DesignLinkDialog
+          currentUrl={designLink?.url}
+          appOrigin={window.location.origin}
+          onSubmit={(link) => {
+            rememberDesignLink({ url: link.url, label: link.kind === 'figma' ? link.label : link.host, kind: link.kind });
+            setDesignLink(link);
+            setDesignDialog(false);
+            setView('design');
+          }}
+          onClose={() => setDesignDialog(false)}
+        />
+      )}
       {mounted && (
       <KloudMeetToolbar
         activeView={view}
@@ -219,6 +270,7 @@ export default function DevTilesPage() {
         hasScreenShare={false}
         isDesktop={false}
         canSwitchViews
+        onDesignClick={() => (designLink ? setView('design') : setDesignDialog(true))}
         canShowOperatorMenus={host}
         canToggleLiveDocAnnotation={host}
         participantLiveDocAi

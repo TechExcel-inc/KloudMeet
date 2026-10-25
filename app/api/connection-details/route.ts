@@ -216,6 +216,7 @@ export async function GET(request: NextRequest) {
       meetingId: meeting.id,
       isPersonalRoom,
       ...(currentView ? { currentView } : {}),
+      ...(roomFlags.designLink ? { designLink: roomFlags.designLink } : {}),
       participantLiveDocAi,
       livedocInstanceId,
       ...(meetingEndsAt ? { meetingEndsAt: meetingEndsAt.toISOString() } : {}),

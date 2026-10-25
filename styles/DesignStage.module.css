@@ -1,0 +1,557 @@
+/* Design stage mode: a shared link shown on the meeting stage, plus the "Show a link" dialog.
+   In-meeting surfaces are always dark (--km-stage*, --km-panel, --km-menu tokens). */
+
+/* ───────────── Stage ───────────── */
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--km-stage);
+  color: var(--km-stage-text);
+  font-family: var(--km-font);
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 56px 12px 12px;
+}
+
+.box {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--km-radius-sm);
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  border: 0;
+  background: #ffffff;
+  transform-origin: 0 0;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--km-stage-2);
+  color: var(--km-stage-muted);
+  font-size: 13px;
+  pointer-events: none;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 255, 255, 0.12);
+  border-top-color: var(--km-on-dark-accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* Floating bars share one look */
+.bar,
+.zoom,
+.notice {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--km-stage-border);
+  background: rgba(32, 33, 38, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  white-space: nowrap;
+}
+
+.bar {
+  top: 10px;
+  left: 50%;
+  max-width: calc(100% - 24px);
+  padding: 5px;
+  border-radius: var(--km-radius-md);
+  transform: translateX(-50%);
+}
+
+.source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 8px 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sourceIcon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--km-tile);
+  color: var(--km-stage-text);
+}
+
+.sourceText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sourceHost {
+  color: var(--km-stage-muted);
+  font-weight: 500;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: 7px;
+  background: var(--km-tile);
+  color: var(--km-stage-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(94, 92, 230, 0.2);
+  color: var(--km-on-dark-accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.followDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #8b89ff;
+  box-shadow: 0 0 0 3px rgba(139, 137, 255, 0.25);
+}
+
+.sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 2px;
+  background: var(--km-stage-border);
+}
+
+.btn,
+.btnPrimary,
+.btnDanger,
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--km-tile);
+  color: var(--km-stage-text);
+  font: 600 12px var(--km-font);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.iconBtn {
+  width: 30px;
+  padding: 0;
+}
+
+.btn:hover,
+.iconBtn:hover {
+  background: var(--km-control-hover);
+}
+
+.btnPrimary {
+  background: var(--km-primary);
+  color: #ffffff;
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--km-primary-hover);
+}
+
+.btnDanger {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+.btnDanger:hover {
+  background: rgba(239, 68, 68, 0.26);
+}
+
+.btn:focus-visible,
+.btnPrimary:focus-visible,
+.btnDanger:focus-visible,
+.iconBtn:focus-visible,
+.zoomBtn:focus-visible,
+.recentShow:focus-visible,
+.recentRemove:focus-visible,
+.close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--km-on-dark-accent);
+}
+
+/* Free browsing (zoomed on your own): amber bar */
+.barFree {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(64, 48, 12, 0.96);
+}
+
+.zoom {
+  right: 10px;
+  bottom: 10px;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.zoomBtn {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--km-stage-text);
+  font: 600 12px var(--km-font);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoomBtn:hover:not(:disabled) {
+  background: var(--km-tile);
+}
+
+.zoomBtn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* One-time notice: only the link is shared */
+.notice {
+  left: 50%;
+  bottom: 14px;
+  max-width: min(560px, calc(100% - 24px));
+  padding: 10px 10px 10px 14px;
+  border-radius: var(--km-radius-md);
+  transform: translateX(-50%);
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.notice svg {
+  flex: none;
+  color: var(--km-on-dark-accent);
+}
+
+/* ───────────── Dialog ───────────── */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 10vh 16px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  font-family: var(--km-font);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 540px;
+  max-height: 80vh;
+  overflow: hidden;
+  border: 1px solid var(--km-stage-border);
+  border-radius: var(--km-radius-lg);
+  background: var(--km-panel);
+  color: var(--km-stage-text);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45);
+}
+
+.dialogHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 14px 6px 20px;
+}
+
+.dialogTitle {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.close {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--km-stage-muted);
+  cursor: pointer;
+}
+
+.close:hover {
+  background: var(--km-tile);
+  color: var(--km-stage-text);
+}
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 6px 20px 16px;
+}
+
+.inputRow {
+  display: flex;
+  gap: 8px;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--km-stage-border);
+  border-radius: var(--km-radius-sm);
+  background: var(--km-stage-2);
+  color: var(--km-stage-text);
+  font: 400 14px var(--km-font);
+  outline: none;
+}
+
+.input::placeholder {
+  color: var(--km-stage-muted);
+}
+
+.input:focus {
+  border-color: rgba(139, 137, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(94, 92, 230, 0.25);
+}
+
+.inputError {
+  border-color: rgba(239, 68, 68, 0.6);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 20px;
+  margin: 0;
+  color: var(--km-stage-muted);
+  font-size: 12.5px;
+}
+
+.statusOk {
+  color: var(--km-stage-text);
+}
+
+.statusError {
+  color: #fca5a5;
+}
+
+.kindTag {
+  padding: 1px 7px;
+  border-radius: 5px;
+  background: rgba(94, 92, 230, 0.22);
+  color: var(--km-on-dark-accent);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--km-radius-sm);
+  background: var(--km-stage-2);
+  color: var(--km-stage-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.tip svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.label {
+  margin: 6px 0 0;
+  color: var(--km-stage-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.recent {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recentItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 10px;
+  border: 1px solid var(--km-stage-border);
+  border-radius: 10px;
+}
+
+.recentText {
+  flex: 1;
+  min-width: 0;
+}
+
+.recentLabel,
+.recentUrl {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentLabel {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recentUrl {
+  color: var(--km-stage-muted);
+  font-size: 11.5px;
+}
+
+.recentShow {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--km-tile);
+  color: var(--km-stage-text);
+  font: 600 12px var(--km-font);
+  cursor: pointer;
+}
+
+.recentShow:hover {
+  background: var(--km-control-hover);
+}
+
+.recentRemove {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--km-stage-muted);
+  cursor: pointer;
+}
+
+.recentRemove:hover {
+  background: var(--km-tile);
+  color: var(--km-stage-text);
+}
+
+.dialogFoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--km-stage-border);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.footSpacer {
+  flex: 1;
+}
+
+.dialogFoot .btn,
+.dialogFoot .btnPrimary {
+  height: 36px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.btnPrimary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 640px) {
+  .canvas {
+    padding: 48px 6px 6px;
+  }
+  .bar {
+    top: 6px;
+    gap: 4px;
+  }
+  .hideNarrow {
+    display: none;
+  }
+  .scrim {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .dialog {
+    max-width: none;
+    max-height: 88vh;
+    border-radius: var(--km-radius-lg) var(--km-radius-lg) 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+}

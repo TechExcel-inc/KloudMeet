@@ -190,6 +190,17 @@ const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 import { MeetingTopBar } from '@/lib/MeetingTopBar';
+import { DesignStage } from '@/lib/DesignStage';
+import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
+import {
+  parseDesignLink,
+  parseDesignViewport,
+  parseStoredDesignLink,
+  type DesignLink,
+  type DesignViewport,
+  type StoredDesignLink,
+} from '@/lib/designLink';
+import { persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
 
 /** Height of the desktop top bar (styles/MeetingTopBar.module.css). */
 const MEETING_TOP_BAR_HEIGHT = 56;
@@ -345,10 +356,23 @@ export function VideoConferenceComponent(props: {
   );
   const activeViewRef = React.useRef<ViewMode>(activeView);
   activeViewRef.current = activeView;
+  /** Design mode: the link everyone views (late joiners get it from room metadata). */
+  const [designStored, setDesignStored] = React.useState<StoredDesignLink | null>(() =>
+    parseStoredDesignLink(props.connectionDetails.designLink),
+  );
+  const [designDialogOpen, setDesignDialogOpen] = React.useState(false);
+  const [remoteDesignViewport, setRemoteDesignViewport] = React.useState<DesignViewport | null>(null);
+  /** Rebuilt locally from the URL: never trust another participant's embed address */
+  const designLink: DesignLink | null = React.useMemo(() => {
+    if (!designStored || typeof window === 'undefined') return null;
+    const parsed = parseDesignLink(designStored.url, { appOrigin: window.location.origin });
+    return parsed.ok ? parsed.link : null;
+  }, [designStored]);
   /** Last non-share room mode (webcam | liveDoc). Used when leaving shareScreen / takeover. */
   const lastStableRoomViewRef = React.useRef<ViewMode>(
     activeView === 'shareScreen' ? 'webcam' : activeView,
   );
+  // Design isn't recorded here: stopping Design returns to the video or LiveDoc view before it
   if (activeView === 'webcam' || activeView === 'liveDoc') {
     lastStableRoomViewRef.current = activeView;
   }
@@ -664,7 +688,7 @@ export function VideoConferenceComponent(props: {
     if (!localShareViewSessionRef.current) {
       const current = activeViewRef.current;
       const previousView =
-        current === 'webcam' || current === 'liveDoc'
+        current === 'webcam' || current === 'liveDoc' || current === 'design'
           ? current
           : lastStableRoomViewRef.current;
       localShareViewSessionRef.current = { previousView };
@@ -2490,6 +2514,20 @@ export function VideoConferenceComponent(props: {
   const canBroadcastViewChange = canSwitchViews;
   canBroadcastViewChangeRef.current = canBroadcastViewChange;
 
+  /** Design mode messages count only from people who may switch the stage */
+  const designSenderAllowedRef = React.useRef<(identity: string) => boolean>(() => false);
+  designSenderAllowedRef.current = (identity: string) =>
+    identity === hostIdentity ||
+    cohostIdentities.includes(identity) ||
+    copresenterIdentities.includes(identity) ||
+    identity === autoPresenterIdentity;
+  /** Whoever opened the link drives size and zoom; the host takes over if they left */
+  const designSetBy = designStored?.setBy ?? null;
+  const designOpenerPresent =
+    !!designSetBy && (designSetBy === localIdentity || room.remoteParticipants.has(designSetBy));
+  const isDesignDriver =
+    canSwitchViews && (designSetBy === localIdentity || (!designOpenerPresent && isHost));
+
   React.useEffect(() => {
     localMicRestrictedRef.current = isLocalMicRestricted;
 
@@ -2550,6 +2588,8 @@ export function VideoConferenceComponent(props: {
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  /** Design mode shows the shared link; a screen share still takes the stage first */
+  const shouldDisplayDesign = activeView === 'design' && !!designLink && (!hasScreenShare || isLocalScreenShare);
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
@@ -2697,6 +2737,8 @@ export function VideoConferenceComponent(props: {
     raisedHands: string[];
     /** identity → 举手时刻（发送端时钟），仅用于主持人重连后按心跳重建队列顺序 */
     raisedHandAtByIdentity: Record<string, number>;
+    /** Design mode link (null when none) */
+    designLink: StoredDesignLink | null;
   }>({
     view: activeView,
     presenter: [],
@@ -2712,6 +2754,7 @@ export function VideoConferenceComponent(props: {
     participantLiveDocAi: props.connectionDetails.participantLiveDocAi !== false,
     raisedHands: [],
     raisedHandAtByIdentity: {},
+    designLink: parseStoredDesignLink(props.connectionDetails.designLink),
   });
   if (isHost) {
     authState.current.participantLiveDocAi =
@@ -2746,6 +2789,7 @@ export function VideoConferenceComponent(props: {
       captionsOn: auth.captionsOn,
       participantLiveDocAi: auth.participantLiveDocAi,
       raisedHands: auth.raisedHands,
+      designLink: auth.designLink,
     } as const;
   }, []);
 
@@ -3347,6 +3391,96 @@ export function VideoConferenceComponent(props: {
     broadcastViewChangeRef.current = broadcastViewChange;
   }, [broadcastViewChange]);
 
+  /* ── Design mode: a link everyone views ── */
+  const persistDesignLink = React.useCallback((url: string | null, view?: ViewMode) => {
+    const token = connectionDetailsRef.current.participantToken;
+    const rn = connectionDetailsRef.current.roomName;
+    if (!token || !rn) return;
+    // Guests can't store it for late joiners (403); the live message still reached everyone.
+    void persistMeetingDesignLink({ roomName: rn, url, view, livekitToken: token }).catch((err) =>
+      console.warn('[design] persist failed', err),
+    );
+  }, []);
+
+  const applyDesignLink = React.useCallback(
+    (next: StoredDesignLink | null, nextView?: ViewMode) => {
+      setDesignStored(next);
+      setRemoteDesignViewport(null);
+      if (isHost) authState.current.designLink = next;
+      sendMeetingMsg({ type: 'DESIGN_LINK', link: next });
+      persistDesignLink(next?.url ?? null, nextView);
+    },
+    [isHost, sendMeetingMsg, persistDesignLink],
+  );
+
+  const handleDesignClick = React.useCallback(() => {
+    if (!canSwitchViews) return;
+    if (designLink) {
+      handleViewChange('design');
+      return;
+    }
+    setDesignDialogOpen(true);
+  }, [canSwitchViews, designLink, handleViewChange]);
+
+  const submitDesignLink = React.useCallback(
+    (link: DesignLink) => {
+      applyDesignLink({
+        url: link.url,
+        setBy: room.localParticipant.identity,
+        setByName: props.userChoices.username || undefined,
+        setAt: Date.now(),
+      });
+      rememberDesignLink({ url: link.url, label: link.kind === 'figma' ? link.label : link.host, kind: link.kind });
+      setDesignDialogOpen(false);
+      handleViewChange('design');
+    },
+    [applyDesignLink, room, props.userChoices.username, handleViewChange],
+  );
+
+  const stopDesign = React.useCallback(() => {
+    const nextView = lastStableRoomViewRef.current;
+    applyDesignLink(null, nextView);
+    handleViewChange(nextView);
+  }, [applyDesignLink, handleViewChange]);
+
+  // Driver: share frame size and zoom (throttled), and repeat it so late joiners catch up.
+  const designViewportRef = React.useRef<DesignViewport | null>(null);
+  const designViewportSentAtRef = React.useRef(0);
+  const designViewportTimerRef = React.useRef<number | null>(null);
+  const sendDesignViewport = React.useCallback(() => {
+    designViewportTimerRef.current = null;
+    if (!designViewportRef.current) return;
+    designViewportSentAtRef.current = Date.now();
+    sendMeetingMsg({ type: 'DESIGN_VIEWPORT', viewport: designViewportRef.current });
+  }, [sendMeetingMsg]);
+  const handleDesignViewport = React.useCallback(
+    (viewport: DesignViewport) => {
+      designViewportRef.current = viewport;
+      if (designViewportTimerRef.current !== null) return;
+      const wait = Math.max(0, 200 - (Date.now() - designViewportSentAtRef.current));
+      designViewportTimerRef.current = window.setTimeout(sendDesignViewport, wait);
+    },
+    [sendDesignViewport],
+  );
+  React.useEffect(() => {
+    if (activeView !== 'design' || !isDesignDriver || !designLink) return;
+    const timer = window.setInterval(sendDesignViewport, 3000);
+    return () => window.clearInterval(timer);
+  }, [activeView, isDesignDriver, designLink, sendDesignViewport]);
+  React.useEffect(
+    () => () => {
+      if (designViewportTimerRef.current !== null) window.clearTimeout(designViewportTimerRef.current);
+    },
+    [],
+  );
+
+  // The stage says Design but there's no usable link (cleared, or refused locally): fall back.
+  React.useEffect(() => {
+    if (activeView === 'design' && !designLink) {
+      setActiveView(lastStableRoomViewRef.current);
+    }
+  }, [activeView, designLink]);
+
   // Listen for incoming DataChannel messages
   React.useEffect(() => {
     const handleData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
@@ -3385,6 +3519,23 @@ export function VideoConferenceComponent(props: {
           if (senderIdentity !== room.localParticipant.identity) {
             setActiveView(msg.view as ViewMode);
           }
+        } else if (msg.type === 'DESIGN_LINK') {
+          // Only people who may switch the stage can change what everyone views
+          if (senderIdentity && senderIdentity !== room.localParticipant.identity && designSenderAllowedRef.current(senderIdentity)) {
+            const next = msg.link === null ? null : parseStoredDesignLink(msg.link);
+            if (msg.link === null || next) {
+              setDesignStored(next);
+              setRemoteDesignViewport(null);
+              if (hostIdentityRef.current === room.localParticipant.identity) {
+                authState.current.designLink = next;
+              }
+            }
+          }
+        } else if (msg.type === 'DESIGN_VIEWPORT') {
+          if (senderIdentity && senderIdentity !== room.localParticipant.identity && designSenderAllowedRef.current(senderIdentity)) {
+            const viewport = parseDesignViewport(msg.viewport);
+            if (viewport) setRemoteDesignViewport(viewport);
+          }
         } else if (msg.type === 'LIVEDOC_INSTANCE' && typeof msg.livedocInstanceId === 'string') {
           setLivedocInstanceId(msg.livedocInstanceId);
         } else if (msg.type === 'PARTICIPANT_LIVEDOC_AI' && typeof msg.show === 'boolean') {
@@ -3405,6 +3556,9 @@ export function VideoConferenceComponent(props: {
             setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
           }
           // Restore mute state for late joiners
+          if ('designLink' in msg) {
+            setDesignStored(parseStoredDesignLink(msg.designLink));
+          }
           if (typeof msg.muteAllActive === 'boolean') {
             setMuteAllActive(msg.muteAllActive);
           }
@@ -4598,6 +4752,7 @@ export function VideoConferenceComponent(props: {
     !showWebcamSidebar &&
     (screenShareActive ||
       (activeView === 'liveDoc' && !hasScreenShare) ||
+      (activeView === 'design' && !hasScreenShare) ||
       (hasScreenShare && !screenShareActive && isWebcamSidebarCollapsed));
   // Web · LiveDoc 屏幕共享中（观看方 activeView 会切到 shareScreen，不能只判断 liveDoc）：
   // 非 host/co-host 观看方不显示浮窗；共享方与 host/co-host 显示
@@ -4842,7 +4997,9 @@ export function VideoConferenceComponent(props: {
     const meetingView = meetingViewRef.current;
     let wantView: ViewMode = meetingView;
     if (botMode === 'gallery') wantView = 'webcam';
-    if (botMode === 'speaker') wantView = hasScreenShare || meetingView === 'liveDoc' ? meetingView : 'webcam';
+    if (botMode === 'speaker') {
+      wantView = hasScreenShare || meetingView === 'liveDoc' || meetingView === 'design' ? meetingView : 'webcam';
+    }
     if (wantView !== activeView) {
       botForcingViewRef.current = true;
       setActiveView(wantView);
@@ -6495,13 +6652,23 @@ export function VideoConferenceComponent(props: {
             modeLabel={
               activeView === 'liveDoc'
                 ? t('toolbar.liveDoc')
-                : hasScreenShare || activeView === 'shareScreen'
+                : shouldDisplayDesign
+                  ? t('toolbar.design')
+                  : hasScreenShare || activeView === 'shareScreen'
                   ? t('toolbar.shareScreen')
                   : webcamLayoutMode === 'spotlight'
                     ? t('toolbar.webcamSpotlight')
                     : t('toolbar.webcamTile')
             }
-            modeDetail={activeView === 'liveDoc' && isWhiteboardDoc ? t('liveDocAi.whiteboard') : undefined}
+            modeDetail={
+              activeView === 'liveDoc' && isWhiteboardDoc
+                ? t('liveDocAi.whiteboard')
+                : shouldDisplayDesign && designLink
+                  ? designLink.kind === 'figma'
+                    ? designLink.label
+                    : designLink.host
+                  : undefined
+            }
             isRecording={isRecording}
             recordingLabel={recordingState.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
             captionsOn={captionsRunning}
@@ -6513,7 +6680,7 @@ export function VideoConferenceComponent(props: {
         <div
           className={`main-meeting-area${
             isToolbarMobile &&
-            ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc)
+            ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
               ? ' kloud-mobile-webcam-view'
               : ''
           }`}
@@ -6524,7 +6691,7 @@ export function VideoConferenceComponent(props: {
             right: 0,
             bottom:
               isToolbarMobile &&
-              ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc)
+              ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
                 ? 'var(--kloud-mobile-toolbar-height)'
                 : 0,
             overflow: 'hidden',
@@ -6655,13 +6822,29 @@ export function VideoConferenceComponent(props: {
               })()}
           </div>
 
+          {/* Design mode: the shared link (Figma, web page) */}
+          {shouldDisplayDesign && designLink && (
+            <div style={{ display: 'flex', flex: 1, minWidth: 0, position: 'relative' }}>
+              <DesignStage
+                link={designLink}
+                presenterName={designStored?.setByName}
+                isDriver={isDesignDriver}
+                canControl={canSwitchViews}
+                remoteViewport={remoteDesignViewport}
+                onViewportChange={handleDesignViewport}
+                onChangeLink={() => setDesignDialogOpen(true)}
+                onStop={stopDesign}
+              />
+            </div>
+          )}
+
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
             className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
             style={{
               flex: 1,
               position: 'relative',
-              display: shouldDisplayLiveDoc ? 'none' : 'flex',
+              display: shouldDisplayLiveDoc || shouldDisplayDesign ? 'none' : 'flex',
               flexDirection: 'column',
               minHeight: 0,
               height: '100%',
@@ -9359,6 +9542,7 @@ export function VideoConferenceComponent(props: {
           hasScreenShare={hasScreenShare}
           isDesktop={isDesktop}
           canSwitchViews={canSwitchViews}
+          onDesignClick={handleDesignClick}
           webcamLayoutMode={webcamLayoutMode}
           onWebcamLayoutChange={setWebcamLayoutMode}
           galleryPrefs={galleryPrefs}
@@ -9589,6 +9773,14 @@ export function VideoConferenceComponent(props: {
         )}
         {desktopLaunchModal}
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+        {designDialogOpen && canSwitchViews && (
+          <DesignLinkDialog
+            currentUrl={designLink?.url}
+            appOrigin={typeof window !== 'undefined' ? window.location.origin : ''}
+            onSubmit={submitDesignLink}
+            onClose={() => setDesignDialogOpen(false)}
+          />
+        )}
         </ParticipantRoleMenuProvider>
       </RoomContext.Provider>
     </div>

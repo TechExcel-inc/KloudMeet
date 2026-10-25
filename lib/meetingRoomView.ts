@@ -4,30 +4,35 @@ import {
   parseParticipantLiveDocAi,
 } from '@/lib/participantLiveDocAi';
 import {
+  mergeRoomMetadataWithDesignLink,
   mergeRoomMetadataWithView,
   parseCurrentViewFromRoomMetadata,
+  parseDesignLinkFromRoomMetadata,
   type MeetingRoomView,
 } from '@/lib/meetingRoomViewShared';
+import type { StoredDesignLink } from '@/lib/designLink';
 
 export type { MeetingRoomView } from '@/lib/meetingRoomViewShared';
 export { parseMeetingRoomView, parseCurrentViewFromRoomMetadata } from '@/lib/meetingRoomViewShared';
 
-/** 一次读取房间 metadata：当前视图，以及普通参会者是否显示文档 AI。 */
+/** 一次读取房间 metadata：当前视图、普通参会者是否显示文档 AI、Design 模式的链接。 */
 export async function readMeetingRoomFlags(roomName: string): Promise<{
   currentView: MeetingRoomView | null;
   participantLiveDocAi: boolean;
+  designLink: StoredDesignLink | null;
 }> {
   const client = getRoomServiceClient();
-  if (!client) return { currentView: null, participantLiveDocAi: true };
+  if (!client) return { currentView: null, participantLiveDocAi: true, designLink: null };
   try {
     const rooms = await client.listRooms([roomName]);
     const metadata = rooms[0]?.metadata;
     return {
       currentView: parseCurrentViewFromRoomMetadata(metadata),
       participantLiveDocAi: parseParticipantLiveDocAi(metadata),
+      designLink: parseDesignLinkFromRoomMetadata(metadata),
     };
   } catch {
-    return { currentView: null, participantLiveDocAi: true };
+    return { currentView: null, participantLiveDocAi: true, designLink: null };
   }
 }
 
@@ -85,6 +90,25 @@ export async function setMeetingRoomCurrentView(
     return true;
   } catch (e) {
     console.error('[meetingRoomView] updateRoomMetadata failed', roomName, e);
+    return false;
+  }
+}
+
+/** Persist the Design-mode link (null clears it) and, when given, the view in one metadata write. */
+export async function setMeetingRoomDesignLink(
+  roomName: string,
+  designLink: StoredDesignLink | null,
+  view?: MeetingRoomView,
+): Promise<boolean> {
+  const client = getRoomServiceClient();
+  if (!client) return false;
+  try {
+    const rooms = await client.listRooms([roomName]);
+    const existing = rooms[0]?.metadata;
+    await client.updateRoomMetadata(roomName, mergeRoomMetadataWithDesignLink(existing, designLink, view));
+    return true;
+  } catch (e) {
+    console.error('[meetingRoomView] design link update failed', roomName, e);
     return false;
   }
 }

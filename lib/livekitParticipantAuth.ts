@@ -4,6 +4,8 @@ import { TokenVerifier } from 'livekit-server-sdk';
 export interface RoomParticipant {
   identity: string;
   room: string;
+  /** Display name from the token, when set */
+  name?: string;
 }
 
 export interface VerifyParticipantOptions {
@@ -43,7 +45,11 @@ export async function verifyParticipant(
     ) {
       return null;
     }
-    return { identity: claims.sub, room };
+    return {
+      identity: claims.sub,
+      room,
+      ...(typeof claims.name === 'string' && claims.name ? { name: claims.name } : {}),
+    };
   } catch (err) {
     console.error('[verifyParticipant]', err);
     return null;
