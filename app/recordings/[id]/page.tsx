@@ -11,6 +11,7 @@ import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
+import s from '@/styles/Replay.module.css';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -84,9 +85,9 @@ function fmtTime(secs: number | null | undefined): string {
   if (secs === 0) return '0:00';
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${m}:${String(s).padStart(2, '0')}`;
+  const sec = Math.floor(secs % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  return `${m}:${String(sec).padStart(2, '0')}`;
 }
 
 function offsetToSecs(offset: string): number {
@@ -141,6 +142,28 @@ function speakerColor(name: string): string {
   return COLORS[Math.abs(h) % COLORS.length];
 }
 
+/** Follow the theme chosen on the home page (pre-meeting pages share html[data-theme]). */
+function useStoredTheme() {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (root.hasAttribute('data-theme')) return;
+    try {
+      const stored = window.localStorage.getItem('kloud-theme');
+      if (stored === 'dark' || stored === 'light') root.setAttribute('data-theme', stored);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+}
+
+function Avatar({ name, className }: { name: string; className: string }) {
+  return (
+    <span className={className} style={{ background: speakerColor(name) }} aria-hidden="true">
+      {getInitials(name)}
+    </span>
+  );
+}
+
 /* ─── Chapter Cards + Speaker Timeline types ─────────────── */
 
 interface ChapterCard {
@@ -158,7 +181,7 @@ interface SpeakerSegment {
   segments: [number, number][];
 }
 
-/* ─── ChapterCardsCarousel ────────────────────────────────── */
+/* ─── Chapters ────────────────────────────────────────────── */
 function ChapterCardsCarousel({
   chapters,
   currentTime,
@@ -170,10 +193,10 @@ function ChapterCardsCarousel({
   selectedId: number | null;
   onSelect: (ch: ChapterCard) => void;
 }) {
+  const { t } = useI18n();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(true);
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const [canRight, setCanRight] = useState(false);
 
   const check = () => {
     const el = scrollRef.current;
@@ -189,8 +212,12 @@ function ChapterCardsCarousel({
     const el = scrollRef.current;
     if (!el) return;
     el.addEventListener('scroll', check, { passive: true });
+    window.addEventListener('resize', check);
     check();
-    return () => el.removeEventListener('scroll', check);
+    return () => {
+      el.removeEventListener('scroll', check);
+      window.removeEventListener('resize', check);
+    };
   }, []);
 
   // 自动高亮：基于播放时间
@@ -200,58 +227,58 @@ function ChapterCardsCarousel({
   );
 
   return (
-    <div style={stx.carouselWrap}>
-      {canLeft && (
-        <button style={{ ...stx.arrowBtn, left: 6 }} onClick={() => scroll('l')}>
-          ‹
-        </button>
-      )}
-      <div ref={scrollRef} style={stx.carouselTrack}>
-        {chapters.map((ch, idx) => {
-          const isSelected = ch.id === selectedId;
-          const isAuto = idx === autoIdx && selectedId === null;
-          const isActive = isSelected || isAuto;
-          const isHovered = idx === hoverIdx;
-          return (
-            <div
-              key={ch.id}
-              onClick={() => onSelect(ch)}
-              onMouseEnter={() => setHoverIdx(idx)}
-              onMouseLeave={() => setHoverIdx(null)}
-              style={{
-                ...stx.chapterCard,
-                background: isActive
-                  ? 'rgba(99,102,241,0.22)'
-                  : isHovered
-                    ? 'rgba(255,255,255,0.06)'
-                    : '#1a2235',
-                borderColor: isActive ? '#6366f1' : 'rgba(255,255,255,0.07)',
-                boxShadow: isActive ? '0 0 0 1.5px rgba(99,102,241,0.5)' : 'none',
-                cursor: 'pointer',
-              }}
-            >
-              <div style={{ ...stx.cardAvatar, background: speakerColor(ch.speaker) }}>
-                {getInitials(ch.speaker)}
-              </div>
-              <div style={stx.cardName}>{ch.speaker}</div>
-              <div style={stx.cardTimeRange}>{ch.timeRange}</div>
-              <div style={stx.cardTopic} title={ch.topic}>
-                {ch.topic}
-              </div>
-            </div>
-          );
-        })}
+    <section className={s.card} aria-label={t('replay.chapters')}>
+      <div className={s.cardHead}>
+        <h2 className={s.cardTitle}>{t('replay.chapters')}</h2>
       </div>
-      {canRight && (
-        <button style={{ ...stx.arrowBtn, right: 6 }} onClick={() => scroll('r')}>
-          ›
-        </button>
-      )}
-    </div>
+      <div className={s.chapterRow}>
+        {canLeft && (
+          <button
+            type="button"
+            className={`${s.scrollBtn} ${s.scrollLeft}`}
+            onClick={() => scroll('l')}
+            aria-label={t('replay.scrollChaptersLeft')}
+            title={t('replay.scrollChaptersLeft')}
+          >
+            <Chevron dir="left" />
+          </button>
+        )}
+        <div ref={scrollRef} className={s.chapterTrack}>
+          {chapters.map((ch, idx) => {
+            const isActive = ch.id === selectedId || (idx === autoIdx && selectedId === null);
+            return (
+              <button
+                type="button"
+                key={ch.id}
+                className={isActive ? s.chapterOn : s.chapter}
+                aria-current={isActive ? 'true' : undefined}
+                onClick={() => onSelect(ch)}
+                title={ch.topic}
+              >
+                <span className={s.chapterTime}>{ch.timeRange}</span>
+                <span className={s.chapterTopic}>{ch.topic}</span>
+                {ch.speaker && <span className={s.chapterSpeaker}>{ch.speaker}</span>}
+              </button>
+            );
+          })}
+        </div>
+        {canRight && (
+          <button
+            type="button"
+            className={`${s.scrollBtn} ${s.scrollRight}`}
+            onClick={() => scroll('r')}
+            aria-label={t('replay.scrollChaptersRight')}
+            title={t('replay.scrollChaptersRight')}
+          >
+            <Chevron dir="right" />
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
-/* ─── SpeakerSegmentTimeline ──────────────────────────────── */
+/* ─── Speakers ────────────────────────────────────────────── */
 function SpeakerSegmentTimeline({
   speakers,
   duration,
@@ -259,57 +286,48 @@ function SpeakerSegmentTimeline({
 }: {
   speakers: SpeakerSegment[];
   duration: number;
-  onSeek: (s: number) => void;
+  onSeek: (secs: number) => void;
 }) {
+  const { t } = useI18n();
   if (!speakers.length || !duration) return null;
-  const pct = (s: number) => `${((s / duration) * 100).toFixed(2)}%`;
+  const pct = (secs: number) => `${((secs / duration) * 100).toFixed(2)}%`;
   return (
-    <div style={stx.segTimeline}>
-      {speakers.map((sp) => (
-        <div key={sp.name} style={stx.segRow}>
-          <div style={stx.segLabel}>
-            <div style={{ ...stx.segAvatar, background: sp.color }}>{getInitials(sp.name)}</div>
-            <span style={stx.segName}>{sp.name}</span>
+    <section className={s.card} aria-label={t('replay.speakers')}>
+      <div className={s.cardHead}>
+        <h2 className={s.cardTitle}>{t('replay.speakers')}</h2>
+        <span className={s.cardHint}>{t('replay.speakersHint')}</span>
+      </div>
+      <div className={s.lanes}>
+        {speakers.map((sp) => (
+          <div key={sp.name} className={s.lane}>
+            <div className={s.laneName}>
+              <Avatar name={sp.name} className={s.dot} />
+              <span>{sp.name}</span>
+            </div>
+            <div
+              className={s.laneBar}
+              onClick={(e) => {
+                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                onSeek(((e.clientX - rect.left) / rect.width) * duration);
+              }}
+            >
+              {sp.segments.map(([start, end], i) => (
+                <div
+                  key={i}
+                  className={s.laneSeg}
+                  title={`${fmtTime(start)} – ${fmtTime(end)}`}
+                  style={{ left: pct(start), width: pct(end - start), background: sp.color }}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onSeek(start);
+                  }}
+                />
+              ))}
+            </div>
           </div>
-          <div
-            style={stx.segBar}
-            onClick={(e) => {
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              onSeek(((e.clientX - rect.left) / rect.width) * duration);
-            }}
-          >
-            {sp.segments.map(([s, e], i) => (
-              <div
-                key={i}
-                title={`${fmtTime(s)} – ${fmtTime(e)}  点击跳转`}
-                style={{
-                  position: 'absolute',
-                  left: pct(s),
-                  width: pct(e - s),
-                  top: 0,
-                  height: '100%',
-                  background: sp.color,
-                  borderRadius: 3,
-                  opacity: 0.88,
-                  cursor: 'pointer',
-                  transition: 'opacity 0.15s',
-                }}
-                onClick={(ev) => {
-                  ev.stopPropagation();
-                  onSeek(s);
-                }}
-                onMouseEnter={(ev) => {
-                  (ev.currentTarget as HTMLElement).style.opacity = '1';
-                }}
-                onMouseLeave={(ev) => {
-                  (ev.currentTarget as HTMLElement).style.opacity = '0.88';
-                }}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -319,59 +337,53 @@ function SpeakerSegmentTimeline({
 function SummaryPanel({
   items,
   currentTime,
-  duration,
   onSeek,
   meetingId,
   kloudMeetingId,
-  forceExpandId,
+  focusId,
+  speakerById,
 }: {
   items: SummaryItem[];
   currentTime: number;
-  duration: number;
   onSeek: (secs: number) => void;
   meetingId: number;
   kloudMeetingId: number | null;
-  forceExpandId?: number | null;
+  /** 外部点击章节卡片时滚动到对应摘要 */
+  focusId?: number | null;
+  speakerById: Record<number, string>;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [localItems, setLocalItems] = useState<SummaryItem[]>(items);
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const itemRefs = useRef<Record<number, HTMLElement | null>>({});
 
   useEffect(() => setLocalItems(items), [items]);
 
-  // 外部点击章节卡片时强制展开对应摘要
   useEffect(() => {
-    if (forceExpandId !== undefined && forceExpandId !== null) {
-      setExpanded(forceExpandId);
-    }
-  }, [forceExpandId]);
+    if (focusId === undefined || focusId === null) return;
+    itemRefs.current[focusId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [focusId]);
 
   // 高亮当前所在章节
   const activeIdx = localItems.reduce((acc, item, idx) => {
-    const s = offsetToSecs(item.timeOffset);
-    return s <= currentTime ? idx : acc;
+    const start = offsetToSecs(item.timeOffset);
+    return start <= currentTime ? idx : acc;
   }, -1);
 
   if (!localItems.length) {
-    if (!meetingId) {
-      return (
-        <div style={styles.emptyPanel}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-          <p style={{ color: '#94a3b8' }}>{t('replay.noSummaryData')}</p>
-        </div>
-      );
-    }
     return (
-      <div style={styles.emptyPanel}>
-        <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
-        <p style={{ color: '#94a3b8', marginBottom: 8 }}>{t('replay.noSummary')}</p>
-        <p style={{ color: '#475569', fontSize: 12, marginBottom: 16 }}>
-          {kloudMeetingId ? t('replay.summaryHint') : t('replay.summaryNoSource')}
-        </p>
-        {kloudMeetingId ? (
+      <div className={s.empty}>
+        <span className={s.emptyIcon} aria-hidden="true">
+          <DocGlyph />
+        </span>
+        <p className={s.emptyTitle}>{meetingId ? t('replay.noSummary') : t('replay.noSummaryData')}</p>
+        {!!meetingId && (
+          <p className={s.muted}>{kloudMeetingId ? t('replay.summaryHint') : t('replay.summaryNoSource')}</p>
+        )}
+        {!!meetingId && kloudMeetingId ? (
           <button
-            style={styles.genBtn}
+            type="button"
+            className={s.primaryBtn}
             disabled={loading}
             onClick={async () => {
               setLoading(true);
@@ -403,34 +415,35 @@ function SummaryPanel({
   }
 
   return (
-    <div style={styles.panelScroll}>
+    <div className={s.scroll}>
       {localItems.map((item, idx) => {
-        const isActive = idx === activeIdx;
-        const isOpen = expanded === item.id;
+        const start = offsetToSecs(item.timeOffset);
+        const speaker = speakerById[item.id] || '';
         return (
-          <div
+          <article
             key={item.id}
-            style={{
-              ...styles.summaryCard,
-              background: isActive ? 'rgba(99,102,241,0.12)' : 'rgba(255,255,255,0.03)',
-              borderLeft: isActive ? '3px solid #6366f1' : '3px solid transparent',
+            ref={(el) => {
+              itemRefs.current[item.id] = el;
             }}
+            className={idx === activeIdx ? s.summaryItemOn : s.summaryItem}
           >
-            <div
-              style={styles.summaryCardHeader}
-              onClick={() => {
-                onSeek(offsetToSecs(item.timeOffset));
-                setExpanded(isOpen ? null : item.id);
-              }}
-            >
-              <span style={styles.chapterTime}>{item.timeOffset}</span>
-              <span style={{ ...styles.chapterTitle, color: isActive ? '#818cf8' : '#e2e8f0' }}>
-                {item.title}
-              </span>
-              <span style={{ color: '#475569', fontSize: 12 }}>{isOpen ? '▲' : '▼'}</span>
+            <span className={s.summaryIndex} aria-hidden="true">{idx + 1}</span>
+            <button type="button" className={s.summaryTitle} onClick={() => onSeek(start)}>
+              {item.title}
+            </button>
+            {item.content && <p className={s.summaryText}>{item.content}</p>}
+            <div className={s.summaryFoot}>
+              <button type="button" className={s.timeLink} onClick={() => onSeek(start)}>
+                {item.timeOffset}
+              </button>
+              {speaker && (
+                <span className={s.person}>
+                  <Avatar name={speaker} className={s.dot} />
+                  {speaker}
+                </span>
+              )}
             </div>
-            {isOpen && <div style={styles.chapterContent}>{item.content}</div>}
-          </div>
+          </article>
         );
       })}
     </div>
@@ -449,15 +462,15 @@ function TranscriptPanel({
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState('');
-  const activeRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLElement | null>(null);
 
   const filtered = search
-    ? transcripts.filter((t) => t.content.toLowerCase().includes(search.toLowerCase()))
+    ? transcripts.filter((row) => row.content.toLowerCase().includes(search.toLowerCase()))
     : transcripts;
 
   // 当前正在播放的字幕
-  const activeId = transcripts.reduce((acc, t) => {
-    if (t.offsetSeconds !== null && t.offsetSeconds <= currentTime) return t.id;
+  const activeId = transcripts.reduce((acc, row) => {
+    if (row.offsetSeconds !== null && row.offsetSeconds <= currentTime) return row.id;
     return acc;
   }, -1);
 
@@ -471,74 +484,72 @@ function TranscriptPanel({
   // 按说话人分组（连续同一人合并）
   type Group = { speaker: string; items: Transcript[] };
   const groups: Group[] = [];
-  for (const t of filtered) {
-    if (!groups.length || groups[groups.length - 1].speaker !== t.speakerName) {
-      groups.push({ speaker: t.speakerName, items: [t] });
+  for (const row of filtered) {
+    if (!groups.length || groups[groups.length - 1].speaker !== row.speakerName) {
+      groups.push({ speaker: row.speakerName, items: [row] });
     } else {
-      groups[groups.length - 1].items.push(t);
+      groups[groups.length - 1].items.push(row);
     }
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* 搜索框 */}
-      <div style={styles.searchBox}>
-        <span style={{ color: '#64748b', marginRight: 8 }}>🔍</span>
+    <div className={s.tabBody}>
+      <label className={s.search}>
+        <SearchGlyph />
         <input
-          style={styles.searchInput}
           placeholder={t('replay.searchPlaceholder')}
+          aria-label={t('replay.searchPlaceholder')}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
         {search && (
-          <button style={styles.clearBtn} onClick={() => setSearch('')}>
-            ✕
+          <button
+            type="button"
+            className={s.clearBtn}
+            onClick={() => setSearch('')}
+            aria-label={t('replay.clearSearch')}
+            title={t('replay.clearSearch')}
+          >
+            <CloseGlyph size={12} />
           </button>
         )}
-      </div>
+      </label>
 
-      {/* 字幕列表 */}
-      <div style={styles.panelScroll}>
+      <div className={s.scroll}>
         {!filtered.length && (
-          <div style={styles.emptyPanel}>
-            <p style={{ color: '#94a3b8' }}>
-              {search ? t('replay.noMatch') : t('replay.noTranscript')}
-            </p>
+          <div className={s.empty}>
+            <p className={s.muted}>{search ? t('replay.noMatch') : t('replay.noTranscript')}</p>
           </div>
         )}
         {groups.map((group, gi) => (
-          <div key={gi} style={{ marginBottom: 16 }}>
-            {/* 说话人头像 + 名字 */}
-            <div style={styles.speakerRow}>
-              <div
-                style={{
-                  ...styles.speakerAvatar,
-                  background: speakerColor(group.speaker),
-                }}
-              >
-                {getInitials(group.speaker)}
-              </div>
-              <span style={styles.speakerName}>{group.speaker}</span>
+          <div key={gi} className={s.group}>
+            <div className={s.groupHead}>
+              <Avatar name={group.speaker} className={s.dot} />
+              <span className={s.groupName}>{group.speaker}</span>
               {group.items[0].offsetSeconds !== null && (
-                <span style={styles.speakerTime}>{fmtTime(group.items[0].offsetSeconds)}</span>
+                <span className={s.groupTime}>{fmtTime(group.items[0].offsetSeconds)}</span>
               )}
             </div>
-            {/* 逐条字幕气泡 */}
-            {group.items.map((t) => {
-              const isActive = t.id === activeId;
-              return (
-                <div
-                  key={t.id}
-                  ref={isActive ? activeRef : null}
-                  style={{
-                    ...styles.captionBubble,
-                    background: isActive ? 'rgba(99,102,241,0.18)' : 'rgba(255,255,255,0.06)',
-                    borderColor: isActive ? '#6366f1' : 'transparent',
-                    cursor: t.offsetSeconds !== null ? 'pointer' : 'default',
-                  }}
-                  onClick={() => t.offsetSeconds !== null && onSeek(t.offsetSeconds)}
+            {group.items.map((row) => {
+              const isActive = row.id === activeId;
+              const cls = isActive ? s.lineOn : s.line;
+              return row.offsetSeconds !== null ? (
+                <button
+                  type="button"
+                  key={row.id}
+                  ref={isActive ? (el) => { activeRef.current = el; } : undefined}
+                  className={cls}
+                  onClick={() => onSeek(row.offsetSeconds as number)}
                 >
-                  {t.content}
+                  {row.content}
+                </button>
+              ) : (
+                <div
+                  key={row.id}
+                  ref={isActive ? (el) => { activeRef.current = el; } : undefined}
+                  className={cls}
+                >
+                  {row.content}
                 </div>
               );
             })}
@@ -560,61 +571,47 @@ function InfoPanel({
   const { t } = useI18n();
   if (!meeting) return null;
   return (
-    <div style={styles.panelScroll}>
-      <div style={styles.infoSection}>
-        <h4 style={styles.infoLabel}>{t('replay.meetingTitle')}</h4>
-        <p style={styles.infoValue}>{meeting.title || meeting.roomName}</p>
+    <div className={s.scroll}>
+      <div className={s.infoRow}>
+        <h3 className={s.infoLabel}>{t('replay.meetingTitle')}</h3>
+        <p className={s.infoValue}>{meeting.title || meeting.roomName}</p>
       </div>
       {meeting.actualStartedAt && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.startTime')}</h4>
-          <p style={styles.infoValue}>{new Date(meeting.actualStartedAt).toLocaleString()}</p>
+        <div className={s.infoRow}>
+          <h3 className={s.infoLabel}>{t('replay.startTime')}</h3>
+          <p className={s.infoValue}>{new Date(meeting.actualStartedAt).toLocaleString()}</p>
         </div>
       )}
       {meeting.actualDurationMinutes && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.meetingDuration')}</h4>
-          <p style={styles.infoValue}>
-            {t('replay.minutes', { n: meeting.actualDurationMinutes })}
-          </p>
+        <div className={s.infoRow}>
+          <h3 className={s.infoLabel}>{t('replay.meetingDuration')}</h3>
+          <p className={s.infoValue}>{t('replay.minutes', { n: meeting.actualDurationMinutes })}</p>
         </div>
       )}
       {recording.durationSeconds && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.recordingDuration')}</h4>
-          <p style={styles.infoValue}>{fmtTime(recording.durationSeconds)}</p>
+        <div className={s.infoRow}>
+          <h3 className={s.infoLabel}>{t('replay.recordingDuration')}</h3>
+          <p className={s.infoValue}>{fmtTime(recording.durationSeconds)}</p>
         </div>
       )}
       {meeting.createdBy && (
-        <div style={styles.infoSection}>
-          <h4 style={styles.infoLabel}>{t('replay.host')}</h4>
-          <p style={styles.infoValue}>{meeting.createdBy.fullName || meeting.createdBy.username}</p>
+        <div className={s.infoRow}>
+          <h3 className={s.infoLabel}>{t('replay.host')}</h3>
+          <p className={s.infoValue}>{meeting.createdBy.fullName || meeting.createdBy.username}</p>
         </div>
       )}
-      <div style={styles.infoSection}>
-        <h4 style={styles.infoLabel}>
-          {t('replay.participants')}({meeting.participants.length})
-        </h4>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className={s.infoRow}>
+        <h3 className={s.infoLabel}>
+          {t('replay.participants')} ({meeting.participants.length})
+        </h3>
+        <div className={s.people}>
           {meeting.participants.map((p) => (
-            <div key={p.id} style={styles.participantRow}>
-              <div
-                style={{
-                  ...styles.speakerAvatar,
-                  background: speakerColor(p.displayName),
-                  width: 32,
-                  height: 32,
-                  fontSize: 12,
-                }}
-              >
-                {getInitials(p.displayName)}
-              </div>
+            <div key={p.id} className={s.personRow}>
+              <Avatar name={p.displayName} className={s.personAvatar} />
               <div>
-                <div style={{ color: '#e2e8f0', fontSize: 13 }}>{p.displayName}</div>
+                <div className={s.personName}>{p.displayName}</div>
                 {p.durationSeconds && (
-                  <div style={{ color: '#64748b', fontSize: 11 }}>
-                    {t('replay.online', { time: fmtTime(p.durationSeconds) })}
-                  </div>
+                  <div className={s.personMeta}>{t('replay.online', { time: fmtTime(p.durationSeconds) })}</div>
                 )}
               </div>
             </div>
@@ -625,106 +622,15 @@ function InfoPanel({
   );
 }
 
-/** 参与者发言进度条 */
-function ParticipantTimeline({
-  transcripts,
-  participants,
-  duration,
-  currentTime,
-  onSeek,
-}: {
-  transcripts: Transcript[];
-  participants: Participant[];
-  duration: number;
-  currentTime: number;
-  onSeek: (secs: number) => void;
-}) {
-  if (!duration || !transcripts.length) return null;
-
-  // 聚合：每个发言人的发言时段
-  const speakerMap: Record<string, number[]> = {};
-  for (const t of transcripts) {
-    if (t.offsetSeconds === null) continue;
-    if (!speakerMap[t.speakerName]) speakerMap[t.speakerName] = [];
-    speakerMap[t.speakerName].push(t.offsetSeconds);
-  }
-
-  const speakers = Object.keys(speakerMap).slice(0, 6); // 最多显示6人
-
+/** AI 生成进度（模拟） */
+function GenerateProgress({ pct }: { pct: number }) {
+  const { t } = useI18n();
   return (
-    <div style={styles.timelineContainer}>
-      {speakers.map((name) => {
-        const offsets = speakerMap[name];
-        return (
-          <div key={name} style={styles.timelineRow}>
-            <div style={styles.timelineLabel} title={name}>
-              <div
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: speakerColor(name),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  color: '#fff',
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
-              >
-                {getInitials(name)}
-              </div>
-              <span
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontSize: 11,
-                }}
-              >
-                {name}
-              </span>
-            </div>
-            <div style={styles.timelineBar}>
-              {offsets.map((sec, i) => {
-                const left = `${(sec / duration) * 100}%`;
-                return (
-                  <div
-                    key={i}
-                    title={fmtTime(sec)}
-                    style={{
-                      position: 'absolute',
-                      left,
-                      top: 2,
-                      width: 4,
-                      height: 'calc(100% - 4px)',
-                      borderRadius: 2,
-                      background: speakerColor(name),
-                      opacity: 0.85,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => onSeek(sec)}
-                  />
-                );
-              })}
-              {/* 当前播放位置 */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${(currentTime / duration) * 100}%`,
-                  top: 0,
-                  width: 2,
-                  height: '100%',
-                  background: '#818cf8',
-                  opacity: 0.7,
-                  pointerEvents: 'none',
-                }}
-              />
-            </div>
-          </div>
-        );
-      })}
+    <div className={s.progress}>
+      <div className={s.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
+        <div className={s.progressBar} style={{ width: `${Math.round(pct)}%` }} />
+      </div>
+      <p className={s.muted}>{t('replay.generating', { pct: Math.round(pct) })}</p>
     </div>
   );
 }
@@ -734,12 +640,12 @@ export default function ReplayPage() {
   const params = useParams();
   const id = params?.id as string;
   const { t, locale, setLocale } = useI18n();
+  useStoredTheme();
 
   const [data, setData] = useState<ReplayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info'>('summary');
   // 为 null 表示未手动选中，高亮跟随播放时间自动
@@ -844,11 +750,12 @@ export default function ReplayPage() {
     }
   }, []);
 
-  // 点击章节卡片：跳转视频 + 切换右侧摘要面板 + 展开对应项
+  // 点击章节卡片：跳转视频 + 切换左侧摘要面板 + 滚动到对应项
   const handleChapterSelect = useCallback(
     (ch: ChapterCard) => {
       seekTo(ch.startSec);
       setActiveTab('summary');
+      setPanelVisible(true);
       setSelectedChapterId(ch.id);
     },
     [seekTo],
@@ -892,7 +799,7 @@ export default function ReplayPage() {
     if (!generating) return;
     setGenProgress(0);
     // 每 600ms 推进一次，越接近 90 推进越慢（模拟 AI 延迟感）
-    const id = setInterval(() => {
+    const timer = setInterval(() => {
       setGenProgress((prev) => {
         if (prev >= 90) return prev;
         const remaining = 90 - prev;
@@ -900,16 +807,15 @@ export default function ReplayPage() {
         return Math.min(90, prev + step);
       });
     }, 600);
-    return () => clearInterval(id);
+    return () => clearInterval(timer);
   }, [generating]);
 
   /* ── Loading ── */
   if (loading) {
     return (
-      <div style={styles.fullCenter}>
-        <div style={styles.spinner} />
-        <p style={{ color: '#94a3b8', marginTop: 16 }}>{t('replay.loading')}</p>
-        <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div className={s.center}>
+        <div className={s.spinner} />
+        <p className={s.muted}>{t('replay.loading')}</p>
       </div>
     );
   }
@@ -917,23 +823,14 @@ export default function ReplayPage() {
   /* ── Error ── */
   if (error || !data?.recording.streamUrl) {
     return (
-      <div style={styles.fullCenter}>
-        <div
-          style={{
-            textAlign: 'center',
-            padding: 40,
-            background: '#1e293b',
-            borderRadius: 16,
-            border: '1px solid #334155',
-            maxWidth: 420,
-          }}
-        >
-          <div style={{ fontSize: 48, marginBottom: 12 }}>&#x26A0;&#xFE0F;</div>
-          <h2 style={{ color: '#f1f5f9', marginBottom: 8 }}>{t('replay.notReady')}</h2>
-          <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 24 }}>
-            {error || t('replay.processing')}
-          </p>
-          <Link href="/" style={styles.primaryBtn}>
+      <div className={s.center}>
+        <div className={s.notice}>
+          <span className={s.emptyIcon} aria-hidden="true">
+            <ClockGlyph />
+          </span>
+          <h1 className={s.emptyTitle}>{t('replay.notReady')}</h1>
+          <p className={s.muted}>{error || t('replay.processing')}</p>
+          <Link href="/" className={s.primaryBtn}>
             {t('replay.back')}
           </Link>
         </div>
@@ -953,10 +850,10 @@ export default function ReplayPage() {
   const unfinished = isSttActive(sttStatus) || sttStatus === 'FAILED';
   const canAskTranscribe = recording.canTranscribe === true || recording.canManage || sessionOn;
 
-  function secsToHMS(s: number): string {
-    const h = Math.floor(s / 3600);
-    const m = Math.floor((s % 3600) / 60);
-    const sec = Math.floor(s % 60);
+  function secsToHMS(secs: number): string {
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const sec = Math.floor(secs % 60);
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   }
 
@@ -976,16 +873,19 @@ export default function ReplayPage() {
       topic: item.title,
     };
   });
+  const speakerById: Record<number, string> = Object.fromEntries(
+    realChapters.map((ch) => [ch.id, ch.speaker]),
+  );
 
   const realSpeakerSegments: SpeakerSegment[] = (() => {
     if (!transcripts.length) return [];
     const acc: Record<string, [number, number][]> = {};
-    for (const t of transcripts) {
-      if (t.offsetSeconds === null || t.offsetSeconds === undefined) continue;
-      const start = t.offsetSeconds;
-      const dur = Math.min(30, Math.max(1.5, t.content.length * 0.25));
-      if (!acc[t.speakerName]) acc[t.speakerName] = [];
-      acc[t.speakerName].push([start, start + dur]);
+    for (const row of transcripts) {
+      if (row.offsetSeconds === null || row.offsetSeconds === undefined) continue;
+      const start = row.offsetSeconds;
+      const dur = Math.min(30, Math.max(1.5, row.content.length * 0.25));
+      if (!acc[row.speakerName]) acc[row.speakerName] = [];
+      acc[row.speakerName].push([start, start + dur]);
     }
     return Object.entries(acc).map(([name, segs]) => ({
       name,
@@ -996,163 +896,119 @@ export default function ReplayPage() {
 
   const realDuration =
     recording.durationSeconds ??
-    (transcripts.length ? Math.max(...transcripts.map((t) => t.offsetSeconds ?? 0)) + 60 : 300);
-
-  const displaySummaryItems = summaryItems;
+    (transcripts.length ? Math.max(...transcripts.map((row) => row.offsetSeconds ?? 0)) + 60 : 300);
 
   const tabs = [
-    { key: 'summary', label: t('replay.tabSummary'), count: displaySummaryItems.length },
+    { key: 'summary', label: t('replay.tabSummary'), count: summaryItems.length },
     { key: 'transcript', label: t('replay.tabTranscript'), count: transcripts.length },
     { key: 'info', label: t('replay.tabInfo'), count: null },
   ] as const;
 
+  // Header line under the title: when · how long · who
+  const hostName = meeting?.createdBy ? meeting.createdBy.fullName || meeting.createdBy.username : '';
+  const metaParts = [
+    meeting?.actualStartedAt
+      ? new Date(meeting.actualStartedAt).toLocaleString(locale, {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
+      : '',
+    meeting?.actualDurationMinutes
+      ? t('replay.minutes', { n: meeting.actualDurationMinutes })
+      : recording.durationSeconds
+        ? fmtTime(recording.durationSeconds)
+        : '',
+    participants.length ? t('replay.metaPeople', { n: participants.length }) : '',
+    hostName ? t('replay.metaHost', { name: hostName }) : '',
+  ].filter(Boolean);
+
+  const showPanel = hasTranscripts && panelVisible;
+  const videoClass = !hasTranscripts ? s.videoSolo : videoFit === 'height' ? s.videoTall : '';
+
   return (
-    <div style={styles.page}>
+    <div className={s.page}>
       {/* ── Header ── */}
-      <header style={styles.header}>
-        <div style={styles.headerLeft}>
-          <Link href="/" style={styles.backBtn}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-            >
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            {t('replay.back')}
-          </Link>
-          <div style={styles.headerTitle}>
-            <span>{meetingTitle}</span>
-            {meeting?.actualStartedAt && (
-              <span style={styles.headerDate}>
-                {new Date(meeting.actualStartedAt).toLocaleDateString('zh-CN', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </span>
-            )}
-          </div>
+      <header className={s.header}>
+        <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </Link>
+        <div className={s.titleBlock}>
+          <h1 className={s.title} title={meetingTitle}>{meetingTitle}</h1>
+          {metaParts.length > 0 && <p className={s.meta}>{metaParts.join(' · ')}</p>}
         </div>
-        <div style={styles.headerRight}>
+        <div className={s.headerRight}>
           {/* Panel toggle */}
           {hasTranscripts && (
             <button
-              style={styles.iconBtn}
+              type="button"
+              className={s.iconBtn}
               onClick={() => setPanelVisible(!panelVisible)}
+              aria-pressed={panelVisible}
               aria-label={panelVisible ? t('replay.hidePanel') : t('replay.showPanel')}
               title={panelVisible ? t('replay.hidePanel') : t('replay.showPanel')}
             >
-              {panelVisible ? (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="15" y1="3" x2="15" y2="21" />
-                </svg>
-              ) : (
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <line x1="9" y1="3" x2="9" y2="21" />
-                </svg>
-              )}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="16" rx="2" />
+                <line x1="9" y1="4" x2="9" y2="20" />
+              </svg>
             </button>
           )}
 
-          {/* Help tip */}
+          {/* Help */}
           <button
-            style={styles.iconBtn}
+            type="button"
+            className={s.iconBtn}
             onClick={() => setHelpOpen(true)}
             aria-label={t('nav.help')}
             title={t('nav.help')}
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M9.6 9.3a2.5 2.5 0 014.8 1c0 1.7-2.4 2.2-2.4 3.7" />
+              <line x1="12" y1="17.2" x2="12.01" y2="17.2" />
             </svg>
           </button>
 
-          {/* Language selector */}
-          <div style={{ position: 'relative' }} ref={langMenuRef}>
+          {/* Language */}
+          <div className={s.menuAnchor} ref={langMenuRef}>
             <button
-              style={{ ...styles.iconBtn, gap: 4, paddingLeft: '0.5rem', paddingRight: '0.5rem' }}
+              type="button"
+              className={s.iconBtn}
               onClick={() => setLangMenuOpen(!langMenuOpen)}
+              aria-haspopup="menu"
+              aria-expanded={langMenuOpen}
               aria-label={t('nav.langSelector')}
               title={t('nav.langSelector')}
             >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="2" y1="12" x2="22" y2="12" />
-                <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <path d="M12 3a14 14 0 014 9 14 14 0 01-4 9 14 14 0 01-4-9 14 14 0 014-9z" />
               </svg>
-              <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>
+              <span className={s.hideNarrow}>
                 {LOCALE_OPTIONS.find((l) => l.code === locale)?.shortCode || 'EN'}
               </span>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
             </button>
             {langMenuOpen && (
-              <div style={styles.dropdownMenu}>
+              <div className={s.menu} role="menu">
                 {LOCALE_OPTIONS.map((opt) => (
                   <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={locale === opt.code}
                     key={opt.code}
-                    style={{
-                      ...styles.dropdownItem,
-                      fontWeight: locale === opt.code ? 600 : 400,
-                      background: locale === opt.code ? 'rgba(99,102,241,0.12)' : 'transparent',
-                    }}
+                    className={locale === opt.code ? s.menuItemOn : s.menuItem}
                     onClick={() => {
-                      setLocale(opt.code);
+                      setLocale(opt.code as Locale);
                       setLangMenuOpen(false);
                     }}
                   >
                     <span>{opt.label}</span>
-                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{opt.shortCode}</span>
+                    <span className={s.menuHint}>{opt.shortCode}</span>
                   </button>
                 ))}
               </div>
@@ -1160,42 +1016,29 @@ export default function ReplayPage() {
           </div>
 
           {/* Avatar menu */}
-          <div style={{ position: 'relative' }} ref={avatarMenuRef}>
+          <div className={s.menuAnchor} ref={avatarMenuRef}>
             <button
-              style={styles.avatarBtn}
+              type="button"
+              className={s.avatarBtn}
               onClick={() => setAvatarMenuOpen(!avatarMenuOpen)}
+              aria-haspopup="menu"
+              aria-expanded={avatarMenuOpen}
               aria-label={t('nav.userMenu')}
               title={t('nav.userMenu')}
             >
               {userInfo?.avatarUrl ? (
-                <img
-                  src={userInfo.avatarUrl}
-                  alt=""
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
-                />
+                <img src={userInfo.avatarUrl} alt="" />
               ) : (
-                <span style={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                  {userInfo?.displayName?.charAt(0).toUpperCase() || '?'}
-                </span>
+                <span>{userInfo?.displayName?.charAt(0).toUpperCase() || '?'}</span>
               )}
             </button>
             {avatarMenuOpen && (
-              <div style={styles.dropdownMenu}>
-                {userInfo && (
-                  <div
-                    style={{
-                      padding: '8px 12px',
-                      borderBottom: '1px solid #1e293b',
-                      marginBottom: 4,
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#e2e8f0' }}>
-                      {userInfo.displayName}
-                    </div>
-                  </div>
-                )}
+              <div className={s.menu} role="menu">
+                {userInfo && <div className={s.menuUser}>{userInfo.displayName}</div>}
                 <button
-                  style={styles.dropdownItem}
+                  type="button"
+                  role="menuitem"
+                  className={s.menuItem}
                   onClick={() => {
                     setAvatarMenuOpen(false);
                     window.location.href = '/';
@@ -1204,33 +1047,23 @@ export default function ReplayPage() {
                   {t('replay.back')}
                 </button>
                 <a
+                  role="menuitem"
                   href={recording.streamUrl!}
                   download={recording.fileName}
-                  style={{
-                    ...styles.dropdownItem,
-                    textDecoration: 'none',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                  }}
+                  className={s.menuItem}
                   onClick={() => setAvatarMenuOpen(false)}
                 >
                   {t('replay.download')}
-                  <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                     <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
                     <polyline points="7 10 12 15 17 10" />
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </a>
                 <button
-                  style={{ ...styles.dropdownItem, color: '#ef4444' }}
+                  type="button"
+                  role="menuitem"
+                  className={s.menuItemDanger}
                   onClick={() => {
                     setAvatarMenuOpen(false);
                     try {
@@ -1250,40 +1083,110 @@ export default function ReplayPage() {
         </div>
       </header>
 
-      {/* ── Main Layout ── */}
-      <div
-        style={{
-          ...styles.mainLayout,
-          ...(hasTranscripts ? {} : { flexDirection: 'column' as const }),
-        }}
-      >
-        {/* Left: Video →（有字幕时）Chapter Cards → Speaker Timeline */}
-        <div
-          style={{
-            ...styles.leftPanel,
-            ...(hasTranscripts ? {} : { borderRight: 'none', flex: 1, minHeight: 0 }),
-          }}
-        >
-          {/* ① 视频播放器（最顶部） */}
-          <div style={styles.videoWrap}>
+      {/* ── Main: read on the left, watch on the right ── */}
+      <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
+        {showPanel && (
+          <aside className={s.panel} aria-label={t('replay.tabsLabel')}>
+            <div className={s.tabs} role="tablist" aria-label={t('replay.tabsLabel')}>
+              {tabs.map((tab) => (
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.key}
+                  key={tab.key}
+                  className={activeTab === tab.key ? s.tabOn : s.tab}
+                  onClick={() => setActiveTab(tab.key)}
+                >
+                  {tab.label}
+                  {tab.count !== null && tab.count > 0 && <span className={s.tabCount}>{tab.count}</span>}
+                </button>
+              ))}
+            </div>
+
+            <div className={s.tabBody} role="tabpanel">
+              {activeTab === 'summary' &&
+                (summaryItems.length > 0 ? (
+                  <>
+                    <div className={s.toolbar}>
+                      {generating ? (
+                        <GenerateProgress pct={genProgress} />
+                      ) : (
+                        <>
+                          <span className={s.toolbarHint}>
+                            <SparkGlyph />
+                            {t('replay.summaryAiHint')}
+                          </span>
+                          <button
+                            type="button"
+                            className={s.textBtn}
+                            onClick={generateSummary}
+                            title={t('replay.regenerateSummaryHint')}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <polyline points="23 4 23 10 17 10" />
+                              <polyline points="1 20 1 14 7 14" />
+                              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+                            </svg>
+                            {t('replay.regenerateSummary')}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                    {generateError && !generating && (
+                      <p className={s.error} style={{ padding: '8px 14px 0' }}>{generateError}</p>
+                    )}
+                    <SummaryPanel
+                      items={summaryItems}
+                      currentTime={currentTime}
+                      onSeek={seekTo}
+                      meetingId={meeting?.id ?? 0}
+                      kloudMeetingId={meeting?.kloudMeetingId ?? null}
+                      focusId={selectedChapterId}
+                      speakerById={speakerById}
+                    />
+                  </>
+                ) : (
+                  <div className={s.empty}>
+                    {generating ? (
+                      <GenerateProgress pct={genProgress} />
+                    ) : transcripts.length > 0 ? (
+                      <>
+                        <span className={s.emptyIcon} aria-hidden="true">
+                          <SparkGlyph size={20} />
+                        </span>
+                        <p className={s.emptyTitle}>{t('replay.noSummaryYet')}</p>
+                        <p className={s.muted}>{t('replay.noSummaryHint', { count: transcripts.length })}</p>
+                        {generateError && <p className={s.error}>{generateError}</p>}
+                        <button type="button" className={s.primaryBtn} onClick={generateSummary}>
+                          {t('replay.generateSummary')}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <span className={s.emptyIcon} aria-hidden="true">
+                          <DocGlyph />
+                        </span>
+                        <p className={s.emptyTitle}>{t('replay.noTranscriptForSummary')}</p>
+                        <p className={s.muted}>{t('replay.noTranscriptForSummaryHint')}</p>
+                      </>
+                    )}
+                  </div>
+                ))}
+              {activeTab === 'transcript' && (
+                <TranscriptPanel transcripts={transcripts} currentTime={currentTime} onSeek={seekTo} />
+              )}
+              {activeTab === 'info' && <InfoPanel meeting={meeting} recording={recording} />}
+            </div>
+          </aside>
+        )}
+
+        <section className={s.stage}>
+          <div className={s.videoCard}>
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
-              style={{
-                ...styles.video,
-                ...(hasTranscripts
-                  ? videoFit === 'height'
-                    ? {
-                        maxHeight: 'calc(100vh - 56px)',
-                        minHeight: 320,
-                        height: 'calc(100vh - 56px)',
-                        objectFit: 'contain' as const,
-                      }
-                    : {}
-                  : { maxHeight: 'min(88vh, 1200px)', minHeight: '52vh' }),
-                objectFit: videoFit === 'height' ? ('contain' as const) : ('contain' as const),
-              }}
+              className={`${s.video}${videoClass ? ` ${videoClass}` : ''}`}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget;
                 // Recording was paused here: the file shows a "paused" slate, so skip past it
@@ -1291,44 +1194,26 @@ export default function ReplayPage() {
                 if (target !== el.currentTime) el.currentTime = Math.min(target, el.duration || target);
                 setCurrentTime(el.currentTime);
               }}
-              onDurationChange={(e) => setDuration(e.currentTarget.duration)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
             {/* Fit toggle */}
             <button
-              style={styles.fitToggleBtn}
+              type="button"
+              className={s.fitBtn}
               onClick={() => setVideoFit(videoFit === 'width' ? 'height' : 'width')}
               title={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
               aria-label={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
             >
               {videoFit === 'width' ? (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="15 3 21 3 21 9" />
                   <polyline points="9 21 3 21 3 15" />
                   <line x1="21" y1="3" x2="14" y2="10" />
                   <line x1="3" y1="21" x2="10" y2="14" />
                 </svg>
               ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polyline points="3 8 3 3 8 3" />
                   <polyline points="21 16 21 21 16 21" />
                   <line x1="3" y1="3" x2="10" y2="10" />
@@ -1348,273 +1233,10 @@ export default function ReplayPage() {
           )}
 
           {hasTranscripts && realSpeakerSegments.length > 0 && (
-            <SpeakerSegmentTimeline
-              speakers={realSpeakerSegments}
-              duration={realDuration}
-              onSeek={seekTo}
-            />
+            <SpeakerSegmentTimeline speakers={realSpeakerSegments} duration={realDuration} onSeek={seekTo} />
           )}
-        </div>
-
-        {/* Right: Tab Panel（仅在有字幕且面板可见时展示） */}
-        {hasTranscripts && panelVisible && (
-          <div style={styles.rightPanel}>
-            {/* Tabs */}
-            <div style={styles.tabBar}>
-              {tabs.map((tab) => (
-                <button
-                  key={tab.key}
-                  style={{
-                    ...styles.tabBtn,
-                    ...(activeTab === tab.key ? styles.tabBtnActive : {}),
-                  }}
-                  onClick={() => setActiveTab(tab.key)}
-                >
-                  {tab.label}
-                  {tab.count !== null && tab.count > 0 && (
-                    <span style={styles.tabBadge}>{tab.count}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Tab Content */}
-            <div style={styles.tabContent}>
-              {activeTab === 'summary' &&
-                (summaryItems.length > 0 ? (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      height: '100%',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    {/* ── Re-generate toolbar ── */}
-                    {generating ? (
-                      <div
-                        style={{
-                          padding: '10px 16px',
-                          borderBottom: '1px solid #1e293b',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 8,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: '100%',
-                            height: 4,
-                            background: '#1e293b',
-                            borderRadius: 99,
-                            overflow: 'hidden',
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: '100%',
-                              width: `${Math.round(genProgress)}%`,
-                              background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)',
-                              borderRadius: 99,
-                              transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
-                              boxShadow: '0 0 6px rgba(129,140,248,0.5)',
-                            }}
-                          />
-                        </div>
-                        <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
-                          {t('replay.generating', { pct: Math.round(genProgress) })}
-                        </p>
-                      </div>
-                    ) : (
-                      <div
-                        style={{
-                          padding: '7px 12px',
-                          borderBottom: '1px solid #1e293b',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'flex-end',
-                          gap: 8,
-                          flexShrink: 0,
-                        }}
-                      >
-                        <button
-                          onClick={generateSummary}
-                          title={t('replay.regenerateSummary')}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 5,
-                            padding: '4px 10px',
-                            background: 'transparent',
-                            border: '1px solid #334155',
-                            borderRadius: 6,
-                            color: '#94a3b8',
-                            fontSize: 12,
-                            cursor: 'pointer',
-                            transition: 'all 0.15s',
-                            flexShrink: 0,
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.borderColor = '#6366f1';
-                            e.currentTarget.style.color = '#818cf8';
-                            e.currentTarget.style.background = 'rgba(99,102,241,0.08)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.borderColor = '#334155';
-                            e.currentTarget.style.color = '#94a3b8';
-                            e.currentTarget.style.background = 'transparent';
-                          }}
-                        >
-                          <svg
-                            width="12"
-                            height="12"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          >
-                            <polyline points="23 4 23 10 17 10" />
-                            <polyline points="1 20 1 14 7 14" />
-                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                          </svg>
-                          {t('replay.regenerateSummary')}
-                        </button>
-                      </div>
-                    )}
-                    {/* ── Summary content ── */}
-                    <div style={{ flex: 1, overflow: 'hidden' }}>
-                      <SummaryPanel
-                        items={displaySummaryItems}
-                        currentTime={currentTime}
-                        duration={duration}
-                        onSeek={seekTo}
-                        meetingId={meeting?.id ?? 0}
-                        kloudMeetingId={meeting?.kloudMeetingId ?? null}
-                        forceExpandId={selectedChapterId}
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      height: '100%',
-                      gap: 16,
-                      padding: 32,
-                    }}
-                  >
-                    {generating ? (
-                      <div
-                        style={{
-                          width: '100%',
-                          maxWidth: 320,
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: 14,
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: '100%',
-                            height: 6,
-                            background: '#1e293b',
-                            borderRadius: 99,
-                            overflow: 'hidden',
-                            border: '1px solid #334155',
-                          }}
-                        >
-                          <div
-                            style={{
-                              height: '100%',
-                              width: `${Math.round(genProgress)}%`,
-                              background: 'linear-gradient(90deg, #6366f1, #818cf8, #a5b4fc)',
-                              borderRadius: 99,
-                              transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
-                              boxShadow: '0 0 8px rgba(129,140,248,0.6)',
-                            }}
-                          />
-                        </div>
-                        <p
-                          style={{
-                            color: '#94a3b8',
-                            fontSize: 13,
-                            textAlign: 'center',
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          {t('replay.generating', { pct: Math.round(genProgress) })}
-                        </p>
-                      </div>
-                    ) : transcripts.length > 0 ? (
-                      <>
-                        <div style={{ fontSize: 48, marginBottom: 4 }}>🤖</div>
-                        <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>
-                          {t('replay.noSummaryYet')}
-                        </p>
-                        <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
-                          {t('replay.noSummaryHint', { count: transcripts.length })}
-                        </p>
-                        {generateError && (
-                          <p style={{ color: '#f87171', fontSize: 13 }}>{generateError}</p>
-                        )}
-                        <button
-                          onClick={generateSummary}
-                          style={{
-                            marginTop: 8,
-                            padding: '10px 28px',
-                            background: 'linear-gradient(135deg, #6366f1, #818cf8)',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 8,
-                            fontSize: 14,
-                            fontWeight: 600,
-                            cursor: 'pointer',
-                            transition: 'transform 0.15s, box-shadow 0.15s',
-                            boxShadow: '0 2px 12px rgba(99,102,241,0.4)',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.transform = 'translateY(-1px)';
-                            e.currentTarget.style.boxShadow = '0 4px 20px rgba(99,102,241,0.5)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.transform = 'translateY(0)';
-                            e.currentTarget.style.boxShadow = '0 2px 12px rgba(99,102,241,0.4)';
-                          }}
-                        >
-                          {t('replay.generateSummary')}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <div style={{ fontSize: 48, marginBottom: 4 }}>📝</div>
-                        <p style={{ color: '#e2e8f0', fontSize: 15, fontWeight: 600 }}>
-                          {t('replay.noTranscriptForSummary')}
-                        </p>
-                        <p style={{ color: '#94a3b8', fontSize: 13, textAlign: 'center' }}>
-                          {t('replay.noTranscriptForSummaryHint')}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                ))}
-              {activeTab === 'transcript' && (
-                <TranscriptPanel
-                  transcripts={transcripts}
-                  currentTime={currentTime}
-                  onSeek={seekTo}
-                />
-              )}
-              {activeTab === 'info' && <InfoPanel meeting={meeting} recording={recording} />}
-            </div>
-          </div>
-        )}
-      </div>
+        </section>
+      </main>
 
       {canAskTranscribe && meeting && (!hasTranscripts || unfinished) && (
         <RecordingTranscribePrompt
@@ -1625,616 +1247,58 @@ export default function ReplayPage() {
       )}
 
       <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'Inter', sans-serif; background: #0f172a; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @media (max-width: 768px) {
-          .replay-main { flex-direction: column !important; }
-          .replay-right { width: 100% !important; height: 360px !important; }
-        }
-      `}</style>
     </div>
   );
 }
 
-/* ─── Styles ─────────────────────────────────────────────── */
-const styles: Record<string, React.CSSProperties> = {
-  page: {
-    minHeight: '100vh',
-    background: '#0f172a',
-    display: 'flex',
-    flexDirection: 'column',
-    fontFamily: "'Inter', sans-serif",
-    color: '#e2e8f0',
-  },
-  fullCenter: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: '#0f172a',
-    fontFamily: "'Inter', sans-serif",
-  },
-  spinner: {
-    width: 44,
-    height: 44,
-    border: '3px solid #1e293b',
-    borderTopColor: '#6366f1',
-    borderRadius: '50%',
-    animation: 'spin 0.8s linear infinite',
-  },
-  header: {
-    background: '#1e293b',
-    borderBottom: '1px solid #1e293b',
-    padding: '0 20px',
-    height: 56,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    flexShrink: 0,
-    boxShadow: '0 1px 0 rgba(255,255,255,0.05)',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    minWidth: 0,
-    flex: 1,
-  },
-  backBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-    color: '#94a3b8',
-    textDecoration: 'none',
-    fontSize: 13,
-    padding: '5px 10px',
-    borderRadius: 8,
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    flexShrink: 0,
-    transition: 'all 0.15s',
-  },
-  headerTitle: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    fontSize: 15,
-    fontWeight: 600,
-    color: '#f1f5f9',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  headerDate: {
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: 400,
-    flexShrink: 0,
-  },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 0,
-  },
-  downloadBtn: {
-    background: 'rgba(99,102,241,0.15)',
-    color: '#a5b4fc',
-    border: '1px solid rgba(99,102,241,0.3)',
-    padding: '6px 14px',
-    borderRadius: 8,
-    textDecoration: 'none',
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  iconBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid rgba(255,255,255,0.08)',
-    color: '#94a3b8',
-    borderRadius: 8,
-    cursor: 'pointer',
-    width: 34,
-    height: 34,
-    flexShrink: 0,
-    transition: 'all 0.15s',
-  },
-  avatarBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(99,102,241,0.15)',
-    border: '1px solid rgba(99,102,241,0.3)',
-    color: '#a5b4fc',
-    borderRadius: '50%',
-    cursor: 'pointer',
-    width: 34,
-    height: 34,
-    overflow: 'hidden',
-    flexShrink: 0,
-    transition: 'all 0.15s',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    top: '100%',
-    right: 0,
-    marginTop: 6,
-    background: '#1e293b',
-    border: '1px solid #334155',
-    borderRadius: 10,
-    boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-    padding: '6px',
-    minWidth: 180,
-    zIndex: 100,
-  },
-  dropdownItem: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    width: '100%',
-    padding: '8px 12px',
-    background: 'transparent',
-    border: 'none',
-    color: '#cbd5e1',
-    fontSize: 13,
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    transition: 'all 0.15s',
-  },
-  fitToggleBtn: {
-    position: 'absolute',
-    bottom: 10,
-    right: 10,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    background: 'rgba(15,23,42,0.85)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    color: '#e2e8f0',
-    borderRadius: 8,
-    cursor: 'pointer',
-    width: 32,
-    height: 32,
-    zIndex: 5,
-    transition: 'all 0.15s',
-  },
-  primaryBtn: {
-    background: '#6366f1',
-    color: '#fff',
-    padding: '10px 24px',
-    borderRadius: 8,
-    textDecoration: 'none',
-    fontSize: 14,
-    fontWeight: 500,
-  },
+/* ─── Glyphs ─────────────────────────────────────────────── */
+function Chevron({ dir }: { dir: 'left' | 'right' }) {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={dir === 'left' ? 'M15 6l-6 6 6 6' : 'M9 6l6 6-6 6'} />
+    </svg>
+  );
+}
 
-  /* Layout */
-  mainLayout: {
-    flex: 1,
-    display: 'flex',
-    overflow: 'hidden',
-  },
-  leftPanel: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    background: '#0b1120',
-    borderRight: '1px solid #1e293b',
-    overflowY: 'auto' /* 内容超出时可滚动 */,
-  },
-  videoWrap: {
-    width: '100%',
-    background: '#000',
-    flexShrink: 0,
-  },
-  video: {
-    width: '100%',
-    display: 'block',
-    maxHeight: '46vh',
-    minHeight: 320,
-    outline: 'none',
-  },
-  chapterBar: {
-    position: 'relative',
-    height: 28,
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
-    flexShrink: 0,
-    cursor: 'pointer',
-  },
-  timeInfo: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '8px 16px',
-    fontSize: 13,
-    borderTop: '1px solid #1e293b',
-    background: '#0f172a',
-    flexShrink: 0,
-  },
+function SparkGlyph({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2l1.9 6.1L20 10l-6.1 1.9L12 18l-1.9-6.1L4 10l6.1-1.9z" />
+    </svg>
+  );
+}
 
-  /* Timeline */
-  timelineContainer: {
-    padding: '10px 16px',
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
-    flexShrink: 0,
-  },
-  timelineRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-    height: 22,
-  },
-  timelineLabel: {
-    width: 100,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  timelineBar: {
-    flex: 1,
-    height: 18,
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: 4,
-    position: 'relative',
-    overflow: 'hidden',
-    cursor: 'pointer',
-  },
+function DocGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z" />
+      <path d="M14 3v5h5M9 13h6M9 17h4" />
+    </svg>
+  );
+}
 
-  /* Right Panel */
-  rightPanel: {
-    width: 360,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    background: '#111827',
-    overflow: 'hidden',
-  },
-  tabBar: {
-    display: 'flex',
-    borderBottom: '1px solid #1e293b',
-    background: '#0f172a',
-    flexShrink: 0,
-  },
-  tabBtn: {
-    flex: 1,
-    padding: '12px 8px',
-    background: 'none',
-    border: 'none',
-    color: '#64748b',
-    fontSize: 12,
-    fontWeight: 500,
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    borderBottom: '2px solid transparent',
-    transition: 'color 0.15s, border-color 0.15s',
-    fontFamily: 'inherit',
-  },
-  tabBtnActive: {
-    color: '#818cf8',
-    borderBottom: '2px solid #6366f1',
-  },
-  tabBadge: {
-    background: '#1e293b',
-    color: '#94a3b8',
-    fontSize: 10,
-    padding: '1px 5px',
-    borderRadius: 99,
-  },
-  tabContent: {
-    flex: 1,
-    overflow: 'hidden',
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  panelScroll: {
-    flex: 1,
-    overflowY: 'auto',
-    padding: '12px 14px',
-  },
+function ClockGlyph() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
 
-  /* Summary */
-  emptyPanel: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: '100%',
-    minHeight: 200,
-    padding: 24,
-    textAlign: 'center',
-  },
-  genBtn: {
-    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
-    color: '#fff',
-    border: 'none',
-    padding: '10px 20px',
-    borderRadius: 10,
-    fontSize: 14,
-    fontWeight: 600,
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-  },
-  summaryCard: {
-    borderRadius: 8,
-    marginBottom: 8,
-    overflow: 'hidden',
-    transition: 'background 0.2s',
-  },
-  summaryCardHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    padding: '10px 12px',
-    cursor: 'pointer',
-    userSelect: 'none',
-  },
-  chapterTime: {
-    color: '#6366f1',
-    fontSize: 11,
-    fontWeight: 600,
-    fontFamily: 'monospace',
-    flexShrink: 0,
-    background: 'rgba(99,102,241,0.12)',
-    padding: '2px 6px',
-    borderRadius: 4,
-  },
-  chapterTitle: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: 500,
-    lineHeight: 1.4,
-  },
-  chapterContent: {
-    padding: '0 12px 12px',
-    fontSize: 12,
-    color: '#94a3b8',
-    lineHeight: 1.6,
-  },
+function SearchGlyph() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7" />
+      <path d="M20 20l-3.5-3.5" />
+    </svg>
+  );
+}
 
-  /* Transcript */
-  searchBox: {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '10px 14px',
-    borderBottom: '1px solid #1e293b',
-    flexShrink: 0,
-  },
-  searchInput: {
-    flex: 1,
-    background: 'rgba(255,255,255,0.05)',
-    border: '1px solid #1e293b',
-    borderRadius: 8,
-    padding: '6px 10px',
-    color: '#e2e8f0',
-    fontSize: 13,
-    outline: 'none',
-    fontFamily: 'inherit',
-  },
-  clearBtn: {
-    background: 'none',
-    border: 'none',
-    color: '#64748b',
-    cursor: 'pointer',
-    marginLeft: 6,
-    fontSize: 14,
-  },
-  speakerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  speakerAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#fff',
-    flexShrink: 0,
-  },
-  speakerName: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: '#cbd5e1',
-  },
-  speakerTime: {
-    fontSize: 11,
-    color: '#475569',
-    marginLeft: 'auto',
-  },
-  captionBubble: {
-    marginLeft: 36,
-    marginBottom: 4,
-    padding: '7px 10px',
-    borderRadius: 8,
-    fontSize: 13,
-    lineHeight: 1.5,
-    color: '#cbd5e1',
-    border: '1px solid',
-    transition: 'all 0.15s',
-  },
-
-  /* Info */
-  infoSection: {
-    marginBottom: 18,
-    paddingBottom: 18,
-    borderBottom: '1px solid #1e293b',
-  },
-  infoLabel: {
-    fontSize: 11,
-    color: '#64748b',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: '0.08em',
-    fontWeight: 600,
-  },
-  infoValue: {
-    fontSize: 14,
-    color: '#e2e8f0',
-  },
-  participantRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '6px 0',
-  },
-};
-
-/* --- stx: ChapterCardsCarousel + SpeakerSegmentTimeline --- */
-const stx: Record<string, React.CSSProperties> = {
-  carouselWrap: {
-    position: 'relative',
-    height: 155,
-    flexShrink: 0,
-    background: '#111827',
-    borderBottom: '1px solid #1e293b',
-    display: 'flex',
-    alignItems: 'center',
-    overflow: 'hidden',
-  },
-  carouselTrack: {
-    display: 'flex',
-    gap: 10,
-    overflowX: 'auto',
-    padding: '10px 36px',
-    height: '100%',
-    alignItems: 'center',
-    scrollbarWidth: 'none',
-  } as React.CSSProperties,
-  chapterCard: {
-    flexShrink: 0,
-    width: 160,
-    minHeight: 128,
-    borderRadius: 10,
-    border: '1px solid',
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    padding: '10px 8px 8px',
-    gap: 3,
-    cursor: 'pointer',
-    transition: 'all 0.2s ease',
-  },
-  cardAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 17,
-    fontWeight: 700,
-    color: '#fff',
-    flexShrink: 0,
-    marginBottom: 4,
-    boxShadow: '0 3px 10px rgba(0,0,0,0.4)',
-  },
-  cardName: { fontSize: 13, fontWeight: 600, color: '#e2e8f0', textAlign: 'center' },
-  cardTimeRange: {
-    fontSize: 10,
-    color: '#818cf8',
-    fontFamily: 'monospace',
-    cursor: 'pointer',
-    marginTop: 2,
-  },
-  cardTopic: {
-    fontSize: 12,
-    color: '#60a5fa',
-    textAlign: 'center',
-    lineHeight: 1.4,
-    cursor: 'pointer',
-    marginTop: 4,
-    padding: '0 4px',
-    overflow: 'hidden',
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-  } as React.CSSProperties,
-  arrowBtn: {
-    position: 'absolute',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    zIndex: 10,
-    background: 'rgba(15,23,42,0.90)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    color: '#e2e8f0',
-    width: 32,
-    height: 32,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
-    fontSize: 22,
-    padding: 0,
-  } as React.CSSProperties,
-  segTimeline: {
-    padding: '12px 16px 6px',
-    background: '#f8fafc',
-    borderTop: '1px solid #e2e8f0',
-    flexShrink: 0,
-  },
-  segRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, height: 32 },
-  segLabel: {
-    width: 120,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 7,
-    flexShrink: 0,
-    overflow: 'hidden',
-  },
-  segAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: '50%',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    fontSize: 10,
-    fontWeight: 700,
-    color: '#fff',
-    flexShrink: 0,
-  },
-  segName: {
-    fontSize: 12,
-    fontWeight: 500,
-    color: '#475569',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  segBar: {
-    flex: 1,
-    height: 8,
-    background: 'rgba(0,0,0,0.08)',
-    borderRadius: 6,
-    position: 'relative',
-    cursor: 'pointer',
-    overflow: 'hidden',
-  },
-};
+function CloseGlyph({ size }: { size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
