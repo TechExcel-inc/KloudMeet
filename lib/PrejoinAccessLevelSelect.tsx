@@ -21,9 +21,24 @@ export function PrejoinAccessLevelSelect({ value, onChange }: PrejoinAccessLevel
       value={value}
       onChange={onChange}
       options={[
-        { value: 'public', label: t('prejoin.accessLevelPublic'), icon: Globe },
-        { value: 'protected', label: t('prejoin.accessLevelProtected'), icon: ShieldCheck },
-        { value: 'private', label: t('prejoin.accessLevelPrivate'), icon: Lock },
+        {
+          value: 'public',
+          label: t('prejoin.accessLevelPublic'),
+          description: t('prejoin.accessLevelPublicDesc'),
+          icon: Globe,
+        },
+        {
+          value: 'protected',
+          label: t('prejoin.accessLevelProtected'),
+          description: t('prejoin.accessLevelProtectedDesc'),
+          icon: ShieldCheck,
+        },
+        {
+          value: 'private',
+          label: t('prejoin.accessLevelPrivate'),
+          description: t('prejoin.accessLevelPrivateDesc'),
+          icon: Lock,
+        },
       ]}
     />
   );

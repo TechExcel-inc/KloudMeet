@@ -24,10 +24,30 @@ export function PrejoinRecordingOptionSelect({
       value={value}
       onChange={onChange}
       options={[
-        { value: 'none', label: t('prejoin.recordingNone'), icon: CircleOff },
-        { value: 'ai_smart', label: t('prejoin.recordingAiSmart'), icon: Sparkles },
-        { value: 'livedoc_full', label: t('prejoin.recordingLivedocFull'), icon: FileVideo },
-        { value: 'screen_share', label: t('prejoin.recordingScreenShare'), icon: MonitorUp },
+        {
+          value: 'none',
+          label: t('prejoin.recordingNone'),
+          description: t('prejoin.recordingNoneDesc'),
+          icon: CircleOff,
+        },
+        {
+          value: 'ai_smart',
+          label: t('prejoin.recordingAiSmart'),
+          description: t('prejoin.recordingAiSmartDesc'),
+          icon: Sparkles,
+        },
+        {
+          value: 'livedoc_full',
+          label: t('prejoin.recordingLivedocFull'),
+          description: t('prejoin.recordingLivedocFullDesc'),
+          icon: FileVideo,
+        },
+        {
+          value: 'screen_share',
+          label: t('prejoin.recordingScreenShare'),
+          description: t('prejoin.recordingScreenShareDesc'),
+          icon: MonitorUp,
+        },
       ]}
     />
   );
