@@ -10,6 +10,7 @@ import { authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
+import { skipPaused } from '@/lib/recordingControls';
 
 /* ─── Types ──────────────────────────────────────────────── */
 interface Participant {
@@ -49,6 +50,8 @@ interface ReplayData {
     id: number;
     fileName: string;
     durationSeconds: number | null;
+    /** Paused stretches [start, end] in seconds; the player jumps over them */
+    pausedRanges?: Array<[number, number]>;
     streamUrl: string | null;
     status: string;
     createdAt: string;
@@ -1281,7 +1284,13 @@ export default function ReplayPage() {
                   : { maxHeight: 'min(88vh, 1200px)', minHeight: '52vh' }),
                 objectFit: videoFit === 'height' ? ('contain' as const) : ('contain' as const),
               }}
-              onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+              onTimeUpdate={(e) => {
+                const el = e.currentTarget;
+                // Recording was paused here: the file shows a "paused" slate, so skip past it
+                const target = skipPaused(el.currentTime, recording.pausedRanges ?? []);
+                if (target !== el.currentTime) el.currentTime = Math.min(target, el.duration || target);
+                setCurrentTime(el.currentTime);
+              }}
               onDurationChange={(e) => setDuration(e.currentTarget.duration)}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
