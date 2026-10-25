@@ -816,7 +816,6 @@
 
   "prejoin.tryAgain": "Try again",
 
-
   "prejoin.allowPermission": "Allow camera and microphone when your browser asks",
   "prejoin.cameraStarting": "Starting camera…",
 
@@ -895,7 +894,7 @@
   "annotation.clearAll": "Clear all annotations",
   "anon.heroTitle": "Meet on the document.",
   "anon.heroAccent": "Replay it anytime.",
-  "anon.heroSubtitle": "Where AI agents learn from and work with your teams and customers. Join from your browser — no account needed.",
+  "anon.heroSubtitle": "The interactive meeting platform where AI agents learn and work with your teams and customers. Join from your browser — no account needed.",
   "anon.carousel.label": "What you can do",
   "anon.carousel.prev": "Previous",
   "anon.carousel.next": "Next",
@@ -920,7 +919,7 @@
   "dash.scheduleHint": "Invite people and add to calendar",
   "dash.joinWithCode": "Join with a code",
   "dash.joinCodePlaceholder": "Code or link",
-  "dash.meetingListTagline": "Where AI agents learn from and work with your teams and customers.",
+  "dash.meetingListTagline": "The interactive meeting platform where AI agents learn and work with your teams and customers.",
   "dash.joinAnyCode": "Code, link or personal ID",
   "dash.open": "Open",
   "dash.prevPageGroup": "Previous {n} pages",

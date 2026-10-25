@@ -817,7 +817,6 @@
 
   "prejoin.tryAgain": "再試行",
 
-
   "prejoin.allowPermission": "ブラウザで確認されたら、カメラとマイクを許可してください",
   "prejoin.cameraStarting": "カメラを起動しています…",
 
@@ -896,7 +895,7 @@
   "annotation.clearAll": "すべての注釈を消去",
   "anon.heroTitle": "ドキュメントの上で会議を。",
   "anon.heroAccent": "いつでもリプレイ。",
-  "anon.heroSubtitle": "AI がチームや顧客とともに学び、協働する場所。アカウント不要、ブラウザからすぐ参加できます。",
+  "anon.heroSubtitle": "AI エージェントがチームやお客様と学び、協働するインタラクティブな会議プラットフォーム。アカウント不要、ブラウザからすぐ参加できます。",
   "anon.carousel.label": "できること",
   "anon.carousel.prev": "前へ",
   "anon.carousel.next": "次へ",
@@ -921,7 +920,7 @@
   "dash.scheduleHint": "招待してカレンダーに追加",
   "dash.joinWithCode": "コードで参加",
   "dash.joinCodePlaceholder": "コードまたはリンク",
-  "dash.meetingListTagline": "AI がチームやお客様と学びながら連携します。",
+  "dash.meetingListTagline": "AI エージェントがチームやお客様と学び、協働するインタラクティブな会議プラットフォーム。",
   "dash.joinAnyCode": "コード、リンク、または個人 ID",
   "dash.open": "開く",
   "dash.prevPageGroup": "前の {n} ページ",

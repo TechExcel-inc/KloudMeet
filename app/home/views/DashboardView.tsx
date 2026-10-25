@@ -36,7 +36,12 @@ import { useTx } from '../components/ui';
 
 type MeetingListScope = 'all' | 'hosted';
 
-function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope): string {
+function meetingsQuery(
+  page: number,
+  size: number,
+  search: string,
+  scope: MeetingListScope,
+): string {
   const qs = new URLSearchParams({
     page: String(page),
     pageSize: String(size),
@@ -74,7 +79,7 @@ export function DashboardView({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
-  
+
   const [isJoining, setIsJoining] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
   const creatingMeetingRef = useRef(false);
@@ -106,7 +111,6 @@ export function DashboardView({
   const userToken = user.token;
   const userId = user.id;
 
-
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -128,10 +132,10 @@ export function DashboardView({
   useEffect(() => {
     if (!userToken) return;
     fetch('/api/account/profile', {
-      headers: { Authorization: `Bearer ${userToken}` }
+      headers: { Authorization: `Bearer ${userToken}` },
     })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
         if (data?.personalRoomId) setPersonalRoomId(data.personalRoomId);
       })
       .catch(() => {});
@@ -148,34 +152,41 @@ export function DashboardView({
   const meetingsFetchGenRef = useRef(0);
   const prevScopeRef = useRef(meetingScope);
 
-  const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
-    const term = searchTerm ?? searchQueryRef.current;
-    if (!userToken && !userId) return;
-    const currentPage = pageOverride ?? pageRef.current;
-    const gen = ++meetingsFetchGenRef.current;
-    setLoadingMeetings(true);
-    const qs = meetingsQuery(currentPage, pageSizeRef.current, term, meetingScopeRef.current);
-    fetch(`/api/account/meetings?${qs}`, {
-      headers: { Authorization: `Bearer ${userToken}` }
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (gen !== meetingsFetchGenRef.current) return;
-        if (data.meetings) {
-          const sorted = data.meetings.sort((a: any, b: any) => {
-            const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-            const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-            return tB - tA;
-          });
-          setDbMeetings(sorted);
-          setTotalMeetings(data.total || 0);
-        }
+  const fetchMeetings = useCallback(
+    (searchTerm?: string, pageOverride?: number) => {
+      const term = searchTerm ?? searchQueryRef.current;
+      if (!userToken && !userId) return;
+      const currentPage = pageOverride ?? pageRef.current;
+      const gen = ++meetingsFetchGenRef.current;
+      setLoadingMeetings(true);
+      const qs = meetingsQuery(currentPage, pageSizeRef.current, term, meetingScopeRef.current);
+      fetch(`/api/account/meetings?${qs}`, {
+        headers: { Authorization: `Bearer ${userToken}` },
       })
-      .catch(console.error)
-      .finally(() => {
-        if (gen === meetingsFetchGenRef.current) setLoadingMeetings(false);
-      });
-  }, [userId, userToken]);
+        .then((res) => res.json())
+        .then((data) => {
+          if (gen !== meetingsFetchGenRef.current) return;
+          if (data.meetings) {
+            const sorted = data.meetings.sort((a: any, b: any) => {
+              const tA = a.scheduledFor
+                ? new Date(a.scheduledFor).getTime()
+                : new Date(a.createdAt).getTime();
+              const tB = b.scheduledFor
+                ? new Date(b.scheduledFor).getTime()
+                : new Date(b.createdAt).getTime();
+              return tB - tA;
+            });
+            setDbMeetings(sorted);
+            setTotalMeetings(data.total || 0);
+          }
+        })
+        .catch(console.error)
+        .finally(() => {
+          if (gen === meetingsFetchGenRef.current) setLoadingMeetings(false);
+        });
+    },
+    [userId, userToken],
+  );
 
   useEffect(() => {
     fetchMeetings();
@@ -205,45 +216,53 @@ export function DashboardView({
     fetchMeetings(searchQueryRef.current, 1);
   }, [meetingScope, fetchMeetings]);
 
-
   // Polling fallback to check processing recordings
   useEffect(() => {
     if (!userToken) return;
-    
+
     // Check if any meetings in the current list have a PROCESSING/UPLOADING recording
-    const hasProcessing = dbMeetings.some(m => 
-      m.recordings?.some((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status))
+    const hasProcessing = dbMeetings.some((m) =>
+      m.recordings?.some((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status)),
     );
 
     if (!hasProcessing) return;
 
     const intervalId = setInterval(() => {
       fetch('/api/account/recordings/sync', {
-        headers: { Authorization: `Bearer ${userToken}` }
+        headers: { Authorization: `Bearer ${userToken}` },
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.updatedCount > 0) {
-          // Re-fetch meetings silently without setting loading state
-            const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current);
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.updatedCount > 0) {
+            // Re-fetch meetings silently without setting loading state
+            const qs = meetingsQuery(
+              page,
+              pageSize,
+              searchQueryRef.current,
+              meetingScopeRef.current,
+            );
             fetch(`/api/account/meetings?${qs}`, {
-              headers: { Authorization: `Bearer ${userToken}` }
+              headers: { Authorization: `Bearer ${userToken}` },
             })
-              .then(res => res.json())
-              .then(d => {
+              .then((res) => res.json())
+              .then((d) => {
                 if (d.meetings) {
                   const sorted = d.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
+                    const tA = a.scheduledFor
+                      ? new Date(a.scheduledFor).getTime()
+                      : new Date(a.createdAt).getTime();
+                    const tB = b.scheduledFor
+                      ? new Date(b.scheduledFor).getTime()
+                      : new Date(b.createdAt).getTime();
                     return tB - tA;
                   });
                   setDbMeetings(sorted);
                   setTotalMeetings(d.total || 0);
                 }
               });
-        }
-      })
-      .catch(console.error);
+          }
+        })
+        .catch(console.error);
     }, 5000);
 
     return () => clearInterval(intervalId);
@@ -310,14 +329,14 @@ export function DashboardView({
       const target = new Date(scheduledModalData.scheduledFor).getTime();
       const diffMs = target - Date.now();
       if (diffMs <= 0) {
-        setCountdown("00:00");
+        setCountdown('00:00');
         toast.show(t('dash.meetingStarting'));
         router.push(`/rooms/${scheduledModalData.roomName}`);
         setScheduledModalData(null);
         return;
       }
       if (diffMs > 3600000) {
-        setCountdown("MORE_THAN_HOUR");
+        setCountdown('MORE_THAN_HOUR');
         return;
       }
       const totalSec = Math.floor(diffMs / 1000);
@@ -338,7 +357,7 @@ export function DashboardView({
         headers: { Authorization: `Bearer ${user.token}` },
       });
       if (res.ok) {
-        setDbMeetings(prev => prev.filter(m => m.roomName !== roomName));
+        setDbMeetings((prev) => prev.filter((m) => m.roomName !== roomName));
         toast.show(t('dash.meetingDeleted'));
       } else {
         toast.show(t('dash.deleteFailure'));
@@ -552,10 +571,9 @@ export function DashboardView({
     fetchMeetings();
 
     if (pendingIntent.type === 'startScheduled') {
-      const meeting =
-        dbMeetings.find((x) => x.roomName === pendingIntent.roomName) ?? {
-          roomName: pendingIntent.roomName,
-        };
+      const meeting = dbMeetings.find((x) => x.roomName === pendingIntent.roomName) ?? {
+        roomName: pendingIntent.roomName,
+      };
       if (meeting.scheduledFor) {
         const diff = new Date(meeting.scheduledFor).getTime() - Date.now();
         if (Math.abs(diff) > 15 * 60 * 1000) {
@@ -574,7 +592,7 @@ export function DashboardView({
       return;
     }
     if (isJoining) return;
-    
+
     let roomId = raw;
     if (raw.includes('/rooms/')) {
       roomId = raw.split('/rooms/')[1].split('?')[0].split('#')[0];
@@ -586,21 +604,21 @@ export function DashboardView({
       toast.show(t('anon.enterValidCode'));
       return;
     }
-    
+
     setIsJoining(true);
 
     try {
       const res = await fetch(`/api/meetings/${encodeURIComponent(roomId)}`, {
         headers: authHeaders(),
       });
-      
+
       // 1. Non-Existing
       if (!res.ok) {
         setWarningMessage(t('dash.meetingNotFoundDash'));
         setIsJoining(false);
         return;
       }
-      
+
       const data = await res.json();
       // 2. Already Finished（专属会议室归档后仍可由主持人再开新场）
       if (data.status === 'ENDED' && !data.isPersonalRoom) {
@@ -608,7 +626,7 @@ export function DashboardView({
         setIsJoining(false);
         return;
       }
-      
+
       // 6. Already In Progress
       if (data.isActive) {
         router.push(`/rooms/${roomId}`);
@@ -618,7 +636,7 @@ export function DashboardView({
       // Check Scheduling
       if (data.scheduledFor) {
         const diffMs = new Date(data.scheduledFor).getTime() - Date.now();
-        
+
         if (diffMs > 0) {
           // 4 & 5. Scheduled for Future
           setScheduledModalData(data);
@@ -631,10 +649,10 @@ export function DashboardView({
           return;
         }
       }
-      
+
       // Valid routing
       router.push(`/rooms/${roomId}`);
-    } catch(e) {
+    } catch (e) {
       console.error(e);
       setWarningMessage(t('anon.apiError'));
       setIsJoining(false);
@@ -644,15 +662,16 @@ export function DashboardView({
   // Group meetings by date for Figma card layout
   const userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
-  const toLocalDateStr = (date: Date) =>
-    date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
+  const toLocalDateStr = (date: Date) => date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
 
   const getDisplayDate = (m: any) => {
     const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
     const dateStr = toLocalDateStr(d);
     const todayStr = toLocalDateStr(new Date());
-    const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const tomorrowDate = new Date();
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const yesterdayDate = new Date();
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const tomorrowStr = toLocalDateStr(tomorrowDate);
     const yesterdayStr = toLocalDateStr(yesterdayDate);
     if (dateStr === todayStr) return t('dash.today');
@@ -762,7 +781,6 @@ export function DashboardView({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [anyDashModalOpen]);
 
-
   /* ── Display helpers (presentation only) ── */
   const greetingHour = new Date(currentTime).getHours();
   const greeting =
@@ -771,65 +789,143 @@ export function DashboardView({
       : greetingHour < 18
         ? tx('dash.greeting.afternoon', 'Good afternoon, {name}', { name: user.displayName })
         : tx('dash.greeting.evening', 'Good evening, {name}', { name: user.displayName });
-  const todayLabel = new Date(currentTime).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
+  const todayLabel = new Date(currentTime).toLocaleDateString(locale, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  });
   // Today's line under the title, from the meetings on this page of the list.
   const liveCount = dbMeetings.filter((m) => m.isActive).length;
   const soonCount = dbMeetings.filter((m) => {
-    if (m.isActive || m.status === 'ENDED' || m.status === 'CANCELED' || !m.scheduledFor) return false;
+    if (m.isActive || m.status === 'ENDED' || m.status === 'CANCELED' || !m.scheduledFor)
+      return false;
     const diff = new Date(m.scheduledFor).getTime() - currentTime;
     return diff > 0 && diff <= 60 * 60 * 1000;
   }).length;
   const summaryParts = [
-    ...(liveCount > 0 ? [{ key: 'live', text: tx('dash.summaryLive', '{n} in progress', { n: liveCount }) }] : []),
-    ...(soonCount > 0 ? [{ key: 'soon', text: tx('dash.summarySoon', '{n} starting soon', { n: soonCount }) }] : []),
+    ...(liveCount > 0
+      ? [{ key: 'live', text: tx('dash.summaryLive', '{n} in progress', { n: liveCount }) }]
+      : []),
+    ...(soonCount > 0
+      ? [{ key: 'soon', text: tx('dash.summarySoon', '{n} starting soon', { n: soonCount }) }]
+      : []),
   ];
-  const replayLabel = t('dash.replay').replace(/^[^\p{L}\p{N}]+/u, '').trim() || t('dash.replay');
+  const replayLabel =
+    t('dash.replay')
+      .replace(/^[^\p{L}\p{N}]+/u, '')
+      .trim() || t('dash.replay');
   const hasJoinCode = joinCode.trim().length > 0;
   const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
 
-
   const openRecording = (recording: { id: number | string; shareKey?: string | null }) => {
-    window.open(recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`, '_blank');
+    window.open(
+      recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`,
+      '_blank',
+    );
   };
 
   const copyIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
       <rect x="8" y="8" width="12" height="12" rx="2" />
       <path d="M16 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v8a2 2 0 002 2h2" />
     </svg>
   );
   const videoIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
       <rect x="3" y="6" width="12" height="12" rx="3" />
       <path d="M15 10l6-3v10l-6-3z" />
     </svg>
   );
   const playIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="currentColor" width={size} height={size} aria-hidden="true"><path d="M8 5v14l11-7z" /></svg>
+    <svg viewBox="0 0 24 24" fill="currentColor" width={size} height={size} aria-hidden="true">
+      <path d="M8 5v14l11-7z" />
+    </svg>
   );
   const linkIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width={size} height={size} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
       <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
     </svg>
   );
   const chatIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
-      <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
+      <path
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
   const trashIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width={size} height={size} aria-hidden="true">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      width={size}
+      height={size}
+      aria-hidden="true"
+    >
       <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
     </svg>
   );
 
   const renderInviteMenu = (m: any, alignLeft?: boolean, menuKey: string = m.roomName) =>
     inviteMenuRoomName === menuKey ? (
-      <div className={`${styles.dropdownMenu} ${styles.inviteMenu}${alignLeft ? ` ${styles.inviteMenuLeft}` : ''}`} role="menu">
-        <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
+      <div
+        className={`${styles.dropdownMenu} ${styles.inviteMenu}${alignLeft ? ` ${styles.inviteMenuLeft}` : ''}`}
+        role="menu"
+      >
+        <button
+          type="button"
+          role="menuitem"
+          className={styles.dropdownItem}
+          onClick={() => copyMeetingLink(m)}
+        >
           {t('schedule.copyLink')}
         </button>
-        <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
+        <button
+          type="button"
+          role="menuitem"
+          className={styles.dropdownItem}
+          onClick={() => copyMeetingInvite(m)}
+        >
           {t('dash.copyInvite')}
         </button>
         {isCalendarEligible(m) && (
@@ -839,7 +935,10 @@ export function DashboardView({
             {calendarMenuItems(
               toCalendarMeetingFromClient(m, {
                 hostName:
-                  m?.createdByMember?.fullName || m?.createdByMember?.username || user?.displayName || null,
+                  m?.createdByMember?.fullName ||
+                  m?.createdByMember?.username ||
+                  user?.displayName ||
+                  null,
               }),
               window.location.origin,
               t,
@@ -849,7 +948,9 @@ export function DashboardView({
                 role="menuitem"
                 className={styles.dropdownItem}
                 href={item.href}
-                {...(item.download ? { download: true } : { target: '_blank', rel: 'noopener noreferrer' })}
+                {...(item.download
+                  ? { download: true }
+                  : { target: '_blank', rel: 'noopener noreferrer' })}
                 onClick={() => setInviteMenuRoomName(null)}
               >
                 {item.label}
@@ -862,15 +963,18 @@ export function DashboardView({
 
   return (
     <div className={`${styles.anonWrapper} ${styles.dashPage}`}>
-      <TopToolbar 
-        user={user} 
-        onSignOut={onSignOut} 
+      <TopToolbar
+        user={user}
+        onSignOut={onSignOut}
         onOpenSettings={() => setShowSettingsModal(true)}
         onOpenProfile={() => setShowProfileModal(true)}
         onOpenHelp={onOpenHelp}
         onOpenDesktopApp={onOpenDesktopApp}
-        hideAvatar={false} 
-        tagline={tx('dash.meetingListTagline', 'Where AI agents learn from and work with your teams and customers.')}
+        hideAvatar={false}
+        tagline={tx(
+          'dash.meetingListTagline',
+          'The interactive meeting platform where AI agents learn and work with your teams and customers.',
+        )}
       />
 
       <div className={styles.dashMain}>
@@ -882,11 +986,15 @@ export function DashboardView({
               {todayLabel}
               {summaryParts.length > 0 && (
                 <>
-                  <span className={styles.dashSummaryDot} aria-hidden="true">·</span>
+                  <span className={styles.dashSummaryDot} aria-hidden="true">
+                    ·
+                  </span>
                   {summaryParts.map((part, i) => (
                     <React.Fragment key={part.key}>
                       {i > 0 && tx('dash.listSep', ', ')}
-                      <span className={part.key === 'live' ? styles.dashSummaryLive : undefined}>{part.text}</span>
+                      <span className={part.key === 'live' ? styles.dashSummaryLive : undefined}>
+                        {part.text}
+                      </span>
                     </React.Fragment>
                   ))}
                 </>
@@ -942,7 +1050,16 @@ export function DashboardView({
           {/* Join errors — inline instead of a blocking dialog */}
           {warningMessage && (
             <div className={styles.anonAlert} role="alert" id="dash-join-error">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                aria-hidden="true"
+              >
                 <circle cx="12" cy="12" r="9"></circle>
                 <path d="M12 8v5M12 16h.01"></path>
               </svg>
@@ -954,7 +1071,16 @@ export function DashboardView({
                 aria-label={t('common.close')}
                 title={t('common.close')}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
@@ -967,10 +1093,12 @@ export function DashboardView({
             <h2 className={styles.srOnly}>{t('dash.yourMeetings')}</h2>
             {/* All meetings / hosted by me: the two filter choices as tabs */}
             <div className={styles.scopeTabs} role="group" aria-label={t('dash.filterShow')}>
-              {([
-                ['all', 'dash.filterAll', 'dash.filterAllHint'],
-                ['hosted', 'dash.filterHosted', 'dash.filterHostedHint'],
-              ] as const).map(([scope, labelKey, hintKey]) => {
+              {(
+                [
+                  ['all', 'dash.filterAll', 'dash.filterAllHint'],
+                  ['hosted', 'dash.filterHosted', 'dash.filterHostedHint'],
+                ] as const
+              ).map(([scope, labelKey, hintKey]) => {
                 const selected = meetingScope === scope;
                 return (
                   <button
@@ -982,14 +1110,26 @@ export function DashboardView({
                     onClick={() => setMeetingScope(scope)}
                   >
                     {t(labelKey)}
-                    {selected && !loadingMeetings && <span className={styles.scopeCount}>{totalMeetings}</span>}
+                    {selected && !loadingMeetings && (
+                      <span className={styles.scopeCount}>{totalMeetings}</span>
+                    )}
                   </button>
                 );
               })}
             </div>
 
             <label className={styles.meetingSearchWrapper}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="17" height="17" className={styles.meetingSearchIcon} aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                width="17"
+                height="17"
+                className={styles.meetingSearchIcon}
+                aria-hidden="true"
+              >
                 <circle cx="11" cy="11" r="7" />
                 <path d="M20 20l-3.5-3.5" />
               </svg>
@@ -1011,7 +1151,9 @@ export function DashboardView({
               aria-label={tx('dash.scheduleAction', 'Schedule')}
             >
               <CalendarPlus size={16} aria-hidden="true" />
-              <span className={styles.scheduleBtnText}>{tx('dash.scheduleAction', 'Schedule')}</span>
+              <span className={styles.scheduleBtnText}>
+                {tx('dash.scheduleAction', 'Schedule')}
+              </span>
             </button>
           </div>
 
@@ -1023,7 +1165,16 @@ export function DashboardView({
           ) : Object.keys(groupedMeetings).length === 0 ? (
             <div className={styles.meetingEmptyState}>
               <span className={styles.meetingEmptyIcon} aria-hidden="true">
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <svg
+                  width="26"
+                  height="26"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
                   <rect x="3" y="5" width="18" height="16" rx="3" />
                   <path d="M3 10h18M8 3v4M16 3v4" />
                 </svg>
@@ -1040,9 +1191,15 @@ export function DashboardView({
                     {(() => {
                       const first = (meetings as any[])[0];
                       const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
-                      const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
+                      const full = d.toLocaleDateString(locale, {
+                        month: 'long',
+                        day: 'numeric',
+                        timeZone: userTZ,
+                      });
                       // Only "Today" / "Yesterday" / "Tomorrow" get the date beside them
-                      return full !== dateLabel ? <span className={styles.meetingDateSub}>{full}</span> : null;
+                      return full !== dateLabel ? (
+                        <span className={styles.meetingDateSub}>{full}</span>
+                      ) : null;
                     })()}
                   </h3>
 
@@ -1050,33 +1207,58 @@ export function DashboardView({
                     {(meetings as any[]).map((m, i) => {
                       const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
                       const recording = m.recordings?.find((r: any) => r.status === 'READY');
-                      const processingRecording = !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-                      const diffMs = m.scheduledFor ? new Date(m.scheduledFor).getTime() - currentTime : -1;
+                      const processingRecording =
+                        !recording &&
+                        m.recordings?.find((r: any) =>
+                          ['PROCESSING', 'UPLOADING'].includes(r.status),
+                        );
+                      const diffMs = m.scheduledFor
+                        ? new Date(m.scheduledFor).getTime() - currentTime
+                        : -1;
                       const isHost = m.createdByMemberId === user.id;
                       const isLive = m.isActive;
                       const cardMenuOpen = inviteMenuRoomName === m.roomName;
-                      const timeText = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone });
-                      const canJoinOrStart = !isLive && m.status !== 'ENDED' && m.status !== 'CANCELED';
+                      const timeText = d.toLocaleTimeString(undefined, {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false,
+                        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      });
+                      const canJoinOrStart =
+                        !isLive && m.status !== 'ENDED' && m.status !== 'CANCELED';
                       const startLabel = isHost && !m.isActive;
 
                       const statusClass = isLive
                         ? styles.statusInProgress
-                        : m.status === 'ENDED' ? styles.statusFinished
-                        : m.status === 'CANCELED' ? styles.statusCanceled
-                        : diffMs < 0 && m.scheduledFor ? styles.statusPastDue
-                        : m.scheduledFor ? styles.statusScheduled
-                        : styles.statusFinished;
+                        : m.status === 'ENDED'
+                          ? styles.statusFinished
+                          : m.status === 'CANCELED'
+                            ? styles.statusCanceled
+                            : diffMs < 0 && m.scheduledFor
+                              ? styles.statusPastDue
+                              : m.scheduledFor
+                                ? styles.statusScheduled
+                                : styles.statusFinished;
                       const statusLabel = isLive
                         ? t('dash.statusInProgress')
-                        : m.status === 'ENDED' ? t('dash.statusFinished')
-                        : m.status === 'CANCELED' ? t('dash.statusCanceled')
-                        : diffMs < 0 && m.scheduledFor ? t('dash.statusPastDue')
-                        : m.scheduledFor ? t('dash.statusScheduled')
-                        : t('dash.statusCreated');
+                        : m.status === 'ENDED'
+                          ? t('dash.statusFinished')
+                          : m.status === 'CANCELED'
+                            ? t('dash.statusCanceled')
+                            : diffMs < 0 && m.scheduledFor
+                              ? t('dash.statusPastDue')
+                              : m.scheduledFor
+                                ? t('dash.statusScheduled')
+                                : t('dash.statusCreated');
 
                       const elapsedMin =
                         isLive && m.actualStartedAt
-                          ? Math.max(0, Math.floor((currentTime - new Date(m.actualStartedAt).getTime()) / 60000))
+                          ? Math.max(
+                              0,
+                              Math.floor(
+                                (currentTime - new Date(m.actualStartedAt).getTime()) / 60000,
+                              ),
+                            )
                           : null;
                       // The "In progress" chip already says it is live; the time column just counts minutes.
                       const durationText =
@@ -1086,9 +1268,14 @@ export function DashboardView({
                             ? t('dash.mins', { n: m.durationMinutes })
                             : '';
                       const showCountdown =
-                        canJoinOrStart && !!m.scheduledFor && diffMs > 0 && diffMs <= 60 * 60 * 1000;
+                        canJoinOrStart &&
+                        !!m.scheduledFor &&
+                        diffMs > 0 &&
+                        diffMs <= 60 * 60 * 1000;
                       const countdownText = showCountdown
-                        ? t('dash.startsIn', { time: t('dash.mins', { n: Math.max(1, Math.ceil(diffMs / 60000)) }) })
+                        ? t('dash.startsIn', {
+                            time: t('dash.mins', { n: Math.max(1, Math.ceil(diffMs / 60000)) }),
+                          })
                         : '';
                       const openReplay = () => openRecording(recording);
                       const onJoinOrStart = () => {
@@ -1103,12 +1290,15 @@ export function DashboardView({
                         navigator.clipboard?.writeText(m.roomName);
                         toast.show(tx('dash.codeCopied', 'Meeting code copied'));
                       };
-                      const hostLabel = m.createdByMember?.fullName || m.createdByMember?.username || '';
+                      const hostLabel =
+                        m.createdByMember?.fullName || m.createdByMember?.username || '';
                       // Instant meetings have no title: name them after the host instead of repeating the code.
                       const displayTitle =
                         m.title ||
                         (hostLabel
-                          ? tx('dash.instantMeetingOf', "{name}'s instant meeting", { name: hostLabel })
+                          ? tx('dash.instantMeetingOf', "{name}'s instant meeting", {
+                              name: hostLabel,
+                            })
                           : m.roomName || t('dash.untitledMeeting'));
 
                       return (
@@ -1133,7 +1323,9 @@ export function DashboardView({
                           {/* Time + duration */}
                           <div className={styles.meetingCardTime}>
                             <div className={styles.meetingCardClock}>{timeText}</div>
-                            {durationText && <div className={styles.meetingCardDuration}>{durationText}</div>}
+                            {durationText && (
+                              <div className={styles.meetingCardDuration}>{durationText}</div>
+                            )}
                           </div>
 
                           {/* Title, status, meta */}
@@ -1142,7 +1334,9 @@ export function DashboardView({
                               <h4 className={styles.meetingCardTitle}>{displayTitle}</h4>
                               {/* One status: "Starts in 24 min" replaces "Scheduled" in the last hour */}
                               {countdownText ? (
-                                <span className={`${styles.statusBadge} ${styles.statusSoon}`}>{countdownText}</span>
+                                <span className={`${styles.statusBadge} ${styles.statusSoon}`}>
+                                  {countdownText}
+                                </span>
                               ) : m.status === 'ENDED' && !isLive ? null : (
                                 <span className={`${styles.statusBadge} ${statusClass}`}>
                                   {isLive && <span className={styles.liveDot} aria-hidden="true" />}
@@ -1152,10 +1346,28 @@ export function DashboardView({
                             </div>
 
                             <div className={styles.meetingCardMeta}>
-                              <span>{tx('dash.hostedBy', 'Host: {name}', { name: hostLabel || t('common.unknown') })}</span>
+                              <span>
+                                {tx('dash.hostedBy', 'Host: {name}', {
+                                  name: hostLabel || t('common.unknown'),
+                                })}
+                              </span>
                               {m._count?.participants > 0 && (
-                                <span className={styles.meetingCardMetaItem} title={t('dash.attendees')}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                <span
+                                  className={styles.meetingCardMetaItem}
+                                  title={t('dash.attendees')}
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="13"
+                                    height="13"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                  </svg>
                                   {m._count.participants}
                                 </span>
                               )}
@@ -1190,9 +1402,33 @@ export function DashboardView({
                                   }
                                 >
                                   {recording.visibility === 'PUBLIC' ? (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" /></svg>
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      aria-hidden="true"
+                                    >
+                                      <circle cx="12" cy="12" r="9" />
+                                      <path d="M3 12h18M12 3c3 3.5 3 14.5 0 18M12 3c-3 3.5-3 14.5 0 18" />
+                                    </svg>
                                   ) : (
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2" /><path d="M8 11V8a4 4 0 018 0v3" /></svg>
+                                    <svg
+                                      width="14"
+                                      height="14"
+                                      viewBox="0 0 24 24"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      strokeWidth="2"
+                                      strokeLinecap="round"
+                                      aria-hidden="true"
+                                    >
+                                      <rect x="5" y="11" width="14" height="10" rx="2" />
+                                      <path d="M8 11V8a4 4 0 018 0v3" />
+                                    </svg>
                                   )}
                                   {recording.visibility === 'PUBLIC'
                                     ? t('dash.recordingPublic')
@@ -1212,7 +1448,18 @@ export function DashboardView({
                               )}
                               {processingRecording && (
                                 <div className={styles.recordingProcessing}>
-                                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="13" height="13" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    width="13"
+                                    height="13"
+                                    aria-hidden="true"
+                                  >
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                  </svg>
                                   {t('common.processing')}
                                 </div>
                               )}
@@ -1237,7 +1484,11 @@ export function DashboardView({
                                 type="button"
                                 className={styles.rowAction}
                                 onClick={() => openFinishedMeeting(m)}
-                                title={processingRecording ? t('common.processing') : t('chatHistory.open')}
+                                title={
+                                  processingRecording
+                                    ? t('common.processing')
+                                    : t('chatHistory.open')
+                                }
                               >
                                 {playIcon(12)}
                                 {tx('dash.open', 'Open')}
@@ -1274,7 +1525,9 @@ export function DashboardView({
                                   aria-expanded={cardMenuOpen}
                                   className={styles.iconBtn}
                                   onClick={() =>
-                                    setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                    setInviteMenuRoomName((prev) =>
+                                      prev === m.roomName ? null : m.roomName,
+                                    )
                                   }
                                 >
                                   {linkIcon(18)}
@@ -1282,7 +1535,6 @@ export function DashboardView({
                                 {renderInviteMenu(m)}
                               </div>
                             )}
-
 
                             {m.status === 'ENDED' && (
                               <button
@@ -1304,7 +1556,17 @@ export function DashboardView({
                                 className={styles.iconBtn}
                                 onClick={() => setEditingMeeting(m)}
                               >
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="18" height="18" aria-hidden="true">
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  width="18"
+                                  height="18"
+                                  aria-hidden="true"
+                                >
                                   <path d="M4 20h4L19 9a2.1 2.1 0 00-3-3L5 17z" />
                                 </svg>
                               </button>
@@ -1338,7 +1600,11 @@ export function DashboardView({
                             {canJoinOrStart && (
                               <button
                                 type="button"
-                                className={isHost && !m.isActive && m.scheduledFor ? styles.mobileStartBtn : styles.mobileJoinBtn}
+                                className={
+                                  isHost && !m.isActive && m.scheduledFor
+                                    ? styles.mobileStartBtn
+                                    : styles.mobileJoinBtn
+                                }
                                 onClick={onJoinOrStart}
                               >
                                 {startLabel ? (
@@ -1362,7 +1628,9 @@ export function DashboardView({
                                   aria-haspopup="menu"
                                   aria-expanded={cardMenuOpen}
                                   onClick={() =>
-                                    setInviteMenuRoomName((prev) => (prev === m.roomName ? null : m.roomName))
+                                    setInviteMenuRoomName((prev) =>
+                                      prev === m.roomName ? null : m.roomName,
+                                    )
                                   }
                                 >
                                   {linkIcon(14)}
@@ -1406,28 +1674,45 @@ export function DashboardView({
                     className={styles.pageSizeSelect}
                     value={pageSize}
                     aria-label={t('dash.page', { n: pageSize })}
-                    onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setPage(1);
+                    }}
                   >
                     <option value={15}>{t('dash.page', { n: 15 })}</option>
                     <option value={25}>{t('dash.page', { n: 25 })}</option>
                     <option value={50}>{t('dash.page', { n: 50 })}</option>
                     <option value={100}>{t('dash.page', { n: 100 })}</option>
                   </select>
-                  <span className={styles.totalFiles}>{totalMeetings} {t('dash.totalRecords')}</span>
+                  <span className={styles.totalFiles}>
+                    {totalMeetings} {t('dash.totalRecords')}
+                  </span>
                 </div>
                 <div className={styles.paginationRight}>
                   <button
                     type="button"
                     className={styles.pageArrow}
                     disabled={page <= 1}
-                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
                     aria-label={tx('dash.prevPage', 'Previous page')}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6" /></svg>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M15 18l-6-6 6-6" />
+                    </svg>
                   </button>
                   {(() => {
                     // Pages in groups of PAGE_GROUP_SIZE (1–5, 6–10, …)
-                    const groupStart = Math.floor((page - 1) / PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1;
+                    const groupStart =
+                      Math.floor((page - 1) / PAGE_GROUP_SIZE) * PAGE_GROUP_SIZE + 1;
                     const groupEnd = Math.min(totalPages, groupStart + PAGE_GROUP_SIZE - 1);
                     const pages = [];
                     for (let i = groupStart; i <= groupEnd; i++) {
@@ -1440,11 +1725,15 @@ export function DashboardView({
                           onClick={() => setPage(i)}
                         >
                           {i}
-                        </button>
+                        </button>,
                       );
                     }
-                    const groupLabelPrev = tx('dash.prevPageGroup', 'Previous {n} pages', { n: PAGE_GROUP_SIZE });
-                    const groupLabelNext = tx('dash.nextPageGroup', 'Next {n} pages', { n: PAGE_GROUP_SIZE });
+                    const groupLabelPrev = tx('dash.prevPageGroup', 'Previous {n} pages', {
+                      n: PAGE_GROUP_SIZE,
+                    });
+                    const groupLabelNext = tx('dash.nextPageGroup', 'Next {n} pages', {
+                      n: PAGE_GROUP_SIZE,
+                    });
                     return (
                       <>
                         {totalPages > PAGE_GROUP_SIZE && (
@@ -1479,31 +1768,60 @@ export function DashboardView({
                     type="button"
                     className={styles.pageArrow}
                     disabled={page >= Math.ceil(totalMeetings / pageSize)}
-                    onClick={() => setPage(p => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))}
+                    onClick={() =>
+                      setPage((p) => Math.min(Math.ceil(totalMeetings / pageSize), p + 1))
+                    }
                     aria-label={tx('dash.nextPage', 'Next page')}
                   >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6" /></svg>
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      aria-hidden="true"
+                    >
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
                   </button>
                 </div>
               </div>
             </div>
           )}
         </section>
-      </div>{/* end dashMain */}
+      </div>
+      {/* end dashMain */}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
-          <div className={styles.dashModalContent} role="dialog" aria-modal="true" aria-labelledby="dash-scheduled-title">
-            <h2 id="dash-scheduled-title" className={styles.dialogTitle}>{t('anon.scheduledMeeting')}</h2>
+          <div
+            className={styles.dashModalContent}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dash-scheduled-title"
+          >
+            <h2 id="dash-scheduled-title" className={styles.dialogTitle}>
+              {t('anon.scheduledMeeting')}
+            </h2>
             <p className={styles.dialogText}>
-              {t('anon.hostedBy', { title: scheduledModalData.title || scheduledModalData.roomName, host: scheduledModalData.createdByMember?.fullName || 'Host' })}
+              {t('anon.hostedBy', {
+                title: scheduledModalData.title || scheduledModalData.roomName,
+                host: scheduledModalData.createdByMember?.fullName || 'Host',
+              })}
             </p>
             {(() => {
               const diffMs = new Date(scheduledModalData.scheduledFor).getTime() - Date.now();
               return diffMs > 60 * 60 * 1000 ? (
                 <div className={styles.dialogInfo}>
-                  <p className={`${styles.dialogText} ${styles.dialogTextMuted}`}>{t('anon.scheduledFor')} <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong></p>
-                  <p className={styles.dialogText} style={{ marginTop: 6 }}>{t('anon.moreThanHour')}</p>
+                  <p className={`${styles.dialogText} ${styles.dialogTextMuted}`}>
+                    {t('anon.scheduledFor')}{' '}
+                    <strong>{new Date(scheduledModalData.scheduledFor).toLocaleString()}</strong>
+                  </p>
+                  <p className={styles.dialogText} style={{ marginTop: 6 }}>
+                    {t('anon.moreThanHour')}
+                  </p>
                 </div>
               ) : (
                 <div className={styles.dialogCountdown}>
@@ -1513,23 +1831,26 @@ export function DashboardView({
               );
             })()}
             <div className={styles.dialogActions}>
-              <button 
+              <button
                 type="button"
-                onClick={() => setScheduledModalData(null)} 
+                onClick={() => setScheduledModalData(null)}
                 className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
               >
                 {t('common.close')}
               </button>
-              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <= 60 * 60 * 1000 && (
-                <button 
+              {new Date(scheduledModalData.scheduledFor).getTime() - Date.now() <=
+                60 * 60 * 1000 && (
+                <button
                   type="button"
                   onClick={() => {
                     setScheduledModalData(null);
                     router.push(`/rooms/${scheduledModalData.roomName}`);
-                  }} 
+                  }}
                   className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
                 >
-                  {scheduledModalData.createdByMemberId === user.id ? t('dash.startMeetingBtn') : t('anon.joinAnyway')}
+                  {scheduledModalData.createdByMemberId === user.id
+                    ? t('dash.startMeetingBtn')
+                    : t('anon.joinAnyway')}
                 </button>
               )}
             </div>
@@ -1538,25 +1859,25 @@ export function DashboardView({
       )}
 
       {showScheduleModal && (
-        <ScheduleMeetingModal 
+        <ScheduleMeetingModal
           user={user}
           onClose={() => setShowScheduleModal(false)}
           onSave={() => {
             setShowScheduleModal(false);
             fetchMeetings();
-          }} 
+          }}
         />
       )}
 
       {editingMeeting && (
-        <ScheduleMeetingModal 
+        <ScheduleMeetingModal
           user={user}
           existingMeeting={editingMeeting}
           onClose={() => setEditingMeeting(null)}
           onSave={() => {
             setEditingMeeting(null);
             fetchMeetings();
-          }} 
+          }}
         />
       )}
 
@@ -1574,21 +1895,33 @@ export function DashboardView({
 
       {earlyStartMeeting && (
         <div className={styles.dashModalOverlay}>
-          <div className={styles.dashModalContent} role="dialog" aria-modal="true" aria-labelledby="dash-early-title">
-            <h2 id="dash-early-title" className={styles.dialogTitle}>{t('dash.earlyStart.title')}</h2>
+          <div
+            className={styles.dashModalContent}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dash-early-title"
+          >
+            <h2 id="dash-early-title" className={styles.dialogTitle}>
+              {t('dash.earlyStart.title')}
+            </h2>
             <p className={styles.dialogText}>
-              {t('dash.earlyStart.message', { time: new Date(earlyStartMeeting.scheduledFor).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) })}
+              {t('dash.earlyStart.message', {
+                time: new Date(earlyStartMeeting.scheduledFor).toLocaleString([], {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                }),
+              })}
             </p>
             <p className={styles.dialogText}>{t('dash.earlyStart.confirm')}</p>
             <div className={styles.dialogActions}>
-              <button 
+              <button
                 type="button"
                 onClick={() => setEarlyStartMeeting(null)}
                 className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
               >
                 {t('common.cancel')}
               </button>
-              <button 
+              <button
                 type="button"
                 onClick={() => {
                   const m = earlyStartMeeting;
@@ -1610,7 +1943,7 @@ export function DashboardView({
       )}
 
       {showSettingsModal && (
-        <SystemSettingsModal 
+        <SystemSettingsModal
           onClose={() => setShowSettingsModal(false)}
           onSave={() => {
             setShowSettingsModal(false);
@@ -1620,8 +1953,8 @@ export function DashboardView({
       )}
 
       {showProfileModal && (
-        <MyProfileModal 
-          user={user} 
+        <MyProfileModal
+          user={user}
           onClose={() => setShowProfileModal(false)}
           onSave={({ personalRoomId: newId, avatarUrl: newAvatar, displayName: newName }) => {
             setPersonalRoomId(newId || null);
@@ -1633,7 +1966,9 @@ export function DashboardView({
                 ...(newName ? { displayName: newName } : {}),
               };
               // Keep localStorage in sync
-              try { localStorage.setItem('kloudUser', JSON.stringify(updated)); } catch {}
+              try {
+                localStorage.setItem('kloudUser', JSON.stringify(updated));
+              } catch {}
               onUpdateUser(updated);
             }
           }}
@@ -1644,8 +1979,15 @@ export function DashboardView({
       {/* ── Delete Confirmation Dialog ── */}
       {deletingMeeting && (
         <div className={styles.dashModalOverlay} style={{ zIndex: 9999 }}>
-          <div className={styles.dashModalContent} role="alertdialog" aria-modal="true" aria-labelledby="dash-delete-title">
-            <h2 id="dash-delete-title" className={styles.dialogTitle}>{t('dash.deleteMeetingConfirm')}</h2>
+          <div
+            className={styles.dashModalContent}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="dash-delete-title"
+          >
+            <h2 id="dash-delete-title" className={styles.dialogTitle}>
+              {t('dash.deleteMeetingConfirm')}
+            </h2>
             <p className={styles.dialogText}>
               {t('dash.willBeDeleted', { name: deletingMeeting.title || deletingMeeting.roomName })}
             </p>
@@ -1671,7 +2013,6 @@ export function DashboardView({
           </div>
         </div>
       )}
-
     </div>
   );
 }

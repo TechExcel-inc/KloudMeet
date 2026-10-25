@@ -817,7 +817,6 @@
 
   "prejoin.tryAgain": "다시 시도",
 
-
   "prejoin.allowPermission": "브라우저에서 물으면 카메라와 마이크를 허용하세요",
   "prejoin.cameraStarting": "카메라를 켜는 중…",
 
@@ -896,7 +895,7 @@
   "annotation.clearAll": "모든 주석 지우기",
   "anon.heroTitle": "문서 위에서 회의하세요.",
   "anon.heroAccent": "언제든 다시보기.",
-  "anon.heroSubtitle": "AI가 팀과 고객에게서 배우고 함께 일하는 곳. 계정 없이 브라우저에서 바로 참가하세요.",
+  "anon.heroSubtitle": "AI 에이전트가 팀 및 고객과 함께 학습하고 일하는 인터랙티브 회의 플랫폼입니다. 계정 없이 브라우저에서 바로 참가하세요.",
   "anon.carousel.label": "할 수 있는 일",
   "anon.carousel.prev": "이전",
   "anon.carousel.next": "다음",
@@ -921,7 +920,7 @@
   "dash.scheduleHint": "초대하고 캘린더에 추가",
   "dash.joinWithCode": "코드로 참가",
   "dash.joinCodePlaceholder": "코드 또는 링크",
-  "dash.meetingListTagline": "AI가 팀과 고객과 함께 배우고 협업할 수 있습니다.",
+  "dash.meetingListTagline": "AI 에이전트가 팀 및 고객과 함께 학습하고 일하는 인터랙티브 회의 플랫폼입니다.",
   "dash.joinAnyCode": "코드, 링크 또는 개인 ID",
   "dash.open": "열기",
   "dash.prevPageGroup": "이전 {n}페이지",

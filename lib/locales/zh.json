@@ -802,7 +802,6 @@
 
   "prejoin.tryAgain": "重试",
 
-
   "prejoin.allowPermission": "浏览器询问时，请允许使用摄像头和麦克风",
   "prejoin.cameraStarting": "正在打开摄像头…",
 
@@ -881,7 +880,7 @@
   "annotation.clearAll": "清除所有标注",
   "anon.heroTitle": "在文档上开会。",
   "anon.heroAccent": "随时回放。",
-  "anon.heroSubtitle": "AI 能与你的团队和客户共同学习与协作。无需账户，直接在浏览器中加入。",
+  "anon.heroSubtitle": "互动式会议平台，AI 智能体与你的团队和客户共同学习与协作。无需账户，直接在浏览器中加入。",
   "anon.carousel.label": "你可以做什么",
   "anon.carousel.prev": "上一张",
   "anon.carousel.next": "下一张",
@@ -906,7 +905,7 @@
   "dash.scheduleHint": "邀请参会人并加入日历",
   "dash.joinWithCode": "输入会议码加入",
   "dash.joinCodePlaceholder": "会议码或链接",
-  "dash.meetingListTagline": "AI 能与你的团队和客户共同学习与协作。",
+  "dash.meetingListTagline": "互动式会议平台，AI 智能体与你的团队和客户共同学习与协作。",
   "dash.joinAnyCode": "输入会议码、链接或个人会议号",
   "dash.open": "打开",
   "dash.prevPageGroup": "前 {n} 页",
