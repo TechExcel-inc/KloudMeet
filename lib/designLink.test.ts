@@ -72,6 +72,17 @@ describe('parseDesignLink', () => {
     expect(parseDesignLink(`https://example.com/${'a'.repeat(2100)}`, app)).toEqual({ ok: false, error: 'tooLong' });
   });
 
+  it('accepts local http design servers only when asked (development)', () => {
+    expect(parseDesignLink('http://localhost:8790/d/a/', app)).toEqual({ ok: false, error: 'notHttps' });
+    const dev = parseDesignLink('http://localhost:8790/d/a/', { ...app, allowLocalHttp: true });
+    expect(dev.ok && dev.link.kind).toBe('web');
+    expect(parseDesignLink('http://192.168.1.2/a', { ...app, allowLocalHttp: true })).toEqual({ ok: false, error: 'notHttps' });
+    expect(parseDesignLink('http://localhost:3210/x', { appOrigin: 'http://localhost:3210', allowLocalHttp: true })).toEqual({
+      ok: false,
+      error: 'sameSite',
+    });
+  });
+
   it('allows other kloud.cn sites (only the meeting site itself is refused)', () => {
     expect(parseDesignLink('https://design.kloud.cn/abc/', app).ok).toBe(true);
   });

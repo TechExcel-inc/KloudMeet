@@ -18,6 +18,29 @@ import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
 import { parseDesignLink, type DesignLink } from '@/lib/designLink';
 import { rememberDesignLink } from '@/lib/designLinkClient';
+import { parseDesignSyncMessage } from '@/lib/designSync';
+import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
+
+/* Design mode between preview windows: the host window drives, attendee windows follow,
+   over a BroadcastChannel instead of a meeting's data channel. */
+const DEV_HOST_IDENTITY = 'dev-host';
+function useDevDesignTransport(identity: string, name: string): DesignSyncTransport | null {
+  return React.useMemo(() => {
+    if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
+    const channel = new BroadcastChannel('km-dev-design');
+    return {
+      send: (msg) => channel.postMessage({ from: identity, name, msg }),
+      subscribe: (handler) => {
+        const onMessage = (event: MessageEvent) => {
+          const msg = parseDesignSyncMessage(event.data?.msg);
+          if (msg) handler(msg, { identity: String(event.data.from), name: String(event.data.name || '') });
+        };
+        channel.addEventListener('message', onMessage);
+        return () => channel.removeEventListener('message', onMessage);
+      },
+    };
+  }, [identity, name]);
+}
 
 const BASE_NAMES = [
   'Kloud Solution', 'Tieren Zhou', 'Angela', 'Shad Z Daly', 'Mark Butteris', 'Natalia Kushner',
@@ -122,7 +145,7 @@ export default function DevTilesPage() {
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   // Design mode preview: ?design=<link> opens straight on the stage, ?dialog=1 opens "Show a
-  // link", ?as=attendee views as an attendee following a sample presenter view (125%, 1100×620).
+  // link", ?as=attendee views as an attendee following the host window (open both side by side).
   const [designLink, setDesignLink] = React.useState<DesignLink | null>(null);
   const [designDialog, setDesignDialog] = React.useState(false);
   React.useEffect(() => {
@@ -131,12 +154,26 @@ export default function DevTilesPage() {
     if (query.get('dialog') === '1') setDesignDialog(true);
     const preset = query.get('design');
     if (!preset) return;
-    const parsed = parseDesignLink(preset, { appOrigin: window.location.origin });
+    const parsed = parseDesignLink(preset, { appOrigin: window.location.origin, allowLocalHttp: true });
     if (parsed.ok) {
       setDesignLink(parsed.link);
       setView('design');
     }
   }, []);
+  const devIdentity = React.useMemo(
+    () => (host ? DEV_HOST_IDENTITY : `dev-attendee-${Math.random().toString(36).slice(2, 7)}`),
+    [host],
+  );
+  const designTransport = useDevDesignTransport(devIdentity, host ? 'ying huang' : 'Attendee');
+  const designSync = useDesignSync({
+    transport: designTransport,
+    active: view === 'design' && !!designLink,
+    linkUrl: designLink?.url ?? null,
+    isDriver: host,
+    isAllowedSender: React.useCallback((identity: string) => identity === DEV_HOST_IDENTITY, []),
+    localIdentity: devIdentity,
+    localName: host ? 'ying huang' : 'Attendee',
+  });
   const gridRef = React.useRef<HTMLDivElement | null>(null);
 
   React.useLayoutEffect(() => {
@@ -195,7 +232,7 @@ export default function DevTilesPage() {
             presenterName="ying huang"
             isDriver={host}
             canControl={host}
-            remoteViewport={host ? null : { zoom: 1.25, baseWidth: 1100, baseHeight: 620 }}
+            sync={designSync}
             onChangeLink={() => setDesignDialog(true)}
             onStop={() => {
               setDesignLink(null);

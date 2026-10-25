@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { publicOrigin } from '@/lib/calendar/server';
-import { parseDesignLink, type StoredDesignLink } from '@/lib/designLink';
+import { DESIGN_ALLOW_LOCAL_HTTP, parseDesignLink, type StoredDesignLink } from '@/lib/designLink';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { parseMeetingRoomView, setMeetingRoomDesignLink } from '@/lib/meetingRoomView';
@@ -46,6 +46,7 @@ export async function POST(
 
     const parsed = parseDesignLink(typeof payload.url === 'string' ? payload.url : '', {
       appOrigin: publicOrigin(request),
+      allowLocalHttp: DESIGN_ALLOW_LOCAL_HTTP,
     });
     if (!parsed.ok) {
       return NextResponse.json({ error: 'Invalid link', code: parsed.error }, { status: 400 });

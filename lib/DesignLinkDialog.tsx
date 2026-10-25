@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useI18n } from '@/lib/i18n';
-import { parseDesignLink, type DesignLink, type DesignLinkError } from '@/lib/designLink';
+import { DESIGN_ALLOW_LOCAL_HTTP, parseDesignLink, type DesignLink, type DesignLinkError } from '@/lib/designLink';
 import {
   forgetDesignLink,
   readRecentDesignLinks,
@@ -47,7 +47,7 @@ export function DesignLinkDialog({ currentUrl, appOrigin, onSubmit, onClose }: D
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const parsed = parseDesignLink(value, { appOrigin });
+  const parsed = parseDesignLink(value, { appOrigin, allowLocalHttp: DESIGN_ALLOW_LOCAL_HTTP });
   const errorText = (error: DesignLinkError): string => {
     switch (error) {
       case 'empty':
@@ -66,7 +66,7 @@ export function DesignLinkDialog({ currentUrl, appOrigin, onSubmit, onClose }: D
   };
 
   const show = async (input: string) => {
-    const result = parseDesignLink(input, { appOrigin });
+    const result = parseDesignLink(input, { appOrigin, allowLocalHttp: DESIGN_ALLOW_LOCAL_HTTP });
     setTouched(true);
     if (!result.ok || busy) return;
     setBusy(true);

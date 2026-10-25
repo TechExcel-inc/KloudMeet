@@ -219,6 +219,131 @@
   box-shadow: 0 0 0 2px var(--km-on-dark-accent);
 }
 
+/* Synced pages (hosted designs with the sync script) */
+.chipSynced {
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+}
+
+/* Drawings and laser pointers, in the page's document coordinates */
+.ink {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.inkActive {
+  pointer-events: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.inkLaser {
+  cursor: none;
+}
+
+.inkSvg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: visible;
+}
+
+.laser {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 0 5px rgba(255, 59, 48, 0.25), 0 0 16px #ff3b30;
+  pointer-events: none;
+  transition: left 60ms linear, top 60ms linear;
+}
+
+.laserName {
+  position: absolute;
+  top: -5px;
+  left: 18px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #ff3b30;
+  color: #ffffff;
+  font: 600 11px var(--km-font);
+  white-space: nowrap;
+}
+
+/* Annotation tools: top-left, where LiveDoc keeps its annotation bar */
+.rail {
+  position: absolute;
+  top: 60px;
+  left: 10px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--km-stage-border);
+  border-radius: 11px;
+  background: rgba(32, 33, 38, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.railBtn,
+.railBtnOn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--km-stage-text);
+  cursor: pointer;
+}
+
+.railBtn:hover:not(:disabled) {
+  background: var(--km-tile);
+}
+
+.railBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.railBtnOn {
+  background: var(--km-primary);
+  color: #ffffff;
+}
+
+.railSwatch {
+  width: 16px;
+  height: 16px;
+  margin: 4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.railSep {
+  width: 20px;
+  height: 1px;
+  margin: 2px 0;
+  background: var(--km-stage-border);
+}
+
+.railBtn:focus-visible,
+.railBtnOn:focus-visible,
+.railSwatch:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--km-on-dark-accent);
+}
+
 /* Free browsing (zoomed on your own): amber bar */
 .barFree {
   border-color: rgba(245, 158, 11, 0.35);

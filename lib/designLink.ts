@@ -88,7 +88,11 @@ function figmaLabel(slug: string | undefined): string {
  */
 export function parseDesignLink(
   input: string,
-  opts: { appOrigin?: string | null } = {},
+  opts: {
+    appOrigin?: string | null;
+    /** Development only: also accept http://localhost / 127.0.0.1 (other ports than the app) */
+    allowLocalHttp?: boolean;
+  } = {},
 ): { ok: true; link: DesignLink } | { ok: false; error: DesignLinkError } {
   const raw = (input ?? '').trim();
   if (!raw) return { ok: false, error: 'empty' };
@@ -100,9 +104,13 @@ export function parseDesignLink(
   } catch {
     return { ok: false, error: 'invalid' };
   }
-  if (parsed.protocol !== 'https:') return { ok: false, error: 'notHttps' };
+  const localDev =
+    !!opts.allowLocalHttp &&
+    (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+  if (parsed.protocol !== 'https:' && !localDev) return { ok: false, error: 'notHttps' };
   if (!parsed.hostname || parsed.username || parsed.password) return { ok: false, error: 'invalid' };
-  if (isPrivateHost(parsed.hostname)) return { ok: false, error: 'privateHost' };
+  if (isPrivateHost(parsed.hostname) && !localDev) return { ok: false, error: 'privateHost' };
   if (opts.appOrigin) {
     try {
       if (new URL(opts.appOrigin).host.toLowerCase() === parsed.host.toLowerCase()) {
@@ -155,6 +163,9 @@ export function parseStoredDesignLink(value: unknown): StoredDesignLink | null {
     ...(typeof v.setAt === 'number' && Number.isFinite(v.setAt) ? { setAt: v.setAt } : {}),
   };
 }
+
+/** Development builds accept local http design servers (see parseDesignLink). */
+export const DESIGN_ALLOW_LOCAL_HTTP = process.env.NODE_ENV !== 'production';
 
 /** Viewport the presenter shares: the frame is laid out at base size, then zoomed. */
 export interface DesignViewport {
