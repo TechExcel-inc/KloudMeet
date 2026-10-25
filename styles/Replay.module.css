@@ -488,12 +488,16 @@
   color: var(--km-on-primary);
 }
 
-.summaryTitle {
+.summaryHead {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
+}
+
+.summaryTitle {
+  display: block;
+  flex: 1;
+  min-width: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -508,10 +512,31 @@
   color: var(--km-primary);
 }
 
+.foldBtn {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.foldBtn:hover {
+  background: var(--km-hover);
+}
+
+.foldBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
 .summaryChevron,
 .summaryChevronOpen {
   flex: none;
-  margin-top: 3px;
   fill: none;
   stroke: var(--km-text-muted);
   stroke-width: 2.2;
@@ -760,7 +785,8 @@ button.line:hover {
 }
 
 .videoSolo {
-  max-height: min(88vh, 1200px);
+  max-height: min(calc(100vh - 112px), 1200px);
+  max-height: min(calc(100dvh - 112px), 1200px);
   min-height: 52vh;
 }
 

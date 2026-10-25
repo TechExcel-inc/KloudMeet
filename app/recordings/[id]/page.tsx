@@ -185,12 +185,10 @@ interface SpeakerSegment {
 function ChapterCardsCarousel({
   chapters,
   currentTime,
-  selectedId,
   onSelect,
 }: {
   chapters: ChapterCard[];
   currentTime: number;
-  selectedId: number | null;
   onSelect: (ch: ChapterCard) => void;
 }) {
   const { t } = useI18n();
@@ -220,7 +218,7 @@ function ChapterCardsCarousel({
     };
   }, []);
 
-  // 自动高亮：基于播放时间
+  // 高亮始终跟随播放时间；点击卡片会跳到该章开头，高亮随之移过去
   const autoIdx = chapters.reduce(
     (acc, c, i) => (currentTime >= c.startSec && currentTime < c.endSec ? i : acc),
     -1,
@@ -242,7 +240,7 @@ function ChapterCardsCarousel({
         )}
         <div ref={scrollRef} className={s.chapterTrack}>
           {chapters.map((ch, idx) => {
-            const isActive = ch.id === selectedId || (idx === autoIdx && selectedId === null);
+            const isActive = idx === autoIdx;
             return (
               <button
                 type="button"
@@ -254,10 +252,12 @@ function ChapterCardsCarousel({
               >
                 <span className={s.chapterTime}>{ch.timeRange}</span>
                 <span className={s.chapterTopic}>{ch.topic}</span>
-                <span className={s.chapterSpeaker}>
-                  <Avatar name={ch.speaker} className={s.dot} />
-                  <span>{ch.speaker}</span>
-                </span>
+                {ch.speaker && (
+                  <span className={s.chapterSpeaker}>
+                    <Avatar name={ch.speaker} className={s.dot} />
+                    <span>{ch.speaker}</span>
+                  </span>
+                )}
               </button>
             );
           })}
@@ -311,7 +311,7 @@ function SpeakerSegmentTimeline({
                 <div
                   key={i}
                   className={s.laneSeg}
-                  title={`${fmtTime(start)} – ${fmtTime(end)}  点击跳转`}
+                  title={`${fmtTime(start)} – ${fmtTime(end)} · ${t('replay.jumpHere')}`}
                   style={{ left: pct(start), width: pct(end - start), background: sp.color }}
                   onClick={(ev) => {
                     ev.stopPropagation();
@@ -336,7 +336,7 @@ function SummaryPanel({
   onSeek,
   meetingId,
   kloudMeetingId,
-  focusId,
+  focus,
   speakerById,
 }: {
   items: SummaryItem[];
@@ -344,24 +344,38 @@ function SummaryPanel({
   onSeek: (secs: number) => void;
   meetingId: number;
   kloudMeetingId: number | null;
-  /** 外部点击章节卡片时展开并滚动到对应摘要 */
-  focusId?: number | null;
+  /** 点击章节卡片时展开并滚动到对应摘要；n 让重复点同一章也生效 */
+  focus?: { id: number; n: number } | null;
   speakerById: Record<number, string>;
 }) {
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [localItems, setLocalItems] = useState<SummaryItem[]>(items);
-  const [expanded, setExpanded] = useState<number | null>(null);
+  // 默认全部展开，方便直接阅读；只记录被收起的条目
+  const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
   const itemRefs = useRef<Record<number, HTMLElement | null>>({});
 
   useEffect(() => setLocalItems(items), [items]);
 
-  // 外部点击章节卡片时强制展开对应摘要
+  // 外部点击章节卡片时展开并滚动到对应摘要
   useEffect(() => {
-    if (focusId === undefined || focusId === null) return;
-    setExpanded(focusId);
-    itemRefs.current[focusId]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, [focusId]);
+    if (!focus) return;
+    setCollapsed((prev) => {
+      if (!prev.has(focus.id)) return prev;
+      const next = new Set(prev);
+      next.delete(focus.id);
+      return next;
+    });
+    itemRefs.current[focus.id]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [focus]);
+
+  const toggle = (itemId: number) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
 
   // 高亮当前所在章节
   const activeIdx = localItems.reduce((acc, item, idx) => {
@@ -418,7 +432,7 @@ function SummaryPanel({
       {localItems.map((item, idx) => {
         const start = offsetToSecs(item.timeOffset);
         const speaker = speakerById[item.id] || '';
-        const isOpen = expanded === item.id;
+        const isOpen = !collapsed.has(item.id);
         return (
           <article
             key={item.id}
@@ -428,20 +442,25 @@ function SummaryPanel({
             className={idx === activeIdx ? s.summaryItemOn : s.summaryItem}
           >
             <span className={s.summaryIndex} aria-hidden="true">{idx + 1}</span>
-            <button
-              type="button"
-              className={s.summaryTitle}
-              aria-expanded={isOpen}
-              onClick={() => {
-                onSeek(start);
-                setExpanded(isOpen ? null : item.id);
-              }}
-            >
-              <span>{item.title}</span>
-              <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
+            <div className={s.summaryHead}>
+              <button type="button" className={s.summaryTitle} onClick={() => onSeek(start)}>
+                {item.title}
+              </button>
+              {item.content && (
+                <button
+                  type="button"
+                  className={s.foldBtn}
+                  aria-expanded={isOpen}
+                  aria-label={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                  title={isOpen ? t('replay.collapseItem') : t('replay.expandItem')}
+                  onClick={() => toggle(item.id)}
+                >
+                  <svg className={isOpen ? s.summaryChevronOpen : s.summaryChevron} width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+              )}
+            </div>
             {isOpen && item.content && <p className={s.summaryText}>{item.content}</p>}
             <div className={s.summaryFoot}>
               <button type="button" className={s.timeLink} onClick={() => onSeek(start)}>
@@ -633,146 +652,6 @@ function InfoPanel({
   );
 }
 
-/** 参与者发言进度条 */
-function ParticipantTimeline({
-  transcripts,
-  participants,
-  duration,
-  currentTime,
-  onSeek,
-}: {
-  transcripts: Transcript[];
-  participants: Participant[];
-  duration: number;
-  currentTime: number;
-  onSeek: (secs: number) => void;
-}) {
-  if (!duration || !transcripts.length) return null;
-
-  // 聚合：每个发言人的发言时段
-  const speakerMap: Record<string, number[]> = {};
-  for (const t of transcripts) {
-    if (t.offsetSeconds === null) continue;
-    if (!speakerMap[t.speakerName]) speakerMap[t.speakerName] = [];
-    speakerMap[t.speakerName].push(t.offsetSeconds);
-  }
-
-  const speakers = Object.keys(speakerMap).slice(0, 6); // 最多显示6人
-
-  return (
-    <div style={timelineStyles.timelineContainer}>
-      {speakers.map((name) => {
-        const offsets = speakerMap[name];
-        return (
-          <div key={name} style={timelineStyles.timelineRow}>
-            <div style={timelineStyles.timelineLabel} title={name}>
-              <div
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: '50%',
-                  background: speakerColor(name),
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 9,
-                  color: '#fff',
-                  fontWeight: 700,
-                  flexShrink: 0,
-                }}
-              >
-                {getInitials(name)}
-              </div>
-              <span
-                style={{
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  fontSize: 11,
-                }}
-              >
-                {name}
-              </span>
-            </div>
-            <div style={timelineStyles.timelineBar}>
-              {offsets.map((sec, i) => {
-                const left = `${(sec / duration) * 100}%`;
-                return (
-                  <div
-                    key={i}
-                    title={fmtTime(sec)}
-                    style={{
-                      position: 'absolute',
-                      left,
-                      top: 2,
-                      width: 4,
-                      height: 'calc(100% - 4px)',
-                      borderRadius: 2,
-                      background: speakerColor(name),
-                      opacity: 0.85,
-                      cursor: 'pointer',
-                    }}
-                    onClick={() => onSeek(sec)}
-                  />
-                );
-              })}
-              {/* 当前播放位置 */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `${(currentTime / duration) * 100}%`,
-                  top: 0,
-                  width: 2,
-                  height: '100%',
-                  background: '#818cf8',
-                  opacity: 0.7,
-                  pointerEvents: 'none',
-                }}
-              />
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* Styles for ParticipantTimeline (kept from the previous replay page) */
-const timelineStyles: Record<string, React.CSSProperties> = {
-  timelineContainer: {
-    padding: '10px 16px',
-    background: '#0f172a',
-    borderTop: '1px solid #1e293b',
-    flexShrink: 0,
-  },
-  timelineRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-    height: 22,
-  },
-  timelineLabel: {
-    width: 100,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 5,
-    flexShrink: 0,
-    color: '#94a3b8',
-    fontSize: 11,
-  },
-  timelineBar: {
-    flex: 1,
-    height: 18,
-    background: 'rgba(255,255,255,0.05)',
-    borderRadius: 4,
-    position: 'relative',
-    overflow: 'hidden',
-    cursor: 'pointer',
-  },
-
-};
-
 /** AI 生成进度（模拟） */
 function GenerateProgress({ pct }: { pct: number }) {
   const { t } = useI18n();
@@ -799,8 +678,8 @@ export default function ReplayPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info'>('summary');
-  // 为 null 表示未手动选中，高亮跟随播放时间自动
-  const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
+  // 最近一次点击的章节，用来展开并滚动到对应摘要
+  const [chapterFocus, setChapterFocus] = useState<{ id: number; n: number } | null>(null);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [genProgress, setGenProgress] = useState(0);
@@ -901,13 +780,13 @@ export default function ReplayPage() {
     }
   }, []);
 
-  // 点击章节卡片：跳转视频 + 切换左侧摘要面板 + 滚动到对应项
+  // 点击章节卡片：跳转视频 + 切换到摘要面板 + 展开并滚动到对应项
   const handleChapterSelect = useCallback(
     (ch: ChapterCard) => {
       seekTo(ch.startSec);
       setActiveTab('summary');
       setPanelVisible(true);
-      setSelectedChapterId(ch.id);
+      setChapterFocus((prev) => ({ id: ch.id, n: (prev?.n ?? 0) + 1 }));
     },
     [seekTo],
   );
@@ -937,7 +816,7 @@ export default function ReplayPage() {
           ? { ...prev, meeting: { ...prev.meeting, summaryItems: json.items } }
           : prev,
       );
-      setSelectedChapterId(null);
+      setChapterFocus(null);
     } catch (e: any) {
       setGenerateError(e.message || '网络错误');
     } finally {
@@ -1060,7 +939,9 @@ export default function ReplayPage() {
   const metaParts = [
     meeting?.actualStartedAt
       ? new Date(meeting.actualStartedAt).toLocaleString(locale, {
-          year: 'numeric',
+          ...(new Date(meeting.actualStartedAt).getFullYear() !== new Date().getFullYear()
+            ? { year: 'numeric' as const }
+            : {}),
           month: 'short',
           day: 'numeric',
           hour: '2-digit',
@@ -1107,7 +988,7 @@ export default function ReplayPage() {
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <rect x="3" y="3" width="18" height="18" rx="2" />
-                {panelVisible ? <line x1="9" y1="3" x2="9" y2="21" /> : <line x1="15" y1="3" x2="15" y2="21" />}
+                {panelVisible ? <line x1="15" y1="3" x2="15" y2="21" /> : <line x1="9" y1="3" x2="9" y2="21" />}
               </svg>
             </button>
           )}
@@ -1287,7 +1168,6 @@ export default function ReplayPage() {
             <ChapterCardsCarousel
               chapters={realChapters}
               currentTime={currentTime}
-              selectedId={selectedChapterId}
               onSelect={handleChapterSelect}
             />
           )}
@@ -1353,7 +1233,7 @@ export default function ReplayPage() {
                       onSeek={seekTo}
                       meetingId={meeting?.id ?? 0}
                       kloudMeetingId={meeting?.kloudMeetingId ?? null}
-                      focusId={selectedChapterId}
+                      focus={chapterFocus}
                       speakerById={speakerById}
                     />
                   </>
