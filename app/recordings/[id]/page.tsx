@@ -220,8 +220,9 @@ function StageViews({
 
   return (
     <section className={s.card}>
-      <div className={s.pills} role="tablist">
-        {hasChapters && (
+      {/* A switch with one option is noise: show the pills only when both views exist */}
+      {hasChapters && hasSpeakers && (
+        <div className={s.pills} role="tablist">
           <button
             type="button"
             role="tab"
@@ -232,8 +233,6 @@ function StageViews({
             <ListGlyph />
             {t('replay.chapters')}
           </button>
-        )}
-        {hasSpeakers && (
           <button
             type="button"
             role="tab"
@@ -244,8 +243,8 @@ function StageViews({
             <PersonGlyph />
             {t('replay.speakers')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {shown === 'chapters' ? (
         <ChapterCardsCarousel chapters={chapters} currentTime={currentTime} onSelect={onSelectChapter} />
       ) : (
