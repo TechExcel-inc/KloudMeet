@@ -95,7 +95,7 @@
         const request = state && state.request;
         bar.classList.toggle('request', !!request);
         if (request) {
-          bar.classList.remove('paused');
+          bar.classList.remove('paused', 'blocked');
           text.textContent = (request.name || 'Someone') + ' wants to control your screen';
           return;
         }
