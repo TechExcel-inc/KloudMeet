@@ -11,7 +11,6 @@ import { notFound } from 'next/navigation';
 import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
-import { MeetingTopBar } from '@/lib/MeetingTopBar';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from '@/lib/galleryPrefs';
 import { IDLE_RECORDING_STATE, type RecordingState } from '@/lib/recordingControls';
 import { DesignStage } from '@/lib/DesignStage';
@@ -214,17 +213,6 @@ export default function DevTilesPage() {
           Viewing as: {host ? 'host' : 'attendee'}
         </button>
       </div>
-      <div style={{ position: 'relative', height: 56, flex: 'none' }}>
-        <MeetingTopBar
-          meetingTitle="Weekly product review"
-          modeLabel={view === 'liveDoc' ? 'LiveDoc' : view === 'shareScreen' ? 'Screen share' : view === 'design' ? 'Design' : 'Video · Grid'}
-          modeDetail={view === 'design' && designLink ? (designLink.kind === 'figma' ? designLink.label : designLink.host) : undefined}
-          isRecording={host}
-          recordingLabel={rec.paused ? 'Recording paused' : 'Recording'}
-          captionsOn
-          captionsLabel="Captions on"
-        />
-      </div>
       {view === 'design' && designLink ? (
         <div style={{ flex: 1, minHeight: 0, display: 'flex', paddingBottom: 88 }}>
           <DesignStage
@@ -328,7 +316,7 @@ export default function DevTilesPage() {
         attendeeOpen={false}
         onToggleAttendee={noop}
         canRecord={host}
-        isRecording={host}
+        isRecording
         recordingState={rec}
         canChangeRecordingPolicy={host}
         onRecordingAction={(action) => setRec((r) => ({ ...r, paused: action === 'pause' }))}

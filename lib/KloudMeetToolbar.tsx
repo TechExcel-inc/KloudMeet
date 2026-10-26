@@ -2011,7 +2011,7 @@ export function KloudMeetToolbar({
           </>
         ) : (
           <>
-            {/* Left zone: your devices (clock and meeting name live in the top bar, lib/MeetingTopBar.tsx) */}
+            {/* Left zone: your devices */}
             <div className={styles.zoneLeft}>
             {(() => {
               const micLabel = isMutedByHost
@@ -2121,6 +2121,13 @@ export function KloudMeetToolbar({
                 </div>
               );
             })()}
+            {/* Everyone can see the meeting is recorded; hosts have the Recording button on the right instead */}
+            {isRecording && !canRecord && (
+              <span className={styles.recStatus} role="status">
+                <span className={styles.recStatusDot} aria-hidden="true" />
+                {recordingState?.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
+              </span>
+            )}
             </div>
 
             {/* Centre zone: what everyone sees (modes) | what you can do (actions) */}

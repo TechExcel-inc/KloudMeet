@@ -191,7 +191,6 @@ const AUTO_LOWER_HAND_MS = 1500;
 const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
-import { MeetingTopBar } from '@/lib/MeetingTopBar';
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
 import {
@@ -205,9 +204,6 @@ import {
 import { persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
 import { DESIGN_TOPIC, parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
-
-/** Height of the desktop top bar (styles/MeetingTopBar.module.css). */
-const MEETING_TOP_BAR_HEIGHT = 56;
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -431,7 +427,6 @@ export function VideoConferenceComponent(props: {
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
   /** Desktop web: clock | name | mode bar above the stage (phones keep their own header). */
-  const showMeetingTopBar = !isToolbarMobile && !isRecorderBot;
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
   const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
   const [canPlaybackAudio, setCanPlaybackAudio] = React.useState(() =>
@@ -6688,37 +6683,6 @@ export function VideoConferenceComponent(props: {
           </div>
         )}
 
-        {/* Desktop top bar: clock | meeting name | current mode · recording / captions */}
-        {showMeetingTopBar && (
-          <MeetingTopBar
-            meetingTitle={props.meetingTitle}
-            modeLabel={
-              activeView === 'liveDoc'
-                ? t('toolbar.liveDoc')
-                : shouldDisplayDesign
-                  ? t('toolbar.design')
-                  : hasScreenShare || activeView === 'shareScreen'
-                  ? t('toolbar.shareScreen')
-                  : webcamLayoutMode === 'spotlight'
-                    ? t('toolbar.webcamSpotlight')
-                    : t('toolbar.webcamTile')
-            }
-            modeDetail={
-              activeView === 'liveDoc' && isWhiteboardDoc
-                ? t('liveDocAi.whiteboard')
-                : shouldDisplayDesign && designLink
-                  ? designLink.kind === 'figma'
-                    ? designLink.label
-                    : designLink.host
-                  : undefined
-            }
-            isRecording={isRecording}
-            recordingLabel={recordingState.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
-            captionsOn={captionsRunning}
-            captionsLabel={t('meeting.captionsRunning')}
-          />
-        )}
-
         {/* View content area */}
         <div
           className={`main-meeting-area${
@@ -6729,7 +6693,7 @@ export function VideoConferenceComponent(props: {
           }`}
           style={{
             position: 'absolute',
-            top: showMeetingTopBar ? MEETING_TOP_BAR_HEIGHT : 0,
+            top: 0,
             left: 0,
             right: 0,
             bottom:
@@ -7769,8 +7733,8 @@ export function VideoConferenceComponent(props: {
             @media (max-width: 768px) {
                .floating-webcam-panel.expanded {
                   max-width: min(280px, calc(100vw - 24px));
-                  /* 头栏≈36 + 面板/网格 padding≈36 + 3×hero(132) + 2×gap(8) ≈ 508，保证左侧三大格完整可视 */
-                  max-height: calc(36px + 36px + 3 * 132px + 2 * 8px);
+                  /* 头栏≈36 + 面板/网格 padding≈36 + 3×hero(168×9/16) + 2×gap(8)，保证左侧三大格完整可视 */
+                  max-height: calc(36px + 36px + 3 * 168px * 9 / 16 + 2 * 8px);
                   overflow: auto;
                }
             }
@@ -7843,7 +7807,7 @@ export function VideoConferenceComponent(props: {
                margin-top: 6px;
                padding-top: 6px;
                border-top: 1px solid rgba(255,255,255,0.08);
-               width: var(--floating-hero-col-w, 132px);
+               width: var(--floating-hero-col-w, 168px);
                cursor: default;
             }
             .floating-webcam-panel:not(.expanded):has(.floating-collapsed-preview) {
@@ -7989,7 +7953,7 @@ export function VideoConferenceComponent(props: {
                padding: 0;
                border: none;
                overflow: visible;
-               --floating-hero-col-w: 132px;
+               --floating-hero-col-w: 168px;
                --floating-rest-tile: calc(var(--floating-hero-col-w) / 3 + 10px);
             }
             .floating-expanded-grid:has(.floating-compact-slot:hover) {
@@ -7999,15 +7963,15 @@ export function VideoConferenceComponent(props: {
                gap: 0;
             }
             .floating-webcam-panel.expanded:has(.floating-expanded-grid--heroes-only) {
-               min-width: 156px;
-               max-width: 168px;
+               min-width: 188px;
+               max-width: 188px;
             }
             .floating-expanded-hero-column {
                display: flex;
                flex-direction: column;
                justify-content: center;
                gap: 8px;
-               width: var(--floating-hero-col-w, 132px);
+               width: var(--floating-hero-col-w, 168px);
                flex-shrink: 0;
                align-self: stretch;
                min-height: 0;
@@ -8065,14 +8029,14 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-compact-slot {
               position: relative;
               width: var(--floating-rest-tile);
-              height: var(--floating-rest-tile);
+              height: calc(var(--floating-rest-tile) * 9 / 16);
               flex-shrink: 0;
               z-index: 1;
               transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), z-index 0s linear 0.22s;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover {
               width: calc(var(--floating-rest-tile) * 2);
-              height: calc(var(--floating-rest-tile) * 2);
+              height: calc(var(--floating-rest-tile) * 2 * 9 / 16);
               z-index: 30;
               transition: width 0.22s cubic-bezier(0.22, 1, 0.36, 1), height 0.22s cubic-bezier(0.22, 1, 0.36, 1), z-index 0s;
             }
@@ -8118,11 +8082,12 @@ export function VideoConferenceComponent(props: {
                border-color: rgba(201, 200, 255, 0.45);
                color: var(--km-on-dark-accent);
             }
+            /* Same 16:9 as the stage's video tiles */
             .floating-grid-tile--hero .floating-grid-video {
                width: 100%;
                height: auto;
-               aspect-ratio: 1 / 1;
-               border-radius: 12px;
+               aspect-ratio: 16 / 9;
+               border-radius: 10px;
             }
             .floating-grid-tile--hero .floating-grid-avatar {
                font-size: 22px;
@@ -8131,10 +8096,10 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-compact-slot .floating-grid-video {
                width: 100%;
                height: 100%;
-               aspect-ratio: 1;
+               aspect-ratio: auto;
                min-height: 0;
                min-width: 0;
-               border-radius: 10px;
+               border-radius: 8px;
                transition: border-radius 0.22s ease;
             }
             .floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-video {
@@ -8311,16 +8276,24 @@ export function VideoConferenceComponent(props: {
                height: 100%;
                object-fit: cover;
             }
+            /* Camera off: the stage tile's look — this person's soft tint (--km-tile-hue) */
             .floating-grid-avatar {
                width: 100%;
                height: 100%;
-               background: var(--km-tile);
-               color: var(--km-on-dark-accent);
+               background-color: hsl(var(--km-tile-hue, 230) 12% 19%);
+               background-image: radial-gradient(
+                 120% 110% at 50% 0%,
+                 hsl(var(--km-tile-hue, 230) 24% 27%) 0%,
+                 hsl(var(--km-tile-hue, 230) 14% 21%) 55%,
+                 hsl(var(--km-tile-hue, 230) 10% 17%) 100%
+               );
+               color: rgba(255, 255, 255, 0.96);
                font-size: 16px;
-               font-weight: 700;
+               font-weight: 500;
                display: flex;
                align-items: center;
                justify-content: center;
+               container-type: size;
             }
             .floating-grid-avatar-initials,
             .floating-grid-avatar-fullname {
@@ -8338,27 +8311,43 @@ export function VideoConferenceComponent(props: {
                line-height: 1.2;
                color: var(--km-stage-text);
             }
-            /* Camera off: round initials avatar centred in the tile */
+            /* Camera off: the initials alone, large and white, as on the stage (no disc) */
             .floating-grid-avatar-initials {
-               display: flex;
-               align-items: center;
-               justify-content: center;
-               width: min(56%, 72px);
-               aspect-ratio: 1 / 1;
+               display: block;
                padding: 0;
-               border-radius: 50%;
-               background: rgba(139, 135, 255, 0.22);
-               color: var(--km-on-dark-accent);
-               font-size: 0.78em;
+               color: rgba(255, 255, 255, 0.96);
+               font-size: clamp(11px, 34cqh, 30px);
+               font-weight: 500;
+               letter-spacing: 0.08em;
+               line-height: 1;
                text-transform: uppercase;
+               transform: translateY(-8%);
             }
-            .floating-grid-tile.lk-participant-tile:hover .floating-grid-avatar-initials,
-            .floating-grid-tile.lk-participant-tile:focus-within .floating-grid-avatar-initials {
+            /* Small tiles have no name label, so hovering swaps the initials for the name.
+               Large tiles always show the name bottom-left and keep the initials. */
+            .floating-grid-tile--compact.lk-participant-tile:hover .floating-grid-avatar-initials,
+            .floating-grid-tile--compact.lk-participant-tile:focus-within .floating-grid-avatar-initials {
                display: none;
             }
-            .floating-grid-tile.lk-participant-tile:hover .floating-grid-avatar-fullname,
-            .floating-grid-tile.lk-participant-tile:focus-within .floating-grid-avatar-fullname {
+            .floating-grid-tile--compact.lk-participant-tile:hover .floating-grid-avatar-fullname,
+            .floating-grid-tile--compact.lk-participant-tile:focus-within .floating-grid-avatar-fullname {
                display: block;
+            }
+            /* Large tiles: the name beside the mic, always (over video too) */
+            .floating-grid-label {
+               min-width: 0;
+               max-width: calc(var(--floating-hero-col-w, 168px) - 64px);
+               overflow: hidden;
+               text-overflow: ellipsis;
+               white-space: nowrap;
+               color: rgba(255, 255, 255, 0.92);
+               font-size: 11px;
+               font-weight: 500;
+               line-height: 20px;
+               text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+            }
+            .floating-grid-tile--hero .floating-grid-name-row {
+               gap: 4px;
             }
             .floating-grid-tile--hero .floating-grid-avatar-fullname {
                font-size: 14px;
@@ -8366,18 +8355,27 @@ export function VideoConferenceComponent(props: {
             .floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar-fullname {
                font-size: calc(var(--floating-rest-tile) * 0.18);
             }
-            .floating-grid-tile.lk-participant-tile:hover .floating-grid-video {
+            /* Hover / speaking outlines sit on a layer above the video or initials (an inset
+               shadow on the box itself is hidden under the content that fills it) */
+            .floating-grid-video::after {
+               content: '';
+               position: absolute;
+               inset: 0;
+               z-index: 3;
+               border-radius: inherit;
+               pointer-events: none;
+               box-shadow: inset 0 0 0 2px transparent;
+               transition: box-shadow 0.35s ease;
+            }
+            .floating-grid-tile.lk-participant-tile:hover .floating-grid-video::after {
                box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
             }
             /* Floating tiles: speaking outline drawn on the media box (tile itself is transparent) */
             .floating-webcam-panel .floating-grid-tile.lk-participant-tile::after {
                display: none;
             }
-            .floating-webcam-panel .floating-grid-tile .floating-grid-video {
-               transition: box-shadow 0.35s ease;
-            }
-            .floating-webcam-panel .floating-grid-tile[data-lk-speaking="true"] .floating-grid-video {
-               box-shadow: inset 0 0 0 2px var(--km-speaking);
+            .floating-webcam-panel .floating-grid-tile[data-lk-speaking="true"] .floating-grid-video::after {
+               box-shadow: inset 0 0 0 2px var(--km-speaking), inset 0 0 18px rgba(34, 197, 94, 0.18);
             }
             .floating-webcam-panel .floating-grid-name {
                display: none !important;
