@@ -532,6 +532,28 @@
   animation: recBlink 1.6s infinite;
 }
 
+.recStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(220, 54, 46, 0.16);
+  color: #f2b8b5;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.recStatusDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f28b82;
+  animation: recBlink 1.6s infinite;
+}
+
 @keyframes recBlink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.35; }
@@ -2344,6 +2366,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .recStatusDot {
+    animation: none;
+  }
+
   .roundBtn,
   .controlBtn,
   .toolbar {

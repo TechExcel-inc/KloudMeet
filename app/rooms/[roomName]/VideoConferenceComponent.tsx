@@ -191,7 +191,6 @@ const AUTO_LOWER_HAND_MS = 1500;
 const HAND_TOAST_MERGE_MS = 700;
 import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
-import { MeetingTopBar } from '@/lib/MeetingTopBar';
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
 import {
@@ -205,9 +204,6 @@ import {
 import { persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
 import { DESIGN_TOPIC, parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
-
-/** Height of the desktop top bar (styles/MeetingTopBar.module.css). */
-const MEETING_TOP_BAR_HEIGHT = 56;
 
 const LiveDocView = dynamic(
   () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
@@ -431,7 +427,6 @@ export function VideoConferenceComponent(props: {
   const isDesktop = useIsDesktop();
   const isToolbarMobile = useToolbarIsMobile();
   /** Desktop web: clock | name | mode bar above the stage (phones keep their own header). */
-  const showMeetingTopBar = !isToolbarMobile && !isRecorderBot;
   // 微信/手机内置浏览器无法自动播放时，显示「点击播放」覆盖层
   const [needsPlayTap, setNeedsPlayTap] = React.useState(false);
   const [canPlaybackAudio, setCanPlaybackAudio] = React.useState(() =>
@@ -6688,37 +6683,6 @@ export function VideoConferenceComponent(props: {
           </div>
         )}
 
-        {/* Desktop top bar: clock | meeting name | current mode · recording / captions */}
-        {showMeetingTopBar && (
-          <MeetingTopBar
-            meetingTitle={props.meetingTitle}
-            modeLabel={
-              activeView === 'liveDoc'
-                ? t('toolbar.liveDoc')
-                : shouldDisplayDesign
-                  ? t('toolbar.design')
-                  : hasScreenShare || activeView === 'shareScreen'
-                  ? t('toolbar.shareScreen')
-                  : webcamLayoutMode === 'spotlight'
-                    ? t('toolbar.webcamSpotlight')
-                    : t('toolbar.webcamTile')
-            }
-            modeDetail={
-              activeView === 'liveDoc' && isWhiteboardDoc
-                ? t('liveDocAi.whiteboard')
-                : shouldDisplayDesign && designLink
-                  ? designLink.kind === 'figma'
-                    ? designLink.label
-                    : designLink.host
-                  : undefined
-            }
-            isRecording={isRecording}
-            recordingLabel={recordingState.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
-            captionsOn={captionsRunning}
-            captionsLabel={t('meeting.captionsRunning')}
-          />
-        )}
-
         {/* View content area */}
         <div
           className={`main-meeting-area${
@@ -6729,7 +6693,7 @@ export function VideoConferenceComponent(props: {
           }`}
           style={{
             position: 'absolute',
-            top: showMeetingTopBar ? MEETING_TOP_BAR_HEIGHT : 0,
+            top: 0,
             left: 0,
             right: 0,
             bottom:
