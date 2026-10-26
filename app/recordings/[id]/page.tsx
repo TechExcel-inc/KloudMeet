@@ -11,6 +11,7 @@ import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
+import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import s from '@/styles/Replay.module.css';
 
 /* ─── Types ──────────────────────────────────────────────── */
@@ -104,6 +105,8 @@ interface ReplayData {
     canTranscribe?: boolean;
     /** 旧版服务端不返回该字段 */
     transcribe?: TranscribeState;
+    /** LiveDoc Full Recording: replay LiveDoc, screen shares and SmartCam on the voice's clock */
+    livedoc?: LiveDocReplayInfo | null;
   };
   meeting: {
     id: number;
@@ -1290,6 +1293,14 @@ export default function ReplayPage() {
 
   const showPanel = hasTranscripts && panelVisible;
   const videoClass = !hasTranscripts ? s.videoSolo : videoFit === 'height' ? s.videoTall : '';
+  const livedoc = recording.livedoc ?? null;
+  // SmartCam: whoever is speaking now (from the transcript)
+  const speakingNow = realSpeakerSegments.find((sp) =>
+    sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
+  );
+  const replaySpeaker = speakingNow
+    ? { name: speakingNow.name, photo: avatarPhotos[speakingNow.name], color: speakingNow.color }
+    : null;
 
   return (
     <AvatarContext.Provider value={{ photos: avatarPhotos, tones: avatarTones }}>
@@ -1474,11 +1485,21 @@ export default function ReplayPage() {
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
           <div className={s.videoCard}>
+            {livedoc && (
+              <LiveDocReplayStage
+                info={livedoc}
+                mediaRef={videoRef}
+                viewerName={userInfo?.displayName || ''}
+                speaker={replaySpeaker}
+              />
+            )}
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
-              className={`${s.video}${videoClass ? ` ${videoClass}` : ''}`}
+              // LiveDoc Full: the file is the meeting's voice, so only its controls show
+              style={livedoc ? { height: 56, minHeight: 0, aspectRatio: 'auto' } : undefined}
+              className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget;
                 // Recording was paused here: the file shows a "paused" slate, so skip past it
@@ -1489,7 +1510,8 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
-            {/* Fit toggle */}
+            {/* Fit toggle (not for LiveDoc Full: its stage has a fixed shape) */}
+            {!livedoc && (
             <button
               type="button"
               className={s.fitBtn}
@@ -1513,6 +1535,7 @@ export default function ReplayPage() {
                 </svg>
               )}
             </button>
+            )}
           </div>
 
           {hasTranscripts && (

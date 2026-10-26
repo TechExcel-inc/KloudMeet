@@ -7,6 +7,7 @@ import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { checkReplayQuota } from '@/lib/billing/limits';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 import { endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
+import { startScreenSectionsForRoom, stopScreenSections } from '@/lib/livedoc/screenSections';
 import {
   closePause,
   isRecordingMode,
@@ -191,7 +192,10 @@ export async function POST(
         } catch (e) {
           console.error('Failed to stop egress', rec.storageKey, e);
         }
-        await finishLivedocRecording(rec, meeting.kloudMeetingId, livedocToken);
+        if (rec.kind === 'livedoc_full') {
+          await stopScreenSections(rec.id);
+          await finishLivedocRecording(rec, meeting.kloudMeetingId, livedocToken);
+        }
       }
       
       return NextResponse.json({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
@@ -318,6 +322,12 @@ export async function POST(
           : {}),
       }
     });
+    // LiveDoc Full: a screen share already on is recorded from now (later ones via the webhook)
+    if (livedocFull) {
+      await startScreenSectionsForRoom(recording, roomName).catch((e) =>
+        console.error('[meetings record] screen sections failed to start', e),
+      );
+    }
     if (!livedocFull && meeting.recordingMode !== mode) {
       await prisma.meeting.update({ where: { id: meeting.id }, data: { recordingMode: mode } });
     }

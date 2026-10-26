@@ -89,6 +89,7 @@ export async function GET(
             },
           },
           teamMember: { select: { id: true, fullName: true, username: true } },
+          sections: { where: { kind: 'screen', status: 'READY' }, orderBy: { startMs: 'asc' } },
         },
       });
 
@@ -110,6 +111,41 @@ export async function GET(
       console.error('[replay summary] S3 presign failed:', e);
     }
 
+    // LiveDoc Full Recording: the replay shows LiveDoc (Kloud's saved actions) and the screen
+    // shares on the voice's clock. Kloud time (ms) = media time (ms) + offsetMs.
+    let livedoc: {
+      recordingId: number;
+      kloudMeetingId: number;
+      offsetMs: number;
+      screens: Array<{ url: string; startMs: number; endMs: number | null }>;
+    } | null = null;
+    if (recording.kind === 'livedoc_full' && recording.livedocRecordingId && recording.meeting?.kloudMeetingId) {
+      const offsetMs =
+        recording.mediaStartedAt && recording.livedocStartedAt
+          ? recording.mediaStartedAt.getTime() - recording.livedocStartedAt.getTime()
+          : 0;
+      const screens = [];
+      for (const section of recording.sections) {
+        if (section.startMs === null) continue;
+        try {
+          const url = await getSignedUrl(
+            s3,
+            new GetObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: section.storageKey }),
+            { expiresIn: 3600 },
+          );
+          screens.push({ url, startMs: section.startMs, endMs: section.endMs });
+        } catch (e) {
+          console.error('[replay summary] S3 presign failed for section', section.id, e);
+        }
+      }
+      livedoc = {
+        recordingId: recording.livedocRecordingId,
+        kloudMeetingId: recording.meeting.kloudMeetingId,
+        offsetMs,
+        screens,
+      };
+    }
+
     return NextResponse.json({
       recording: {
         id: recording.id,
@@ -127,6 +163,7 @@ export async function GET(
         streamUrl,
         recordedBy: recording.teamMember,
         transcribe: transcribeStateOf(recording),
+        livedoc,
       },
       meeting: recording.meeting
         ? {

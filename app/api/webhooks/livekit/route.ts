@@ -13,6 +13,7 @@ import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
 import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
 import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
+import { onSectionEgressEnded, onTrackPublished } from '@/lib/livedoc/screenSections';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -65,6 +66,11 @@ export async function POST(request: NextRequest) {
         where: { storageKey: egressId }
       });
 
+      // LiveDoc Full Recording: a screen-share section's file
+      if (!recording) {
+        await onSectionEgressEnded(event.egressInfo);
+      }
+
       if (recording) {
         // LiveDoc Full Recording: the media has ended, so Kloud stops saving actions too.
         if (recording.kind === 'livedoc_full') {
@@ -113,6 +119,13 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+    }
+
+    // LiveDoc Full Recording: record each screen share on its own while the meeting records
+    if (event.event === 'track_published' && event.room && event.participant) {
+      await onTrackPublished(event.room.name, event.track, event.participant.identity).catch((err) =>
+        console.error('[webhooks livekit] screen section failed to start', err),
+      );
     }
 
     // Capture Exact Start Time when the first user joins an Instant or Scheduled Meeting
