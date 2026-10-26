@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { followOwnerLiveRoom, otherLiveMeetingOfHost } from './oneMeetingPerHost';
 
-const resolveRoomEntry = vi.fn();
-const resolveHostActiveMeeting = vi.fn();
-const listActiveRoomNames = vi.fn();
+const { resolveRoomEntry, resolveHostActiveMeeting, listActiveRoomNames } = vi.hoisted(() => ({
+  resolveRoomEntry: vi.fn(),
+  resolveHostActiveMeeting: vi.fn(),
+  listActiveRoomNames: vi.fn(),
+}));
 
 vi.mock('@/lib/resolvePersonalRoomJoin', () => ({ resolveRoomEntry: (...a: unknown[]) => resolveRoomEntry(...a) }));
 vi.mock('@/lib/hostActiveMeeting', () => ({
@@ -12,8 +15,6 @@ vi.mock('@/lib/livekitRooms', () => ({ listActiveRoomNames: () => listActiveRoom
 vi.mock('@/lib/meetingRoomIsActive', () => ({
   isRoomLiveInList: (name: string, list: string[]) => list.some((n) => n.toLowerCase() === name.toLowerCase()),
 }));
-
-const { followOwnerLiveRoom, otherLiveMeetingOfHost } = await import('./oneMeetingPerHost');
 
 beforeEach(() => {
   vi.clearAllMocks();
