@@ -219,67 +219,6 @@ export function KloudVideoConference({
       data-kloud-focus-track={focusTrack ? trackKey(focusTrack) : ''}
       {...props}
     >
-      {/* Spotlight 自带布局样式，不依赖父级注入是否生效 */}
-      {webcamLayoutMode === 'spotlight' && !hasActiveScreenShare && (
-        <style>{`
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] {
-            width: 100%;
-            height: 100%;
-            min-height: 0;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-video-conference-inner {
-            display: flex !important;
-            flex-direction: row-reverse !important;
-            width: 100% !important;
-            height: 100% !important;
-            min-height: 0 !important;
-            padding: 0 !important;
-            margin: 0 !important;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-focus-layout-wrapper,
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-focus-layout {
-            flex: 1 1 auto !important;
-            display: flex !important;
-            width: 100% !important;
-            height: 100% !important;
-            min-width: 0 !important;
-            min-height: 0 !important;
-            background: #000 !important;
-            align-items: center !important;
-            justify-content: center !important;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-focus-layout > .lk-participant-tile {
-            width: 100% !important;
-            height: 100% !important;
-            max-height: 100% !important;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-carousel {
-            --kloud-spotlight-tile: 120px;
-            flex: 0 0 calc(var(--kloud-spotlight-tile) + 16px) !important;
-            width: calc(var(--kloud-spotlight-tile) + 16px) !important;
-            max-width: calc(var(--kloud-spotlight-tile) + 16px) !important;
-            min-width: calc(var(--kloud-spotlight-tile) + 16px) !important;
-            height: 100% !important;
-            overflow-x: hidden !important;
-            overflow-y: auto !important;
-            padding: 8px !important;
-            gap: 8px !important;
-            box-sizing: border-box !important;
-            border-right: 1px solid rgba(255,255,255,0.12) !important;
-            background: rgba(0,0,0,0.35) !important;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-carousel > .lk-participant-tile {
-            width: var(--kloud-spotlight-tile) !important;
-            max-width: var(--kloud-spotlight-tile) !important;
-            height: auto !important;
-            aspect-ratio: 1 / 1 !important;
-            flex: 0 0 auto !important;
-          }
-          .lk-video-conference[data-kloud-webcam-layout="spotlight"] .lk-focus-toggle-button {
-            display: none !important;
-          }
-        `}</style>
-      )}
       {isWeb() && (
         <LayoutContextProvider value={layoutContext} onWidgetChange={setWidgetState}>
           <div className="lk-video-conference-inner">

@@ -8,6 +8,42 @@ import {
 } from '@/lib/ParticipantRoleMenu';
 import { applyTileHue } from '@/lib/tileLayout';
 
+const TILE_REFRESH_EVENTS = [
+  RoomEvent.TrackMuted,
+  RoomEvent.TrackUnmuted,
+  RoomEvent.TrackPublished,
+  RoomEvent.TrackUnpublished,
+  RoomEvent.LocalTrackPublished,
+  RoomEvent.LocalTrackUnpublished,
+  RoomEvent.TrackSubscribed,
+  RoomEvent.TrackUnsubscribed,
+  RoomEvent.ParticipantConnected,
+  RoomEvent.ParticipantDisconnected,
+  RoomEvent.ParticipantNameChanged,
+  RoomEvent.Connected,
+] as const;
+
+/** 新瓦片挂上时补一次（只看 childList，避免改属性时和注入逻辑互相踩） */
+function observeNewParticipantTiles(onAdd: () => void): () => void {
+  const root = document.querySelector('.lk-room-container') ?? document.body;
+  const observer = new MutationObserver((records) => {
+    for (const rec of records) {
+      for (const node of rec.addedNodes) {
+        if (!(node instanceof HTMLElement)) continue;
+        if (
+          node.classList.contains('lk-participant-tile') ||
+          node.querySelector('.lk-participant-tile')
+        ) {
+          onAdd();
+          return;
+        }
+      }
+    }
+  });
+  observer.observe(root, { childList: true, subtree: true });
+  return () => observer.disconnect();
+}
+
 interface TileIndicatorOptions {
   room: Room;
   hostIdentity: string | null;
@@ -38,7 +74,7 @@ interface TileIndicatorOptions {
  * useTileIndicators — 在 LiveKit 参会者瓦片上注入麦克风 / 摄像头图标、举手角标与 ⋯ 菜单
  *
  * 覆盖主网格、移动网格、LiveDoc 侧栏与共享时左侧 carousel；
- * 由 LiveKit 轨道事件驱动重绘，另有 500ms 兜底刷新。
+ * 由 LiveKit 轨道事件驱动，新瓦片挂载时再补一次。
  */
 export function useTileIndicators({
   room,
@@ -103,7 +139,6 @@ export function useTileIndicators({
       tiles.forEach((tile) => {
         const inCarousel = !!tile.closest('.lk-carousel');
         const inWebcamSidebar = !!tile.closest('.webcam-sidebar-panel');
-        const inFloating = !!tile.closest('.floating-webcam-panel');
         const inGrid =
           !!tile.closest('.lk-grid-layout-wrapper') || !!tile.closest('.lk-mobile-scroll-grid');
 
@@ -127,8 +162,8 @@ export function useTileIndicators({
         tile.setAttribute('data-lk-local-participant', isLocal ? 'true' : 'false');
 
         // 举手角标：主网格 / 移动网格 / 共享 carousel 走 DOM 注入；
-        // LiveDoc 侧栏与浮窗由 KloudTileHandBadge 渲染，此处跳过以免重复注入
-        if (!inWebcamSidebar && !inFloating) {
+        // LiveDoc 侧栏由 KloudTileHandBadge 渲染，此处跳过以免重复注入
+        if (!inWebcamSidebar) {
           const existingHandBadge = tile.querySelector('.kloud-tile-hand-badge');
           if (!handIdentities.includes(identity)) {
             existingHandBadge?.remove();
@@ -289,7 +324,7 @@ export function useTileIndicators({
         const isCameraTile =
           !tileSource || tileSource === 'camera' || tileSource === String(Track.Source.Camera);
         const shouldInjectDomMoreMenu =
-          isCameraTile && (inCarousel || (inGrid && !inWebcamSidebar && !inFloating));
+          isCameraTile && (inCarousel || (inGrid && !inWebcamSidebar));
 
         if (shouldInjectDomMoreMenu) {
           const roleConfig = participantRoleMenuBridge.current?.getConfig();
@@ -350,40 +385,30 @@ export function useTileIndicators({
       });
     };
 
-    updateCustomMicsRef.current = updateCustomMics;
-
-    // Run the update immediately
-    updateCustomMics();
-
-    // Listen to all relevant LiveKit events to update the DOM reactively
-    room.on(RoomEvent.TrackMuted, updateCustomMics);
-    room.on(RoomEvent.TrackPublished, updateCustomMics);
-    room.on(RoomEvent.TrackUnpublished, updateCustomMics);
-    room.on(RoomEvent.LocalTrackPublished, updateCustomMics);
-    room.on(RoomEvent.LocalTrackUnpublished, updateCustomMics);
-    room.on(RoomEvent.ParticipantConnected, updateCustomMics);
-    room.on(RoomEvent.ParticipantDisconnected, updateCustomMics);
-
-    // Track unmuting by the user — refresh indicators only; host restrictions are cleared by the host
-    const handleTrackUnmuted = () => {
-      updateCustomMics();
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        updateCustomMics();
+      });
     };
-    room.on(RoomEvent.TrackUnmuted, handleTrackUnmuted);
 
-    // Fail-safe refresh (avoid tight loops — MutationObserver + DOM writes caused screen-share freeze)
-    const intervalId = setInterval(updateCustomMics, 500);
+    updateCustomMicsRef.current = updateCustomMics;
+    schedule();
+
+    for (const event of TILE_REFRESH_EVENTS) {
+      room.on(event, schedule);
+    }
+    const stopObserve = observeNewParticipantTiles(schedule);
 
     return () => {
       updateCustomMicsRef.current = null;
-      room.off(RoomEvent.TrackMuted, updateCustomMics);
-      room.off(RoomEvent.TrackUnmuted, handleTrackUnmuted);
-      room.off(RoomEvent.TrackPublished, updateCustomMics);
-      room.off(RoomEvent.TrackUnpublished, updateCustomMics);
-      room.off(RoomEvent.LocalTrackPublished, updateCustomMics);
-      room.off(RoomEvent.LocalTrackUnpublished, updateCustomMics);
-      room.off(RoomEvent.ParticipantConnected, updateCustomMics);
-      room.off(RoomEvent.ParticipantDisconnected, updateCustomMics);
-      clearInterval(intervalId);
+      if (raf) cancelAnimationFrame(raf);
+      for (const event of TILE_REFRESH_EVENTS) {
+        room.off(event, schedule);
+      }
+      stopObserve();
     };
   }, [
     room,
@@ -447,8 +472,26 @@ export function useTileNameSync(room: Room): void {
         }
       });
     };
-    syncNames();
-    const interval = setInterval(syncNames, 1000);
-    return () => clearInterval(interval);
+    let raf = 0;
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        syncNames();
+      });
+    };
+
+    schedule();
+    for (const event of TILE_REFRESH_EVENTS) {
+      room.on(event, schedule);
+    }
+    const stopObserve = observeNewParticipantTiles(schedule);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      for (const event of TILE_REFRESH_EVENTS) {
+        room.off(event, schedule);
+      }
+      stopObserve();
+    };
   }, [room]);
 }

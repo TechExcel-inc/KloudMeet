@@ -23,15 +23,6 @@ import { getInitials } from '@/lib/getInitials';
 import { tileHue } from '@/lib/tileLayout';
 import { useI18n } from '@/lib/i18n';
 import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
-import {
-  FLOATING_WEBCAM_BOTTOM_TOOLBAR_INSET,
-  FLOATING_WEBCAM_DEFAULT_GAP_FROM_LIVEDOC_PANEL,
-  FLOATING_WEBCAM_RIGHT_DRAG_CLAMP_MARGIN,
-  FLOATING_WEBCAM_RIGHT_INSET,
-  FLOATING_WEBCAM_TOP_INSET,
-  LIVEDOC_FILE_PANEL_COLLAPSED_WIDTH,
-  LIVEDOC_FILE_PANEL_EXPANDED_WIDTH,
-} from './roomConstants';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 

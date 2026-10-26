@@ -155,12 +155,7 @@ import { useTileIndicators, useTileNameSync } from './useTileIndicators';
 import { useMeetingConnection } from './useMeetingConnection';
 import { useLiveDocSession } from './useLiveDocSession';
 import { useMeetingChat } from './useMeetingChat';
-import {
-  KLOUD_MODAL_CSS,
-  ROOM_STAGE_CSS,
-  SCREEN_SHARE_LAYOUT_CSS,
-  WEBCAM_SPOTLIGHT_CSS,
-} from './roomStyles';
+import '@/styles/roomStage.css';
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -3463,7 +3458,7 @@ export function VideoConferenceComponent(props: {
 
           {/* VideoConference: always visible when not in pure LiveDoc mode */}
           <div
-            className={`sky-meet-video-wrapper ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
+            className={`sky-meet-video-wrapper ${hasScreenShare ? 'has-screen-share' : ''} ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
             style={{
               flex: 1,
               position: 'relative',
@@ -3718,14 +3713,6 @@ export function VideoConferenceComponent(props: {
             </div>
           )}
 
-          {/* Dynamic layout injections */}
-          <style>{`
-            ${hasScreenShare ? SCREEN_SHARE_LAYOUT_CSS : ''}
-            ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight'
-              ? WEBCAM_SPOTLIGHT_CSS
-              : ''}
-            ${ROOM_STAGE_CSS}
-          `}</style>
         </div>
 
         {/* Captions overlay — visible to all participants when host enables captions */}
@@ -4002,8 +3989,6 @@ export function VideoConferenceComponent(props: {
         )}
 
 
-
-        <style>{KLOUD_MODAL_CSS}</style>
 
         {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
