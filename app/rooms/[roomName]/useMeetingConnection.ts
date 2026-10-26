@@ -48,6 +48,7 @@ import {
   TOKEN_REFRESH_RETRY_MS,
 } from './roomConstants';
 import { publishMic } from './roomMedia';
+import { appendJoinCredentials } from '@/lib/meetingAccessClient';
 
 export interface MeetingConnectionOptions {
   room: Room;
@@ -194,6 +195,8 @@ export function useMeetingConnection({
       url.searchParams.append('roomName', connectionDetailsRef.current.roomName);
       url.searchParams.append('participantName', participantName);
       appendKloudDeviceId(url);
+      // An attendee's invite link / the recorder bot's token: reconnects are checked like the first join.
+      appendJoinCredentials(url);
       if (region) {
         url.searchParams.append('region', region);
       }

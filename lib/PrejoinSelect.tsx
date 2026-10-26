@@ -9,6 +9,11 @@ export interface PrejoinSelectOption<T extends string> {
   label: string;
   /** One short line explaining the choice: shown inside the field and in the menu. */
   description?: string;
+  /** Shorter line for the closed field when the menu's description is long. */
+  summary?: string;
+  /** Shown but not choosable; `disabledNote` replaces the description in the menu. */
+  disabled?: boolean;
+  disabledNote?: string;
   icon: LucideIcon;
 }
 
@@ -55,8 +60,17 @@ export function PrejoinSelect<T extends string>({
   };
 
   const choose = (index: number) => {
+    if (options[index].disabled) return;
     onChange(options[index].value);
     close(true);
+  };
+
+  /** Next choosable option from `from` in direction `step` (stays put at the ends). */
+  const step = (from: number, dir: 1 | -1) => {
+    for (let i = from + dir; i >= 0 && i < options.length; i += dir) {
+      if (!options[i].disabled) return i;
+    }
+    return from;
   };
 
   React.useEffect(() => {
@@ -81,19 +95,19 @@ export function PrejoinSelect<T extends string>({
     switch (e.key) {
       case 'ArrowDown':
         e.preventDefault();
-        setActiveIndex((i) => Math.min(last, i + 1));
+        setActiveIndex((i) => step(i, 1));
         break;
       case 'ArrowUp':
         e.preventDefault();
-        setActiveIndex((i) => Math.max(0, i - 1));
+        setActiveIndex((i) => step(i, -1));
         break;
       case 'Home':
         e.preventDefault();
-        setActiveIndex(0);
+        setActiveIndex(step(-1, 1));
         break;
       case 'End':
         e.preventDefault();
-        setActiveIndex(last);
+        setActiveIndex(step(last + 1, -1));
         break;
       case 'Enter':
       case ' ':
@@ -126,7 +140,7 @@ export function PrejoinSelect<T extends string>({
             aria-expanded={open}
             aria-controls={open ? listId : undefined}
             aria-labelledby={`${labelId} ${buttonId}`}
-            aria-describedby={selected.description ? hintId : undefined}
+            aria-describedby={selected.summary || selected.description ? hintId : undefined}
             onClick={() => (open ? close(false) : openList())}
             onKeyDown={onButtonKeyDown}
           >
@@ -139,9 +153,9 @@ export function PrejoinSelect<T extends string>({
             />
           </button>
         </div>
-        {selected.description && (
+        {(selected.summary || selected.description) && (
           <p id={hintId} className={styles.selectHint}>
-            {selected.description}
+            {selected.summary || selected.description}
           </p>
         )}
         {open && (
@@ -164,8 +178,9 @@ export function PrejoinSelect<T extends string>({
                   id={`${id}-opt-${index}`}
                   role="option"
                   aria-selected={isSelected}
-                  className={`${styles.selectOption}${index === activeIndex ? ` ${styles.selectOptionActive}` : ''}${isSelected ? ` ${styles.selectOptionSelected}` : ''}`}
-                  onMouseEnter={() => setActiveIndex(index)}
+                  aria-disabled={option.disabled || undefined}
+                  className={`${styles.selectOption}${index === activeIndex ? ` ${styles.selectOptionActive}` : ''}${isSelected ? ` ${styles.selectOptionSelected}` : ''}${option.disabled ? ` ${styles.selectOptionDisabled}` : ''}`}
+                  onMouseEnter={() => !option.disabled && setActiveIndex(index)}
                   onClick={() => choose(index)}
                 >
                   <span className={styles.selectOptionIcon}>
@@ -173,8 +188,10 @@ export function PrejoinSelect<T extends string>({
                   </span>
                   <span className={styles.selectOptionText}>
                     <span className={styles.selectOptionLabel}>{option.label}</span>
-                    {option.description && (
-                      <span className={styles.selectOptionDesc}>{option.description}</span>
+                    {(option.disabled ? option.disabledNote : option.description) && (
+                      <span className={styles.selectOptionDesc}>
+                        {option.disabled ? option.disabledNote : option.description}
+                      </span>
                     )}
                   </span>
                   {isSelected && (

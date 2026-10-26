@@ -198,7 +198,8 @@ export function HomeContent() {
 
   useEffect(() => {
     if (!authInitialized || user) return;
-    if (safeReplayNext(searchParams.get('next'))) {
+    // "Create an account" from a meeting's sign-in card: sign up, then back to the meeting.
+    if (safeReplayNext(searchParams.get('next')) && searchParams.get('signup') !== '1') {
       setView('login');
       return;
     }

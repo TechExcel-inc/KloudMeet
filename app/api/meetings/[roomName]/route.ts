@@ -26,6 +26,7 @@ import {
 import { isCanceledStatus } from '@/lib/calendar/ics';
 import { publicOrigin } from '@/lib/calendar/server';
 import { sendCancellationEmails } from '@/lib/meetingInvites.server';
+import { parseAccessLevel } from '@/lib/meetingAccess';
 
 export async function GET(
   request: NextRequest,
@@ -145,6 +146,12 @@ export async function PUT(
     if (durationMinutes !== undefined) data.durationMinutes = durationMinutes;
     if (timezone !== undefined) data.timezone = timezone;
     if (status !== undefined) data.status = status;
+    // Schedule dialog → Access. Applies to whoever joins from now on; people already in stay.
+    const accessLevel = parseAccessLevel(body.accessLevel);
+    if (accessLevel === 'PRIVATE' && !current.accountId) {
+      return NextResponse.json({ error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' }, { status: 400 });
+    }
+    if (accessLevel) data.accessLevel = accessLevel;
     // Calendar files derive SEQUENCE from modifiedAt, so bump it on every organizer edit.
     if (Object.keys(data).length > 0) data.modifiedAt = new Date();
 

@@ -899,6 +899,11 @@
   background: var(--km-hover);
 }
 
+.selectOptionDisabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .selectOptionIcon {
   flex: none;
   display: inline-flex;

@@ -6,6 +6,7 @@ import { decodePassphrase } from '@/lib/client-utils';
 import { DebugMode } from '@/lib/Debug';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
+import { JoinRequestsPrompt } from '@/lib/JoinRequestsPrompt';
 import { MeetingTimeLimitBanner } from '@/lib/billing/MeetingTimeLimitBanner';
 import { SettingsMenu } from '@/lib/SettingsMenu';
 import { VideoConferenceErrorBoundary } from '@/lib/VideoConferenceErrorBoundary';
@@ -4007,6 +4008,7 @@ export function VideoConferenceComponent(props: {
 
         {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
+        {!isRecorderBot && <JoinRequestsPrompt room={room} canAdmit={isHost || isCohost} />}
         {!isRecorderBot && (
           <MeetingTimeLimitBanner
             meetingEndsAt={props.connectionDetails.meetingEndsAt}

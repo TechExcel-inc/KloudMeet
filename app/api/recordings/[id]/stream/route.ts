@@ -36,7 +36,7 @@ export async function GET(
       return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
     }
 
-    const access = await authorizeRecordingView(req, recording, resolvedParams.id);
+    const access = await authorizeRecordingView(req, recording);
     if (isRecordingResponse(access)) return access;
 
     if (recording.status !== 'READY') {
