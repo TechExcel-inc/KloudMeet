@@ -79,7 +79,9 @@ import { getInitials } from '@/lib/getInitials';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { VideoConferenceComponent } from './VideoConferenceComponent';
-import { connectionDetailsFetchInit, authHeaders } from '@/lib/kloudSession';
+import { connectionDetailsFetchInit, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
+import { ActiveMeetingConflictModal } from '@/lib/ActiveMeetingConflictModal';
+import { endMeetingByHost, type ActiveMeetingInfo } from '@/lib/meetingStartGuard';
 import { fetchPersonalRoomResolve, getResolvedLiveRoomName } from '@/lib/personalRoomResolveClient';
 import { isCurrentUserMeetingCreator } from '@/lib/meetingOwner';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
@@ -195,6 +197,12 @@ export function PageClientImpl(props: {
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
   const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
+  /** One host, one meeting: the server refused to start this one while another of theirs is live. */
+  const [hostConflict, setHostConflict] = React.useState<{
+    activeMeeting: ActiveMeetingInfo;
+    values: LocalUserChoices;
+  } | null>(null);
+  const [endingHostConflict, setEndingHostConflict] = React.useState(false);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -663,6 +671,13 @@ export function PageClientImpl(props: {
           handleKloudSessionExpired();
           return;
         }
+        if (connectionDetailsResp.status === 409) {
+          const conflict = await connectionDetailsResp.json().catch(() => null);
+          if (conflict?.code === 'HOST_ALREADY_IN_MEETING' && conflict.activeMeeting) {
+            setHostConflict({ activeMeeting: conflict.activeMeeting, values });
+            return;
+          }
+        }
         if (!connectionDetailsResp.ok) {
           const detail = await connectionDetailsResp.text();
           throw Object.assign(
@@ -734,6 +749,28 @@ export function PageClientImpl(props: {
       participantLiveDocShow,
     ],
   );
+  const handleHostConflictContinue = React.useCallback(() => {
+    const room = hostConflict?.activeMeeting.roomName;
+    setHostConflict(null);
+    if (room) window.location.assign(`/rooms/${encodeURIComponent(room)}`);
+  }, [hostConflict]);
+
+  const handleHostConflictStartNew = React.useCallback(async () => {
+    if (!hostConflict) return;
+    const token = getKloudSessionBearer();
+    if (!token) return;
+    setEndingHostConflict(true);
+    const ok = await endMeetingByHost(token, hostConflict.activeMeeting.roomName);
+    setEndingHostConflict(false);
+    if (!ok) {
+      alert(t('dash.conflict.endFailed'));
+      return;
+    }
+    const { values } = hostConflict;
+    setHostConflict(null);
+    void handlePreJoinSubmit(values);
+  }, [hostConflict, handlePreJoinSubmit, t]);
+
   // KloudPreJoin shows camera/mic failures (blocked, in use, not found) next to the preview,
   // with a retry, so preview errors are only logged here.
   const handlePreJoinError = React.useCallback((error: unknown) => {
@@ -1162,6 +1199,18 @@ export function PageClientImpl(props: {
               }
               setCurrentUser(updated);
             }
+          }}
+        />
+      )}
+
+      {hostConflict && (
+        <ActiveMeetingConflictModal
+          activeMeeting={hostConflict.activeMeeting}
+          ending={endingHostConflict}
+          onContinue={handleHostConflictContinue}
+          onStartNew={() => void handleHostConflictStartNew()}
+          onCancel={() => {
+            if (!endingHostConflict) setHostConflict(null);
           }}
         />
       )}

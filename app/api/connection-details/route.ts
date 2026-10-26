@@ -16,6 +16,7 @@ import {
   sanitizeKloudDeviceId,
 } from '@/lib/meetingOwner';
 import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
+import { followOwnerLiveRoom, otherLiveMeetingOfHost } from '@/lib/oneMeetingPerHost';
 import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoomView';
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
@@ -59,7 +60,14 @@ export async function GET(request: NextRequest) {
       return new NextResponse('Missing required query parameter: participantName', { status: 400 });
     }
 
-    const livekitRoomName = await resolveCanonicalRoomName(roomName);
+    let livekitRoomName = await resolveCanonicalRoomName(roomName);
+    // One host, one meeting: a personal ID reaches the meeting its owner is hosting
+    // now (e.g. m5888 → their instant meeting), never a second room of its own.
+    const ownerLiveRoom = await followOwnerLiveRoom(livekitRoomName);
+    if (ownerLiveRoom) {
+      console.log(`[connection-details] Personal ID "${livekitRoomName}" follows its owner into "${ownerLiveRoom}"`);
+      livekitRoomName = ownerLiveRoom;
+    }
 
     let meeting = await ensurePersonalRoomMeeting(livekitRoomName);
     const personalOwner = await findPersonalRoomOwner(livekitRoomName);
@@ -79,6 +87,15 @@ export async function GET(request: NextRequest) {
     const member = await getSessionTeamMember(request);
     if (clientClaimsLoggedIn && !member) {
       return new NextResponse('Session expired or invalid', { status: 401 });
+    }
+
+    // One host, one meeting: starting another while hosting a live one asks first
+    // (the room page shows the same choice as the home page).
+    if (member && member.id === meeting.createdByMemberId) {
+      const activeMeeting = await otherLiveMeetingOfHost(member.id, livekitRoomName);
+      if (activeMeeting) {
+        return NextResponse.json({ code: 'HOST_ALREADY_IN_MEETING', activeMeeting }, { status: 409 });
+      }
     }
 
     meeting = await prepareMeetingForJoin(meeting);

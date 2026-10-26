@@ -38,21 +38,16 @@ export async function fetchPersonalRoomResolve(
   return (await res.json()) as PersonalRoomResolveResponse;
 }
 
-/** 个人房入口解析出的真实 LiveKit 会场（与当前 URL roomName 不同时需跟会） */
+/**
+ * 个人房入口解析出的真实 LiveKit 会场（与当前 URL roomName 不同时需跟会）。
+ * 一人同一时间只主持一场会：打开个人会议 ID（如 m5888）而登记人正在主持别的会
+ * （如即时会议 uzf-dfxb-smf）时，必须跟进那场会，不能在个人房号码里另开一场。
+ */
 export function getResolvedLiveRoomName(
   roomName: string,
   resolved: PersonalRoomResolveResponse | null,
 ): string | null {
   if (resolved?.kind !== 'join_live') {
-    return null;
-  }
-  const canonicalPersonal =
-    resolved.personalRoomId?.trim() ||
-    (resolved.isPersonalSession ? resolved.effectiveRoomName : null);
-  if (
-    canonicalPersonal &&
-    canonicalPersonal.toLowerCase() === roomName.trim().toLowerCase()
-  ) {
     return null;
   }
   if (
