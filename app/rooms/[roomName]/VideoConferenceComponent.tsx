@@ -950,6 +950,8 @@ export function VideoConferenceComponent(props: {
       setScreenShareActive(false);
       screenShareRestorePendingRef.current = false;
       if (next) {
+        // The desktop app already took the picked source as shared; let it go again.
+        void window.electronAPI?.clearShareTarget?.();
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
         showScreenShareFailureToast(e);
@@ -2909,6 +2911,16 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     updateCustomMicsRef.current?.();
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare, activeView]);
+
+  // Our own share ended while someone else's goes on: the desktop app stops floating its overlay.
+  const prevScreenShareActiveRef = React.useRef(false);
+  React.useEffect(() => {
+    const wasSharing = prevScreenShareActiveRef.current;
+    prevScreenShareActiveRef.current = screenShareActive;
+    if (wasSharing && !screenShareActive && hasScreenShare) {
+      void window.electronAPI?.clearShareTarget?.();
+    }
+  }, [screenShareActive, hasScreenShare]);
 
   // Clear remote-control + Electron share-target only when a share session ends
   const prevHasScreenShareRef = React.useRef(false);
