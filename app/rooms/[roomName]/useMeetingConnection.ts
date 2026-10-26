@@ -301,6 +301,7 @@ export function useMeetingConnection({
     } catch (e: unknown) {
       screenShareRestorePendingRef.current = false;
       setScreenShareActive(false);
+      void window.electronAPI?.clearShareTarget?.();
       const restored = endLocalScreenShareView();
       if (restored) setActiveView(restored);
       console.warn(

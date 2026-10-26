@@ -728,7 +728,8 @@
 }
 
 /* Someone else is sharing: warning colour + pulsing dot */
-.segWarn {
+.segWarn,
+.segSplit .segMain.segWarn {
   color: #fb923c;
 }
 
@@ -792,7 +793,7 @@
   box-shadow: 0 0 0 2px #7c79ff;
 }
 
-.shareToolsMenu {
+.viewModeMenu.shareToolsMenu {
   min-width: 248px;
 }
 
@@ -980,7 +981,7 @@
 
 @media (max-width: 900px) {
   .desktopBar {
-    padding: 10px 12px;
+    padding: 8px 10px;
     gap: 8px;
   }
 
@@ -1009,7 +1010,7 @@
 
   .seg {
     height: 48px;
-    min-width: 54px;
+    min-width: 50px;
   }
 
   .segChevron {

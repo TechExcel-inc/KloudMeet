@@ -1918,6 +1918,7 @@ export function VideoConferenceComponent(props: {
       beginLocalScreenShareView();
       room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e: unknown) => {
         setScreenShareActive(false);
+        void window.electronAPI?.clearShareTarget?.();
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
         showScreenShareFailureToast(e);
