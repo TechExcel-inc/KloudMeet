@@ -1484,21 +1484,24 @@ export default function ReplayPage() {
       {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
-          <div className={s.videoCard}>
+          <div className={hasTranscripts ? s.videoCard : `${s.videoCard} ${s.videoCardFill}`}>
             {livedoc && (
               <LiveDocReplayStage
                 info={livedoc}
                 mediaRef={videoRef}
                 viewerName={userInfo?.displayName || ''}
                 speaker={replaySpeaker}
+                fill={!hasTranscripts}
+                fillClass={s.livedocFill}
               />
             )}
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
-              // LiveDoc Full: the file is the meeting's voice, so only its controls show
-              style={livedoc ? { height: 56, minHeight: 0, aspectRatio: 'auto' } : undefined}
+              // LiveDoc Full: the file is the meeting's voice, so only its controls show.
+              // flex 锁定高度，避免被上方画面挤出可视区域。
+              style={livedoc ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' } : undefined}
               className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget;

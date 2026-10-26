@@ -44,11 +44,17 @@ export function LiveDocReplayStage({
   mediaRef,
   viewerName,
   speaker,
+  fill = false,
+  fillClass,
 }: {
   info: LiveDocReplayInfo;
   mediaRef: React.RefObject<HTMLVideoElement | null>;
   viewerName: string;
   speaker: ReplaySpeaker | null;
+  /** 无字幕时占满剩余高度，把下方声音控制条留在可视区域内 */
+  fill?: boolean;
+  /** fill 时的布局类（桌面限高、窄屏改回 16:9） */
+  fillClass?: string;
 }) {
   const { t, locale } = useI18n();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
@@ -153,7 +159,7 @@ export function LiveDocReplayStage({
   }, [screen, kloudMs, mediaRef]);
 
   return (
-    <div style={stageStyle}>
+    <div className={fill ? fillClass : undefined} style={fill ? stageFillStyle : stageStyle}>
       {src && (
         <iframe
           ref={iframeRef}
@@ -193,6 +199,14 @@ const stageStyle: React.CSSProperties = {
   position: 'relative',
   width: '100%',
   aspectRatio: '16 / 9',
+  background: '#0b0d12',
+  overflow: 'hidden',
+};
+/** 尺寸由 fillClass 决定，避免 16:9 把下方控制条顶出画面 */
+const stageFillStyle: React.CSSProperties = {
+  position: 'relative',
+  width: '100%',
+  minHeight: 0,
   background: '#0b0d12',
   overflow: 'hidden',
 };
