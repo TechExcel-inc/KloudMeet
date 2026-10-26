@@ -20,6 +20,8 @@ const SUBMIT_STALE_MS = 2 * 60 * 1000;
 const SAVE_LOCK = 'resume';
 const SAVE_STALE_MS = 60 * 1000;
 const SOURCE_PREFIX = 'aliyun';
+/** DashScope's answer for a file it processed but found no speech in: done, not failed */
+const NO_SPEECH = 'SUCCESS_WITH_NO_VALID_FRAGMENT';
 
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -86,6 +88,7 @@ type TaskResult =
   | { state: 'pending' }
   | { state: 'running' }
   | { state: 'failed'; error: string }
+  | { state: 'no_speech' }
   | { state: 'succeeded'; transcriptionUrl: string };
 
 async function queryTask(taskId: string): Promise<TaskResult> {
@@ -104,6 +107,7 @@ async function queryTask(taskId: string): Promise<TaskResult> {
   if (status === 'SUCCEEDED' && field(first, 'subtask_status') === 'SUCCEEDED' && typeof url === 'string') {
     return { state: 'succeeded', transcriptionUrl: url };
   }
+  if (field(first, 'code') === NO_SPEECH || field(first, 'message') === NO_SPEECH) return { state: 'no_speech' };
   const message = field(first, 'message') ?? field(output, 'message') ?? status;
   return { state: 'failed', error: `DashScope task failed: ${String(message)}` };
 }
@@ -206,6 +210,10 @@ function progressOf(recording: Recording): number {
 }
 
 export function transcribeStateOf(recording: Recording): TranscribeState {
+  // Saved as a failure before "no speech" was recognised as done
+  if (toSttStatus(recording.sttStatus) === 'FAILED' && recording.sttError?.includes(NO_SPEECH)) {
+    return { status: 'SUCCEEDED', progress: 100, error: null };
+  }
   return {
     status: toSttStatus(recording.sttStatus),
     progress: progressOf(recording),
@@ -298,6 +306,15 @@ async function continueTask(recording: Recording): Promise<void> {
 
   if (result.state === 'failed') {
     await markFailed(recording.id, new Error(result.error), true);
+    return;
+  }
+
+  // Nobody spoke: the transcription is done and simply empty.
+  if (result.state === 'no_speech') {
+    await prisma.recording.update({
+      where: { id: recording.id },
+      data: { sttStatus: 'SUCCEEDED', sttError: null },
+    });
     return;
   }
 
