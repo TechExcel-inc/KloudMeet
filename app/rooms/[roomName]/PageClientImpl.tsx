@@ -15,10 +15,6 @@ import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import { PrejoinAttendeeShareCheckbox } from '@/lib/PrejoinAttendeeShareCheckbox';
 import { PrejoinAccessLevelSelect, type AccessLevel } from '@/lib/PrejoinAccessLevelSelect';
-import {
-  PrejoinRecordingOptionSelect,
-  type RecordingOption,
-} from '@/lib/PrejoinRecordingOptionSelect';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
@@ -199,7 +195,6 @@ export function PageClientImpl(props: {
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
   const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
-  const [recordingOption, setRecordingOption] = React.useState<RecordingOption>('ai_smart');
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -658,7 +653,6 @@ export function PageClientImpl(props: {
         }
         if (isMeetingCreator && !isSameTabRefresh) {
           url.searchParams.append('participantLiveDocAi', participantLiveDocShow ? '1' : '0');
-          url.searchParams.append('recordingOption', recordingOption);
         }
         const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
@@ -738,7 +732,6 @@ export function PageClientImpl(props: {
       t,
       personalRoomSwitching,
       participantLiveDocShow,
-      recordingOption,
     ],
   );
   // KloudPreJoin shows camera/mic failures (blocked, in use, not found) next to the preview,
@@ -1060,13 +1053,7 @@ export function PageClientImpl(props: {
                 nobodyHereText={isHost && !isActive ? t('prejoin.nobodyHereYet') : undefined}
                 beforeName={
                   isHost ? (
-                    <>
-                      <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
-                      <PrejoinRecordingOptionSelect
-                        value={recordingOption}
-                        onChange={setRecordingOption}
-                      />
-                    </>
+                    <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
                   ) : null
                 }
                 joinFooter={

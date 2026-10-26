@@ -7,7 +7,7 @@ import styles from '../styles/PreJoin.module.css';
 export interface PrejoinSelectOption<T extends string> {
   value: T;
   label: string;
-  /** One short line explaining the choice: shown under the field and in the menu. */
+  /** One short line explaining the choice: shown inside the field and in the menu. */
   description?: string;
   icon: LucideIcon;
 }
@@ -130,7 +130,14 @@ export function PrejoinSelect<T extends string>({
           onKeyDown={onButtonKeyDown}
         >
           <SelectedIcon size={18} className={styles.selectIcon} aria-hidden="true" />
-          <span className={styles.selectValue}>{selected.label}</span>
+          <span className={styles.selectText}>
+            <span className={styles.selectValue}>{selected.label}</span>
+            {selected.description && (
+              <span id={hintId} className={styles.selectHint}>
+                {selected.description}
+              </span>
+            )}
+          </span>
           <ChevronDown
             size={18}
             className={`${styles.selectChevron}${open ? ` ${styles.selectChevronOpen}` : ''}`}
@@ -179,11 +186,6 @@ export function PrejoinSelect<T extends string>({
           </ul>
         )}
       </div>
-      {selected.description && (
-        <p id={hintId} className={styles.fieldHint}>
-          {selected.description}
-        </p>
-      )}
     </div>
   );
 }

@@ -492,11 +492,9 @@ export function VideoConferenceComponent(props: {
       const pageUrlStr = window.location.href;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
 
-      // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login.
-      const livedocToken =
-        recordingState.option === 'livedoc_full'
-          ? await createOrUpdateInstantAccount(props.userChoices.username).catch(() => null)
-          : null;
+      // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login
+      // (the server records LiveDoc Full whenever the meeting has its LiveDoc).
+      const livedocToken = await createOrUpdateInstantAccount(props.userChoices.username).catch(() => null);
 
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',

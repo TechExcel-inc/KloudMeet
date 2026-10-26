@@ -11,7 +11,6 @@ import { startScreenSectionsForRoom, stopScreenSections } from '@/lib/livedoc/sc
 import {
   closePause,
   isRecordingMode,
-  isRecordingOption,
   memberMayRecord,
   memberMayReportRoles,
   parseMeetingRoles,
@@ -40,6 +39,14 @@ function findActiveRecording(meetingId: number) {
   });
 }
 
+/**
+ * Every recording is LiveDoc Full (voice, LiveDoc actions, screen shares) once the meeting has its
+ * LiveDoc; before LiveDoc was ever opened there is none to record, so the screen recording is used.
+ */
+function livedocFullFor(meeting: MeetingRow): boolean {
+  return !!meeting.kloudMeetingId;
+}
+
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
   const mode = active?.mode ?? meeting.recordingMode;
   return {
@@ -48,7 +55,7 @@ function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingSta
     mode: isRecordingMode(mode) ? mode : 'follow',
     hostOnly: meeting.recordingHostOnly,
     syncTranscript: meeting.recordingSyncTranscript,
-    option: isRecordingOption(meeting.recordingOption) ? meeting.recordingOption : 'screen_share',
+    option: livedocFullFor(meeting) ? 'livedoc_full' : 'screen_share',
     livedocRecordingId: active?.livedocRecordingId ?? null,
   };
 }
@@ -256,17 +263,11 @@ export async function POST(
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
     // LiveDoc Full Recording: Kloud saves the LiveDoc actions; the media is the meeting's voice,
-    // recorded for now with the audio-only web egress (later its own voice and screen sections).
-    const livedocFull = meeting.recordingOption === 'livedoc_full';
+    // recorded with the audio-only web egress, and each screen share as its own section.
+    const livedocFull = livedocFullFor(meeting) && !!livedocToken;
     let livedocRecordingId: number | null = null;
     let livedocStartedAt: Date | null = null;
-    if (livedocFull) {
-      if (!meeting.kloudMeetingId) {
-        return NextResponse.json({ error: 'LiveDoc is not ready in this meeting yet', code: 'LIVEDOC_NOT_READY' }, { status: 409 });
-      }
-      if (!livedocToken) {
-        return NextResponse.json({ error: 'livedocToken is required for LiveDoc Full Recording' }, { status: 400 });
-      }
+    if (livedocFull && meeting.kloudMeetingId && livedocToken) {
       try {
         livedocRecordingId = await startKloudRecording(meeting.kloudMeetingId, livedocToken);
       } catch (e) {

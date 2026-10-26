@@ -792,23 +792,14 @@
   gap: 6px;
 }
 
-.fieldHint {
-  margin: 0;
-  padding: 0 16px;
-  color: var(--km-text-muted);
-  font-size: 12.5px;
-  font-weight: 500;
-  line-height: 1.45;
-}
-
 .selectButton {
   flex: 1;
   min-width: 0;
-  height: 50px;
+  min-height: 50px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 14px 0 0;
+  padding: 8px 14px 8px 0;
   border: 0;
   background: transparent;
   color: var(--km-text);
@@ -821,6 +812,23 @@
 .selectIcon {
   flex: none;
   color: var(--km-primary);
+}
+
+.selectText {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* The choice's one-line explanation, inside the field under its value */
+.selectHint {
+  color: var(--km-text-muted);
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.35;
+  white-space: normal;
 }
 
 .selectValue {
@@ -1381,9 +1389,6 @@
   .stage,
   .panel {
     flex-basis: 100%;
-  }
-  .fieldHint {
-    padding: 0 14px;
   }
   .rowLabel {
     width: 104px;
