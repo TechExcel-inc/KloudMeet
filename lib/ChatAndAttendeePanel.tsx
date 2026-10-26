@@ -4,7 +4,7 @@ import { RoomEvent, Track } from 'livekit-client';
 import { useI18n } from './i18n';
 import { getInitials } from './getInitials';
 import { ParticipantAttendeeRowMoreMenu } from './ParticipantRoleMenu';
-import type { ChatMsg } from './chatProtocol';
+import type { ChatMsg, ChatUploadState } from './chatProtocol';
 
 export type { ChatMsg } from './chatProtocol';
 
@@ -20,6 +20,12 @@ export interface ChatPanelProps {
   onOpenLivedoc?: (msg: ChatMsg) => void;
   attachBusy?: boolean;
   attachDisabled?: boolean;
+  /** Send again a message the server didn't take */
+  onRetrySend?: (msg: ChatMsg) => void;
+  /** The local user's file share in progress or failed */
+  upload?: ChatUploadState | null;
+  onRetryUpload?: () => void;
+  onDismissUpload?: () => void;
 }
 
 export function ChatPanel({
@@ -29,6 +35,10 @@ export function ChatPanel({
   onOpenLivedoc,
   attachBusy = false,
   attachDisabled = false,
+  onRetrySend,
+  upload = null,
+  onRetryUpload,
+  onDismissUpload,
 }: ChatPanelProps) {
   const [draft, setDraft] = useState('');
   const [showUploadConsent, setShowUploadConsent] = useState(false);
@@ -39,7 +49,7 @@ export function ChatPanel({
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }, [messages, upload]);
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -61,6 +71,8 @@ export function ChatPanel({
   }, [sendDraft]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Enter that confirms a Chinese / Japanese / Korean word is the input method's, not a send
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key !== 'Enter' || e.shiftKey) return;
     e.preventDefault();
     sendDraft();
@@ -141,9 +153,58 @@ export function ChatPanel({
               ) : (
                 <div className="kloud-chat-text">{msg.message}</div>
               )}
+              {msg.isLocal && msg.sendFailed ? (
+                <div className="kloud-chat-failed" role="status">
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="M12 7.5v5.5M12 16.5h.01" />
+                  </svg>
+                  {t('chat.notSent')}
+                  {onRetrySend ? (
+                    <button type="button" className="kloud-chat-inline-btn" onClick={() => onRetrySend(msg)}>
+                      {t('chat.retry')}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
+        {upload ? (
+          <div className={`kloud-chat-upload ${upload.state}`} role="status" aria-live="polite">
+            {upload.state === 'uploading' ? (
+              <>
+                <span className="kloud-chat-attach-spinner" aria-hidden="true" />
+                <span className="kloud-chat-upload-text">{t('chat.uploadingFile', { name: upload.fileName })}</span>
+              </>
+            ) : (
+              <>
+                <span className="kloud-chat-upload-text">
+                  <b>{t('chat.uploadFailedTitle', { name: upload.fileName })}</b>
+                  <span>
+                    {upload.reason === 'notReady'
+                      ? t('chat.uploadFailNotReady')
+                      : upload.reason === 'timeout'
+                        ? t('chat.uploadFailTimeout')
+                        : t('chat.uploadFailConvert')}
+                  </span>
+                </span>
+                <span className="kloud-chat-upload-actions">
+                  {onRetryUpload ? (
+                    <button type="button" className="kloud-chat-inline-btn" onClick={onRetryUpload}>
+                      {t('chat.retry')}
+                    </button>
+                  ) : null}
+                  {onDismissUpload ? (
+                    <button type="button" className="kloud-chat-inline-btn quiet" onClick={onDismissUpload}>
+                      {t('chat.dismiss')}
+                    </button>
+                  ) : null}
+                </span>
+              </>
+            )}
+          </div>
+        ) : null}
         <div ref={messagesEndRef} />
       </div>
       <form className="kloud-chat-form" onSubmit={handleSend}>
@@ -618,6 +679,73 @@ export const chatAndAttendeeStyles = `
     flex-direction: column;
     gap: 4px;
     animation: kloud-chat-entry-in 0.2s ease-out both;
+  }
+  .kloud-chat-failed {
+    align-self: flex-end;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: #ff8a80;
+    font-size: 12px;
+  }
+  .kloud-chat-inline-btn {
+    padding: 2px 8px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--km-stage-text, #e8eaed);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .kloud-chat-inline-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+  }
+  .kloud-chat-inline-btn.quiet {
+    background: transparent;
+    color: var(--km-stage-muted, #9aa0a6);
+  }
+  .kloud-chat-inline-btn:focus-visible {
+    outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+    outline-offset: 2px;
+  }
+  /* The sender's own file share in flight, or why it didn't go */
+  .kloud-chat-upload {
+    align-self: flex-end;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    max-width: 92%;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px dashed rgba(139, 135, 255, 0.35);
+    color: var(--km-stage-text, #e8eaed);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  .kloud-chat-upload.failed {
+    flex-wrap: wrap;
+    border: 1px solid rgba(255, 107, 107, 0.35);
+    background: rgba(255, 107, 107, 0.08);
+  }
+  .kloud-chat-upload-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .kloud-chat-upload-text b {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .kloud-chat-upload-text span {
+    color: var(--km-stage-muted, #9aa0a6);
+    font-size: 12px;
+  }
+  .kloud-chat-upload-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
   }
   @keyframes kloud-chat-entry-in {
     from { opacity: 0; transform: translateY(4px); }

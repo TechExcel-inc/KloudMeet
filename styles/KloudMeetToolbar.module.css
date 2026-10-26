@@ -1696,6 +1696,16 @@
   pointer-events: none;
 }
 
+/* Room for the unread count on the phone's chat button */
+.mobileTopBtnBadged {
+  position: relative;
+}
+
+.mobileTopBtnBadged .countBadge {
+  top: -2px;
+  right: -2px;
+}
+
 .mobileTopBtn {
   background: rgba(46, 48, 54, 0.88);
   backdrop-filter: blur(10px);
