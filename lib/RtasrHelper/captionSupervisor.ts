@@ -44,7 +44,6 @@ export interface CaptionSupervisorOptions {
 export class CaptionSupervisor {
   private _status: CaptionStatus = IDLE_CAPTION_STATUS;
   private _wanted = false;
-  private _deviceId = '';
   private _seq = 0;
   private _attempt = 0;
   private _retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -69,10 +68,9 @@ export class CaptionSupervisor {
   }
 
   /** Start recognising (no-op while already running or retrying). */
-  start(deviceId = '') {
+  start() {
     if (this._wanted) return;
     this._wanted = true;
-    this._deviceId = deviceId;
     this._attempt = 0;
     this._connect('connecting');
   }
@@ -121,7 +119,7 @@ export class CaptionSupervisor {
   private _connect(state: 'connecting' | 'reconnecting') {
     const seq = ++this._seq;
     this._set({ state, failure: state === 'reconnecting' ? this._status.failure : undefined, attempt: this._attempt });
-    this.engine.Start(this._deviceId).then(
+    this.engine.Start().then(
       () => {
         if (seq !== this._seq || !this._wanted) return;
         this._set({ state: 'live', attempt: this._attempt });

@@ -18,6 +18,7 @@
  */
 
 import { CaptionEngineError, httpFailure, micFailure, toCaptionError } from './captionErrors';
+import { defaultMicSource, type CaptionMicSource } from './captionMic';
 
 export interface RtasrMessage {
   id: string | number;
@@ -35,8 +36,10 @@ export interface CaptionEngine {
   OnMessage?: (msg: RtasrMessage) => void;
   /** The connection was lost after Start resolved; the engine has already released the mic. */
   OnDropped?: (err: CaptionEngineError) => void;
+  /** Where the audio comes from (lib/RtasrHelper/captionMic.ts); the system default when unset. */
+  micSource?: CaptionMicSource;
   /** Resolves once audio is flowing; rejects with a CaptionEngineError (mic already released). */
-  Start(deviceId?: string): Promise<void>;
+  Start(): Promise<void>;
   Stop(): void;
 }
 
@@ -46,6 +49,7 @@ const CONNECT_TIMEOUT_MS = 12000;
 export class RtasrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
   public OnDropped?: (err: CaptionEngineError) => void;
+  public micSource?: CaptionMicSource;
 
   /** ISO-639-1 语言代码（zh/en/ja/ko/fr/de/es/pt/ru/ar/hi/vi 等）
    *  空字符串或 'auto' 表示自动检测 */
@@ -73,7 +77,7 @@ export class RtasrHelper implements CaptionEngine {
   SetServerID(_id: number) {}
   SetSpeakingLanguageID(_id: number) {}
 
-  async Start(deviceId = '') {
+  async Start() {
     if (this._running) return;
     const gen = ++this._gen;
     this._running = true;
@@ -97,22 +101,9 @@ export class RtasrHelper implements CaptionEngine {
       }
       const { token, error: tokenErr } = await tokenRes.json();
       if (tokenErr || !token) throw new CaptionEngineError('unavailable', `Token error: ${tokenErr || 'empty'}`);
-      // ── Step 2: 打开麦克风 ──────────────────────────────────────────────
-      const baseConstraints: MediaTrackConstraints = {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
-      const audioConstraints: MediaTrackConstraints = deviceId
-        ? { ...baseConstraints, deviceId: { exact: deviceId } }
-        : baseConstraints;
-
+      // ── Step 2: 麦克风（会议里正在用的那个，见 captionMic.ts）──────────────
       try {
-        this._stream = await navigator.mediaDevices.getUserMedia({
-          audio: audioConstraints,
-          video: false,
-        });
+        this._stream = await (this.micSource ?? defaultMicSource)();
       } catch (err) {
         throw new CaptionEngineError(micFailure(err), err instanceof Error ? err.message : 'microphone failed');
       }

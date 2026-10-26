@@ -17,8 +17,8 @@
  */
 
 import React from 'react';
-import { RoomEvent } from 'livekit-client';
-import type { Room } from 'livekit-client';
+import { RoomEvent, Track } from 'livekit-client';
+import type { LocalTrackPublication, Room } from 'livekit-client';
 import { RtasrHelper } from './RtasrHelper';
 import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
 import { FunAsrHelper } from './FunAsrHelper';
@@ -26,6 +26,7 @@ import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
 import { CaptionSupervisor, IDLE_CAPTION_STATUS, type CaptionStatus } from './captionSupervisor';
+import { meetingMicSource, type MeetingMicSource } from './captionMic';
 import {
   CAPTION_STATUS_TOPIC,
   parsePeerCaptionState,
@@ -214,6 +215,8 @@ export function useCaptions({
 
   const rtasrRef = React.useRef<CaptionEngine | null>(null);
   const supervisorRef = React.useRef<CaptionSupervisor | null>(null);
+  /** The meeting-mic source handed to the engine (captionMic.ts). */
+  const micSourceRef = React.useRef<MeetingMicSource | null>(null);
   const [captionStatus, setCaptionStatus] = React.useState<CaptionStatus>(IDLE_CAPTION_STATUS);
   const peerStatesRef = React.useRef(new Map<string, PeerCaptionState>());
   const [peerCaptionIssues, setPeerCaptionIssues] = React.useState<PeerCaptionIssue[]>([]);
@@ -387,9 +390,28 @@ export function useCaptions({
       supervisor.stop();
       return;
     }
-    const defaultMic = localStorage.getItem('DefaultMic') || '';
-    supervisor.start(defaultMic);
+    supervisor.start();
   }, [micEnabled, captionsRunning, engineEpoch]);
+
+  // Captions listen to the meeting's own mic (captionMic.ts). When the person switches mic, or
+  // the mic track is (re)published while captions run on a stand-in capture, pick up the new
+  // source: a quick restart, so the old device isn't left open.
+  React.useEffect(() => {
+    if (!captionsRunning || !micEnabled) return;
+    const restart = () => supervisorRef.current?.retry();
+    const onDevice = (kind: MediaDeviceKind) => {
+      if (kind === 'audioinput') restart();
+    };
+    const onPublished = (pub: LocalTrackPublication) => {
+      if (pub.source === Track.Source.Microphone && micSourceRef.current?.usingStandIn()) restart();
+    };
+    room.on(RoomEvent.ActiveDeviceChanged, onDevice);
+    room.on(RoomEvent.LocalTrackPublished, onPublished);
+    return () => {
+      room.off(RoomEvent.ActiveDeviceChanged, onDevice);
+      room.off(RoomEvent.LocalTrackPublished, onPublished);
+    };
+  }, [room, captionsRunning, micEnabled]);
 
   // Network back: don't sit out the rest of a backoff wait.
   React.useEffect(() => {
@@ -495,6 +517,8 @@ export function useCaptions({
           const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
           helper.languageCode = uiLanguage;
           helper.roomName = room.name;
+          micSourceRef.current = meetingMicSource(room);
+          helper.micSource = micSourceRef.current;
 
           helper.OnMessage = async (d: RtasrMessage) => {
             // 使用 LiveKit 的 localParticipant（每个连接独立，不受同浏览器多 Tab 共享 localStorage 影响）

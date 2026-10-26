@@ -7,6 +7,7 @@
 
 import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
 import { CaptionEngineError, httpFailure, micFailure, toCaptionError } from './captionErrors';
+import { defaultMicSource, type CaptionMicSource } from './captionMic';
 
 const TARGET_SAMPLE_RATE = 16000;
 /** ~30 s of 16 kHz PCM16 the relay has not taken: the connection is stuck though not closed. */
@@ -42,6 +43,7 @@ function relayUrl(token: string): string {
 export class FunAsrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
   public OnDropped?: (err: CaptionEngineError) => void;
+  public micSource?: CaptionMicSource;
   public languageCode = 'zh';
   public roomName?: string;
 
@@ -56,7 +58,7 @@ export class FunAsrHelper implements CaptionEngine {
   /** @param getToken 每次取最新的 LiveKit 参会 token（会中会续期） */
   constructor(private readonly getToken: () => string) {}
 
-  async Start(deviceId = '') {
+  async Start() {
     if (this._running) return;
     const gen = ++this._gen;
     this._running = true;
@@ -130,17 +132,9 @@ export class FunAsrHelper implements CaptionEngine {
         if (gen === this._gen) this._drop(`relay closed (${event.code})`);
       };
 
-      const base: MediaTrackConstraints = {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      };
       try {
-        this._stream = await navigator.mediaDevices.getUserMedia({
-          audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base,
-          video: false,
-        });
+        // The meeting's own microphone (captionMic.ts).
+        this._stream = await (this.micSource ?? defaultMicSource)();
       } catch (err) {
         throw new CaptionEngineError(micFailure(err), err instanceof Error ? err.message : 'microphone failed');
       }
