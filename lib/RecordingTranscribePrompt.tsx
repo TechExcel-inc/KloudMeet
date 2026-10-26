@@ -21,17 +21,25 @@ export interface RecordingTranscribePromptProps {
   initial: TranscribeState;
   /** 字幕已写入（或已存在），由父组件重新加载回放数据 */
   onDone: () => void;
+  /** Start as the small pill instead of a dialog (the replay works without a transcript) */
+  startCollapsed?: boolean;
 }
 
-function initialPhase(state: TranscribeState): Phase {
+function initialPhase(state: TranscribeState, startCollapsed: boolean): Phase {
+  if (startCollapsed && !isSttActive(state.status) && state.status !== 'SUCCEEDED') return 'collapsed';
   if (isSttActive(state.status) || state.status === 'FAILED') return 'resume';
   return state.status === 'SUCCEEDED' ? 'empty' : 'prompt';
 }
 
 /** 回放页无字幕时：询问是否解析字幕，确认后提交阿里云任务并展示进度 */
-export function RecordingTranscribePrompt({ recordingKey, initial, onDone }: RecordingTranscribePromptProps) {
+export function RecordingTranscribePrompt({
+  recordingKey,
+  initial,
+  onDone,
+  startCollapsed = false,
+}: RecordingTranscribePromptProps) {
   const { t } = useI18n();
-  const [phase, setPhase] = React.useState<Phase>(() => initialPhase(initial));
+  const [phase, setPhase] = React.useState<Phase>(() => initialPhase(initial, startCollapsed));
   const [state, setState] = React.useState<TranscribeState>(initial);
   const [starting, setStarting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);
