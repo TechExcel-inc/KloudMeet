@@ -2,7 +2,7 @@
   position: fixed;
   left: auto;
   right: 24px;
-  bottom: 88px;
+  bottom: calc(var(--km-toolbar-h, 72px) + 16px);
   z-index: 11800;
   pointer-events: auto;
   user-select: none;

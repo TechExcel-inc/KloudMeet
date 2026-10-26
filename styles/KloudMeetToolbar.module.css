@@ -122,8 +122,8 @@
    left (your devices · clock | name) · centre (modes | actions) · right (leave)
    ============================================ */
 .desktopBar {
-  min-height: 72px;
-  padding: 12px 20px;
+  min-height: 64px;
+  padding: 8px 16px;
   gap: 12px;
   row-gap: 8px;
   flex-wrap: wrap;            /* never push Exit off-screen: right zone wraps to a 2nd row */
@@ -185,7 +185,7 @@
 /* Modes and actions are told apart by a divider as well as by their shape */
 .zoneSeparator {
   width: 1px;
-  height: 40px;
+  height: 32px;
   background: rgba(255, 255, 255, 0.14);
   flex-shrink: 0;
 }
@@ -204,7 +204,7 @@
 .deviceGroup {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 .actionGroup {
@@ -220,9 +220,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 60px;
-  height: 56px;
+  gap: 3px;
+  min-width: 56px;
+  height: 48px;
   padding: 0 6px;
   border: 0;
   border-radius: 12px;
@@ -238,8 +238,8 @@
 }
 
 .actBtn svg {
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
 }
 
 .actIcon {
@@ -375,7 +375,7 @@
 .split {
   display: inline-flex;
   align-items: center;
-  padding: 4px;
+  padding: 3px;
   border-radius: 999px;
   background: #1c1d22;
   flex-shrink: 0;
@@ -383,8 +383,8 @@
 
 /* On: neutral grey, clearly lighter than the track */
 .split .roundBtn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   background: #3c4043;
   color: #fff;
 }
@@ -423,8 +423,8 @@
 }
 
 .roundBtn svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   flex-shrink: 0;
 }
 
@@ -504,8 +504,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 44px;
+  width: 22px;
+  height: 40px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -615,8 +615,8 @@
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 4px;
-  border-radius: 17px;
+  padding: 3px;
+  border-radius: 15px;
   background: #26272d;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
@@ -628,12 +628,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  min-width: 70px;
-  height: 56px;
-  padding: 0 10px;
+  gap: 3px;
+  min-width: 64px;
+  height: 48px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 13px;
+  border-radius: 12px;
   background: transparent;
   color: #c4c7cc;
   font: 600 11px/1.2 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
@@ -648,8 +648,8 @@
 }
 
 .seg svg {
-  width: 20px;
-  height: 20px;
+  width: 19px;
+  height: 19px;
   flex-shrink: 0;
 }
 
@@ -707,8 +707,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 56px;
+  width: 18px;
+  height: 48px;
   margin-right: 2px;
   padding: 0;
   border: 0;
@@ -768,45 +768,38 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 
-/* ---------- Annotate / remote control pills (Electron + share) ---------- */
-.shareTools {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.pillBtn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  height: 40px;
-  padding: 0 14px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--km-control, #2e3036);
-  color: var(--km-stage-text, #e8eaed);
-  font: 700 13px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.pillBtn:hover {
-  background: var(--km-control-hover, #3a3c43);
-}
-
-.pillBtn svg {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-}
-
-.pillBtnOn,
-.pillBtnOn:hover {
-  background: var(--km-primary, #5e5ce6);
+/* ---------- Screen share tools (Electron + share): chevron menu on the share segment ---------- */
+.segChevronOn,
+.segChevronOn:hover {
   color: #fff;
+}
+
+/* Annotate or remote control is on */
+.segToolDot {
+  position: absolute;
+  top: 9px;
+  right: 3px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a5a3ff;
+  box-shadow: 0 0 0 2px #26272d;
+  pointer-events: none;
+}
+
+.segActive .segToolDot {
+  background: #fff;
+  box-shadow: 0 0 0 2px #7c79ff;
+}
+
+.shareToolsMenu {
+  min-width: 248px;
+}
+
+.viewModeMenuItemHint {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9aa0a6;
 }
 
 .spin {
@@ -901,21 +894,17 @@
 
 /* ---------- Narrow windows: compress gracefully ---------- */
 @media (max-width: 1180px) {
-  .pillLabel {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
-  .pillBtn {
-    padding: 0 12px;
-  }
-
   .meetingMeta {
     display: none;
+  }
+
+  /* Leave keeps its colour and icon; the word goes first so the bar stays on one row */
+  .exitLabel {
+    display: none;
+  }
+
+  .exitPill {
+    padding: 0 18px;
   }
 
   .actBtn {
@@ -927,8 +916,8 @@
   }
 }
 
-@media (max-width: 1024px) {
-  /* Keep Leave on the same row down to ~960px: tighter gaps instead of wrapping */
+@media (max-width: 1100px) {
+  /* Keep Leave on the same row down to ~900px: icon-only actions and tighter gaps instead of wrapping */
   .desktopBar {
     padding-left: 14px;
     padding-right: 14px;
@@ -969,8 +958,23 @@
 }
 
 @media (max-width: 1000px) {
+  .desktopBar {
+    padding-left: 10px;
+    padding-right: 10px;
+    gap: 8px;
+  }
+
+  .zoneCenter {
+    gap: 8px;
+  }
+
   .actBtn {
     min-width: 40px;
+  }
+
+  .seg {
+    min-width: 50px;
+    padding: 0 6px;
   }
 }
 
@@ -1001,11 +1005,6 @@
   .splitChevron {
     width: 22px;
     height: 40px;
-  }
-
-  .pillBtn {
-    height: 34px;
-    padding: 0 10px;
   }
 
   .seg {

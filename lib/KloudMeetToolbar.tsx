@@ -338,6 +338,8 @@ export function KloudMeetToolbar({
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
   const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
+  /** Screen share segment's menu: annotate / remote control (desktop app, during a share) */
+  const [shareToolsOpen, setShareToolsOpen] = useState(false);
   /** 未受控时本地兜底；父级传入 webcamLayoutMode 时以父级为准 */
   const [webcamLayoutModeLocal, setWebcamLayoutModeLocal] = useState<WebcamLayoutMode>('tile');
   const webcamLayoutMode = webcamLayoutModeProp ?? webcamLayoutModeLocal;
@@ -346,6 +348,21 @@ export function KloudMeetToolbar({
     onWebcamLayoutChange?.(mode);
   };
   const toolbarRef = useRef<HTMLDivElement | null>(null);
+  // Floating chips above the bar (e.g. the SmartCam suggestion) sit on --km-toolbar-h, so a bar
+  // that wraps to a second row in a narrow window never covers them or Leave.
+  useEffect(() => {
+    const el = toolbarRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const root = document.documentElement;
+    const apply = () => root.style.setProperty('--km-toolbar-h', `${Math.round(el.getBoundingClientRect().height)}px`);
+    apply();
+    const observer = new ResizeObserver(apply);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty('--km-toolbar-h');
+    };
+  }, []);
   const moreMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const recordMenuBtnRef = useRef<HTMLButtonElement | null>(null);
   const exitMenuBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -688,6 +705,16 @@ export function KloudMeetToolbar({
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
   }, [inviteMenuOpen]);
+
+  useEffect(() => {
+    if (!shareToolsOpen) return;
+    const onDocMouseDown = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest('[data-share-tools-anchor="true"]')) setShareToolsOpen(false);
+    };
+    document.addEventListener('mousedown', onDocMouseDown);
+    return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [shareToolsOpen]);
 
   useEffect(() => {
     if (!viewModeMenuOpen) return;
@@ -1616,56 +1643,111 @@ export function KloudMeetToolbar({
           )}
         </div>
 
-        <button
-          type="button"
-          className={`${styles.seg} ${activeView === 'shareScreen' ? styles.segActive : ''} ${shareConflict ? styles.segWarn : ''}`}
-          onClick={() => {
-            closeViewModeMenu();
-            handleShareScreenClick();
-          }}
-          aria-pressed={activeView === 'shareScreen'}
-          aria-label={shareTip}
-          data-tip={shareTip}
-        >
-          {shareConflict && <span className={styles.segConflictDot} aria-hidden="true" />}
-          {screenShareActive && (
-            <span className={styles.segCheck} aria-hidden="true">✓</span>
-          )}
-          <IconShareScreen />
-          <span className={styles.segLabel}>{t('toolbar.shareScreen')}</span>
-        </button>
+        {renderShareSegment(shareTip, shareConflict)}
       </div>
     );
   };
 
-  /** Web：标注 / 远程控制（仅 Electron 桌面端 + 有屏幕共享 + canSwitchViews，与旧版一致） */
-  const renderDesktopShareTools = () => {
-    if (!(canSwitchViews && isDesktop && hasScreenShare)) return null;
-    const controlTip = remoteControlPending
+  /**
+   * Screen share segment. In the desktop app during a share it is split like Video: the chevron
+   * opens Annotate and Remote control, which act on the shared screen (they used to sit as pills
+   * in the middle of the toolbar). A dot on the chevron shows either one is on.
+   */
+  const renderShareSegment = (shareTip: string, shareConflict: boolean) => {
+    const shareButton = (extraClass: string) => (
+      <button
+        type="button"
+        className={`${styles.seg} ${extraClass} ${shareConflict ? styles.segWarn : ''}`}
+        onClick={() => {
+          closeViewModeMenu();
+          setShareToolsOpen(false);
+          handleShareScreenClick();
+        }}
+        aria-pressed={activeView === 'shareScreen'}
+        aria-label={shareTip}
+        data-tip={shareTip}
+      >
+        {shareConflict && <span className={styles.segConflictDot} aria-hidden="true" />}
+        {screenShareActive && (
+          <span className={styles.segCheck} aria-hidden="true">✓</span>
+        )}
+        <IconShareScreen />
+        <span className={styles.segLabel}>{t('toolbar.shareScreen')}</span>
+      </button>
+    );
+    if (!(canSwitchViews && isDesktop && hasScreenShare)) {
+      return shareButton(activeView === 'shareScreen' ? styles.segActive : '');
+    }
+    const toolOn = isDrawingMode || isRemoteControlMode || !!remoteControlPending;
+    const toolsLabel = tr('toolbar.shareTools', 'Annotate & remote control');
+    return (
+      <div
+        className={`${styles.segSplit} ${activeView === 'shareScreen' ? styles.segActive : ''}`}
+        data-share-tools-anchor="true"
+      >
+        {shareButton(styles.segMain)}
+        <button
+          type="button"
+          className={`${styles.segChevron} ${toolOn ? styles.segChevronOn : ''}`}
+          onClick={() => {
+            closeViewModeMenu();
+            closeInviteMenu();
+            setActiveSheet(null);
+            setShareToolsOpen((prev) => !prev);
+          }}
+          aria-haspopup="menu"
+          aria-expanded={shareToolsOpen}
+          aria-label={toolsLabel}
+          data-tip={toolsLabel}
+        >
+          <IconChevronUp />
+          {toolOn && <span className={styles.segToolDot} aria-hidden="true" />}
+        </button>
+        {shareToolsOpen && (
+          <div className={`${styles.viewModeMenu} ${styles.shareToolsMenu}`} role="menu" aria-label={toolsLabel}>
+            {renderShareToolsMenuItems()}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  /** Annotate / remote control: Electron desktop app + a share in progress + canSwitchViews, as before */
+  const renderShareToolsMenuItems = () => {
+    const controlLabel = remoteControlPending
       ? t('toolbar.cancelRequest')
       : isRemoteControlMode
         ? t('toolbar.stopControl')
         : t('toolbar.requestControl');
     return (
-      <div className={styles.shareTools}>
+      <>
         <button
           type="button"
-          className={`${styles.pillBtn} ${isDrawingMode ? styles.pillBtnOn : ''}`}
-          onClick={onToggleDrawingMode}
-          aria-pressed={isDrawingMode}
-          aria-label={t('toolbar.annotateTooltip')}
-          data-tip={t('toolbar.annotateTooltip')}
+          role="menuitemcheckbox"
+          aria-checked={isDrawingMode}
+          className={`${styles.viewModeMenuItem} ${isDrawingMode ? styles.viewModeMenuItemActive : ''}`}
+          onClick={() => {
+            setShareToolsOpen(false);
+            onToggleDrawingMode();
+          }}
+          title={t('toolbar.annotateTooltip')}
         >
           <IconPen />
-          <span className={styles.pillLabel}>{t('toolbar.annotate')}</span>
+          <span className={styles.viewModeMenuItemLabel}>{t('toolbar.annotate')}</span>
+          {isDrawingMode && (
+            <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+              <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
         </button>
         <button
           type="button"
-          className={`${styles.pillBtn} ${isRemoteControlMode || remoteControlPending ? styles.pillBtnOn : ''}`}
-          onClick={onToggleRemoteControlMode}
-          aria-pressed={!!(isRemoteControlMode || remoteControlPending)}
-          aria-label={controlTip}
-          data-tip={controlTip}
+          role="menuitem"
+          className={`${styles.viewModeMenuItem} ${isRemoteControlMode || remoteControlPending ? styles.viewModeMenuItemActive : ''}`}
+          onClick={() => {
+            setShareToolsOpen(false);
+            onToggleRemoteControlMode();
+          }}
         >
           {remoteControlPending ? (
             <svg className={styles.spin} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
@@ -1674,11 +1756,10 @@ export function KloudMeetToolbar({
           ) : (
             <IconCursor />
           )}
-          <span className={styles.pillLabel}>
-            {remoteControlPending ? t('toolbar.requesting') : t('toolbar.control')}
-          </span>
+          <span className={styles.viewModeMenuItemLabel}>{controlLabel}</span>
+          {remoteControlPending && <span className={styles.viewModeMenuItemHint}>{t('toolbar.requesting')}</span>}
         </button>
-      </div>
+      </>
     );
   };
 
@@ -2146,9 +2227,6 @@ export function KloudMeetToolbar({
               {renderDesktopViewSwitch()}
 
               <span className={styles.zoneSeparator} aria-hidden="true" />
-
-              {/* Annotate / Remote control: Electron + screen share only */}
-              {renderDesktopShareTools()}
 
               <div className={styles.actionGroup}>
                 {renderDesktopLiveDocAiButton()}

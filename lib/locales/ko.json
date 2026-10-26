@@ -465,6 +465,7 @@
   "toolbar.cancelRequest": "제어 요청 취소",
   "toolbar.stopControl": "원격 제어 중지",
   "toolbar.requestControl": "원격 제어 요청",
+  "toolbar.shareTools": "주석 및 원격 제어",
   "toolbar.attendees": "참석자",
   "toolbar.invite": "초대",
   "toolbar.inviteCopied": "초대 링크가 복사되었습니다!",
