@@ -194,6 +194,10 @@ describe('Team pooling', () => {
     expect(includedReplaySeconds('LEGACY', 1)).toBeNull();
   });
 
+  it('pools 25 h per seat on Business', () => {
+    expect(includedReplaySeconds('BUSINESS', 5)).toBe(125 * H);
+  });
+
   it('sums usage for the whole account, not just the caller', async () => {
     vi.stubEnv('BILLING_ENABLED', 'true');
     const now = d('2026-10-20T00:00:00Z');
@@ -273,10 +277,10 @@ describe('Free limits with billing on', () => {
     prisma.accountMembership.findFirst.mockResolvedValue(null);
   });
 
-  it('caps AI summaries at 3 per month', async () => {
-    prisma.usageEvent.aggregate.mockResolvedValue({ _sum: { quantity: 2 } });
+  it('caps AI summaries at 5 per month', async () => {
+    prisma.usageEvent.aggregate.mockResolvedValue({ _sum: { quantity: 4 } });
     expect(await checkAiSummaryQuota(5)).toBeNull();
-    prisma.usageEvent.aggregate.mockResolvedValue({ _sum: { quantity: 3 } });
+    prisma.usageEvent.aggregate.mockResolvedValue({ _sum: { quantity: 5 } });
     const res = await checkAiSummaryQuota(5);
     expect(res?.status).toBe(402);
     expect((await res?.json()).limit).toBe('ai_summaries');
@@ -286,21 +290,21 @@ describe('Free limits with billing on', () => {
     expect((await checkPublicReplayAllowed(5))?.status).toBe(402);
   });
 
-  it('ends meetings 40 minutes after the room started', async () => {
+  it('ends meetings 60 minutes after the room started', async () => {
     const endsAt = await meetingEndsAt({
       id: 1,
       roomName: 'r',
       createdByMemberId: 5,
       actualStartedAt: d('2026-10-20T10:00:00Z'),
     });
-    expect(endsAt).toEqual(d('2026-10-20T10:40:00Z'));
+    expect(endsAt).toEqual(d('2026-10-20T11:00:00Z'));
   });
 
   it('starts the clock now when the room start was not recorded yet', async () => {
     const now = d('2026-10-20T10:00:00Z');
     prisma.meeting.updateMany.mockResolvedValue({ count: 1 });
     const endsAt = await meetingEndsAt({ id: 9, roomName: 'r', createdByMemberId: 5, actualStartedAt: null }, now);
-    expect(endsAt).toEqual(d('2026-10-20T10:40:00Z'));
+    expect(endsAt).toEqual(d('2026-10-20T11:00:00Z'));
     expect(prisma.meeting.updateMany).toHaveBeenCalledWith({
       where: { id: 9, actualStartedAt: null },
       data: { actualStartedAt: now },
