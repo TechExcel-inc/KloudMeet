@@ -471,8 +471,16 @@ export function PageClientImpl(props: {
 
   /** The meeting this page would join (a personal ID resolves to its owner's live meeting). */
   const accessRoom = !isMeetingCreator && resolvedLiveRoom ? resolvedLiveRoom : effectiveRoomName;
+  const accessRequestRef = React.useRef(0);
   const loadAccess = React.useCallback(async () => {
-    const state = await fetchMeetingAccess(accessRoom);
+    // Only the latest load counts: a slow earlier answer must not overwrite it.
+    const requestId = ++accessRequestRef.current;
+    let state = await fetchMeetingAccess(accessRoom);
+    for (let attempt = 1; !state && attempt <= 2 && requestId === accessRequestRef.current; attempt++) {
+      await new Promise((resolve) => window.setTimeout(resolve, attempt * 1500));
+      state = await fetchMeetingAccess(accessRoom);
+    }
+    if (requestId !== accessRequestRef.current) return state;
     setAccess(state);
     setRefusal(
       state?.decision === 'refused'
@@ -725,6 +733,7 @@ export function PageClientImpl(props: {
       const result = await sendKnock(room, values.username);
       if (result.status === 'ADMITTED') {
         admittedRef.current = true;
+        setAccess((a) => (a ? { ...a, decision: 'join' } : a));
         return 'admitted';
       }
       if (result.status === 'PENDING') {
@@ -937,6 +946,8 @@ export function PageClientImpl(props: {
       if (state.status === 'ADMITTED') {
         stopped = true;
         admittedRef.current = true;
+        // Let in: the button reads "Join" again if the join below has to be retried.
+        setAccess((a) => (a ? { ...a, decision: 'join' } : a));
         const values = knockRef.current?.values;
         setKnock(null);
         if (values) void submitRef.current(values);

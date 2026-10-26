@@ -3,13 +3,16 @@
 /**
  * Development-only preview of the host's "wants to join" prompt (lib/JoinRequestsPrompt.tsx)
  * over a meeting-like stage, without LiveKit: the room is a stub and the waiting list is mocked.
- * /dev/access?n=3 shows three people waiting; Admit / Deny update the mock. Not served in production.
+ * /dev/access?n=3 shows three people waiting; Admit / Deny update the mock.
+ * /dev/access?replay=1 shows the replay page's "asked to watch" bar (lib/RecordingAccessCards.tsx)
+ * with mocked requests. Not served in production.
  */
 
 import React from 'react';
 import { notFound } from 'next/navigation';
 import type { Room } from 'livekit-client';
 import { JoinRequestsPrompt } from '@/lib/JoinRequestsPrompt';
+import { RecordingRequestsBar } from '@/lib/RecordingAccessCards';
 
 const PEOPLE = [
   { displayName: 'Mina Sato', email: 'mina.sato@example.jp' },
@@ -27,9 +30,21 @@ function useMockedWaitingList(count: number) {
       avatarUrl: null,
       requestedAt: new Date(Date.now() - (count - i) * 20_000).toISOString(),
     }));
+    let watchers = [
+      { id: 1, name: 'Jonas Lind', email: 'jonas@nordic.io', requestedAt: new Date().toISOString() },
+      { id: 2, name: 'Priya Rao', email: 'priya@partner.co', requestedAt: new Date().toISOString() },
+    ];
     const realFetch = window.fetch.bind(window);
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/access-requests')) {
+        if ((init?.method ?? 'GET') === 'PATCH') {
+          const body = JSON.parse(String(init?.body ?? '{}'));
+          watchers = body.all ? [] : watchers.filter((r) => !body.ids.includes(r.id));
+          return new Response(JSON.stringify({ updated: 1 }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ requests: watchers }), { status: 200 });
+      }
       if (!url.includes('/join-requests')) return realFetch(input, init);
       if ((init?.method ?? 'GET') === 'PATCH') {
         const body = JSON.parse(String(init?.body ?? '{}'));
@@ -56,10 +71,21 @@ export default function DevAccessPage() {
     return Number.isFinite(n) && n >= 0 ? Math.min(n, PEOPLE.length) : 3;
   });
   const ready = useMockedWaitingList(count);
+  const [replay] = React.useState(() =>
+    typeof window !== 'undefined' && new URL(window.location.href).searchParams.get('replay') === '1',
+  );
 
   React.useEffect(() => {
-    document.documentElement.setAttribute('data-theme', 'dark');
-  }, []);
+    document.documentElement.setAttribute('data-theme', replay ? 'light' : 'dark');
+  }, [replay]);
+
+  if (replay) {
+    return (
+      <div style={{ minHeight: '100vh', background: 'var(--km-bg-subtle)', padding: '12px 20px' }}>
+        {ready && <RecordingRequestsBar recordingKey="dev" />}
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: '100vh', background: '#141518', padding: 16, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
