@@ -1262,7 +1262,6 @@ export function KloudMeetToolbar({
   };
 
   const handleWebcamLayoutSelect = (layout: 'tile' | 'spotlight') => {
-    if (!canSwitchViews) return;
     setWebcamLayoutMode(layout);
     onViewChange('webcam');
     closeViewModeMenu();
@@ -1273,7 +1272,6 @@ export function KloudMeetToolbar({
     closeInviteMenu();
     setActiveSheet(null);
     closeViewModeMenu();
-    if (!canSwitchViews) return;
     if (activeView !== 'webcam') {
       onViewChange('webcam');
       return;
@@ -1335,7 +1333,7 @@ export function KloudMeetToolbar({
         type="button"
         role="menuitemradio"
         aria-checked={activeView === 'webcam' && webcamLayoutMode === 'tile'}
-        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'tile' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'tile' ? styles.viewModeMenuItemActive : ''}`}
         onClick={() => handleWebcamLayoutSelect('tile')}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -1356,7 +1354,7 @@ export function KloudMeetToolbar({
         type="button"
         role="menuitemradio"
         aria-checked={activeView === 'webcam' && webcamLayoutMode === 'spotlight'}
-        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? styles.viewModeMenuItemActive : ''}`}
         onClick={() => handleWebcamLayoutSelect('spotlight')}
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
@@ -1424,9 +1422,8 @@ export function KloudMeetToolbar({
         type="button"
         role="menuitemradio"
         aria-checked={activeView === 'liveDoc'}
-        className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''} ${!canSwitchViews ? styles.viewModeMenuItemDisabled : ''}`}
+        className={`${styles.viewModeMenuItem} ${activeView === 'liveDoc' ? styles.viewModeMenuItemActive : ''}`}
         onClick={() => {
-          if (!canSwitchViews) return;
           handleLiveDocTabClick();
           closeViewModeMenu();
         }}
@@ -1503,7 +1500,6 @@ export function KloudMeetToolbar({
 
   /** 手机端合并视图按钮（Web 已拆分，勿用于 desktop） */
   const renderViewModeControl = () => {
-    if (!canShowOperatorMenus) return null;
     return (
       <div
         className={styles.viewModeBtnWrap}
@@ -1543,12 +1539,10 @@ export function KloudMeetToolbar({
    */
   const renderDesktopViewSwitch = () => {
     const showOperatorSegments = canSwitchViews && canShowOperatorMenus;
-    const lockedTip = tr('toolbar.onlyHostSwitchesView', 'Only the host can switch what everyone sees');
-    const webcamLabel = showOperatorSegments
-      ? webcamLayoutMode === 'spotlight'
-        ? t('toolbar.webcamSpotlight')
-        : t('toolbar.webcamTile')
-      : lockedTip;
+    // Attendees switch only their own screen; the host's next switch brings everyone back
+    const ownViewTip = tr('toolbar.switchOwnView', 'Switch your own view');
+    const webcamLabel =
+      webcamLayoutMode === 'spotlight' ? t('toolbar.webcamSpotlight') : t('toolbar.webcamTile');
     const shareConflict = hasScreenShare && !screenShareActive;
     const shareTip = shareConflict
       ? t('toolbar.shareConflictTitle')
@@ -1556,51 +1550,41 @@ export function KloudMeetToolbar({
         ? `${t('toolbar.shareScreen')} · ${t('toolbar.sharing')}`
         : t('toolbar.shareScreen');
     const webcamLayoutLabel = tr('toolbar.webcamLayout', 'Webcam layout');
-    const lockedClass = (view: ViewMode) =>
-      !showOperatorSegments && activeView !== view ? styles.segLocked : '';
     return (
       <div className={styles.viewSwitch} role="group" aria-label={t('toolbar.selectViewLayout')}>
-        {/* As before the redesign: LiveDoc and Webcam are only shown to people who can switch
-            what everyone sees; everyone else gets Screen share alone */}
-        {showOperatorSegments && (
-        <>
+        {/* Everyone sees LiveDoc and Webcam. Host / co-host / presenter switch what everyone sees;
+            attendees switch only their own screen until the host switches again */}
         <button
           type="button"
-          className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''} ${lockedClass('liveDoc')}`}
+          className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''}`}
           onClick={() => {
-            if (!showOperatorSegments) return;
             closeViewModeMenu();
             handleLiveDocTabClick();
           }}
           aria-pressed={activeView === 'liveDoc'}
-          aria-disabled={!showOperatorSegments || undefined}
-          aria-label={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${lockedTip}`}
-          data-tip={showOperatorSegments ? t('toolbar.liveDocView') : lockedTip}
+          aria-label={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${ownViewTip}`}
+          data-tip={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${ownViewTip}`}
         >
           <IconDoc />
           <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
         </button>
 
         <div
-          className={`${styles.segSplit} ${activeView === 'webcam' ? styles.segActive : ''} ${lockedClass('webcam')}`}
+          className={`${styles.segSplit} ${activeView === 'webcam' ? styles.segActive : ''}`}
           data-view-mode-menu-anchor="true"
         >
           <button
             type="button"
             className={`${styles.seg} ${styles.segMain}`}
-            onClick={() => {
-              if (!showOperatorSegments) return;
-              handleDesktopWebcamClick();
-            }}
+            onClick={handleDesktopWebcamClick}
             aria-pressed={activeView === 'webcam'}
-            aria-disabled={!showOperatorSegments || undefined}
-            aria-label={showOperatorSegments ? webcamLabel : `${t('toolbar.webcam')} · ${lockedTip}`}
-            data-tip={webcamLabel}
+            aria-label={showOperatorSegments ? webcamLabel : `${webcamLabel} · ${ownViewTip}`}
+            data-tip={showOperatorSegments ? webcamLabel : `${webcamLabel} · ${ownViewTip}`}
           >
             {webcamLayoutMode === 'spotlight' ? <IconSpotlight /> : <IconTile />}
             <span className={styles.segLabel}>{t('toolbar.webcam')}</span>
           </button>
-          {(showOperatorSegments || galleryPrefs) && (
+          {(
             <button
               type="button"
               className={styles.segChevron}
@@ -1617,21 +1601,18 @@ export function KloudMeetToolbar({
               <IconChevronUp />
             </button>
           )}
-          {(showOperatorSegments || galleryPrefs) && viewModeMenuOpen && (
+          {viewModeMenuOpen && (
             <div
               className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`}
               role="menu"
               aria-label={webcamLayoutLabel}
             >
-              {showOperatorSegments && renderWebcamLayoutMenuItems()}
-              {showOperatorSegments && galleryPrefs && <div className={styles.menuDivider} role="separator" />}
+              {renderWebcamLayoutMenuItems()}
+              {galleryPrefs && <div className={styles.menuDivider} role="separator" />}
               {renderGalleryMenuItems()}
             </div>
           )}
         </div>
-
-        </>
-        )}
 
         <button
           type="button"
@@ -1993,8 +1974,8 @@ export function KloudMeetToolbar({
             {/* 3. 视图模式（活文档 / Webcam Tile·Spotlight / 屏幕共享合并）— 仅 host / co-host / presenter */}
             {renderViewModeControl()}
 
-            {/* 4. Screen Share — 非操作者仍单独显示 */}
-            {!canShowOperatorMenus && (
+            {/* 4. Screen Share — now inside everyone's view menu above; kept off the bar */}
+            {false && (
               <button
                 className={`${styles.mobileBtn} ${activeView === 'shareScreen' || screenShareActive ? styles.active : ''}`}
                 onClick={handleShareScreenClick}
@@ -2830,13 +2811,13 @@ function ActiveSheetContent({
 
       {activeSheet === 'views' && (
         <>
-          {canShowOperatorMenus && (
+          {(
             <button className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`} onClick={() => { onViewChange('liveDoc'); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
               {t('toolbar.liveDocCanvas')}
             </button>
           )}
-          {canShowOperatorMenus && (
+          {(
             <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
               {t('toolbar.webcamGrid')}

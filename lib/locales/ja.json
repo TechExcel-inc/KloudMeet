@@ -335,6 +335,7 @@
   "toolbar.webcamTile": "ウェブカメラ · タイル",
   "toolbar.webcamSpotlight": "ウェブカメラ · スポットライト",
   "toolbar.shareScreen": "画面共有",
+  "toolbar.switchOwnView": "自分の画面だけ切り替え",
   "toolbar.design": "デザイン",
   "toolbar.designTip": "全員にリンクを表示（Figma・Web ページ）",
   "design.presenter": "発表者",
