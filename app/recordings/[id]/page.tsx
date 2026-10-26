@@ -1654,6 +1654,8 @@ export default function ReplayPage() {
           recordingKey={id}
           initial={recording.transcribe ?? IDLE_TRANSCRIBE}
           onDone={handleTranscribeDone}
+          // LiveDoc Full replays play without a transcript: offer it, don't block the stage
+          startCollapsed={!!livedoc}
         />
       )}
 
