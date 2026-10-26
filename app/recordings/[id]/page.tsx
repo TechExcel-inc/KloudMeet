@@ -12,6 +12,12 @@ import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
+import {
+  RecordingAccessBlocked,
+  RecordingRequestsBar,
+  parseRecordingBlocked,
+  type RecordingBlocked,
+} from '@/lib/RecordingAccessCards';
 import s from '@/styles/Replay.module.css';
 
 /* ─── Types ──────────────────────────────────────────────── */
@@ -980,6 +986,8 @@ export default function ReplayPage() {
   const [data, setData] = useState<ReplayData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  /** Signed in but not allowed yet: ask the host (Protected) or attendees only (Private). */
+  const [blocked, setBlocked] = useState<RecordingBlocked | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [playing, setPlaying] = useState(false);
   // null = 还没手动选过：有纪要时先看纪要，否则看转写
@@ -1056,7 +1064,9 @@ export default function ReplayPage() {
           return;
         }
         if (res.status === 403) {
-          setError(t('replay.noAccess'));
+          const why = parseRecordingBlocked(await res.json().catch(() => null));
+          if (why) setBlocked(why);
+          else setError(t('replay.noAccess'));
           return;
         }
         if (!res.ok) {
@@ -1158,6 +1168,14 @@ export default function ReplayPage() {
   }
 
   /* ── Error ── */
+  if (blocked) {
+    return (
+      <div className={s.center}>
+        <RecordingAccessBlocked recordingKey={id} blocked={blocked} />
+      </div>
+    );
+  }
+
   if (error || !data?.recording.streamUrl) {
     return (
       <div className={s.center}>
@@ -1480,6 +1498,13 @@ export default function ReplayPage() {
           </div>
         </div>
       </header>
+
+      {/* Host: people asking to watch (Protected meetings) */}
+      {recording.canManage && (
+        <div style={{ flex: 'none', width: '100%', maxWidth: 1600, margin: '12px auto 0', padding: '0 20px' }}>
+          <RecordingRequestsBar recordingKey={id} />
+        </div>
+      )}
 
       {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>

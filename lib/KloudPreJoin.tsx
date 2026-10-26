@@ -42,6 +42,11 @@ export interface KloudPreJoinProps {
   children?: React.ReactNode;
   /** Small note rendered after the device chips, beside the camera (e.g. "No one else is here yet"). */
   nobodyHereText?: React.ReactNode;
+  /**
+   * Replaces the right column (heading, name, join button) while the camera preview stays —
+   * e.g. "Sign in to join" or "Asking to join…" (lib/MeetingAccessCards.tsx).
+   */
+  panelOverride?: React.ReactNode;
 }
 
 type DeviceStatus = 'off' | 'starting' | 'live' | 'error';
@@ -242,6 +247,7 @@ export function KloudPreJoin({
   beforeName,
   children,
   nobodyHereText,
+  panelOverride,
 }: KloudPreJoinProps) {
   const tf = useTextWithFallback();
   const canUseMediaDevices =
@@ -647,68 +653,72 @@ export function KloudPreJoin({
       </section>
 
       {/* ── Right: heading, name, options, join ── */}
-      <section className={styles.panel}>
-        {(title || subtitle) && (
-          <div className={styles.heading}>
-            {title && <h1 className={styles.title}>{title}</h1>}
-            {subtitle &&
-              (subtitleIsNotice ? (
-                <p className={styles.notice} role="status">
-                  {subtitle}
-                </p>
-              ) : (
-                <p className={styles.subtitle}>{subtitle}</p>
-              ))}
-          </div>
-        )}
-
-        {/* Who is in the room, above the host's meeting settings */}
-        {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
-
-        {/* Injected settings above the name (host meeting settings) */}
-        {beforeName}
-
-        {/* Name field */}
-        <div className={styles.rowField}>
-          <label className={styles.rowLabel} htmlFor="kloud-prejoin-username">
-            {userLabel}
-          </label>
-          <input
-            id="kloud-prejoin-username"
-            className={styles.rowInput}
-            type="text"
-            defaultValue={username}
-            autoComplete="off"
-            aria-required="true"
-            aria-describedby={!isValid ? 'kloud-prejoin-join-reason' : undefined}
-            onChange={(e) => setUsername(e.target.value)}
-          />
-        </div>
-
-        {/* Injected children: host options */}
-        {children}
-
-        {/* Join button */}
-        <div className={styles.joinArea}>
-          <button
-            type="submit"
-            className={styles.joinBtn}
-            onClick={handleSubmit}
-            disabled={!isValid || joinButtonDisabled}
-            aria-busy={joinButtonDisabled || undefined}
-          >
-            {joinLabel}
-          </button>
-          {!isValid && (
-            <span id="kloud-prejoin-join-reason" className={styles.joinReason}>
-              {nameRequiredLabel}
-            </span>
+      {panelOverride ? (
+        <section className={styles.panel}>{panelOverride}</section>
+      ) : (
+        <section className={styles.panel}>
+          {(title || subtitle) && (
+            <div className={styles.heading}>
+              {title && <h1 className={styles.title}>{title}</h1>}
+              {subtitle &&
+                (subtitleIsNotice ? (
+                  <p className={styles.notice} role="status">
+                    {subtitle}
+                  </p>
+                ) : (
+                  <p className={styles.subtitle}>{subtitle}</p>
+                ))}
+            </div>
           )}
-          {joinFooter}
-        </div>
 
-        {footer}
-      </section>
+          {/* Who is in the room, above the host's meeting settings */}
+          {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
+
+          {/* Injected settings above the name (host meeting settings) */}
+          {beforeName}
+
+          {/* Name field */}
+          <div className={styles.rowField}>
+            <label className={styles.rowLabel} htmlFor="kloud-prejoin-username">
+              {userLabel}
+            </label>
+            <input
+              id="kloud-prejoin-username"
+              className={styles.rowInput}
+              type="text"
+              defaultValue={username}
+              autoComplete="off"
+              aria-required="true"
+              aria-describedby={!isValid ? 'kloud-prejoin-join-reason' : undefined}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          </div>
+
+          {/* Injected children: host options */}
+          {children}
+
+          {/* Join button */}
+          <div className={styles.joinArea}>
+            <button
+              type="submit"
+              className={styles.joinBtn}
+              onClick={handleSubmit}
+              disabled={!isValid || joinButtonDisabled}
+              aria-busy={joinButtonDisabled || undefined}
+            >
+              {joinLabel}
+            </button>
+            {!isValid && (
+              <span id="kloud-prejoin-join-reason" className={styles.joinReason}>
+                {nameRequiredLabel}
+              </span>
+            )}
+            {joinFooter}
+          </div>
+
+          {footer}
+        </section>
+      )}
     </div>
   );
 }

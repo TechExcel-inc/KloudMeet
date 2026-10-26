@@ -81,7 +81,7 @@ export function formatLeadTime(minutes: number): string {
   return `${minutes} minute${minutes === 1 ? '' : 's'}`;
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -141,9 +141,14 @@ function meetingRows(meeting: MeetingForEmail): Array<[string, string]> {
   return rows;
 }
 
-/** Invitation (or "time changed" update) for one attendee. */
-export function invitationEmail(to: string, meeting: MeetingForEmail, origin: string, kind: InviteKind) {
-  const joinUrl = meetingJoinUrl(origin, meeting.roomName);
+/** Invitation (or "time changed" update) for one attendee; `joinUrl` is their own link. */
+export function invitationEmail(
+  to: string,
+  meeting: MeetingForEmail,
+  origin: string,
+  kind: InviteKind,
+  joinUrl = meetingJoinUrl(origin, meeting.roomName),
+) {
   const links = buildCalendarLinks(meeting, origin);
   const title = meeting.title || 'Kloud Meet meeting';
   const heading = kind === 'new' ? "You're invited" : 'Meeting time updated';
@@ -211,9 +216,14 @@ export function cancellationEmail(to: string, meeting: MeetingForEmail, origin: 
   return { to, tag: 'meeting-cancel', subject: `Canceled: ${title}`, text, html };
 }
 
-/** Reminder sent `offsetMinutes` before the start. */
-export function reminderEmail(to: string, meeting: MeetingForEmail, origin: string, offsetMinutes: number) {
-  const joinUrl = meetingJoinUrl(origin, meeting.roomName);
+/** Reminder sent `offsetMinutes` before the start; `joinUrl` is the attendee's own link. */
+export function reminderEmail(
+  to: string,
+  meeting: MeetingForEmail,
+  origin: string,
+  offsetMinutes: number,
+  joinUrl = meetingJoinUrl(origin, meeting.roomName),
+) {
   const title = meeting.title || 'Kloud Meet meeting';
   const lead = formatLeadTime(offsetMinutes);
   const intro = `This meeting starts in ${lead}.`;
@@ -233,5 +243,27 @@ export function reminderEmail(to: string, meeting: MeetingForEmail, origin: stri
     subject: `Reminder: ${title} starts in ${lead}`,
     text,
     html: layout(`Starts in ${lead}`, intro, rows, joinUrl, 'Join from a computer, phone or tablet — no download needed in the browser.'),
+  };
+}
+
+/** "Join now": the host invited this person from the pre-join page of a meeting starting now. */
+export function joinNowEmail(
+  to: string,
+  meeting: { title?: string | null; roomName: string; hostName?: string | null },
+  joinUrl: string,
+) {
+  const title = meeting.title || 'Kloud Meet meeting';
+  const intro = `${meeting.hostName || 'Your host'} invited you to join a Kloud Meet meeting now.`;
+  const rows: Array<[string, string]> = [['Meeting', title]];
+  if (meeting.hostName) rows.push(['Host', meeting.hostName]);
+  rows.push(['Meeting ID', meeting.roomName]);
+  const footer = 'This link is for you only. Join from a computer, phone or tablet — no download needed in the browser.';
+  const text = [intro, '', ...rows.map(([k, v]) => `${k}: ${v}`), '', `Join meeting: ${joinUrl}`, '', footer].join('\n');
+  return {
+    to,
+    tag: 'meeting-invite-now',
+    subject: `Join now: ${title}`,
+    text,
+    html: layout('Join the meeting', intro, rows, joinUrl, footer),
   };
 }

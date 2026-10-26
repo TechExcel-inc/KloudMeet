@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
+import { parseAccessLevel } from '@/lib/meetingAccess';
 
 export async function POST(request: NextRequest) {
   const member = await requireSession(request);
@@ -18,12 +19,17 @@ export async function POST(request: NextRequest) {
       timezone,
       status,
     } = body;
+    // Schedule dialog → Access; left out, the column default (Protected) applies.
+    const accessLevel = parseAccessLevel(body.accessLevel);
 
     if (!roomName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const accountId = await resolveMemberAccountId(member.id);
+    if (accessLevel === 'PRIVATE' && !accountId) {
+      return NextResponse.json({ error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' }, { status: 400 });
+    }
 
     const meeting = await prisma.meeting.create({
       data: {
@@ -36,6 +42,7 @@ export async function POST(request: NextRequest) {
         durationMinutes,
         timezone,
         status: status || 'ACTIVE',
+        ...(accessLevel ? { accessLevel } : {}),
       },
     });
 

@@ -6,11 +6,13 @@ import { prisma } from './db';
 import { sendMail } from './mail';
 import { toCalendarMeeting } from './calendar/server';
 import { isCanceledStatus } from './calendar/ics';
+import { ensureInviteJoinTokens, inviteJoinUrl } from './meetingInviteLinks';
 import {
   MAX_REMINDER_MINUTES,
   cancellationEmail,
   dueReminderOffsets,
   invitationEmail,
+  joinNowEmail,
   normalizeEmails,
   parseReminderOffsets,
   reminderEmail,
@@ -55,7 +57,14 @@ export async function getInviteSettings(meetingId: number): Promise<InviteSettin
  */
 export async function saveInviteSettings(
   meetingId: number,
-  input: { emails?: unknown; inviteEmails?: unknown; reminderEmails?: unknown; reminderOffsets?: unknown },
+  input: {
+    emails?: unknown;
+    inviteEmails?: unknown;
+    reminderEmails?: unknown;
+    reminderOffsets?: unknown;
+    /** Pre-join invite box: email attendees who haven't been invited a "join now" link. */
+    notifyNow?: unknown;
+  },
   origin: string,
 ): Promise<InviteSettings & { sent: number; failed: string[] }> {
   const data: { inviteEmails?: boolean; reminderEmails?: boolean; reminderOffsets?: number[] } = {};
@@ -73,13 +82,41 @@ export async function saveInviteSettings(
         skipDuplicates: true,
       }),
     ]);
+    await ensureInviteJoinTokens(meetingId);
   }
 
-  const result = await sendPendingInvitations(meetingId, origin);
+  const result =
+    input.notifyNow === true
+      ? await sendJoinNowInvitations(meetingId, origin)
+      : await sendPendingInvitations(meetingId, origin);
   return { ...(await getInviteSettings(meetingId)), ...result };
 }
 
+/** Pre-join invite box: a meeting starting now. Emails attendees not invited yet, once each. */
+async function sendJoinNowInvitations(meetingId: number, origin: string): Promise<{ sent: number; failed: string[] }> {
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: meetingId },
+    include: { invitees: { where: { invitedAt: null } }, createdByMember: hostSelect },
+  });
+  const failed: string[] = [];
+  if (!meeting || meeting.deletedAt || isClosed(meeting.status)) return { sent: 0, failed };
+  const hostName = meeting.createdByMember?.fullName || meeting.createdByMember?.username || null;
+  let sent = 0;
+  for (const invitee of meeting.invitees) {
+    const joinUrl = inviteJoinUrl(origin, meeting.roomName, invitee.joinToken);
+    const result = await sendMail(joinNowEmail(invitee.email, { title: meeting.title, roomName: meeting.roomName, hostName }, joinUrl));
+    if (!result.ok) {
+      failed.push(invitee.email);
+      continue;
+    }
+    sent += 1;
+    await prisma.meetingInvitee.update({ where: { id: invitee.id }, data: { invitedAt: new Date() } });
+  }
+  return { sent, failed };
+}
+
 async function sendPendingInvitations(meetingId: number, origin: string): Promise<{ sent: number; failed: string[] }> {
+  await ensureInviteJoinTokens(meetingId);
   const meeting = await prisma.meeting.findUnique({
     where: { id: meetingId },
     include: { invitees: true, createdByMember: hostSelect },
@@ -94,7 +131,8 @@ async function sendPendingInvitations(meetingId: number, origin: string): Promis
   for (const invitee of meeting.invitees) {
     if (invitee.invitedFor && invitee.invitedFor.getTime() === scheduledFor.getTime()) continue;
     const kind = invitee.invitedAt ? 'updated' : 'new';
-    const result = await sendMail(invitationEmail(invitee.email, calendar, origin, kind));
+    const joinUrl = inviteJoinUrl(origin, meeting.roomName, invitee.joinToken);
+    const result = await sendMail(invitationEmail(invitee.email, calendar, origin, kind, joinUrl));
     if (!result.ok) {
       failed.push(invitee.email);
       continue;
@@ -163,6 +201,12 @@ export async function sendDueReminders(origin: string, now = new Date()): Promis
 
     const calendar = { ...toCalendarMeeting({ ...meeting, scheduledFor }), scheduledFor };
     const recipients = normalizeEmails([...meeting.invitees.map((i) => i.email), meeting.createdByMember?.email]);
+    // Attendees get their own join link; the host the plain one.
+    if (meeting.invitees.some((i) => !i.joinToken)) {
+      await ensureInviteJoinTokens(meeting.id);
+      meeting.invitees = await prisma.meetingInvitee.findMany({ where: { meetingId: meeting.id } });
+    }
+    const tokenByEmail = new Map(meeting.invitees.map((i) => [i.email.toLowerCase(), i.joinToken]));
     for (const offsetMinutes of due) {
       // Log first: the unique key stops a second cron run from sending the same reminder.
       try {
@@ -172,7 +216,8 @@ export async function sendDueReminders(origin: string, now = new Date()): Promis
       }
       meetingCount += 1;
       for (const to of recipients) {
-        const result = await sendMail(reminderEmail(to, calendar, origin, offsetMinutes));
+        const joinUrl = inviteJoinUrl(origin, meeting.roomName, tokenByEmail.get(to) ?? null);
+        const result = await sendMail(reminderEmail(to, calendar, origin, offsetMinutes, joinUrl));
         if (result.ok) emails += 1;
         else console.error(`[meeting-reminders] ${meeting.roomName}: send failed (${result.provider})`);
       }

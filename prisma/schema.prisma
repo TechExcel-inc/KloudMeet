@@ -119,7 +119,11 @@ model Meeting {
   reminderEmails          Boolean                  @default(true)
   /// Minutes before the start to send reminders, e.g. [1440, 480]; null = the default
   reminderOffsets         Json?
+  /// Who may join and watch the recordings: PUBLIC | PROTECTED | PRIVATE (prisma/add_meeting_access_levels.sql).
+  /// NULL = a meeting from before access levels: anyone with the link joins, recordings keep the old rule.
+  accessLevel             String?                  @default("PROTECTED") @db.VarChar(16)
   invitees                MeetingInvitee[]
+  joinRequests            MeetingJoinRequest[]
   reminderLogs            MeetingReminderLog[]
   account                 KloudMeetAccount?        @relation(fields: [accountId], references: [id], map: "Meeting_accountId_fkey")
   createdByMember         TeamMember               @relation(fields: [createdByMemberId], references: [id], map: "Meeting_createdByMemberId_fkey")
@@ -573,12 +577,34 @@ model MeetingInvitee {
   /// When the latest invitation was sent, and for which start time (a new time re-sends it)
   invitedAt  DateTime?
   invitedFor DateTime?
+  /// This attendee's own join link (/rooms/<room>?invite=<joinToken>)
+  joinToken  String?   @unique(map: "MeetingInvitee_joinToken_key") @db.VarChar(64)
   createdAt  DateTime  @default(now())
   meeting    Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
 
   @@unique([meetingId, email])
   @@index([meetingId])
   @@map("MeetingInvitee")
+}
+
+/// Someone outside the invite list asking to join a Protected meeting; the host or a co-host answers.
+model MeetingJoinRequest {
+  id                  Int       @id @default(autoincrement())
+  meetingId           Int
+  teamMemberId        Int
+  displayName         String
+  /// PENDING | ADMITTED | DENIED | CANCELED
+  status              String    @default("PENDING") @db.VarChar(16)
+  requestedAt         DateTime  @default(now())
+  /// The waiting page polls; requests not seen for a while are no longer shown to the host
+  lastSeenAt          DateTime  @default(now())
+  respondedAt         DateTime?
+  respondedByMemberId Int?
+  meeting             Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingJoinRequest_meetingId_fkey")
+
+  @@unique([meetingId, teamMemberId], map: "MeetingJoinRequest_meetingId_teamMemberId_key")
+  @@index([meetingId, status], map: "MeetingJoinRequest_meetingId_status_idx")
+  @@map("MeetingJoinRequest")
 }
 
 /// One row per reminder sent, so each reminder goes out once per start time

@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { Recording } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import {
-  canAccessRecording,
   canManageRecording,
   forbidden,
   isAuthError,
@@ -11,6 +10,7 @@ import {
   unauthorized,
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
+import { evaluateRecordingView } from '@/lib/meetingAccess.server';
 
 export type RecordingVisibility = 'PRIVATE' | 'PUBLIC';
 
@@ -78,36 +78,65 @@ export function recordingSharePayload(recording: { shareKey: string; visibility:
 }
 
 /**
- * PUBLIC: anyone with the key.
- * PRIVATE: logged-in member who can access the recording.
+ * Who may watch follows the meeting's access level (lib/meetingAccess.ts → decideRecordingView):
+ * PUBLIC recordings (the host's "Anyone with the link") and Public meetings: anyone.
+ * Otherwise sign in; then attendees, the recorder and host; for Protected meetings also the
+ * company and invitees; everyone else asks the host (Private: attendees only).
+ * 403 bodies carry `code` (REQUEST_ACCESS | ATTENDEES_ONLY) for the replay page.
  */
 export async function authorizeRecordingView(
   req: NextRequest,
   recording: Recording,
-  lookupKey?: string,
 ): Promise<NextResponse | { memberId: number | null }> {
   if (recording.deletedAt) {
     return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
   }
 
   const member = await getSessionTeamMember(req);
-  const openedByShareKey = Boolean(
-    member &&
-    lookupKey &&
-    !/^\d+$/.test(lookupKey) &&
-    recording.shareKey &&
-    recording.shareKey === lookupKey,
-  );
+  const decision = await evaluateRecordingView(recording, member);
+  if (decision.kind === 'watch') return { memberId: member?.id ?? null };
+  if (decision.kind === 'sign_in') return unauthorized();
 
-  if (recording.visibility === 'PUBLIC' || openedByShareKey) {
-    return { memberId: member?.id ?? null };
+  // The replay page explains why: the meeting's title, host and date (never who attended),
+  // and whether this person's request is already waiting.
+  const meeting = await prisma.meeting.findUnique({
+    where: { id: recording.meetingId },
+    select: {
+      title: true,
+      startedAt: true,
+      actualStartedAt: true,
+      createdByMember: { select: { fullName: true, username: true } },
+    },
+  });
+  const card = {
+    title: meeting?.title ?? null,
+    hostName: meeting?.createdByMember?.fullName || meeting?.createdByMember?.username || null,
+    date: (meeting?.actualStartedAt ?? meeting?.startedAt ?? recording.createdAt).toISOString(),
+  };
+  const signedInAs = member?.email ?? null;
+  if (decision.kind === 'request') {
+    const latest = member?.email
+      ? await prisma.recordingAccessRequest.findFirst({
+          where: { recordingId: recording.id, meetUser: { email: member.email.trim().toLowerCase() } },
+          orderBy: { id: 'desc' },
+          select: { status: true },
+        })
+      : null;
+    return NextResponse.json(
+      {
+        error: 'You do not have access to this recording',
+        code: 'REQUEST_ACCESS',
+        requestStatus: latest?.status ?? null,
+        meeting: card,
+        signedInAs,
+      },
+      { status: 403 },
+    );
   }
-
-  if (!member) return unauthorized();
-
-  const allowed = await canAccessRecording(member.id, recording);
-  if (!allowed) return forbidden('You do not have access to this recording');
-  return { memberId: member.id };
+  return NextResponse.json(
+    { error: 'Only people who attended this meeting can watch it', code: 'ATTENDEES_ONLY', meeting: card, signedInAs },
+    { status: 403 },
+  );
 }
 
 export async function loadManagedRecording(
@@ -145,7 +174,7 @@ export async function loadAccessibleRecording(
     return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
   }
 
-  const access = await authorizeRecordingView(req, recording, key);
+  const access = await authorizeRecordingView(req, recording);
   if (isRecordingResponse(access) || access.memberId === null) {
     return isRecordingResponse(access) ? access : unauthorized();
   }

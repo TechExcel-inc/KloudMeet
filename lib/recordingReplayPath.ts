@@ -4,9 +4,9 @@ export function recordingReplayPath(shareKey: string): string {
   return `/recordings/${encodeURIComponent(shareKey)}`;
 }
 
-/** Only allow a same-origin replay return path. */
+/** Only allow a same-origin return path: a replay, or a meeting (sign in to join). */
 export function safeReplayNext(raw: string | null): string | null {
-  if (!raw || !raw.startsWith('/recordings/')) return null;
+  if (!raw || !(raw.startsWith('/recordings/') || /^\/rooms\/[^/]+$/.test(raw))) return null;
   if (raw.includes('..') || raw.includes('\\') || raw.includes('//')) return null;
   if (raw.includes('?') || raw.includes('#')) return null;
   return raw;

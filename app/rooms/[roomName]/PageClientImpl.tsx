@@ -15,6 +15,23 @@ import { PrejoinMeetingShareLink } from '@/lib/PrejoinMeetingShareLink';
 import { PrejoinPersonalRoomCheckbox } from '@/lib/PrejoinPersonalRoomCheckbox';
 import { PrejoinAttendeeShareCheckbox } from '@/lib/PrejoinAttendeeShareCheckbox';
 import { PrejoinAccessLevelSelect, type AccessLevel } from '@/lib/PrejoinAccessLevelSelect';
+import {
+  AccessRefusedPage,
+  AccessSignInCard,
+  AccessWaitingCard,
+  PrivateInviteBox,
+  type InviteChip,
+} from '@/lib/MeetingAccessCards';
+import {
+  appendJoinCredentials,
+  cancelKnock,
+  fetchMeetingAccess,
+  pollKnock,
+  rememberInviteFromUrl,
+  sendKnock,
+  signInHref,
+  type MeetingAccessState,
+} from '@/lib/meetingAccessClient';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
 import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
@@ -78,7 +95,7 @@ import { getInitials } from '@/lib/getInitials';
 import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { VideoConferenceComponent } from './VideoConferenceComponent';
-import { connectionDetailsFetchInit, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
+import { connectionDetailsFetchInit, authHeaders, authFetch, getKloudSessionBearer } from '@/lib/kloudSession';
 import { ActiveMeetingConflictModal } from '@/lib/ActiveMeetingConflictModal';
 import { endMeetingByHost, type ActiveMeetingInfo } from '@/lib/meetingStartGuard';
 import { fetchPersonalRoomResolve, getResolvedLiveRoomName } from '@/lib/personalRoomResolveClient';
@@ -117,6 +134,12 @@ export function PageClientImpl(props: {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const searchParams = useSearchParams();
   const isBot = searchParams?.get('isBot') === 'true';
+  // An attendee's own link (?invite=): kept for this tab before the address bar is cleaned.
+  const inviteCapturedRef = React.useRef(false);
+  if (!inviteCapturedRef.current && typeof window !== 'undefined') {
+    inviteCapturedRef.current = true;
+    rememberInviteFromUrl();
+  }
 
   const [preJoinChoices, setPreJoinChoices] = React.useState<LocalUserChoices | undefined>(
     undefined,
@@ -196,6 +219,26 @@ export function PageClientImpl(props: {
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
   const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
+  /** The host changed the dropdown: the level loaded from the server no longer overrides it. */
+  const accessLevelTouchedRef = React.useRef(false);
+  /** Who may join (lib/meetingAccess.ts), from /api/meetings/[room]/access; null until loaded. */
+  const [access, setAccess] = React.useState<MeetingAccessState | null>(null);
+  /** Private: people the host invites from the pre-join page. */
+  const [privateInvitees, setPrivateInvitees] = React.useState<InviteChip[]>([]);
+  const privateInviteesTouchedRef = React.useRef(false);
+  const privateInviteesLoadedRef = React.useRef(false);
+  /** Waiting for the host after "Ask to join". */
+  const [knock, setKnock] = React.useState<{
+    room: string;
+    values: LocalUserChoices;
+    hostPresent: boolean | null;
+    participantCount: number | null;
+  } | null>(null);
+  /** The host let this person in: joining now must not knock again. */
+  const admittedRef = React.useRef(false);
+  /** Can't get in: a Private meeting without an invitation, or the host said no. */
+  const [refusal, setRefusal] = React.useState<{ reason: 'NOT_INVITED' | 'DENIED'; retryAt: number } | null>(null);
+  const [refusalNow, setRefusalNow] = React.useState(() => Date.now());
   /** One host, one meeting: the server refused to start this one while another of theirs is live. */
   const [hostConflict, setHostConflict] = React.useState<{
     activeMeeting: ActiveMeetingInfo;
@@ -425,6 +468,74 @@ export function PageClientImpl(props: {
 
   const isHost = isMeetingCreator;
 
+  /** The meeting this page would join (a personal ID resolves to its owner's live meeting). */
+  const accessRoom = !isMeetingCreator && resolvedLiveRoom ? resolvedLiveRoom : effectiveRoomName;
+  const accessRequestRef = React.useRef(0);
+  const loadAccess = React.useCallback(async () => {
+    // Only the latest load counts: a slow earlier answer must not overwrite it.
+    const requestId = ++accessRequestRef.current;
+    let state = await fetchMeetingAccess(accessRoom);
+    for (let attempt = 1; !state && attempt <= 2 && requestId === accessRequestRef.current; attempt++) {
+      await new Promise((resolve) => window.setTimeout(resolve, attempt * 1500));
+      state = await fetchMeetingAccess(accessRoom);
+    }
+    if (requestId !== accessRequestRef.current) return state;
+    setAccess(state);
+    setRefusal(
+      state?.decision === 'refused'
+        ? { reason: state.reason ?? 'NOT_INVITED', retryAt: Date.now() + (state.retryAfterMs ?? 0) }
+        : null,
+    );
+    return state;
+  }, [accessRoom]);
+
+  React.useEffect(() => {
+    if (!resolveReady || isBot || personalRoomSwitching) return;
+    void loadAccess();
+  }, [resolveReady, isBot, personalRoomSwitching, loadAccess, currentUser]);
+
+  // Host: the dropdown starts at the meeting's saved level (a meeting from before access levels
+  // works as Public).
+  React.useEffect(() => {
+    if (!access?.isHost || accessLevelTouchedRef.current) return;
+    setAccessLevel(access.level ? (access.level.toLowerCase() as AccessLevel) : 'public');
+  }, [access]);
+
+  const handleAccessLevelChange = React.useCallback((level: AccessLevel) => {
+    accessLevelTouchedRef.current = true;
+    setAccessLevel(level);
+  }, []);
+
+  const handlePrivateInviteesChange = React.useCallback((next: InviteChip[]) => {
+    privateInviteesTouchedRef.current = true;
+    setPrivateInvitees(next);
+  }, []);
+
+  // Private: start from the meeting's attendee list (a scheduled meeting may have one).
+  React.useEffect(() => {
+    if (!isHost || accessLevel !== 'private' || privateInviteesLoadedRef.current) return;
+    privateInviteesLoadedRef.current = true;
+    authFetch(`/api/meetings/${encodeURIComponent(effectiveRoomName)}/invitees`, { headers: authHeaders() })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (privateInviteesTouchedRef.current || !Array.isArray(data?.emails)) return;
+        setPrivateInvitees(data.emails.map((email: string) => ({ email })));
+      })
+      .catch(() => undefined);
+  }, [isHost, accessLevel, effectiveRoomName]);
+
+  // "Ask again" counts down to the end of the one-a-minute limit.
+  React.useEffect(() => {
+    setRefusalNow(Date.now());
+    if (!refusal || refusal.retryAt <= Date.now()) return;
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setRefusalNow(now);
+      if (now >= refusal.retryAt) window.clearInterval(id);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [refusal]);
+
   const handleParticipantLiveDocChange = React.useCallback((show: boolean) => {
     setParticipantLiveDocShow(show);
   }, []);
@@ -609,10 +720,34 @@ export function PageClientImpl(props: {
 
   const preJoinButtonText = React.useMemo(() => {
     if (personalRoomSwitching) return t('common.loading');
+    if (!isHost && access?.decision === 'knock') return t('access.askToJoin');
     if (isHost && !isActive) return t('prejoin.startNow');
     if (isHost && isActive) return t('prejoin.joinAsHost');
     return t('prejoin.joinNow');
-  }, [isHost, isActive, personalRoomSwitching, t]);
+  }, [isHost, isActive, personalRoomSwitching, access?.decision, t]);
+
+  /** Ask the host to let this person in; 'admitted' when no waiting is needed. */
+  const startKnock = React.useCallback(
+    async (room: string, values: LocalUserChoices): Promise<'admitted' | 'waiting' | 'blocked'> => {
+      const result = await sendKnock(room, values.username);
+      if (result.status === 'ADMITTED') {
+        admittedRef.current = true;
+        setAccess((a) => (a ? { ...a, decision: 'join' } : a));
+        return 'admitted';
+      }
+      if (result.status === 'PENDING') {
+        setKnock({ room, values, hostPresent: null, participantCount: null });
+        return 'waiting';
+      }
+      if (result.tooSoonMs) {
+        setRefusal({ reason: 'DENIED', retryAt: Date.now() + result.tooSoonMs });
+        return 'blocked';
+      }
+      await loadAccess();
+      return 'blocked';
+    },
+    [loadAccess],
+  );
 
   const handlePreJoinSubmit = React.useCallback(
     async (values: LocalUserChoices) => {
@@ -649,17 +784,24 @@ export function PageClientImpl(props: {
         }
       }
 
+      // Protected meeting and not on the list: ask the host first (lib/meetingAccess.ts).
+      if (!isBot && !admittedRef.current && access?.decision === 'knock') {
+        if ((await startKnock(roomToJoin, values)) !== 'admitted') return;
+      }
+
       try {
         setPreJoinChoices(values);
         const url = new URL(CONN_DETAILS_ENDPOINT, window.location.origin);
         url.searchParams.append('roomName', roomToJoin);
         url.searchParams.append('participantName', values.username);
         appendKloudDeviceId(url);
+        appendJoinCredentials(url);
         if (props.region) {
           url.searchParams.append('region', props.region);
         }
         if (isMeetingCreator && !isSameTabRefresh) {
           url.searchParams.append('participantLiveDocAi', participantLiveDocShow ? '1' : '0');
+          url.searchParams.append('accessLevel', accessLevel);
         }
         const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
@@ -674,6 +816,27 @@ export function PageClientImpl(props: {
           const conflict = await connectionDetailsResp.json().catch(() => null);
           if (conflict?.code === 'HOST_ALREADY_IN_MEETING' && conflict.activeMeeting) {
             setHostConflict({ activeMeeting: conflict.activeMeeting, values });
+            return;
+          }
+        }
+        if (connectionDetailsResp.status === 403) {
+          // Not allowed in (sign in / ask the host / not invited / turned away): show why.
+          const blocked = await connectionDetailsResp.clone().json().catch(() => null);
+          const code = typeof blocked?.code === 'string' ? blocked.code : null;
+          if (code && ['SIGN_IN_REQUIRED', 'KNOCK_REQUIRED', 'NOT_INVITED', 'DENIED'].includes(code)) {
+            setPreJoinChoices(undefined);
+            if (isSameTabRefresh) {
+              setIsSameTabRefresh(false);
+              try {
+                sessionStorage.removeItem('activeKloudRoom');
+              } catch {
+                /* ignore */
+              }
+            }
+            const state = await loadAccess();
+            if (code === 'KNOCK_REQUIRED' && state?.decision === 'knock' && !admittedRef.current) {
+              if ((await startKnock(roomToJoin, values)) === 'admitted') void submitRef.current(values);
+            }
             return;
           }
         }
@@ -711,6 +874,15 @@ export function PageClientImpl(props: {
           replaceBrowserRoomUrl(joinedRoomName);
           setEffectiveRoomName(joinedRoomName);
         }
+
+        // Private: save the people the host picked and email them their own join link.
+        if (isMeetingCreator && accessLevel === 'private' && privateInviteesTouchedRef.current) {
+          void authFetch(`/api/meetings/${encodeURIComponent(joinedRoomName)}/invitees`, {
+            method: 'PUT',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ emails: privateInvitees.map((c) => c.email), notifyNow: true }),
+          }).catch((e) => console.error('[PageClientImpl] save private invitees', e));
+        }
       } catch (error: unknown) {
         console.error('[PageClientImpl] Failed to get connection details:', error);
         if (isSameTabRefresh) {
@@ -746,8 +918,85 @@ export function PageClientImpl(props: {
       t,
       personalRoomSwitching,
       participantLiveDocShow,
+      accessLevel,
+      access?.decision,
+      isBot,
+      startKnock,
+      loadAccess,
+      privateInvitees,
     ],
   );
+  const submitRef = React.useRef(handlePreJoinSubmit);
+  React.useEffect(() => {
+    submitRef.current = handlePreJoinSubmit;
+  }, [handlePreJoinSubmit]);
+
+  // Waiting for the host: poll every 2 s (it also keeps the request fresh on the host's list).
+  // Admitted → join with the choices made before asking; leaving the page cancels the request.
+  const knockRef = React.useRef(knock);
+  knockRef.current = knock;
+  const knockRoom = knock?.room ?? null;
+  React.useEffect(() => {
+    if (!knockRoom) return;
+    let stopped = false;
+    const tick = async () => {
+      const state = await pollKnock(knockRoom);
+      if (stopped || !state) return;
+      if (state.status === 'ADMITTED') {
+        stopped = true;
+        admittedRef.current = true;
+        // Let in: the button reads "Join" again if the join below has to be retried.
+        setAccess((a) => (a ? { ...a, decision: 'join' } : a));
+        const values = knockRef.current?.values;
+        setKnock(null);
+        if (values) void submitRef.current(values);
+        return;
+      }
+      if (state.status === 'DENIED') {
+        stopped = true;
+        setKnock(null);
+        setRefusal({ reason: 'DENIED', retryAt: Date.now() + (state.retryAfterMs || 60_000) });
+        return;
+      }
+      if (state.status !== 'PENDING') {
+        stopped = true;
+        setKnock(null);
+        return;
+      }
+      setKnock((k) =>
+        k ? { ...k, hostPresent: state.hostPresent, participantCount: state.participantCount } : k,
+      );
+    };
+    void tick();
+    const id = window.setInterval(() => void tick(), 2000);
+    const onPageHide = () => cancelKnock(knockRoom);
+    window.addEventListener('pagehide', onPageHide);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+      window.removeEventListener('pagehide', onPageHide);
+    };
+  }, [knockRoom]);
+
+  const handleKnockCancel = React.useCallback(() => {
+    if (knockRef.current) cancelKnock(knockRef.current.room);
+    setKnock(null);
+  }, []);
+
+  const handleAskAgain = React.useCallback(() => {
+    setRefusal(null);
+    setAccess((a) => (a ? { ...a, decision: 'knock' } : a));
+  }, []);
+
+  const handleSwitchAccount = React.useCallback(() => {
+    try {
+      localStorage.removeItem('kloudUser');
+    } catch {
+      /* ignore */
+    }
+    window.location.href = signInHref(effectiveRoomName);
+  }, [effectiveRoomName]);
+
   const handleHostConflictContinue = React.useCallback(() => {
     const room = hostConflict?.activeMeeting.roomName;
     setHostConflict(null);
@@ -943,6 +1192,41 @@ export function PageClientImpl(props: {
     );
   }
 
+  // Can't get in: a Private meeting without an invitation, or the host said no.
+  if (refusal && access && !isBot && !connectionDetails) {
+    return (
+      <div className={prejoinStyles.page}>
+        <header className={prejoinStyles.toolbar}>
+          <div className={prejoinStyles.toolbarLeft}>
+            <Link href="/" className={prejoinStyles.logoLink}>
+              <Image
+                src={
+                  theme === 'dark'
+                    ? '/images/kloud-header-logo-white.svg'
+                    : '/images/kloud-header-logo.svg'
+                }
+                alt="Kloud Meet"
+                width={120}
+                height={36}
+                style={{ display: 'block', transform: 'translateY(4px)' }}
+              />
+            </Link>
+          </div>
+        </header>
+        <main className={prejoinStyles.centerMain}>
+          <AccessRefusedPage
+            access={access}
+            reason={refusal.reason}
+            retryInMs={Math.max(0, refusal.retryAt - refusalNow)}
+            asking={false}
+            onAskAgain={handleAskAgain}
+            onSwitchAccount={handleSwitchAccount}
+          />
+        </main>
+      </div>
+    );
+  }
+
   const languageIcon = (size: number) => <Globe size={size} aria-hidden="true" />;
 
   return (
@@ -1089,8 +1373,35 @@ export function PageClientImpl(props: {
                 nobodyHereText={isHost && !isActive ? t('prejoin.nobodyHereYet') : undefined}
                 beforeName={
                   isHost ? (
-                    <PrejoinAccessLevelSelect value={accessLevel} onChange={setAccessLevel} />
+                    <>
+                      <PrejoinAccessLevelSelect
+                        value={accessLevel}
+                        onChange={handleAccessLevelChange}
+                        companyName={access?.meeting.companyName ?? null}
+                      />
+                      {accessLevel === 'private' && (
+                        <PrivateInviteBox
+                          value={privateInvitees}
+                          onChange={handlePrivateInviteesChange}
+                          companyName={access?.meeting.companyName ?? null}
+                        />
+                      )}
+                    </>
                   ) : null
+                }
+                panelOverride={
+                  knock && access ? (
+                    <AccessWaitingCard
+                      access={access}
+                      displayName={knock.values.username}
+                      email={access.signedInAs?.email ?? null}
+                      hostPresent={knock.hostPresent}
+                      participantCount={knock.participantCount}
+                      onCancel={handleKnockCancel}
+                    />
+                  ) : !isHost && access?.decision === 'sign_in' ? (
+                    <AccessSignInCard access={access} roomName={effectiveRoomName} />
+                  ) : undefined
                 }
                 joinFooter={
                   isHost && isActive && !isSameTabRefresh ? (

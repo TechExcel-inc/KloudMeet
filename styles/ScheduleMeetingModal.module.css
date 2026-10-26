@@ -368,6 +368,19 @@ a.menuItem {
   color: var(--km-danger-text);
 }
 
+.hintWarn {
+  color: var(--km-warning);
+}
+
+/* Access row: label, "New", the three levels */
+.accessLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-height: 36px;
+}
+
 .linkBtn {
   display: inline;
   padding: 0;
@@ -596,6 +609,13 @@ a.menuItem {
   border: 1px solid var(--km-border);
   background: var(--km-surface);
   overflow-wrap: anywhere;
+}
+
+/* Private meeting: an attendee outside the host's company can't join */
+.chip.chipWarn {
+  border-color: var(--km-warning);
+  background: var(--km-warning-bg);
+  color: var(--km-warning);
 }
 
 .chipAvatar {

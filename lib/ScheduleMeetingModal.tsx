@@ -22,6 +22,16 @@ import {
   isValidEmail,
   reminderEmail,
 } from '@/lib/meetingInvites';
+import { fetchCompanyPeople, type AccessLevelValue } from '@/lib/meetingAccessClient';
+
+const ACCESS_LEVELS: AccessLevelValue[] = ['PUBLIC', 'PROTECTED', 'PRIVATE'];
+
+/** Saved level; a meeting from before access levels works as Public, a new one starts Protected. */
+function initialAccessLevel(meeting: { accessLevel?: unknown } | null | undefined): AccessLevelValue {
+  const saved = typeof meeting?.accessLevel === 'string' ? meeting.accessLevel.toUpperCase() : '';
+  if ((ACCESS_LEVELS as string[]).includes(saved)) return saved as AccessLevelValue;
+  return meeting ? 'PUBLIC' : 'PROTECTED';
+}
 
 /** AI assistant / repeat / linked events (enterprise features; shown under "More options" — not saved yet). */
 const SHOW_ENTERPRISE_OPTIONS = true;
@@ -221,6 +231,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const [reminderEmails, setReminderEmails] = useState(true);
   const [reminders, setReminders] = useState<ReminderRow[]>(() => offsetsToRows(DEFAULT_REMINDER_OFFSETS));
   const [invitesTouched, setInvitesTouched] = useState(false);
+  // Access: who may join and watch the recording (lib/meetingAccess.ts). Sent only when changed,
+  // so editing an older meeting doesn't change who can watch its recordings.
+  const [accessLevel, setAccessLevel] = useState<AccessLevelValue>(() => initialAccessLevel(existingMeeting));
+  const [accessTouched, setAccessTouched] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyEmails, setCompanyEmails] = useState<{ key: string; emails: Set<string> }>({ key: '', emails: new Set() });
   const [inviteResult, setInviteResult] = useState<{ sent: number; failed: string[]; error?: boolean } | null>(null);
 
   useEffect(() => {
@@ -243,6 +259,36 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       cancelled = true;
     };
   }, [existingMeeting?.roomName]);
+
+  // The host's company (Private invites only its members) and which attendees are in it.
+  const attendeesKey = attendees.join(',');
+  useEffect(() => {
+    let cancelled = false;
+    const check = accessLevel === 'PRIVATE' ? attendees : [];
+    void fetchCompanyPeople({ check }).then((data) => {
+      if (cancelled || !data) return;
+      setCompanyName(data.companyName);
+      setCompanyEmails({ key: check.join(','), emails: new Set(data.companyEmails) });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accessLevel, attendeesKey]);
+  const outsideCompany = (email: string) =>
+    accessLevel === 'PRIVATE' && companyEmails.key === attendeesKey && !companyEmails.emails.has(email);
+  const outsiders = attendees.filter(outsideCompany);
+
+  const accessDescription = (level: AccessLevelValue) => {
+    const company = companyName ?? '';
+    if (level === 'PUBLIC') return t('prejoin.accessLevelPublicDesc');
+    if (level === 'PROTECTED') {
+      return company
+        ? t('prejoin.accessLevelProtectedDesc', { company })
+        : t('prejoin.accessLevelProtectedDescNoCompany');
+    }
+    return t('prejoin.accessLevelPrivateDesc', { company });
+  };
 
   /** Adds the valid addresses; invalid ones stay in the input with an error. */
   const addAttendees = (text: string) => {
@@ -464,6 +510,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             scheduledFor: scheduledForIso,
             durationMinutes,
             timezone,
+            ...(accessTouched ? { accessLevel } : {}),
           }),
         });
         if (!res.ok) throw new Error(`Update failed (${res.status})`);
@@ -480,7 +527,8 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             scheduledFor: scheduledForIso,
             durationMinutes,
             timezone,
-            status: 'ACTIVE'
+            status: 'ACTIVE',
+            accessLevel,
           }),
         });
         if (!res.ok) throw new Error(`Create failed (${res.status})`);
@@ -753,6 +801,47 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 </div>
               </div>
 
+              {/* Access: who may join and watch the recording */}
+              <div className={styles.row}>
+                <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="5" y="11" width="14" height="9.5" rx="2" />
+                  <path d="M8 11V8a4 4 0 018 0v3" />
+                </svg>
+                <div className={styles.stack}>
+                  <div className={styles.accessLine}>
+                    <span className={styles.inlineLabel}>{tf('schedule.access', 'Access')}</span>
+                    <span className={styles.badge}>{tf('schedule.accessNew', 'New')}</span>
+                    <span className={styles.segmented} role="radiogroup" aria-label={tf('schedule.access', 'Access')}>
+                      {ACCESS_LEVELS.map((level) => {
+                        const needsCompany = level === 'PRIVATE' && !companyName;
+                        return (
+                          <button
+                            key={level}
+                            type="button"
+                            role="radio"
+                            aria-checked={accessLevel === level}
+                            className={accessLevel === level ? styles.segmentOn : styles.segment}
+                            disabled={isReadOnly || needsCompany}
+                            title={needsCompany ? t('prejoin.accessLevelPrivateNeedsCompany') : undefined}
+                            onClick={() => {
+                              setAccessLevel(level);
+                              setAccessTouched(true);
+                            }}
+                          >
+                            {level === 'PUBLIC'
+                              ? t('prejoin.accessLevelPublic')
+                              : level === 'PROTECTED'
+                                ? t('prejoin.accessLevelProtected')
+                                : t('prejoin.accessLevelPrivate')}
+                          </button>
+                        );
+                      })}
+                    </span>
+                  </div>
+                  <p className={styles.hint}>{accessDescription(accessLevel)}</p>
+                </div>
+              </div>
+
               {/* Attendees */}
               <div className={styles.row}>
                 <svg className={styles.rowIcon} viewBox="0 0 24 24" aria-hidden="true">
@@ -765,7 +854,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                     onClick={() => attendeeInputRef.current?.focus()}
                   >
                     {attendees.map((email) => (
-                      <span key={email} className={styles.chip}>
+                      <span key={email} className={`${styles.chip}${outsideCompany(email) ? ` ${styles.chipWarn}` : ''}`}>
                         <span className={styles.chipAvatar} aria-hidden="true">{email.charAt(0).toUpperCase()}</span>
                         {email}
                         {!isReadOnly && (
@@ -814,6 +903,12 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   </div>
                   {attendeeError ? (
                     <p role="alert" className={`${styles.hint} ${styles.hintError}`}>{attendeeError}</p>
+                  ) : outsiders.length > 0 ? (
+                    <p role="status" className={`${styles.hint} ${styles.hintWarn}`}>
+                      {outsiders.length === 1
+                        ? t('access.notInCompanyOne', { email: outsiders[0], company: companyName ?? '' })
+                        : t('access.notInCompanyMany', { n: outsiders.length, company: companyName ?? '' })}
+                    </p>
                   ) : (
                     <p className={styles.hint}>
                       {tf('schedule.attendeeHintHost', "You're the host · attendees get the invitation and reminder emails")}

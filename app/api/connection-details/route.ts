@@ -20,6 +20,9 @@ import { followOwnerLiveRoom, otherLiveMeetingOfHost } from '@/lib/oneMeetingPer
 import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoomView';
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
+import { joinBlockCode, parseAccessLevel } from '@/lib/meetingAccess';
+import { INVITE_PARAM, evaluateJoin, meetingAccessSelect } from '@/lib/meetingAccess.server';
+import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
 import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlements';
 import {
@@ -102,6 +105,40 @@ export async function GET(request: NextRequest) {
 
     if (isMeetingPermanentlyClosed(meeting.status) && !isPersonalRoom) {
       return new NextResponse('Meeting has already ended', { status: 403 });
+    }
+
+    // Access level (lib/meetingAccess.ts). The host sets it from the pre-join dropdown when
+    // starting; everyone else is checked against it before getting a token.
+    const isCreator = Boolean(member && member.id === meeting.createdByMemberId);
+    const requestedLevel = parseAccessLevel(request.nextUrl.searchParams.get('accessLevel'));
+    let accessMeeting = await prisma.meeting.findUnique({
+      where: { id: meeting.id },
+      select: meetingAccessSelect,
+    });
+    if (!accessMeeting) {
+      return new NextResponse('Meeting not found', { status: 404 });
+    }
+    // Private needs a company to invite from; the dropdown disables it without one.
+    if (isCreator && requestedLevel && (requestedLevel !== 'PRIVATE' || accessMeeting.accountId)) {
+      accessMeeting = await prisma.meeting.update({
+        where: { id: meeting.id },
+        data: { accessLevel: requestedLevel },
+        select: meetingAccessSelect,
+      });
+    }
+    const { decision } = await evaluateJoin({
+      meeting: accessMeeting,
+      member,
+      inviteToken: request.nextUrl.searchParams.get(INVITE_PARAM),
+      recorderToken: request.nextUrl.searchParams.get(SPEAK_TOKEN_PARAM),
+    });
+    const blocked = joinBlockCode(decision);
+    if (blocked) {
+      // 403, not 401: the client treats 401 as an expired session and signs the person out.
+      return NextResponse.json(
+        { code: blocked, error: 'You need the host’s permission to join this meeting' },
+        { status: 403 },
+      );
     }
 
     // Billing (skipped entirely when BILLING_ENABLED is off): the host's plan sets the
