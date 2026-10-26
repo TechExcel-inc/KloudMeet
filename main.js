@@ -119,6 +119,46 @@ let updateInstallPending = false;
 let updateInstallStarted = false;
 
 /**
+ * macOS: a window can only float over another app's full-screen Space while this app is a UI
+ * element — no Dock icon, no menu bar, so no ⌘Q or ⌘Tab either. Be one only while a floating
+ * surface is on screen (a share with its annotation overlay, remote control, the update
+ * progress bar) and a normal app the rest of the time. The windows set their full-screen
+ * collection behaviour with skipTransformProcessType, so creating them changes nothing.
+ * @type {Set<string>}
+ */
+const floatingReasons = new Set();
+const DOCK_TOGGLE_SETTLE_MS = 1100;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let dockReconcileTimer = null;
+
+function setFloatingReason(reason, on) {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  if (on) floatingReasons.add(reason);
+  else floatingReasons.delete(reason);
+  reconcileDock();
+}
+
+function reconcileDock() {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  const wantHidden = floatingReasons.size > 0 && !isAppQuitting;
+  if (wantHidden === !app.dock.isVisible()) return;
+  if (wantHidden) app.dock.hide();
+  else app.dock.show().catch(() => {});
+  // Electron ignores a hide within a second of a show; check again once that has passed.
+  if (dockReconcileTimer) clearTimeout(dockReconcileTimer);
+  dockReconcileTimer = setTimeout(() => {
+    dockReconcileTimer = null;
+    const hidden = !app.dock.isVisible();
+    if (hidden !== (floatingReasons.size > 0 && !isAppQuitting)) reconcileDock();
+  }, DOCK_TOGGLE_SETTLE_MS);
+}
+
+/** Visible on every Space, including full-screen ones, without touching the Dock. */
+function floatOnAllSpaces(win) {
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+}
+
+/**
  * 全屏 annotation overlay 会盖住更新进度条 / 弹窗。
  * 用 reason 集合做引用计数：任一更新 UI 需要时 hide，全部结束后再 show。
  * @type {Set<string>}
@@ -227,6 +267,7 @@ function destroyUpdateProgressWindow() {
   pendingUpdateProgressPayload = null;
   lastUpdaterProgressRounded = -1;
   releaseOverlayHide('update-progress');
+  setFloatingReason('update-progress', false);
 }
 
 function raiseUpdateProgressWindow() {
@@ -437,10 +478,11 @@ function ensureUpdateProgressWindow() {
   });
 
   try {
-    updateProgressWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    floatOnAllSpaces(updateProgressWindow);
   } catch {
     /* ignore */
   }
+  setFloatingReason('update-progress', true);
   raiseUpdateProgressWindow();
   startUpdateProgressRaiseLoop();
 
@@ -465,6 +507,7 @@ function ensureUpdateProgressWindow() {
   updateProgressWindow.on('closed', () => {
     updateProgressWindow = null;
     releaseOverlayHide('update-progress');
+    setFloatingReason('update-progress', false);
   });
 
   updateProgressWindow.loadFile(path.join(__dirname, 'update-progress.html')).catch((e) => {
@@ -981,17 +1024,39 @@ function applyOverlayToShareTarget(target) {
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
   applyOverlayToShareTarget(currentShareTarget);
+  setFloatingReason('share', true);
+  appendStartupLog(`[share] start ${currentShareTarget.kind} ${currentShareTarget.width}x${currentShareTarget.height}`);
   return currentShareTarget;
 }
 
 function clearCurrentShareTarget() {
+  if (currentShareTarget) appendStartupLog('[share] stop');
   currentShareTarget = null;
   applyOverlayToShareTarget(primaryDisplayBoundsFallback());
+  setFloatingReason('share', false);
+}
+
+/**
+ * A shared screen has been seen to freeze on macOS (the picture stops while the share stays on).
+ * Log what the system does during a share so the next report says what happened at that moment.
+ */
+function watchShareInterruptions() {
+  const { screen, powerMonitor } = require('electron');
+  const note = (what) => {
+    if (currentShareTarget) appendStartupLog(`[share] ${what}`);
+  };
+  screen.on('display-added', () => note('display added'));
+  screen.on('display-removed', () => note('display removed'));
+  screen.on('display-metrics-changed', (_e, _display, changed) => note(`display changed: ${changed.join(',')}`));
+  for (const event of ['suspend', 'resume', 'lock-screen', 'unlock-screen']) {
+    powerMonitor.on(event, () => note(event));
+  }
 }
 
 function installSessionAndIpcOnce() {
   if (sessionAndIpcHandlersInstalled) return;
   sessionAndIpcHandlersInstalled = true;
+  watchShareInterruptions();
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
@@ -1053,6 +1118,23 @@ function installSessionAndIpcOnce() {
   ipcMain.on('remote-control-session', (event, session) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     setRemoteControlSession(session);
+  });
+
+  ipcMain.on('remote-control-request', (event, request) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    setRemoteControlRequest(request);
+  });
+
+  ipcMain.on('rc-bar-answer', (event, allow) => {
+    if (!rcBarWindow || rcBarWindow.isDestroyed() || event.sender !== rcBarWindow.webContents) return;
+    if (!rcRequest) return;
+    setRemoteControlRequest(null);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-control-answer', allow === true);
+  });
+
+  ipcMain.on('rc-bar-accessibility', (event) => {
+    if (!rcBarWindow || rcBarWindow.isDestroyed() || event.sender !== rcBarWindow.webContents) return;
+    openAccessibilitySettings();
   });
 
   ipcMain.on('rc-bar-stop', (event) => {
@@ -1163,6 +1245,46 @@ async function executeRemoteInput(data) {
   }
 }
 
+/**
+ * macOS drops injected input silently unless this app has Accessibility. Checked when a session
+ * starts (asking macOS to show its prompt once); the bar says so and links to the setting.
+ */
+let rcNeedsAccessibility = false;
+/** @type {ReturnType<typeof setInterval> | null} */
+let rcAccessibilityPoll = null;
+
+function checkAccessibilityForRemoteControl(prompt) {
+  if (process.platform !== 'darwin') return true;
+  const { systemPreferences } = require('electron');
+  const trusted = systemPreferences.isTrustedAccessibilityClient(!!prompt);
+  rcNeedsAccessibility = !trusted;
+  if (!trusted) {
+    appendStartupLog('[remote-control] Accessibility is off: input will not reach other apps');
+    // Turned on in System Settings mid-session: clear the notice as soon as it takes effect.
+    if (!rcAccessibilityPoll) {
+      rcAccessibilityPoll = setInterval(() => {
+        if (!rcSession.active || systemPreferences.isTrustedAccessibilityClient(false)) {
+          stopAccessibilityPoll();
+          rcNeedsAccessibility = false;
+          sendRcBarState();
+        }
+      }, 2000);
+    }
+  }
+  return trusted;
+}
+
+function stopAccessibilityPoll() {
+  if (rcAccessibilityPoll) clearInterval(rcAccessibilityPoll);
+  rcAccessibilityPoll = null;
+}
+
+function openAccessibilitySettings() {
+  shell
+    .openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    .catch(() => {});
+}
+
 function setRemoteControlSession(session) {
   rcSession.protocol = true;
   const active = !!(session && session.active);
@@ -1179,7 +1301,9 @@ function setRemoteControlSession(session) {
         console.warn('remote-control stop shortcut not registered:', e);
       }
       startLocalMouseWatch();
+      checkAccessibilityForRemoteControl(true);
     }
+    setFloatingReason('remote-control', true);
     showRcBar();
   } else if (wasActive) {
     endRemoteControlLocally();
@@ -1190,6 +1314,7 @@ function setRemoteControlSession(session) {
 function endRemoteControlLocally() {
   rcGeneration += 1;
   rcSession.active = false;
+  stopAccessibilityPoll();
   rcSession.controllerName = '';
   try {
     globalShortcut.unregister(remoteInput.STOP_SHORTCUT);
@@ -1197,7 +1322,9 @@ function endRemoteControlLocally() {
     /* ignore */
   }
   stopLocalMouseWatch();
-  hideRcBar();
+  if (rcRequest) sendRcBarState();
+  else hideRcBar();
+  setFloatingReason('remote-control', false);
   // Runs after an event that is mid-execution, so a button it just pressed is released too.
   rcQueue = rcQueue
     .then(async () => {
@@ -1254,9 +1381,20 @@ function stopLocalMouseWatch() {
   rcLocalWatch = null;
 }
 
-/* Floating bar on the shared screen: who is in control + Stop. Hidden from the capture. */
-const RC_BAR_WIDTH = 460;
+/*
+ * Floating bar on the shared screen: who is in control + Stop, or a waiting control request
+ * with Allow / Deny (the meeting window is usually behind the app being shared).
+ * Hidden from the capture.
+ */
+const RC_BAR_WIDTH = 540;
 const RC_BAR_HEIGHT = 52;
+
+/** @type {{ name: string } | null} */
+let rcRequest = null;
+
+function rcBarNeeded() {
+  return rcSession.active || !!rcRequest;
+}
 
 function sendRcBarState() {
   if (!rcBarWindow || rcBarWindow.isDestroyed()) return;
@@ -1264,7 +1402,16 @@ function sendRcBarState() {
     name: rcSession.controllerName,
     paused: Date.now() < rcSession.pausedUntil,
     shortcut: process.platform === 'darwin' ? '⌃⌥S' : remoteInput.STOP_SHORTCUT.replace('Control', 'Ctrl'),
+    request: !rcSession.active && rcRequest ? { name: rcRequest.name } : null,
+    needsAccessibility: rcSession.active && rcNeedsAccessibility,
   });
+}
+
+function setRemoteControlRequest(request) {
+  const name = request && typeof request.name === 'string' ? request.name.slice(0, 80) : '';
+  rcRequest = request ? { name } : null;
+  if (rcBarNeeded()) showRcBar();
+  else hideRcBar();
 }
 
 function showRcBar() {
@@ -1297,7 +1444,7 @@ function showRcBar() {
       },
     });
     rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
-    rcBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    floatOnAllSpaces(rcBarWindow);
     // Viewers see the shared screen, not the presenter's controls.
     rcBarWindow.setContentProtection(true);
     rcBarWindow.on('closed', () => {
@@ -1305,7 +1452,7 @@ function showRcBar() {
     });
     rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
     rcBarWindow.once('ready-to-show', () => {
-      if (rcSession.active && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
+      if (rcBarNeeded() && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
     });
     rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
       console.warn('rc-bar load failed:', e);
@@ -1362,7 +1509,7 @@ function createWindows() {
   });
 
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  floatOnAllSpaces(overlayWindow);
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   const syncUpdateProgressLayout = () => {
@@ -1378,6 +1525,7 @@ function createWindows() {
     // 关主窗口 = 退出应用：清掉所有附属窗 + 本地 Next，避免 KloudMeet.exe 残留占 3201
     isAppQuitting = true;
     destroyAllAuxiliaryWindows();
+    if (currentShareTarget) clearCurrentShareTarget();
     killNextServerProcess();
     if (process.platform !== 'darwin') {
       setImmediate(() => {
@@ -1391,8 +1539,21 @@ function createWindows() {
   });
 
   // A reload or navigation drops the meeting page without telling us the session ended.
-  mainWindow.webContents.on('did-navigate', () => endRemoteControlLocally());
-  mainWindow.webContents.on('render-process-gone', () => endRemoteControlLocally());
+  const meetingPageGone = () => {
+    rcRequest = null;
+    endRemoteControlLocally();
+    if (currentShareTarget) clearCurrentShareTarget();
+  };
+  mainWindow.webContents.on('did-navigate', meetingPageGone);
+  mainWindow.webContents.on('render-process-gone', meetingPageGone);
+  // Leaving the room inside the page (no reload) ends any share too.
+  mainWindow.webContents.on('did-navigate-in-page', (_event, url) => {
+    try {
+      if (!new URL(url).pathname.startsWith('/rooms/')) meetingPageGone();
+    } catch {
+      /* ignore */
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -1423,6 +1584,7 @@ function destroyAllAuxiliaryWindows() {
     }
   }
   updateReadyPromptWindow = null;
+  rcRequest = null;
   endRemoteControlLocally();
   if (rcBarWindow && !rcBarWindow.isDestroyed()) {
     try {
@@ -1499,6 +1661,26 @@ function waitForHttpReady(port, timeoutMs = 90000) {
     }
     ping();
   });
+}
+
+/** @type {Promise<void> | null} */
+let reopenInFlight = null;
+
+/** macOS Dock click after the main window was closed: local server first, then the windows. */
+function reopenMainWindow() {
+  if (reopenInFlight) return reopenInFlight;
+  reopenInFlight = (async () => {
+    isAppQuitting = false;
+    try {
+      if (app.isPackaged && !nextServerProcess) await startPackagedNextServer();
+      if (BrowserWindow.getAllWindows().length === 0) createWindows();
+    } catch (e) {
+      showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
+    }
+  })().finally(() => {
+    reopenInFlight = null;
+  });
+  return reopenInFlight;
 }
 
 async function startPackagedNextServer() {
@@ -1632,8 +1814,10 @@ if (!gotLock) {
     // ── 自动更新（仅打包版；开发模式连本地 Next，不查安装包） ──
     setupAutoUpdater();
 
+    // macOS keeps the app in the Dock after its window closes; closing stopped the local server
+    // the overlay pages come from, so start it again before reopening.
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindows();
+      if (BrowserWindow.getAllWindows().length === 0) void reopenMainWindow();
     });
   });
 }

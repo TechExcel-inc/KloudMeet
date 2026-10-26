@@ -2924,6 +2924,26 @@ export function VideoConferenceComponent(props: {
     [sendMeetingMsg],
   );
 
+  // Desktop app: the meeting window is usually behind the shared app, so the waiting request
+  // also shows in the app's floating bar, where it can be allowed or denied.
+  const pendingRcRequest = remoteControlRequest && screenShareActive ? remoteControlRequest : null;
+  const pendingRcRequestRef = React.useRef(pendingRcRequest);
+  pendingRcRequestRef.current = pendingRcRequest;
+  React.useEffect(() => {
+    window.electronAPI?.setRemoteControlRequest?.(
+      pendingRcRequest ? { name: pendingRcRequest.requesterName || pendingRcRequest.requesterIdentity } : null,
+    );
+  }, [pendingRcRequest]);
+  React.useEffect(() => {
+    const off = window.electronAPI?.onRemoteControlAnswer?.((allow) => {
+      const request = pendingRcRequestRef.current;
+      if (!request) return;
+      if (allow) handleApproveRcRequest(request.requesterIdentity);
+      else handleDenyRcRequest(request.requesterIdentity);
+    });
+    return () => off?.();
+  }, [handleApproveRcRequest, handleDenyRcRequest]);
+
   /** Presenter revokes an active remote-control session */
   const handleRevokeRc = React.useCallback(
     (identity: string | null) => {

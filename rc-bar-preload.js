@@ -8,4 +8,8 @@ contextBridge.exposeInMainWorld('rcBar', {
     return () => ipcRenderer.removeListener('rc-bar-state', handler);
   },
   stop: () => ipcRenderer.send('rc-bar-stop'),
+  /** Answer a waiting control request: true = allow, false = deny. */
+  answer: (allow) => ipcRenderer.send('rc-bar-answer', allow === true),
+  /** macOS: opens Privacy & Security › Accessibility. */
+  openAccessibility: () => ipcRenderer.send('rc-bar-accessibility'),
 });
