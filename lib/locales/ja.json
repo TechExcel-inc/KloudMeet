@@ -459,6 +459,7 @@
   "toolbar.cancelRequest": "リクエストをキャンセル",
   "toolbar.stopControl": "リモート制御を停止",
   "toolbar.requestControl": "リモート制御をリクエスト",
+  "toolbar.shareTools": "注釈とリモート操作",
   "toolbar.attendees": "参加者",
   "toolbar.invite": "招待",
   "toolbar.inviteCopied": "招待リンクをコピーしました！",

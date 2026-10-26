@@ -467,6 +467,7 @@
   "toolbar.cancelRequest": "Cancel Control Request",
   "toolbar.stopControl": "Stop Remote Control",
   "toolbar.requestControl": "Request Remote Control",
+  "toolbar.shareTools": "Annotate & remote control",
   "toolbar.attendees": "People",
   "toolbar.invite": "Invite",
   "toolbar.inviteCopied": "Invite Link Copied to Clipboard!",
