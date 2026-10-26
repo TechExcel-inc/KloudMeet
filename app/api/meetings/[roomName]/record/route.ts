@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
-import { forbidden, isAuthError, requireSession } from '@/lib/apiAuth';
+import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { checkReplayQuota } from '@/lib/billing/limits';
@@ -118,10 +118,6 @@ export async function POST(
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
-    if (meeting.createdByMemberId !== member.id) {
-      return forbidden('Only the meeting host can start or stop recording');
-    }
-
     const roles = parseMeetingRoles(meeting.meetingRoles);
 
     // The current host's client keeps the server's view of who is host / co-host / presenter.
