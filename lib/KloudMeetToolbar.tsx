@@ -755,7 +755,6 @@ export function KloudMeetToolbar({
       target.closest?.('.lk-device-menu') ||
       target.closest?.('.lk-menu') ||
       target.closest?.('.chat-overlay-panel') ||
-      target.closest?.('.floating-webcam-panel') ||
       target.closest?.(`.${styles.actionSheetOverlay}`) ||
       target.closest?.(`.${styles.actionSheet}`) ||
       target.closest?.('.kloud-modal')

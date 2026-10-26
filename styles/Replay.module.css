@@ -3,8 +3,11 @@
    follows html[data-theme] like the other pre-meeting pages; the video stage stays dark. */
 
 .page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  /* html/body 是 overflow:hidden，这一页必须自己占满视口，否则左下角多出来的内容会被裁掉且无法滚动 */
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--km-bg-subtle);
@@ -186,12 +189,16 @@
 .layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: 16px;
+  flex: 1;
   width: 100%;
   max-width: 1600px;
+  min-height: 0;
   margin: 0 auto;
   padding: 16px 20px 24px;
+  overflow: hidden;
 }
 
 .layoutWide {
@@ -203,17 +210,17 @@
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
-/* Right: reading panel, stays in view while the left column scrolls */
+/* Right: reading panel fills the column; the left column scrolls on its own */
 .panel {
-  position: sticky;
-  top: 80px;
+  position: static;
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 104px);
-  height: calc(100dvh - 104px);
-  min-height: 420px;
+  height: auto;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-lg);
@@ -561,6 +568,7 @@
 /* ───────────── Left: video, chapters, speakers ───────────── */
 .videoCard {
   position: relative;
+  flex: none;
   overflow: hidden;
   border-radius: var(--km-radius-lg);
   background: #0b0d12;
@@ -569,8 +577,8 @@
 .video {
   display: block;
   width: 100%;
-  max-height: 62vh;
-  min-height: 260px;
+  max-height: calc(62vh - 100px);
+  min-height: 160px;
   background: #0b0d12;
   object-fit: contain;
   outline: none;
@@ -611,6 +619,11 @@
 }
 
 .card {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
   padding: 12px 14px;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-lg);
@@ -620,6 +633,11 @@
 /* Chapters */
 .chapterRow {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .chapterTrack {
@@ -627,7 +645,9 @@
   grid-auto-flow: column;
   grid-auto-columns: minmax(170px, 1fr);
   gap: 8px;
+  min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
   scroll-snap-type: x proximity;
 }
@@ -1301,6 +1321,7 @@
 /* Chapters / speakers switch */
 .pills {
   display: flex;
+  flex: none;
   gap: 6px;
   margin-bottom: 12px;
 }
@@ -1411,8 +1432,14 @@
 /* Speakers: one row each, soft colour blocks on a light track */
 .lanes {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .lane {
@@ -1482,10 +1509,22 @@
 @media (max-width: 960px) {
   .layout {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    align-items: start;
     padding: 12px 12px 20px;
+    overflow-y: auto;
   }
   .stage {
     order: -1;
+    overflow: visible;
+  }
+  .videoCard,
+  .card,
+  .chapterRow,
+  .lanes {
+    flex: none;
+    min-height: 0;
+    overflow: visible;
   }
   .panel {
     position: static;
