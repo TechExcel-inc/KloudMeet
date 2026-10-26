@@ -3578,6 +3578,19 @@ export function VideoConferenceComponent(props: {
                 <RemoteControlOverlay
                   isActive={isRemoteControlMode && activeView === 'shareScreen'}
                   isPresenter={screenShareActive}
+                  controllerIdentity={screenShareActive ? approvedControllerIdentity : null}
+                  onPresenterStop={() => {
+                    setIsRemoteControlMode(false);
+                    handleRevokeRc(approvedControllerIdentityRef.current);
+                  }}
+                  onStopControl={() => {
+                    setIsRemoteControlMode(false);
+                    sendMeetingMsg({
+                      type: 'RC_STOP',
+                      requesterIdentity: room.localParticipant.identity,
+                      requesterName: room.localParticipant.name || room.localParticipant.identity,
+                    });
+                  }}
                 />
               </>
             )}

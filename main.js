@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog, shell, globalShortcut } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const http = require('http');
@@ -44,10 +44,11 @@ let isAppQuitting = false;
 let nutApi;
 function getNutTree() {
   if (!nutApi) {
-    const { mouse, Point, Button } = require('@nut-tree-fork/nut-js');
+    const { mouse, keyboard, Point, Button, Key } = require('@nut-tree-fork/nut-js');
     mouse.config.autoDelayMs = 0;
     mouse.config.mouseSpeed = 3000;
-    nutApi = { mouse, Point, Button };
+    keyboard.config.autoDelayMs = 0;
+    nutApi = { mouse, keyboard, Point, Button, Key };
   }
   return nutApi;
 }
@@ -1049,51 +1050,275 @@ function installSessionAndIpcOnce() {
     }
   });
 
-  ipcMain.on('remote-control-message', async (event, data) => {
-    try {
-      const { mouse, Point, Button } = getNutTree();
-
-      let targetX, targetY;
-
-      // Map content-normalized 0-1 coords onto the active share target bounds
-      // (secondary monitor when sharing that screen; primary fallback otherwise).
-      const bounds = currentShareTarget || primaryDisplayBoundsFallback();
-      const w = bounds.width;
-      const h = bounds.height;
-      const originX = bounds.x;
-      const originY = bounds.y;
-
-      if (data.absX !== undefined && data.absY !== undefined) {
-        targetX = Math.round(data.absX);
-        targetY = Math.round(data.absY);
-      } else {
-        targetX = Math.round(originX + (data.x || 0) * w);
-        targetY = Math.round(originY + (data.y || 0) * h);
-      }
-
-      if (data.type === 'mousemove') {
-        await mouse.setPosition(new Point(targetX, targetY));
-      } else if (data.type === 'mousedown') {
-        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
-        await mouse.setPosition(new Point(targetX, targetY));
-        await mouse.pressButton(btn);
-      } else if (data.type === 'mouseup') {
-        const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
-        await mouse.setPosition(new Point(targetX, targetY));
-        await mouse.releaseButton(btn);
-      } else if (data.type === 'dblclick') {
-        await mouse.setPosition(new Point(targetX, targetY));
-        await mouse.pressButton(Button.LEFT);
-        await mouse.releaseButton(Button.LEFT);
-        await new Promise((r) => setTimeout(r, 30));
-        await mouse.pressButton(Button.LEFT);
-        await mouse.releaseButton(Button.LEFT);
-      }
-    } catch (err) {
-      console.error('Remote control error:', err);
-    }
+  ipcMain.on('remote-control-session', (event, session) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    setRemoteControlSession(session);
   });
 
+  ipcMain.on('rc-bar-stop', (event) => {
+    if (!rcBarWindow || rcBarWindow.isDestroyed() || event.sender !== rcBarWindow.webContents) return;
+    stopRemoteControlFromPresenter('bar');
+  });
+
+  ipcMain.on('remote-control-message', async (event, data) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    // Only while control is granted (older pages: mouse only, as before), and not while the
+    // presenter is using their own mouse.
+    if (!remoteInput.acceptRemoteInput(rcSession, data, Date.now())) return;
+    const limiter = rcLimiters[remoteInput.limiterFor(data.type)];
+    if (!limiter || !limiter()) return;
+
+    // Events still queued when control stops are dropped, not executed.
+    const generation = rcGeneration;
+    rcQueue = rcQueue
+      .then(() => (generation === rcGeneration ? executeRemoteInput(data) : undefined))
+      .catch((err) => {
+        console.error('Remote control error:', err);
+      });
+  });
+
+}
+
+/* ── Remote control (presenter side) ─────────────────────────────────────── */
+
+const remoteInput = require('./remote-input');
+
+/** protocol: the meeting page reports sessions; active: someone is in control right now. */
+const rcSession = { protocol: false, active: false, controllerName: '', pausedUntil: 0 };
+const rcLimiters = {
+  pointer: remoteInput.createRateLimiter(150, 1000),
+  wheel: remoteInput.createRateLimiter(60, 1000),
+  key: remoteInput.createRateLimiter(30, 1000),
+  text: remoteInput.createRateLimiter(20, 1000),
+};
+/** Execute one event at a time, in order. */
+let rcQueue = Promise.resolve();
+/** Bumped whenever control ends, so queued events from the old session are skipped. */
+let rcGeneration = 0;
+const rcPressedButtons = new Set();
+let rcLastInjected = null;
+let rcLastInjectAt = 0;
+let rcLocalWatch = null;
+let rcLastSeen = null;
+let rcBarWindow = null;
+
+function rcTarget(data) {
+  // Map content-normalized 0-1 coords onto the active share target bounds
+  // (secondary monitor when sharing that screen; primary fallback otherwise), never outside it.
+  const bounds = currentShareTarget || primaryDisplayBoundsFallback();
+  return remoteInput.toScreenPoint(data, bounds, !rcSession.protocol);
+}
+
+async function rcMoveTo(mouse, Point, target) {
+  rcLastInjected = target;
+  rcLastInjectAt = Date.now();
+  await mouse.setPosition(new Point(target.x, target.y));
+  rcLastInjectAt = Date.now();
+}
+
+async function executeRemoteInput(data) {
+  const { mouse, keyboard, Point, Button, Key } = getNutTree();
+
+  if (data.type === 'key') {
+    const keys = remoteInput.toNutKeys({ key: data.key, mods: data.mods }, process.platform, Key);
+    if (!keys) return;
+    await keyboard.pressKey(...keys);
+    await keyboard.releaseKey(...keys.slice().reverse());
+    return;
+  }
+  if (data.type === 'text') {
+    const text = remoteInput.sanitizeText(data.text);
+    if (text) await keyboard.type(text);
+    return;
+  }
+
+  const target = rcTarget(data);
+  if (data.type === 'mousemove') {
+    await rcMoveTo(mouse, Point, target);
+  } else if (data.type === 'mousedown') {
+    const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
+    await rcMoveTo(mouse, Point, target);
+    await mouse.pressButton(btn);
+    rcPressedButtons.add(btn);
+  } else if (data.type === 'mouseup') {
+    const btn = data.button === 2 ? Button.RIGHT : Button.LEFT;
+    await rcMoveTo(mouse, Point, target);
+    await mouse.releaseButton(btn);
+    rcPressedButtons.delete(btn);
+  } else if (data.type === 'dblclick') {
+    await rcMoveTo(mouse, Point, target);
+    await mouse.pressButton(Button.LEFT);
+    await mouse.releaseButton(Button.LEFT);
+    await new Promise((r) => setTimeout(r, 30));
+    await mouse.pressButton(Button.LEFT);
+    await mouse.releaseButton(Button.LEFT);
+  } else if (data.type === 'wheel') {
+    const { down, right } = remoteInput.wheelSteps(data.dx, data.dy, process.platform);
+    if (!down && !right) return;
+    await rcMoveTo(mouse, Point, target);
+    if (down > 0) await mouse.scrollDown(down);
+    else if (down < 0) await mouse.scrollUp(-down);
+    if (right > 0) await mouse.scrollRight(right);
+    else if (right < 0) await mouse.scrollLeft(-right);
+  }
+}
+
+function setRemoteControlSession(session) {
+  rcSession.protocol = true;
+  const active = !!(session && session.active);
+  const name = session && typeof session.controllerName === 'string' ? session.controllerName.slice(0, 80) : '';
+  const wasActive = rcSession.active;
+  rcSession.active = active;
+  rcSession.controllerName = active ? name : '';
+  rcSession.pausedUntil = 0;
+  if (active) {
+    if (!wasActive) {
+      try {
+        globalShortcut.register(remoteInput.STOP_SHORTCUT, () => stopRemoteControlFromPresenter('shortcut'));
+      } catch (e) {
+        console.warn('remote-control stop shortcut not registered:', e);
+      }
+      startLocalMouseWatch();
+    }
+    showRcBar();
+  } else if (wasActive) {
+    endRemoteControlLocally();
+  }
+}
+
+/** Release anything the controller left pressed and drop the banner + shortcut. */
+function endRemoteControlLocally() {
+  rcGeneration += 1;
+  rcSession.active = false;
+  rcSession.controllerName = '';
+  try {
+    globalShortcut.unregister(remoteInput.STOP_SHORTCUT);
+  } catch {
+    /* ignore */
+  }
+  stopLocalMouseWatch();
+  hideRcBar();
+  // Runs after an event that is mid-execution, so a button it just pressed is released too.
+  rcQueue = rcQueue
+    .then(async () => {
+      const pressed = Array.from(rcPressedButtons);
+      rcPressedButtons.clear();
+      if (!pressed.length) return;
+      const { mouse } = getNutTree();
+      for (const btn of pressed) await mouse.releaseButton(btn);
+    })
+    .catch(() => {});
+}
+
+/** Presenter pressed the shortcut or the bar's Stop: stop executing at once, then tell the page. */
+function stopRemoteControlFromPresenter(reason) {
+  if (!rcSession.active) return;
+  endRemoteControlLocally();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('remote-control-stopped', reason);
+  }
+}
+
+/**
+ * The presenter's own mouse wins: when the cursor moves without us moving it, remote input
+ * pauses until the presenter has kept still for a moment.
+ */
+function startLocalMouseWatch() {
+  stopLocalMouseWatch();
+  rcLastSeen = null;
+  rcLocalWatch = setInterval(async () => {
+    if (!rcSession.active) return;
+    try {
+      const { mouse } = getNutTree();
+      const pos = await mouse.getPosition();
+      const prev = rcLastSeen;
+      rcLastSeen = { x: pos.x, y: pos.y };
+      if (!prev || Date.now() - rcLastInjectAt < 250) return;
+      const nearInjected = rcLastInjected && Math.hypot(pos.x - rcLastInjected.x, pos.y - rcLastInjected.y) < 4;
+      if (Math.hypot(pos.x - prev.x, pos.y - prev.y) > 4 && !nearInjected) {
+        const wasPaused = Date.now() < rcSession.pausedUntil;
+        rcSession.pausedUntil = Date.now() + 1500;
+        if (!wasPaused) sendRcBarState();
+      } else if (rcSession.pausedUntil && Date.now() >= rcSession.pausedUntil) {
+        rcSession.pausedUntil = 0;
+        sendRcBarState();
+      }
+    } catch {
+      /* ignore */
+    }
+  }, 120);
+}
+
+function stopLocalMouseWatch() {
+  if (rcLocalWatch) clearInterval(rcLocalWatch);
+  rcLocalWatch = null;
+}
+
+/* Floating bar on the shared screen: who is in control + Stop. Hidden from the capture. */
+const RC_BAR_WIDTH = 460;
+const RC_BAR_HEIGHT = 52;
+
+function sendRcBarState() {
+  if (!rcBarWindow || rcBarWindow.isDestroyed()) return;
+  rcBarWindow.webContents.send('rc-bar-state', {
+    name: rcSession.controllerName,
+    paused: Date.now() < rcSession.pausedUntil,
+    shortcut: process.platform === 'darwin' ? '⌃⌥S' : remoteInput.STOP_SHORTCUT.replace('Control', 'Ctrl'),
+  });
+}
+
+function showRcBar() {
+  const bounds = currentShareTarget || primaryDisplayBoundsFallback();
+  const x = Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2);
+  const y = Math.round(bounds.y + 14);
+  if (!rcBarWindow || rcBarWindow.isDestroyed()) {
+    rcBarWindow = new BrowserWindow({
+      x,
+      y,
+      width: RC_BAR_WIDTH,
+      height: RC_BAR_HEIGHT,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      movable: true,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      hasShadow: false,
+      focusable: false,
+      acceptFirstMouse: true,
+      alwaysOnTop: true,
+      show: false,
+      webPreferences: {
+        preload: path.join(__dirname, 'rc-bar-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
+    rcBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    // Viewers see the shared screen, not the presenter's controls.
+    rcBarWindow.setContentProtection(true);
+    rcBarWindow.on('closed', () => {
+      rcBarWindow = null;
+    });
+    rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
+    rcBarWindow.once('ready-to-show', () => {
+      if (rcSession.active && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
+    });
+    rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
+      console.warn('rc-bar load failed:', e);
+    });
+  } else {
+    rcBarWindow.setBounds({ x, y, width: RC_BAR_WIDTH, height: RC_BAR_HEIGHT });
+    if (!rcBarWindow.isVisible()) rcBarWindow.showInactive();
+    sendRcBarState();
+  }
+}
+
+function hideRcBar() {
+  if (rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.hide();
 }
 
 function createWindows() {
@@ -1165,6 +1390,10 @@ function createWindows() {
     }
   });
 
+  // A reload or navigation drops the meeting page without telling us the session ended.
+  mainWindow.webContents.on('did-navigate', () => endRemoteControlLocally());
+  mainWindow.webContents.on('render-process-gone', () => endRemoteControlLocally());
+
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
@@ -1194,6 +1423,15 @@ function destroyAllAuxiliaryWindows() {
     }
   }
   updateReadyPromptWindow = null;
+  endRemoteControlLocally();
+  if (rcBarWindow && !rcBarWindow.isDestroyed()) {
+    try {
+      rcBarWindow.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  rcBarWindow = null;
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     try {
       overlayWindow.destroy();

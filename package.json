@@ -115,6 +115,9 @@
     "files": [
       "main.js",
       "preload.js",
+      "remote-input.js",
+      "rc-bar.html",
+      "rc-bar-preload.js",
       "update-progress.html",
       "update-progress-preload.js",
       "update-ready.html",

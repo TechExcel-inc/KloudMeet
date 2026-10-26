@@ -25,9 +25,41 @@
     const canvas = document.getElementById('annotationCanvas');
     const ctx = canvas.getContext('2d');
 
+    // One path per stroke (`sid`), so two people drawing at once don't join lines.
+    // Points are 0–1 within the shared screen and this window covers exactly that screen;
+    // strokes are kept so a resize (share target moved to another display) redraws them.
+    const strokes = new Map();
+
+    function style(stroke) {
+      ctx.strokeStyle = stroke.color;
+      ctx.fillStyle = stroke.color;
+      ctx.lineWidth = stroke.lineWidth;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+    }
+
+    function drawFrom(stroke, from) {
+      const n = stroke.pts.length / 2;
+      const X = (i) => stroke.pts[i * 2] * canvas.width;
+      const Y = (i) => stroke.pts[i * 2 + 1] * canvas.height;
+      style(stroke);
+      if (n === 1 || (from === 0 && n > 0)) {
+        ctx.beginPath();
+        ctx.arc(X(0), Y(0), stroke.lineWidth / 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (n < 2) return;
+      const start = Math.max(0, from - 1);
+      ctx.beginPath();
+      ctx.moveTo(X(start), Y(start));
+      for (let i = start + 1; i < n; i++) ctx.lineTo(X(i), Y(i));
+      ctx.stroke();
+    }
+
     function resize() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
+      for (const stroke of strokes.values()) drawFrom(stroke, 0);
     }
     window.addEventListener('resize', resize);
     resize();
@@ -36,26 +68,25 @@
       window.electronAPI.onDrawMessage((data) => {
         if (data.type === 'clear') {
           ctx.clearRect(0, 0, canvas.width, canvas.height);
+          strokes.clear();
           return;
         }
 
-        const absX = data.x * canvas.width;
-        const absY = data.y * canvas.height;
-
-        ctx.strokeStyle = data.color || '#ef4444';
-        ctx.lineWidth = data.lineWidth || 4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        if (data.type === 'start') {
-          ctx.beginPath();
-          ctx.moveTo(absX, absY);
-        } else if (data.type === 'draw') {
-          ctx.lineTo(absX, absY);
-          ctx.stroke();
-        } else if (data.type === 'end') {
-          ctx.closePath();
+        // Older meeting pages send no sid: treat each 'start' as a new stroke.
+        let key = data.sid;
+        if (!key) {
+          if (data.type === 'start') window.__strokeSeq = (window.__strokeSeq || 0) + 1;
+          key = '_' + (window.__strokeSeq || 0);
         }
+        if (data.type === 'end') return;
+
+        let stroke = strokes.get(key);
+        if (!stroke || data.type === 'start') {
+          stroke = { color: data.color || '#ef4444', lineWidth: data.lineWidth || 4, pts: [] };
+          strokes.set(key, stroke);
+        }
+        stroke.pts.push(data.x, data.y);
+        drawFrom(stroke, stroke.pts.length / 2 - 1);
       });
     }
   </script>
