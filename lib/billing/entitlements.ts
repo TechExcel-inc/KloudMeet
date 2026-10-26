@@ -15,6 +15,7 @@ import {
   type PlanLimits,
   PLANS,
   includedReplaySeconds,
+  isSeatPlan,
   isPlanId,
 } from '@/lib/billing/plans';
 
@@ -226,7 +227,7 @@ export function entitlementsFromSubscription(
     limits: PLANS[plan].limits,
     teamMemberId,
     accountId,
-    seats: plan === 'TEAM' ? Math.max(1, sub?.seats ?? 1) : 1,
+    seats: isSeatPlan(plan) ? Math.max(1, sub?.seats ?? 1) : 1,
     interval,
     status: sub?.status ?? null,
     source: sub?.source ?? null,

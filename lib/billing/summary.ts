@@ -7,6 +7,7 @@ import {
   type PlanId,
   type PlanLimits,
   hoursPackPriceId,
+  isSeatPlan,
   stripePriceIdFor,
 } from '@/lib/billing/plans';
 import {
@@ -68,7 +69,7 @@ export async function buildBillingSummary(teamMemberId: number): Promise<Billing
     ent.accountId ? isAccountAdminOf(teamMemberId, ent.accountId) : Promise.resolve(true),
   ]);
 
-  const catalog: CatalogPlan[] = (['FREE', 'PRO', 'TEAM'] as const).map((id) => {
+  const catalog: CatalogPlan[] = (['FREE', 'PRO', 'TEAM', 'BUSINESS'] as const).map((id) => {
     const def = PLANS[id];
     const prices: CatalogPlan['prices'] = {};
     for (const interval of ['month', 'year'] as const) {
@@ -77,7 +78,7 @@ export async function buildBillingSummary(teamMemberId: number): Promise<Billing
       prices[interval] = {
         monthlyRateCents: price.monthlyRateCents,
         amountCents: price.amountCents,
-        available: id !== 'FREE' && Boolean(stripePriceIdFor(id as 'PRO' | 'TEAM', interval)),
+        available: id !== 'FREE' && Boolean(stripePriceIdFor(id, interval)),
       };
     }
     return { id, name: def.name, minSeats: def.minSeats, limits: def.limits, prices };
@@ -91,7 +92,7 @@ export async function buildBillingSummary(teamMemberId: number): Promise<Billing
     source: ent.source,
     interval: ent.interval,
     seats: ent.seats,
-    seatsUsed: ent.plan === 'TEAM' ? seatsUsed : 1,
+    seatsUsed: isSeatPlan(ent.plan) ? seatsUsed : 1,
     cancelAtPeriodEnd: ent.cancelAtPeriodEnd,
     currentPeriodEnd: ent.currentPeriodEnd?.toISOString() ?? null,
     canManage,

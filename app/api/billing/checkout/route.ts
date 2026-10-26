@@ -1,11 +1,11 @@
 /**
- * POST /api/billing/checkout  { plan: 'PRO' | 'TEAM', interval: 'month' | 'year', seats?: number }
+ * POST /api/billing/checkout  { plan: 'PRO' | 'TEAM' | 'BUSINESS', interval: 'month' | 'year', seats?: number }
  * → { url } of a Stripe Checkout Session (subscription mode).
  * Owner / Admin only; a member without an account gets a personal account here.
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
-import { PLANS, isBillingInterval, isSelfServePlan, stripePriceIdFor } from '@/lib/billing/plans';
+import { PLANS, isBillingInterval, isSeatPlan, isSelfServePlan, stripePriceIdFor } from '@/lib/billing/plans';
 import { effectivePlan } from '@/lib/billing/entitlements';
 import { createCheckoutSession } from '@/lib/billing/stripe';
 import {
@@ -31,11 +31,11 @@ export async function POST(request: NextRequest) {
     const plan = body?.plan;
     const interval = body?.interval;
     if (!isSelfServePlan(plan) || !isBillingInterval(interval)) {
-      return NextResponse.json({ error: 'Choose PRO or TEAM and month or year' }, { status: 400 });
+      return NextResponse.json({ error: 'Choose PRO, TEAM or BUSINESS and month or year' }, { status: 400 });
     }
     const minSeats = PLANS[plan].minSeats;
     const requestedSeats = Math.floor(Number(body?.seats ?? minSeats));
-    const seats = plan === 'TEAM' ? Math.min(MAX_SEATS, Math.max(minSeats, requestedSeats || minSeats)) : 1;
+    const seats = isSeatPlan(plan) ? Math.min(MAX_SEATS, Math.max(minSeats, requestedSeats || minSeats)) : 1;
 
     const priceId = stripePriceIdFor(plan, interval);
     if (!priceId) {

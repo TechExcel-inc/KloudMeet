@@ -564,7 +564,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 </a>
 
                 <a
-                  href="mailto:support@kloudmeet.com"
+                  href="mailto:ying.huang@kloud.com"
                   className="help-contact-link"
                   style={{
                     display: 'flex',
