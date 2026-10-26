@@ -16,6 +16,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('remote-control-stopped', handler);
     return () => ipcRenderer.removeListener('remote-control-stopped', handler);
   },
+  /** A control request is waiting (or null when answered): also shown in the floating bar. */
+  setRemoteControlRequest: (request) => ipcRenderer.send('remote-control-request', request),
+  onRemoteControlAnswer: (callback) => {
+    const handler = (_event, allow) => callback(allow === true);
+    ipcRenderer.on('remote-control-answer', handler);
+    return () => ipcRenderer.removeListener('remote-control-answer', handler);
+  },
   getShareTargetBounds: () => ipcRenderer.invoke('get-share-target-bounds'),
   clearShareTarget: () => ipcRenderer.invoke('clear-share-target'),
   /** Google sign-in opens the system browser and returns via kloudmeet://auth. */

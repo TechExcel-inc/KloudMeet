@@ -32,6 +32,10 @@ declare global {
       setRemoteControlSession?: (session: { active: boolean; controllerName?: string }) => void;
       /** The presenter stopped control from the desktop banner or shortcut. Returns an unsubscribe. */
       onRemoteControlStopped?: (callback: (reason: string) => void) => () => void;
+      /** Shows a waiting control request in the desktop app's floating bar (null clears it). */
+      setRemoteControlRequest?: (request: { name: string } | null) => void;
+      /** Allow / Deny clicked in that bar. Returns an unsubscribe. */
+      onRemoteControlAnswer?: (callback: (allow: boolean) => void) => () => void;
     };
   }
 }
