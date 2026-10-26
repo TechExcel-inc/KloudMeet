@@ -154,6 +154,13 @@ export async function POST(
       return NextResponse.json({ error: 'Only the host can record this meeting', code: 'RECORDING_NOT_ALLOWED' }, { status: 403 });
     }
 
+    // The recording page saw a screen share start: record it (also without LiveKit's webhook).
+    if (action === 'screen') {
+      const active = await findActiveRecording(meeting.id);
+      if (active?.kind === 'livedoc_full') await startScreenSectionsForRoom(active, roomName);
+      return NextResponse.json({ success: true });
+    }
+
     if (action === 'pause' || action === 'resume') {
       const active = await findActiveRecording(meeting.id);
       if (!active) return NextResponse.json({ error: 'No active recording found' }, { status: 404 });
@@ -323,7 +330,7 @@ export async function POST(
           : {}),
       }
     });
-    // LiveDoc Full: a screen share already on is recorded from now (later ones via the webhook)
+    // LiveDoc Full: a screen share already on is recorded from now (later ones via the page and the webhook)
     if (livedocFull) {
       await startScreenSectionsForRoom(recording, roomName).catch((e) =>
         console.error('[meetings record] screen sections failed to start', e),

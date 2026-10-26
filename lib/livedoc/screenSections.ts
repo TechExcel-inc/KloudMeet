@@ -1,6 +1,7 @@
 import {
   DirectFileOutput,
   EgressClient,
+  EgressStatus,
   RoomServiceClient,
   TrackSource,
   type EgressInfo,
@@ -12,6 +13,9 @@ import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
  * LiveDoc Full Recording: each screen share is recorded on its own (a LiveKit track egress of the
  * screen-share video) as a RecordingSection placed on Kloud's LiveDoc timeline, so the replay can
  * show it full view for the stretch it was on. The voice is recorded separately.
+ *
+ * Webhooks are not relied on: a share is also reported by the page that started the recording,
+ * and sections are finished by asking LiveKit for their egress (on stop, sync and replay).
  */
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
@@ -61,8 +65,24 @@ async function activeLivedocRecording(roomName: string) {
   });
 }
 
-/** Start recording one screen-share track of a running livedoc_full recording. */
-export async function startScreenSection(
+/** Starts in progress, by track, so the webhook and the page reporting the same share start it once. */
+const starting = new Map<string, Promise<void>>();
+
+/** Start recording one screen-share track of a running livedoc_full recording (once per track). */
+export function startScreenSection(
+  recording: { id: number; livedocStartedAt: Date | null },
+  roomName: string,
+  trackSid: string,
+  identity: string,
+): Promise<void> {
+  const running = starting.get(trackSid);
+  if (running) return running;
+  const job = start(recording, roomName, trackSid, identity).finally(() => starting.delete(trackSid));
+  starting.set(trackSid, job);
+  return job;
+}
+
+async function start(
   recording: { id: number; livedocStartedAt: Date | null },
   roomName: string,
   trackSid: string,
@@ -73,10 +93,8 @@ export async function startScreenSection(
   // No extension: LiveKit adds the one that fits the track's codec.
   const output = directFileOutput(`recordings/${roomName}-screen-${stamp}`);
   if (!client || !output) return;
-  const already = await prisma.recordingSection.findFirst({
-    where: { recordingId: recording.id, kind: 'screen', status: 'PROCESSING', userId: identity },
-  });
-  if (already) return;
+  const active = await client.listEgress({ roomName, active: true });
+  if (active.some((info) => info.request.case === 'track' && info.request.value.trackId === trackSid)) return;
   const info = await client.startTrackEgress(roomName, output, trackSid);
   const startMs = recording.livedocStartedAt ? Date.now() - recording.livedocStartedAt.getTime() : null;
   await prisma.recordingSection.create({
@@ -120,10 +138,11 @@ export async function startScreenSectionsForRoom(
   }
 }
 
-/** Recording stops: stop its screen recordings still running. */
+/** Recording stops: finish the screen sections already done, stop the ones still running. */
 export async function stopScreenSections(recordingId: number): Promise<void> {
   const client = egressClient();
   if (!client) return;
+  await finishScreenSections([recordingId]);
   const running = await prisma.recordingSection.findMany({
     where: { recordingId, kind: 'screen', status: 'PROCESSING' },
   });
@@ -134,14 +153,38 @@ export async function stopScreenSections(recordingId: number): Promise<void> {
   }
 }
 
+const ENDED = [EgressStatus.EGRESS_COMPLETE, EgressStatus.EGRESS_FAILED, EgressStatus.EGRESS_ABORTED, EgressStatus.EGRESS_LIMIT_REACHED];
+
+/** Finish the screen sections of these recordings whose egress has ended, asking LiveKit (no webhook needed). */
+export async function finishScreenSections(recordingIds: number[]): Promise<void> {
+  const client = egressClient();
+  if (!client || recordingIds.length === 0) return;
+  const open = await prisma.recordingSection.findMany({
+    where: { recordingId: { in: recordingIds }, kind: 'screen', status: 'PROCESSING' },
+  });
+  for (const section of open) {
+    const info = await client
+      .listEgress({ egressId: section.providerRef })
+      .then((list) => list[0])
+      .catch((e) => console.error('[screenSections] listEgress failed', section.providerRef, e));
+    if (info && ENDED.includes(info.status)) await settle(section, info);
+  }
+}
+
 /** LiveKit egress_ended for a screen section: the file is ready (or failed). Returns true if it was one. */
 export async function onSectionEgressEnded(info: EgressInfo): Promise<boolean> {
   const section = await prisma.recordingSection.findFirst({ where: { providerRef: info.egressId } });
   if (!section) return false;
+  if (section.status === 'PROCESSING') await settle(section, info);
+  return true;
+}
+
+/** An ended egress: its section is READY with the file placed on Kloud's timeline, or FAILED. */
+async function settle(section: { id: number; recordingId: number; startMs: number | null }, info: EgressInfo) {
   const file = info.fileResults?.[0] ?? (info.result?.case === 'file' ? info.result.value : null);
   if (info.error || !file?.filename) {
     await prisma.recordingSection.update({ where: { id: section.id }, data: { status: 'FAILED' } });
-    return true;
+    return;
   }
   const recording = await prisma.recording.findUnique({
     where: { id: section.recordingId },
@@ -163,5 +206,4 @@ export async function onSectionEgressEnded(info: EgressInfo): Promise<boolean> {
       endMs: startMs !== null && durationMs !== null ? startMs + durationMs : null,
     },
   });
-  return true;
 }

@@ -478,6 +478,23 @@ export function VideoConferenceComponent(props: {
   // Check for any active screen share tracks in the room
   const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
   const hasScreenShare = screenShareTracks.length > 0;
+
+  // LiveDoc Full: the page that started the recording reports each screen share that starts, so it is
+  // recorded even when LiveKit's webhook doesn't reach the server.
+  const screenSids = screenShareTracks.map((ref) => ref.publication?.trackSid ?? '').filter(Boolean).join(',');
+  const reportedSidsRef = React.useRef(new Set<string>());
+  React.useEffect(() => {
+    if (!recordingState.active || recordingState.option !== 'livedoc_full' || !startedRecordingHereRef.current) return;
+    const fresh = screenSids.split(',').filter((sid) => sid && !reportedSidsRef.current.has(sid));
+    if (fresh.length === 0) return;
+    fresh.forEach((sid) => reportedSidsRef.current.add(sid));
+    const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
+    void fetch(`/api/meetings/${roomSeg}/record`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ action: 'screen' }),
+    }).catch(() => fresh.forEach((sid) => reportedSidsRef.current.delete(sid)));
+  }, [screenSids, recordingState.active, recordingState.option]);
   // Whether the local participant is the one sharing their screen (derived from tracks, not state)
   const isLocalScreenShare = screenShareTracks.some(
     (t) => t.participant?.identity === room.localParticipant.identity,

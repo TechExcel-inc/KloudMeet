@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { EgressClient } from 'livekit-server-sdk';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import { onRecordingReady } from '@/lib/billing/limits';
+import { finishScreenSections } from '@/lib/livedoc/screenSections';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
 const API_KEY = process.env.LIVEKIT_API_KEY || '';
@@ -95,6 +96,16 @@ export async function GET(request: NextRequest) {
         console.error(`Failed to sync egress ${egressId}:`, e);
       }
     }
+
+    // LiveDoc Full: screen sections whose egress has ended
+    const open = await prisma.recordingSection.findMany({
+      where: { status: 'PROCESSING', recording: { teamMemberId: session.teamMember.id } },
+      select: { recordingId: true },
+      distinct: ['recordingId'],
+    });
+    await finishScreenSections(open.map((section) => section.recordingId)).catch((e) =>
+      console.error('[account recordings sync] screen sections failed to finish', e),
+    );
 
     return NextResponse.json({ success: true, updatedCount });
   } catch (error: any) {

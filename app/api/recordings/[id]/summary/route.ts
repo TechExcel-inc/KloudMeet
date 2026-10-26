@@ -6,6 +6,7 @@ import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import { parsePauseSpans, pauseRangesInMedia } from '@/lib/recordingControls';
+import { finishScreenSections } from '@/lib/livedoc/screenSections';
 import { isInternalMember } from '@/lib/internalStaff.server';
 import {
   authorizeRecordingView,
@@ -93,6 +94,10 @@ export async function GET(
         },
       });
 
+    // LiveDoc Full: finish screen sections whose egress has ended, so the replay has them
+    await finishScreenSections([located.id]).catch((e) =>
+      console.error('[replay summary] screen sections failed to finish', e),
+    );
     let recording = await loadReplay(located.id);
 
     if (!recording || recording.deletedAt) {
