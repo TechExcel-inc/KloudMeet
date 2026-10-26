@@ -2175,6 +2175,80 @@ a.dropdownItem:focus-visible {
   border-top: 1px solid var(--dash-line);
 }
 
+/* The day label sticks to the top of the list while its rows scroll under it;
+   the next day's label pushes it out, so the top line always names the day in view. */
+.meetingDateGroup > .meetingDateLabel {
+  position: sticky;
+  top: var(--dash-sticky-top, 0px);
+  z-index: 2;
+}
+
+.meetingDateGroup > .meetingDaySubLabel {
+  background: var(--dash-surface);
+}
+
+/* Keyboard focus never lands a row under the sticky label */
+.meetingCardsList .meetingCard,
+.meetingCardsList .meetingCardLive {
+  scroll-margin-top: 44px;
+}
+
+/* Desktop: the page stays put; only the meeting list scrolls, inside its card.
+   The card hugs a short list and stops at the window's foot for a long one. */
+@media (min-width: 641px) and (min-height: 621px) {
+  .dashPage {
+    height: 100vh;
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .dashPage .dashMain {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-bottom: 32px;
+  }
+
+  .dashPage .meetingListSection {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+
+  .dashPage .meetingListHeader,
+  .dashPage .paginationFooter {
+    flex-shrink: 0;
+  }
+
+  .dashPage .meetingCardsList {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+}
+
+/* Phones and short windows: the page scrolls as before; the day label sticks under
+   the sticky top bar (.navInner height + its 1px border) */
+@media (max-width: 640px), (max-height: 620px) {
+  /* As tall as its content (not stretched to one screen), so the sticky top bar
+     and day labels hold all the way down the page */
+  .dashPage {
+    --dash-sticky-top: 69px;
+    align-self: flex-start;
+  }
+
+  /* clip, not hidden: hidden would trap the sticky label inside the card */
+  .dashPage .meetingListSection {
+    overflow: clip;
+  }
+}
+
+@media (max-width: 640px) {
+  .dashPage {
+    --dash-sticky-top: 61px;
+  }
+}
+
 .meetingSectionLabel {
   display: flex;
   align-items: center;

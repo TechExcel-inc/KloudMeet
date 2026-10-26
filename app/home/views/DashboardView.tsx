@@ -98,6 +98,11 @@ export function DashboardView({
   // Row selection for click and keyboard (↑ ↓ Home End move, Enter runs the row's main action)
   const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
   const meetingCardRefs = useRef(new Map<number, HTMLElement>());
+  // The list scrolls inside its card; a new page, size or scope starts at the top
+  const meetingListScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    meetingListScrollRef.current?.scrollTo({ top: 0 });
+  }, [page, pageSize, meetingScope]);
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
     pendingIntent: MeetingStartIntent;
@@ -1281,7 +1286,8 @@ export function DashboardView({
               <p className={styles.meetingEmptyText}>{t('dash.emptyMeetingsHint')}</p>
             </div>
           ) : (
-            <div className={styles.meetingCardsList}>
+            <>
+            <div className={styles.meetingCardsList} ref={meetingListScrollRef}>
               {upcomingMeetings.length > 0 && (
                 <div className={styles.meetingDateGroup}>
                   <h3 className={`${styles.meetingDateLabel} ${styles.meetingSectionLabel}`}>
@@ -1316,8 +1322,9 @@ export function DashboardView({
                   </div>
                 </div>
               ))}
+            </div>
 
-              {/* Pagination */}
+              {/* Pagination: stays at the card's foot while the list scrolls */}
               <div className={styles.paginationFooter}>
                 <div className={styles.paginationLeft}>
                   <select
@@ -1404,7 +1411,7 @@ export function DashboardView({
                   </button>
                 </div>
               </div>
-            </div>
+            </>
           )}
         </section>
       </div>{/* end dashMain */}
