@@ -169,10 +169,13 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  /* This person's tint, as on their stage tile */
+  background: hsl(var(--km-tile-hue, 230) 26% 32%);
   color: #fff;
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -229,7 +232,7 @@
 }
 
 .stack :global(.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"]))::after {
-  border: 2px solid #fff;
+  border: 2px solid #22c55e;
 }
 
 .stack .avatarSelected {

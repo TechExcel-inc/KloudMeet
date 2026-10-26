@@ -6,6 +6,7 @@ import { VideoTrack } from '@livekit/components-react';
 import { LiveDocFloatingCollapsedAvatar, LiveDocFloatingGridTile } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import { getInitials } from '@/lib/getInitials';
+import { tileHue } from '@/lib/tileLayout';
 import styles from '@/styles/MeetingDocumentPip.module.css';
 
 export interface MeetingDocumentPipLabels {
@@ -703,7 +704,10 @@ export function MeetingDocumentPipPanel({
                 {collapsed.map((e, i) => {
                   const participant =
                     e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
-                  const z = { zIndex: COLLAPSED_MAX - i };
+                  const z = {
+                    zIndex: COLLAPSED_MAX - i,
+                    ['--km-tile-hue' as string]: String(tileHue(e.name || e.id)),
+                  } as React.CSSProperties;
                   const mark = isSharer(e.id);
                   if (!participant) {
                     return (
