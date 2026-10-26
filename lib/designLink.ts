@@ -27,6 +27,8 @@ export interface StoredDesignLink {
   setBy?: string;
   setByName?: string;
   setAt?: number;
+  /** The site refuses to be shown in a frame (checked when the link was shared) */
+  embed?: 'blocked';
 }
 
 /** Locale key (and English fallback) naming what kind of link this is, e.g. "Figma prototype". */
@@ -55,7 +57,8 @@ const FIGMA_TYPES: Record<string, FigmaEmbedType> = {
 /** Share-link noise that the embed doesn't need */
 const FIGMA_DROP_PARAMS = new Set(['t', 'fuid', 'embed-host', 'embed_host', 'client-id']);
 
-function isPrivateHost(hostname: string): boolean {
+/** Addresses only reachable on the local network (or not reachable at all). Also used on resolved IPs. */
+export function isPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     return true;
@@ -71,7 +74,9 @@ function isPrivateHost(hostname: string): boolean {
       (a === 100 && b >= 64 && b <= 127) ||
       (a === 169 && b === 254) ||
       (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168)
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
     );
   }
   if (host.includes(':')) {
@@ -170,6 +175,7 @@ export function parseStoredDesignLink(value: unknown): StoredDesignLink | null {
     ...(typeof v.setBy === 'string' ? { setBy: v.setBy.slice(0, 200) } : {}),
     ...(typeof v.setByName === 'string' ? { setByName: v.setByName.slice(0, 120) } : {}),
     ...(typeof v.setAt === 'number' && Number.isFinite(v.setAt) ? { setAt: v.setAt } : {}),
+    ...(v.embed === 'blocked' ? { embed: 'blocked' as const } : {}),
   };
 }
 

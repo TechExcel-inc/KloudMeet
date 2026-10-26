@@ -26,6 +26,8 @@ const ZOOM_STEP = 0.1;
 const SYNC_DETECT_MS = 4000;
 /** Scroll events this close to where we sent the page are ours, not the viewer's */
 const SCROLL_MATCH_PX = 4;
+/** A web page that hasn't finished loading by now may be refusing to be framed */
+const SLOW_LOAD_MS = 12000;
 
 type Tool = 'interact' | 'pen' | 'laser';
 
@@ -38,6 +40,8 @@ interface DesignStageProps {
   /** May change or stop the link, draw and use the laser (host, co-host, presenter) */
   canControl: boolean;
   sync: DesignSync;
+  /** The site refuses to be shown in a frame: everyone gets an "Open in new tab" card instead */
+  embedBlocked?: boolean;
   onChangeLink?: () => void;
   onStop?: () => void;
 }
@@ -47,7 +51,16 @@ interface DesignStageProps {
  * Pages with the Kloud sync script (hosted designs) follow the presenter's page and scroll and
  * take annotations and the laser; other pages share only the link, frame size and zoom.
  */
-export function DesignStage({ link, presenterName, isDriver, canControl, sync, onChangeLink, onStop }: DesignStageProps) {
+export function DesignStage({
+  link,
+  presenterName,
+  isDriver,
+  canControl,
+  sync,
+  embedBlocked = false,
+  onChangeLink,
+  onStop,
+}: DesignStageProps) {
   const { t } = useI18n();
   const tf = (key: string, fallback: string, params?: Record<string, string | number>) => {
     const value = t(key, params);
@@ -62,6 +75,9 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
   const [following, setFollowing] = React.useState(true);
   const [loaded, setLoaded] = React.useState(false);
   const [noticeOpen, setNoticeOpen] = React.useState(false);
+  /** The frame fired load (`loaded` also turns true after a while to stop covering slow pages) */
+  const [frameLoaded, setFrameLoaded] = React.useState(false);
+  const [slowNotice, setSlowNotice] = React.useState(false);
   /** The page the frame shows (changes when following the presenter to another page) */
   const [frameSrc, setFrameSrc] = React.useState(link.embedUrl);
   /** Reported by the page's sync script; null until it says hello */
@@ -93,9 +109,19 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
     return () => window.clearTimeout(loadTimer);
   }, [link.embedUrl]);
 
+  // A page still not loaded after a while may be refusing to be shown in a frame (some browsers
+  // never finish loading a refused frame); offer the new-tab way in.
+  React.useEffect(() => {
+    setFrameLoaded(false);
+    setSlowNotice(false);
+    if (embedBlocked || link.kind !== 'web') return;
+    const timer = window.setTimeout(() => setSlowNotice(true), SLOW_LOAD_MS);
+    return () => window.clearTimeout(timer);
+  }, [frameSrc, embedBlocked, link.kind]);
+
   // Pages without the sync script: say once that only the link is shared.
   React.useEffect(() => {
-    if (synced) {
+    if (synced || embedBlocked) {
       setNoticeOpen(false);
       return;
     }
@@ -105,7 +131,7 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
       window.clearTimeout(open);
       window.clearTimeout(close);
     };
-  }, [synced, link.embedUrl]);
+  }, [synced, embedBlocked, link.embedUrl]);
 
   React.useEffect(() => {
     const el = canvasRef.current;
@@ -207,7 +233,7 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
   const followingRemote = !isDriver && following && !!sync.remoteViewport;
   const viewport = followingRemote ? sync.remoteViewport : ownViewport;
   // Figma has its own pan and zoom inside the embed, so ours stays at 100%.
-  const showZoom = link.kind === 'web';
+  const showZoom = link.kind === 'web' && !embedBlocked;
 
   const reportViewport = sync.reportViewport;
   React.useEffect(() => {
@@ -302,7 +328,33 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
   return (
     <div className={styles.stage}>
       <div ref={canvasRef} className={styles.canvas}>
-        {layout && (
+        {embedBlocked ? (
+          <div className={styles.blocked} role="status">
+            <span className={styles.blockedIcon} aria-hidden="true">
+              <BlockedGlyph size={26} />
+            </span>
+            <h3 className={styles.blockedTitle}>{tf('design.blockedTitle', 'This site doesn’t allow embedding')}</h3>
+            <p className={styles.blockedBody}>
+              {tf('design.blockedBody', '{host} blocks being shown inside other pages. Open it in a new tab to follow along.', {
+                host: link.host,
+              })}
+            </p>
+            <div className={styles.blockedActions}>
+              <a className={styles.btnPrimaryLg} href={link.url} target="_blank" rel="noopener noreferrer">
+                {tf('design.openNewTab', 'Open in new tab')}
+                <ExternalGlyph />
+              </a>
+              {canControl && onChangeLink && (
+                <button type="button" className={styles.btnLg} onClick={onChangeLink}>
+                  {tf('design.changeLink', 'Change link')}
+                </button>
+              )}
+            </div>
+            <span className={styles.blockedUrl} title={link.url}>
+              {link.url}
+            </span>
+          </div>
+        ) : layout && (
           <div className={styles.box} style={{ width: layout.boxWidth, height: layout.boxHeight }}>
             <iframe
               ref={frameRef}
@@ -320,7 +372,10 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation allow-storage-access-by-user-activation"
               allow="fullscreen; clipboard-write"
               referrerPolicy="strict-origin-when-cross-origin"
-              onLoad={() => setLoaded(true)}
+              onLoad={() => {
+                setLoaded(true);
+                setFrameLoaded(true);
+              }}
             />
             {synced && (pageStrokes.length > 0 || pageLasers.length > 0 || drawing) && (
               <div
@@ -428,7 +483,18 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
             {sourceHost && <span className={styles.sourceHost}> · {sourceHost}</span>}
           </span>
         </span>
-        {synced ? (
+        {embedBlocked ? (
+          <span
+            className={`${styles.chip} ${styles.chipBlocked} ${styles.hideNarrow}`}
+            title={tf(
+              'design.blockedChipHint',
+              'This site doesn’t allow being shown inside the meeting. Everyone can open it in a new tab.',
+            )}
+          >
+            <BlockedGlyph />
+            {tf('design.blockedChip', 'Can’t embed')}
+          </span>
+        ) : synced ? (
           <span
             className={`${styles.chip} ${styles.chipSynced} ${styles.hideNarrow}`}
             title={tf('design.syncedHint', 'Page, scrolling, drawings and the laser follow the presenter.')}
@@ -445,7 +511,7 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
             {tf('design.linkOnly', 'Link only')}
           </span>
         )}
-        {!isDriver && (synced || showZoom) && (
+        {!isDriver && !embedBlocked && (synced || showZoom) && (
           following ? (
             <span className={`${styles.follow} ${styles.hideNarrow}`}>
               <span className={styles.followDot} aria-hidden="true" />
@@ -507,6 +573,25 @@ export function DesignStage({ link, presenterName, isDriver, canControl, sync, o
             aria-label={tf('design.zoomIn', 'Zoom in')}
           >
             +
+          </button>
+        </div>
+      )}
+
+      {slowNotice && !frameLoaded && !synced && !noticeOpen && (
+        <div className={styles.notice} role="status">
+          <InfoGlyph />
+          <span>{tf('design.slowNotice', 'Still loading? Some sites don’t allow being shown inside meetings.')}</span>
+          <a className={styles.noticeLink} href={link.url} target="_blank" rel="noopener noreferrer">
+            {tf('design.openNewTab', 'Open in new tab')}
+          </a>
+          <button
+            type="button"
+            className={styles.iconBtn}
+            onClick={() => setSlowNotice(false)}
+            aria-label={t('common.close')}
+            title={t('common.close')}
+          >
+            <CloseGlyph />
           </button>
         </div>
       )}
@@ -609,6 +694,15 @@ function ExternalGlyph() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5" />
+    </svg>
+  );
+}
+
+/** A page frame with a stroke through it: the site can't be shown here */
+export function BlockedGlyph({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 4h11a1 1 0 011 1v11M20 20H5a1 1 0 01-1-1V5M4 8.5h4.5M12 8.5h8M3 3l18 18" />
     </svg>
   );
 }

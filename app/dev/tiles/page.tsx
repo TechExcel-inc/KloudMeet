@@ -16,7 +16,7 @@ import { IDLE_RECORDING_STATE, type RecordingState } from '@/lib/recordingContro
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
 import { parseDesignLink, type DesignLink } from '@/lib/designLink';
-import { rememberDesignLink } from '@/lib/designLinkClient';
+import { checkDesignLinkEmbed, rememberDesignLink } from '@/lib/designLinkClient';
 import { parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
 
@@ -27,15 +27,32 @@ function useDevDesignTransport(identity: string, name: string): DesignSyncTransp
   return React.useMemo(() => {
     if (typeof window === 'undefined' || typeof BroadcastChannel === 'undefined') return null;
     const channel = new BroadcastChannel('km-dev-design');
+    // kmDesignOffline(true) in the console drops messages both ways like a lost connection;
+    // kmDesignOffline(false) comes back and fires onConnected, as a meeting reconnect does.
+    let offline = false;
+    const onConnected = new Set<() => void>();
+    (window as unknown as { kmDesignOffline?: (off: boolean) => void }).kmDesignOffline = (off) => {
+      offline = off;
+      if (!off) onConnected.forEach((handler) => handler());
+    };
     return {
-      send: (msg) => channel.postMessage({ from: identity, name, msg }),
+      send: (msg, opts) => {
+        if (!offline) channel.postMessage({ from: identity, name, msg, ...(opts?.to ? { to: opts.to } : {}) });
+      },
       subscribe: (handler) => {
         const onMessage = (event: MessageEvent) => {
+          if (offline || (event.data?.to && event.data.to !== identity)) return;
           const msg = parseDesignSyncMessage(event.data?.msg);
           if (msg) handler(msg, { identity: String(event.data.from), name: String(event.data.name || '') });
         };
         channel.addEventListener('message', onMessage);
         return () => channel.removeEventListener('message', onMessage);
+      },
+      onConnected: (handler) => {
+        onConnected.add(handler);
+        return () => {
+          onConnected.delete(handler);
+        };
       },
     };
   }, [identity, name]);
@@ -147,10 +164,13 @@ export default function DevTilesPage() {
   // link", ?as=attendee views as an attendee following the host window (open both side by side).
   const [designLink, setDesignLink] = React.useState<DesignLink | null>(null);
   const [designDialog, setDesignDialog] = React.useState(false);
+  /** ?blocked=1 previews the card a site that refuses framing gets (normally set by the embed check) */
+  const [designBlocked, setDesignBlocked] = React.useState(false);
   React.useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     if (query.get('as') === 'attendee') setHost(false);
     if (query.get('dialog') === '1') setDesignDialog(true);
+    if (query.get('blocked') === '1') setDesignBlocked(true);
     const preset = query.get('design');
     if (!preset) return;
     const parsed = parseDesignLink(preset, { appOrigin: window.location.origin, allowLocalHttp: true });
@@ -221,6 +241,7 @@ export default function DevTilesPage() {
             isDriver={host}
             canControl={host}
             sync={designSync}
+            embedBlocked={designBlocked}
             onChangeLink={() => setDesignDialog(true)}
             onStop={() => {
               setDesignLink(null);
@@ -267,8 +288,10 @@ export default function DevTilesPage() {
         <DesignLinkDialog
           currentUrl={designLink?.url}
           appOrigin={window.location.origin}
-          onSubmit={(link) => {
+          checkEmbed={(url) => checkDesignLinkEmbed({ roomName: 'dev-preview', url })}
+          onSubmit={(link, check) => {
             rememberDesignLink({ url: link.url, label: link.kind === 'figma' ? link.label : link.host, kind: link.kind });
+            setDesignBlocked(check?.embed === 'blocked');
             setDesignLink(link);
             setDesignDialog(false);
             setView('design');
