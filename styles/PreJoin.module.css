@@ -688,8 +688,8 @@
 }
 
 .nobodyHere {
-  align-self: center;
-  margin: 0 0 0 6px;
+  margin: 0;
+  text-align: center;
   color: var(--km-text-muted);
   font-size: 15px;
   font-weight: 500;
