@@ -326,6 +326,7 @@
   "toolbar.webcamTile": "웹캠 · 타일",
   "toolbar.webcamSpotlight": "웹캠 · 스포트라이트",
   "toolbar.shareScreen": "화면 공유",
+  "toolbar.switchOwnView": "내 화면만 전환",
   "toolbar.design": "디자인",
   "toolbar.designTip": "모두에게 링크 보여주기(Figma, 웹 페이지)",
   "design.presenter": "발표자",

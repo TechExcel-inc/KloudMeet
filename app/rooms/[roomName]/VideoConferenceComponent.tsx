@@ -360,6 +360,10 @@ export function VideoConferenceComponent(props: {
   );
   const activeViewRef = React.useRef<ViewMode>(activeView);
   activeViewRef.current = activeView;
+  /** The view the host / presenter set for the room (attendees may look at another one locally) */
+  const roomViewRef = React.useRef<ViewMode>(activeView);
+  /** An attendee picked their own view; it lasts until the host switches the room again */
+  const localViewChoiceRef = React.useRef(false);
   /** Design mode: the link everyone views (late joiners get it from room metadata). */
   const [designStored, setDesignStored] = React.useState<StoredDesignLink | null>(() =>
     parseStoredDesignLink(props.connectionDetails.designLink),
@@ -806,7 +810,12 @@ export function VideoConferenceComponent(props: {
       }
       setActiveView(view);
       if (canBroadcastViewChangeRef.current) {
+        roomViewRef.current = view;
+        localViewChoiceRef.current = false;
         broadcastViewChangeRef.current?.(view);
+      } else {
+        // Attendees only change their own screen
+        localViewChoiceRef.current = view !== roomViewRef.current;
       }
     },
     [screenShareActive, room],
@@ -3548,6 +3557,9 @@ export function VideoConferenceComponent(props: {
           // Skip messages from self — presenter broadcasts 'shareScreen' to others
           // but stays in 'liveDoc' themselves
           if (senderIdentity !== room.localParticipant.identity) {
+            // The host switched the room: everyone follows, own choices end here
+            roomViewRef.current = msg.view as ViewMode;
+            localViewChoiceRef.current = false;
             setActiveView(msg.view as ViewMode);
           }
         } else if (msg.type === 'DESIGN_LINK') {
@@ -3570,8 +3582,11 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'CORRECTION') {
           // Correction from host — update to authoritative state
-          // But don't override presenter's liveDoc view (they intentionally diverge)
-          if (!(isLocalScreenShare && msg.view === 'shareScreen')) {
+          // But don't override presenter's liveDoc view (they intentionally diverge), nor an
+          // attendee's own view choice while the room view hasn't changed
+          if (msg.view !== roomViewRef.current) localViewChoiceRef.current = false;
+          roomViewRef.current = msg.view as ViewMode;
+          if (!(isLocalScreenShare && msg.view === 'shareScreen') && !localViewChoiceRef.current) {
             setActiveView(msg.view as ViewMode);
           }
           if (msg.presenter !== undefined) {
@@ -4121,7 +4136,10 @@ export function VideoConferenceComponent(props: {
       sendMeetingMsg(
         {
           type: 'HEARTBEAT',
-          view: (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
+          // An attendee looking at their own choice reports the room view, so the host doesn't pull them back
+          view: localViewChoiceRef.current
+            ? roomViewRef.current
+            : (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
           presenter: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,

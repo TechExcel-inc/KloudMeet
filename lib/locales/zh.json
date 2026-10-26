@@ -326,6 +326,7 @@
   "toolbar.webcamTile": "摄像头 · 宫格",
   "toolbar.webcamSpotlight": "摄像头 · 焦点",
   "toolbar.shareScreen": "共享屏幕",
+  "toolbar.switchOwnView": "只切换你自己的画面",
   "toolbar.design": "设计稿",
   "toolbar.designTip": "给所有人展示一个链接（Figma、网页）",
   "design.presenter": "主讲人",

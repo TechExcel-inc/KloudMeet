@@ -334,6 +334,7 @@
   "toolbar.webcamTile": "Video · Grid",
   "toolbar.webcamSpotlight": "Video · Spotlight",
   "toolbar.shareScreen": "Screen share",
+  "toolbar.switchOwnView": "Switch your own view",
   "toolbar.design": "Design",
   "toolbar.designTip": "Show a link to everyone (Figma, web page)",
   "design.presenter": "the presenter",
