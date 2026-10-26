@@ -9,6 +9,16 @@ import {
 } from '@/lib/meetingRejoin';
 import { fillShareKeys } from '@/lib/recordingShare';
 
+/** A meeting's date is its scheduled time, or when it was created — the same date the list groups by. */
+function meetingDatedBefore(before: Date): Prisma.MeetingWhereInput {
+  return {
+    OR: [
+      { scheduledFor: { lt: before } },
+      { scheduledFor: null, createdAt: { lt: before } },
+    ],
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const authHeader = request.headers.get('Authorization');
@@ -35,6 +45,11 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')?.trim() || '';
     const scope = searchParams.get('scope') === 'hosted' ? 'hosted' : 'all';
     const skip = (page - 1) * pageSize;
+    // Go to date: only meetings dated before this instant (the start of the day after the picked one)
+    const beforeParam = searchParams.get('before');
+    const before = beforeParam ? new Date(beforeParam) : null;
+    const beforeFilter: Prisma.MeetingWhereInput | null =
+      before && !Number.isNaN(before.getTime()) ? meetingDatedBefore(before) : null;
 
     const searchFilter: Prisma.MeetingWhereInput | null = search
       ? {
@@ -55,7 +70,7 @@ export async function GET(request: NextRequest) {
           };
     const whereClause: Prisma.MeetingWhereInput = {
       deletedAt: null,
-      AND: [accessFilter, ...(searchFilter ? [searchFilter] : [])],
+      AND: [accessFilter, ...(searchFilter ? [searchFilter] : []), ...(beforeFilter ? [beforeFilter] : [])],
     };
 
     const [total, meetings] = await Promise.all([

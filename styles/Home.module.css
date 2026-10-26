@@ -2187,6 +2187,279 @@ a.dropdownItem:focus-visible {
   background: var(--dash-surface);
 }
 
+/* The day label is a button: it opens "Go to date" */
+.dateJumpBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: -3px -8px;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dateJumpBtn:hover,
+.dateJumpBtnOpen {
+  background: var(--dash-hover);
+  color: var(--dash-ink-2);
+}
+
+.dateJumpBtn:focus-visible {
+  outline: 2px solid var(--km-primary);
+  outline-offset: 1px;
+}
+
+.dateJumpChevron {
+  margin-left: 2px;
+  opacity: 0.55;
+  transition: opacity 0.15s ease, transform 0.2s ease;
+}
+
+.dateJumpBtn:hover .dateJumpChevron,
+.dateJumpBtnOpen .dateJumpChevron {
+  opacity: 1;
+}
+
+.dateJumpBtnOpen .dateJumpChevron {
+  transform: rotate(180deg);
+}
+
+/* The picked day, beside the tabs: change it, or × back to the whole list */
+.dateJumpChip {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  border: 1px solid color-mix(in srgb, var(--km-primary) 35%, var(--dash-line));
+  border-radius: var(--km-radius-sm);
+  background: color-mix(in srgb, var(--km-primary) 8%, var(--dash-surface));
+  color: var(--km-primary);
+  overflow: hidden;
+}
+
+.dateJumpChipMain,
+.dateJumpChipClear {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.dateJumpChipMain {
+  gap: 6px;
+  padding: 0 6px 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.dateJumpChipClear {
+  justify-content: center;
+  width: 30px;
+}
+
+.dateJumpChipMain:hover,
+.dateJumpChipClear:hover {
+  background: color-mix(in srgb, var(--km-primary) 10%, transparent);
+}
+
+.dateJumpChipMain:focus-visible,
+.dateJumpChipClear:focus-visible {
+  outline: 2px solid var(--km-primary);
+  outline-offset: -2px;
+}
+
+/* Go to date: a month, fixed under (or over) the label that opened it */
+.datePicker {
+  position: fixed;
+  z-index: 70;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 12px 8px;
+  border: 1px solid var(--dash-line);
+  border-radius: 12px;
+  background: var(--dash-surface);
+  box-shadow: 0 12px 32px rgba(16, 24, 40, 0.14), 0 2px 6px rgba(16, 24, 40, 0.06);
+  color: var(--dash-ink-2);
+  animation: datePickerIn 0.14s ease-out;
+}
+
+:global(html[data-theme='dark']) .datePicker {
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+@keyframes datePickerIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.datePickerHead {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding-left: 6px;
+}
+
+.datePickerTitle {
+  flex: 1;
+  color: var(--dash-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.datePickerNav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dash-muted);
+  cursor: pointer;
+}
+
+.datePickerNav:hover:not(:disabled) {
+  background: var(--dash-hover);
+  color: var(--dash-ink);
+}
+
+.datePickerNav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.datePickerWeekdays,
+.datePickerGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  justify-items: center;
+}
+
+.datePickerWeekdays {
+  height: 28px;
+  align-items: center;
+  color: var(--dash-faint);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.datePickerGrid {
+  row-gap: 2px;
+}
+
+.datePickerDay {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dash-ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+
+.datePickerDay:hover:not(:disabled) {
+  background: var(--dash-hover);
+  color: var(--dash-ink);
+}
+
+.datePickerDay:focus-visible {
+  outline: 2px solid var(--km-primary);
+  outline-offset: 1px;
+}
+
+.datePickerDayOutside {
+  color: var(--dash-faint);
+}
+
+.datePickerDay:disabled {
+  color: var(--dash-faint);
+  opacity: 0.45;
+  cursor: default;
+}
+
+.datePickerDayToday {
+  box-shadow: inset 0 0 0 1px var(--km-primary);
+  color: var(--km-primary);
+  font-weight: 600;
+}
+
+.datePickerDaySelected,
+.datePickerDaySelected:hover:not(:disabled) {
+  background: var(--km-primary);
+  box-shadow: none;
+  color: var(--km-on-primary);
+  font-weight: 600;
+}
+
+/* This day has meetings */
+.datePickerDot {
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: var(--km-primary);
+}
+
+.datePickerDaySelected .datePickerDot {
+  background: var(--km-on-primary);
+}
+
+.datePickerFoot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--dash-line);
+}
+
+.datePickerToday {
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--km-primary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.datePickerToday:hover {
+  background: color-mix(in srgb, var(--km-primary) 10%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .datePicker {
+    animation: none;
+  }
+}
+
 /* Keyboard focus never lands a row under the sticky label */
 .meetingCardsList .meetingCard,
 .meetingCardsList .meetingCardLive {
@@ -3165,6 +3438,10 @@ a.dropdownItem:focus-visible {
     order: 2;
     flex: 1 1 100%;
     width: auto;
+  }
+
+  .dateJumpChip {
+    order: 3;
   }
 
   .meetingDateLabel {

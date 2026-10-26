@@ -25,18 +25,27 @@ import {
   type ActiveMeetingInfo,
   type MeetingStartIntent,
 } from '@/lib/meetingStartGuard';
-import { CalendarPlus, Keyboard, Video } from 'lucide-react';
+import { CalendarDays, CalendarPlus, ChevronDown, Keyboard, Video, X } from 'lucide-react';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
+import { MeetingDatePicker, fromYmd, toYmd, type Ymd } from '../components/MeetingDatePicker';
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
 
 type MeetingListScope = 'all' | 'hosted';
 
-function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope): string {
+/** Go to date: the list starts at the picked day — everything dated before the next day's midnight. */
+function jumpBefore(day: Ymd | null): string | null {
+  if (!day) return null;
+  const next = fromYmd(day);
+  next.setDate(next.getDate() + 1);
+  return next.toISOString();
+}
+
+function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope, jumpDay: Ymd | null = null): string {
   const qs = new URLSearchParams({
     page: String(page),
     pageSize: String(size),
@@ -44,6 +53,8 @@ function meetingsQuery(page: number, size: number, search: string, scope: Meetin
   const term = search.trim();
   if (term) qs.set('search', term);
   if (scope === 'hosted') qs.set('scope', 'hosted');
+  const before = jumpBefore(jumpDay);
+  if (before) qs.set('before', before);
   return qs.toString();
 }
 
@@ -98,11 +109,14 @@ export function DashboardView({
   // Row selection for click and keyboard (↑ ↓ Home End move, Enter runs the row's main action)
   const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
   const meetingCardRefs = useRef(new Map<number, HTMLElement>());
-  // The list scrolls inside its card; a new page, size or scope starts at the top
+  // Go to date: the list starts at this day (and runs back from it); null = the whole list
+  const [jumpDate, setJumpDate] = useState<Ymd | null>(null);
+  const [datePicker, setDatePicker] = useState<{ anchor: HTMLElement; day: Ymd } | null>(null);
+  // The list scrolls inside its card; a new page, size, scope or date starts at the top
   const meetingListScrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     meetingListScrollRef.current?.scrollTo({ top: 0 });
-  }, [page, pageSize, meetingScope]);
+  }, [page, pageSize, meetingScope, jumpDate]);
   const [meetingConflict, setMeetingConflict] = useState<{
     activeMeeting: ActiveMeetingInfo;
     pendingIntent: MeetingStartIntent;
@@ -150,8 +164,11 @@ export function DashboardView({
   pageSizeRef.current = pageSize;
   const meetingScopeRef = useRef(meetingScope);
   meetingScopeRef.current = meetingScope;
+  const jumpDateRef = useRef(jumpDate);
+  jumpDateRef.current = jumpDate;
   const meetingsFetchGenRef = useRef(0);
   const prevScopeRef = useRef(meetingScope);
+  const prevJumpDateRef = useRef(jumpDate);
 
   const fetchMeetings = useCallback((searchTerm?: string, pageOverride?: number) => {
     const term = searchTerm ?? searchQueryRef.current;
@@ -159,7 +176,7 @@ export function DashboardView({
     const currentPage = pageOverride ?? pageRef.current;
     const gen = ++meetingsFetchGenRef.current;
     setLoadingMeetings(true);
-    const qs = meetingsQuery(currentPage, pageSizeRef.current, term, meetingScopeRef.current);
+    const qs = meetingsQuery(currentPage, pageSizeRef.current, term, meetingScopeRef.current, jumpDateRef.current);
     fetch(`/api/account/meetings?${qs}`, {
       headers: { Authorization: `Bearer ${userToken}` }
     })
@@ -210,6 +227,32 @@ export function DashboardView({
     fetchMeetings(searchQueryRef.current, 1);
   }, [meetingScope, fetchMeetings]);
 
+  useEffect(() => {
+    if (prevJumpDateRef.current === jumpDate) return;
+    prevJumpDateRef.current = jumpDate;
+    if (pageRef.current !== 1) {
+      setPage(1);
+      return;
+    }
+    fetchMeetings(searchQueryRef.current, 1);
+  }, [jumpDate, fetchMeetings]);
+
+  // The picker's dots: which days of a month have meetings (same scope and search as the list)
+  const loadMeetingDays = useCallback(
+    (first: Date, next: Date) => {
+      const qs = new URLSearchParams({ from: first.toISOString(), to: next.toISOString() });
+      const term = searchQueryRef.current.trim();
+      if (term) qs.set('search', term);
+      if (meetingScopeRef.current === 'hosted') qs.set('scope', 'hosted');
+      return fetch(`/api/account/meetings/days?${qs}`, {
+        headers: { Authorization: `Bearer ${userToken}` },
+      })
+        .then((res) => (res.ok ? res.json() : { dates: [] }))
+        .then((d: { dates?: string[] }) => new Set((d.dates || []).map((iso) => toYmd(new Date(iso)))));
+    },
+    [userToken],
+  );
+
 
   // Polling fallback to check processing recordings
   useEffect(() => {
@@ -230,7 +273,7 @@ export function DashboardView({
       .then(data => {
         if (data.updatedCount > 0) {
           // Re-fetch meetings silently without setting loading state
-            const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current);
+            const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current, jumpDateRef.current);
             fetch(`/api/account/meetings?${qs}`, {
               headers: { Authorization: `Bearer ${userToken}` }
             })
@@ -294,7 +337,7 @@ export function DashboardView({
     };
 
     const intervalId = setInterval(() => {
-      const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current);
+      const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current, jumpDateRef.current);
       fetch(`/api/account/meetings?${qs}`, {
         headers: { Authorization: `Bearer ${userToken}` },
       })
@@ -676,14 +719,15 @@ export function DashboardView({
       m.status !== 'CANCELED' &&
       !!m.scheduledFor &&
       new Date(m.scheduledFor).getTime() >= currentTime - 60 * 60 * 1000);
-  const upcomingMeetings = filteredMeetings
+  // A picked date shows that day and the ones before it; what's coming up returns with "Today"
+  const upcomingMeetings = jumpDate ? [] : filteredMeetings
     .filter(isUpcomingMeeting)
     .sort(
       (a: any, b: any) =>
         Number(!!b.isActive) - Number(!!a.isActive) ||
         new Date(a.scheduledFor || a.createdAt).getTime() - new Date(b.scheduledFor || b.createdAt).getTime(),
     );
-  const historyMeetings = filteredMeetings.filter((m: any) => !isUpcomingMeeting(m));
+  const historyMeetings = jumpDate ? filteredMeetings : filteredMeetings.filter((m: any) => !isUpcomingMeeting(m));
 
   const groupedMeetings = historyMeetings.reduce((acc: Record<string, any[]>, m) => {
     const label = getDisplayDate(m);
@@ -795,12 +839,19 @@ export function DashboardView({
         : tx('dash.greeting.evening', 'Good evening, {name}', { name: user.displayName });
   const todayLabel = new Date(currentTime).toLocaleDateString(locale, { weekday: 'long', month: 'long', day: 'numeric' });
   // Today's line under the title, from the meetings on this page of the list.
-  const liveCount = dbMeetings.filter((m) => m.isActive).length;
-  const soonCount = dbMeetings.filter((m) => {
-    if (m.isActive || m.status === 'ENDED' || m.status === 'CANCELED' || !m.scheduledFor) return false;
-    const diff = new Date(m.scheduledFor).getTime() - currentTime;
-    return diff > 0 && diff <= 60 * 60 * 1000;
-  }).length;
+  // (A picked date keeps the line from the whole list, since live and upcoming meetings aren't in view)
+  const summaryCountsRef = useRef({ live: 0, soon: 0 });
+  if (!jumpDate) {
+    summaryCountsRef.current = {
+      live: dbMeetings.filter((m) => m.isActive).length,
+      soon: dbMeetings.filter((m) => {
+        if (m.isActive || m.status === 'ENDED' || m.status === 'CANCELED' || !m.scheduledFor) return false;
+        const diff = new Date(m.scheduledFor).getTime() - currentTime;
+        return diff > 0 && diff <= 60 * 60 * 1000;
+      }).length,
+    };
+  }
+  const { live: liveCount, soon: soonCount } = summaryCountsRef.current;
   const summaryParts = [
     ...(liveCount > 0 ? [{ key: 'live', text: tx('dash.summaryLive', '{n} in progress', { n: liveCount }) }] : []),
     ...(soonCount > 0 ? [{ key: 'soon', text: tx('dash.summarySoon', '{n} starting soon', { n: soonCount }) }] : []),
@@ -1242,6 +1293,46 @@ export function DashboardView({
               })}
             </div>
 
+            {/* Go to date is on: the picked day, to change it or to clear it */}
+            {jumpDate && (() => {
+              const d = fromYmd(jumpDate);
+              const sameYear = d.getFullYear() === new Date(currentTime).getFullYear();
+              const short = d.toLocaleDateString(locale, { month: 'short', day: 'numeric', ...(sameYear ? {} : { year: 'numeric' }) });
+              const long = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' });
+              const open = datePicker?.day === jumpDate && datePicker.anchor.dataset.jumpChip === 'true';
+              return (
+                <span className={styles.dateJumpChip}>
+                  <button
+                    type="button"
+                    data-jump-chip="true"
+                    className={styles.dateJumpChipMain}
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    title={tx('dash.jumpChipHint', 'Showing meetings on or before {date}', { date: long })}
+                    onClick={(e) => {
+                      const anchor = e.currentTarget;
+                      setDatePicker((cur) => (cur?.anchor === anchor ? null : { anchor, day: jumpDate }));
+                    }}
+                  >
+                    <CalendarDays size={15} aria-hidden="true" />
+                    {short}
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.dateJumpChipClear}
+                    aria-label={tx('dash.clearDate', 'Clear date')}
+                    title={tx('dash.clearDate', 'Clear date')}
+                    onClick={() => {
+                      setDatePicker(null);
+                      setJumpDate(null);
+                    }}
+                  >
+                    <X size={14} aria-hidden="true" />
+                  </button>
+                </span>
+              );
+            })()}
+
             <label className={styles.meetingSearchWrapper}>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="17" height="17" className={styles.meetingSearchIcon} aria-hidden="true">
                 <circle cx="11" cy="11" r="7" />
@@ -1305,23 +1396,39 @@ export function DashboardView({
                   {tx('dash.sectionHistory', 'Past meetings')}
                 </h3>
               )}
-              {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => (
+              {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => {
+                const first = (meetings as any[])[0];
+                const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
+                const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
+                const day = toYmd(d);
+                const open = datePicker?.day === day && datePicker.anchor.dataset.jumpChip !== 'true';
+                return (
                 <div key={dateLabel} className={styles.meetingDateGroup}>
                   <h3 className={`${styles.meetingDateLabel} ${styles.meetingDaySubLabel}`}>
-                    {dateLabel}
-                    {(() => {
-                      const first = (meetings as any[])[0];
-                      const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
-                      const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
-                      // Only "Today" / "Yesterday" / "Tomorrow" get the date beside them
-                      return full !== dateLabel ? <span className={styles.meetingDateSub}>{full}</span> : null;
-                    })()}
+                    {/* The day label opens "Go to date" */}
+                    <button
+                      type="button"
+                      className={`${styles.dateJumpBtn}${open ? ` ${styles.dateJumpBtnOpen}` : ''}`}
+                      aria-haspopup="dialog"
+                      aria-expanded={open}
+                      title={tx('dash.goToDate', 'Go to date')}
+                      onClick={(e) => {
+                        const anchor = e.currentTarget;
+                        setDatePicker((cur) => (cur?.anchor === anchor ? null : { anchor, day }));
+                      }}
+                    >
+                      {dateLabel}
+                      {/* Only "Today" / "Yesterday" / "Tomorrow" get the date beside them */}
+                      {full !== dateLabel && <span className={styles.meetingDateSub}>{full}</span>}
+                      <ChevronDown size={14} strokeWidth={2.25} className={styles.dateJumpChevron} aria-hidden="true" />
+                    </button>
                   </h3>
                   <div className={styles.meetingCardsGroup}>
                     {(meetings as any[]).map((m, i) => renderMeetingRow(m, i, false))}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
 
               {/* Pagination: stays at the card's foot while the list scrolls */}
@@ -1415,6 +1522,29 @@ export function DashboardView({
           )}
         </section>
       </div>{/* end dashMain */}
+
+      {datePicker && (
+        <MeetingDatePicker
+          anchor={datePicker.anchor}
+          locale={locale}
+          value={jumpDate}
+          initialDay={datePicker.day}
+          loadMonth={loadMeetingDays}
+          onSelect={(day) => {
+            setDatePicker(null);
+            setJumpDate(day === toYmd(new Date()) ? null : day);
+          }}
+          onToday={() => {
+            setDatePicker(null);
+            setJumpDate(null);
+          }}
+          onClose={() => {
+            const { anchor } = datePicker;
+            setDatePicker(null);
+            if (anchor.isConnected) anchor.focus();
+          }}
+        />
+      )}
 
       {scheduledModalData && (
         <div className={styles.dashModalOverlay}>
