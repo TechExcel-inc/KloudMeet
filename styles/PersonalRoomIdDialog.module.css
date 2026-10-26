@@ -1,0 +1,275 @@
+/* Personal meeting ID setup: used on the home page and the pre-join page.
+   Colours come from tokens.css, so light and dark both follow the app theme. */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: var(--km-scrim);
+  font-family: var(--km-font);
+  animation: fadeIn 0.15s ease-out;
+}
+
+.dialog {
+  width: min(460px, 100%);
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  padding: 24px;
+  border-radius: var(--km-radius-lg);
+  background: var(--km-surface);
+  color: var(--km-text);
+  box-shadow: 0 24px 48px -12px rgba(16, 24, 40, 0.28);
+  animation: rise 0.18s ease-out;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.lead {
+  margin: 6px 0 0;
+  color: var(--km-text-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.label {
+  display: block;
+  margin-top: 18px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 46px;
+  margin-top: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--km-border);
+  border-radius: 10px;
+  background: var(--km-surface);
+  cursor: text;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.field:focus-within {
+  border-color: var(--km-primary);
+  box-shadow: var(--km-focus-ring);
+}
+
+.fieldBad,
+.fieldBad:focus-within {
+  border-color: var(--km-danger);
+  box-shadow: 0 0 0 3px rgba(220, 54, 46, 0.18);
+}
+
+.prefix {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--km-text-muted);
+  font-size: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.input {
+  flex: 1 1 60px;
+  min-width: 60px;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--km-text);
+  font: 600 16px var(--km-font);
+}
+
+.status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-left: 8px;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--km-success);
+}
+
+.bad {
+  color: var(--km-danger-text);
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+.hint {
+  margin: 6px 0 0;
+  color: var(--km-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.hintBad {
+  color: var(--km-danger-text);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: var(--km-text-muted);
+  font-size: 12px;
+}
+
+.chip {
+  padding: 4px 10px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-pill);
+  background: transparent;
+  color: var(--km-text);
+  font: 600 12px var(--km-font);
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--km-primary);
+  color: var(--km-primary);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.how {
+  display: grid;
+  gap: 8px;
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-md);
+  background: var(--km-bg-subtle);
+  list-style: none;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.how li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.step {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 22px;
+}
+
+.btnGhost,
+.btnPrimary {
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 10px;
+  font: 600 14px var(--km-font);
+  cursor: pointer;
+}
+
+.btnGhost {
+  background: transparent;
+  color: var(--km-text-muted);
+}
+
+.btnGhost:hover:not(:disabled) {
+  background: var(--km-hover);
+}
+
+.btnPrimary {
+  background: var(--km-primary);
+  color: var(--km-on-primary);
+}
+
+.btnPrimary:hover:not(:disabled) {
+  background: var(--km-primary-hover);
+}
+
+.btnPrimary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btnGhost:focus-visible,
+.btnPrimary:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+/* Phones: the host name drops out of the prefix so the ID keeps its room */
+@media (max-width: 480px) {
+  .dialog {
+    padding: 20px;
+  }
+
+  .prefixHost {
+    display: none;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scrim,
+  .dialog,
+  .spin {
+    animation: none;
+  }
+}

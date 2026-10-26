@@ -25,12 +25,20 @@ import {
   type ActiveMeetingInfo,
   type MeetingStartIntent,
 } from '@/lib/meetingStartGuard';
-import { CalendarPlus, Keyboard, Video } from 'lucide-react';
+import { CalendarPlus, Copy, Hash, Keyboard, Video } from 'lucide-react';
+import { PersonalRoomIdDialog } from '@/lib/PersonalRoomIdDialog';
+import {
+  isPersonalIdPromptVisible,
+  parsePersonalIdPromptState,
+  personalIdPromptKey,
+  snoozePersonalIdPrompt,
+} from '@/lib/personalRoomId';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser, SignupStep } from '../types';
 import { KloudLogo } from '../components/KloudLogo';
 import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
+import type { ToastAction } from '../components/useToast';
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
 
@@ -63,7 +71,7 @@ export function DashboardView({
   onUpdateUser: (u: AuthUser) => void;
   onOpenHelp: () => void;
   onOpenDesktopApp: () => void;
-  toast: { show: (t: string) => void };
+  toast: { show: (t: string, action?: ToastAction) => void };
 }) {
   const { t, locale } = useI18n();
   const tx = useTx();
@@ -74,6 +82,19 @@ export function DashboardView({
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
+  // Members without a personal meeting ID get a prompt to set one (until "Not now")
+  const [personalRoomChecked, setPersonalRoomChecked] = useState(false);
+  const [showPersonalIdDialog, setShowPersonalIdDialog] = useState(false);
+  const [personalIdPromptOpen, setPersonalIdPromptOpen] = useState(() => {
+    try {
+      return isPersonalIdPromptVisible(
+        parsePersonalIdPromptState(localStorage.getItem(personalIdPromptKey(user.id))),
+        Date.now(),
+      );
+    } catch {
+      return true;
+    }
+  });
   
   const [isJoining, setIsJoining] = useState(false);
   const [isCreatingMeeting, setIsCreatingMeeting] = useState(false);
@@ -137,7 +158,9 @@ export function DashboardView({
     })
       .then(res => res.ok ? res.json() : null)
       .then(data => {
-        if (data?.personalRoomId) setPersonalRoomId(data.personalRoomId);
+        if (!data) return;
+        if (data.personalRoomId) setPersonalRoomId(data.personalRoomId);
+        setPersonalRoomChecked(true);
       })
       .catch(() => {});
   }, [userToken]);
@@ -367,6 +390,33 @@ export function DashboardView({
     } catch {
       return new Date(meeting.scheduledFor).toLocaleString();
     }
+  };
+
+  const personalRoomLink = (id: string) => `${window.location.origin}/rooms/${encodeURIComponent(id)}`;
+
+  const copyPersonalRoomLink = (id: string) => {
+    navigator.clipboard?.writeText(personalRoomLink(id));
+    toast.show(t('schedule.linkCopied'));
+  };
+
+  const snoozePersonalIdPromptNow = () => {
+    setPersonalIdPromptOpen(false);
+    try {
+      const key = personalIdPromptKey(user.id);
+      const next = snoozePersonalIdPrompt(parsePersonalIdPromptState(localStorage.getItem(key)), Date.now());
+      localStorage.setItem(key, JSON.stringify(next));
+    } catch {
+      /* private mode: hidden for this visit only */
+    }
+  };
+
+  const handlePersonalIdSaved = (id: string) => {
+    setShowPersonalIdDialog(false);
+    setPersonalRoomId(id);
+    toast.show(tx('personalId.savedToast', 'Your meeting ID is {id}', { id }), {
+      label: tx('personalId.copyLink', 'Copy link'),
+      onClick: () => copyPersonalRoomLink(id),
+    });
   };
 
   const copyMeetingLink = (meeting: any) => {
@@ -1145,6 +1195,21 @@ export function DashboardView({
                   ))}
                 </>
               )}
+              {personalRoomId && (
+                <>
+                  <span className={styles.dashSummaryDot} aria-hidden="true">·</span>
+                  <button
+                    type="button"
+                    className={styles.personalIdPill}
+                    onClick={() => copyPersonalRoomLink(personalRoomId)}
+                    title={tx('personalId.copyLinkTitle', 'Copy the link to your meeting ID')}
+                  >
+                    {tx('personalId.yourId', 'Your ID')}
+                    <b>{personalRoomId}</b>
+                    <Copy size={13} aria-hidden="true" />
+                  </button>
+                </>
+              )}
             </p>
           </div>
           <div className={styles.actionBar}>
@@ -1212,6 +1277,34 @@ export function DashboardView({
                   <path d="M6 6l12 12M18 6L6 18" />
                 </svg>
               </button>
+            </div>
+          )}
+
+          {personalRoomChecked && !personalRoomId && personalIdPromptOpen && (
+            <div className={styles.personalIdPrompt} role="region" aria-labelledby="personal-id-prompt-title">
+              <span className={styles.personalIdPromptIcon} aria-hidden="true">
+                <Hash size={18} />
+              </span>
+              <div className={styles.personalIdPromptText}>
+                <b id="personal-id-prompt-title">{tx('personalId.promptTitle', 'Get your personal meeting ID')}</b>
+                <span>{tx('personalId.promptBody', 'One short ID that always reaches you. Share it once; people type it to join you.')}</span>
+              </div>
+              <div className={styles.personalIdPromptActions}>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnSm} ${styles.btnFill} ${styles.btnFlat}`}
+                  onClick={() => setShowPersonalIdDialog(true)}
+                >
+                  {tx('personalId.setUp', 'Set up')}
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.btn} ${styles.btnSm} ${styles.btnText}`}
+                  onClick={snoozePersonalIdPromptNow}
+                >
+                  {tx('personalId.notNow', 'Not now')}
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -1543,6 +1636,13 @@ export function DashboardView({
           }}
         />
       )}
+
+      <PersonalRoomIdDialog
+        open={showPersonalIdDialog}
+        token={userToken}
+        onClose={() => setShowPersonalIdDialog(false)}
+        onSaved={handlePersonalIdSaved}
+      />
 
       {showProfileModal && (
         <MyProfileModal 

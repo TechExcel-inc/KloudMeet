@@ -2008,6 +2008,105 @@ a.dropdownItem:focus-visible {
   font-weight: 600;
 }
 
+/* Personal meeting ID: a copy chip in the summary line once it is set */
+.personalIdPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dash-line);
+  border-radius: var(--km-radius-pill);
+  background: var(--dash-surface);
+  color: var(--dash-muted);
+  font: 500 13px var(--km-font);
+  vertical-align: middle;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.personalIdPill b {
+  color: var(--dash-ink);
+  font-weight: 600;
+}
+
+.personalIdPill:hover {
+  border-color: var(--dash-line-2);
+  color: var(--dash-ink-2);
+}
+
+.personalIdPill:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+/* …and a prompt under the join bar until it is set (or put off) */
+.personalIdPrompt {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid var(--dash-line);
+  border-left: 3px solid var(--km-primary);
+  border-radius: var(--km-radius-md);
+  background: var(--dash-surface);
+  box-shadow: var(--dash-shadow);
+}
+
+.personalIdPromptIcon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
+}
+
+.personalIdPromptText {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.personalIdPromptText b {
+  display: block;
+  color: var(--dash-ink);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.personalIdPromptText span {
+  display: block;
+  margin-top: 2px;
+  color: var(--dash-muted);
+}
+
+.personalIdPromptActions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+@media (max-width: 640px) {
+  .personalIdPrompt {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .personalIdPromptText {
+    flex-basis: calc(100% - 50px);
+  }
+
+  .personalIdPromptActions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 /* Meeting list card */
 .meetingListSection {
   display: flex;
@@ -2959,6 +3058,8 @@ a.dropdownItem:focus-visible {
 /* ── Snackbar ──────────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
+  display: flex;
+  align-items: center;
   left: 24px;
   bottom: 24px;
   z-index: 10000;
@@ -2970,6 +3071,21 @@ a.dropdownItem:focus-visible {
   font: 600 14px/1.5 var(--km-font);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   animation: toastIn 0.2s ease-out;
+}
+
+.toastAction {
+  margin: -6px -10px -6px 14px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #b4b2ff;
+  font: 600 14px var(--km-font);
+  cursor: pointer;
+}
+
+.toastAction:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 @keyframes toastIn {

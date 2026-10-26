@@ -992,6 +992,36 @@
   overflow-wrap: anywhere;
 }
 
+/* No personal ID yet: the row reads as off, with a link to set one up */
+.checkRowMuted {
+  color: var(--km-text-muted);
+  cursor: default;
+}
+
+.checkRowMuted input[type='checkbox'] {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.checkLink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--km-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.checkLink:hover {
+  text-decoration: underline;
+}
+
+.checkLink:focus-visible {
+  outline: none;
+  border-radius: 4px;
+  box-shadow: var(--km-focus-ring);
+}
+
 /* Join */
 .joinArea {
   display: flex;
