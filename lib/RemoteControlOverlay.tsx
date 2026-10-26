@@ -521,6 +521,10 @@ export function RemoteControlLayer({
   if (!isController) return null;
 
   const box = contentBox;
+  // The chip sits in the letterbox above the picture when there is room, so it covers nothing;
+  // otherwise on the picture's top edge. It steps aside while a button is held (drags, selections).
+  const CHIP_H = 38;
+  const chipTop = box ? (box.top >= CHIP_H + 8 ? box.top - CHIP_H - 4 : box.top + 6) : 0;
   const modeLabel = !presenter
     ? t('remoteControl.syncing')
     : !presenter.desktop
@@ -588,9 +592,12 @@ export function RemoteControlLayer({
             style={{
               position: 'absolute',
               left: box.left + box.width / 2,
-              top: box.top + 10,
+              top: chipTop,
               transform: 'translateX(-50%)',
               zIndex: 1002,
+              opacity: isControlling ? 0.12 : 1,
+              pointerEvents: isControlling ? 'none' : 'auto',
+              transition: 'opacity 0.15s ease',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
@@ -666,7 +673,7 @@ export function RemoteControlLayer({
               style={{
                 position: 'absolute',
                 left: box.left + box.width / 2,
-                top: box.top + 54,
+                top: chipTop + CHIP_H + 6,
                 transform: 'translateX(-50%)',
                 zIndex: 1002,
                 maxWidth: Math.max(220, box.width - 24),
