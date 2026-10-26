@@ -1051,25 +1051,20 @@ function installSessionAndIpcOnce() {
 
   ipcMain.on('remote-control-message', async (event, data) => {
     try {
+      // Only the meeting window may drive the OS mouse, and only while sharing.
+      if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+      if (!currentShareTarget || !data || typeof data !== 'object') return;
+      const x = Number(data.x);
+      const y = Number(data.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+
       const { mouse, Point, Button } = getNutTree();
 
-      let targetX, targetY;
-
-      // Map content-normalized 0-1 coords onto the active share target bounds
-      // (secondary monitor when sharing that screen; primary fallback otherwise).
-      const bounds = currentShareTarget || primaryDisplayBoundsFallback();
-      const w = bounds.width;
-      const h = bounds.height;
-      const originX = bounds.x;
-      const originY = bounds.y;
-
-      if (data.absX !== undefined && data.absY !== undefined) {
-        targetX = Math.round(data.absX);
-        targetY = Math.round(data.absY);
-      } else {
-        targetX = Math.round(originX + (data.x || 0) * w);
-        targetY = Math.round(originY + (data.y || 0) * h);
-      }
+      // Map content-normalized 0-1 coords onto the active share target bounds,
+      // clamped so input can never land outside the shared screen/window.
+      const bounds = currentShareTarget;
+      const targetX = Math.round(bounds.x + Math.max(0, Math.min(1, x)) * bounds.width);
+      const targetY = Math.round(bounds.y + Math.max(0, Math.min(1, y)) * bounds.height);
 
       if (data.type === 'mousemove') {
         await mouse.setPosition(new Point(targetX, targetY));

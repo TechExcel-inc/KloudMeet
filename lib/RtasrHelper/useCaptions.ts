@@ -35,6 +35,7 @@ import {
   translationTargets,
   type CaptionLanguage,
 } from './captionLanguage';
+import { roomAuthHeaders } from '@/lib/roomAuth';
 
 // ── 常量 ──────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,7 @@ async function saveTranscript(payload: {
       headers: {
         'content-type': 'application/json',
         ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...roomAuthHeaders(),
       },
       body: JSON.stringify(payload),
     });

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import type { TeamMember } from '@prisma/client';
+import { attendanceOverlapsRecording, type RecordingTimeFields } from '@/lib/recordingAttendance';
 
 export function unauthorized(message = 'Unauthorized') {
   return NextResponse.json({ error: message }, { status: 401 });
@@ -45,9 +46,10 @@ export function canManageMeeting(
   return meeting.createdByMemberId === memberId;
 }
 
+/** Recorder, meeting host, or a member who was in the room while it was being recorded. */
 export async function canAccessRecording(
   memberId: number,
-  recording: { teamMemberId: number | null; meetingId: number },
+  recording: { teamMemberId: number | null; meetingId: number } & RecordingTimeFields,
 ): Promise<boolean> {
   if (recording.teamMemberId === memberId) return true;
 
@@ -58,10 +60,11 @@ export async function canAccessRecording(
   if (!meeting) return false;
   if (meeting.createdByMemberId === memberId) return true;
 
-  const participated = await prisma.meetingParticipant.findFirst({
+  const attendance = await prisma.meetingParticipant.findMany({
     where: { meetingId: recording.meetingId, teamMemberId: memberId },
+    select: { joinedAt: true, leftAt: true },
   });
-  return !!participated;
+  return attendance.some((a) => attendanceOverlapsRecording(a, recording));
 }
 
 /** Host or the member who started the recording may change visibility. */
