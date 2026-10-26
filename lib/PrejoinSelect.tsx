@@ -113,37 +113,37 @@ export function PrejoinSelect<T extends string>({
   return (
     <div className={styles.selectGroup}>
       <div className={`${styles.rowField} ${styles.selectField}`} ref={rootRef}>
-        <span id={labelId} className={styles.rowLabel}>
-          {label}
-        </span>
-        <button
-          ref={buttonRef}
-          id={buttonId}
-          type="button"
-          className={styles.selectButton}
-          aria-haspopup="listbox"
-          aria-expanded={open}
-          aria-controls={open ? listId : undefined}
-          aria-labelledby={`${labelId} ${buttonId}`}
-          aria-describedby={selected.description ? hintId : undefined}
-          onClick={() => (open ? close(false) : openList())}
-          onKeyDown={onButtonKeyDown}
-        >
-          <SelectedIcon size={18} className={styles.selectIcon} aria-hidden="true" />
-          <span className={styles.selectText}>
-            <span className={styles.selectValue}>{selected.label}</span>
-            {selected.description && (
-              <span id={hintId} className={styles.selectHint}>
-                {selected.description}
-              </span>
-            )}
+        <div className={styles.selectRow}>
+          <span id={labelId} className={styles.rowLabel}>
+            {label}
           </span>
-          <ChevronDown
-            size={18}
-            className={`${styles.selectChevron}${open ? ` ${styles.selectChevronOpen}` : ''}`}
-            aria-hidden="true"
-          />
-        </button>
+          <button
+            ref={buttonRef}
+            id={buttonId}
+            type="button"
+            className={styles.selectButton}
+            aria-haspopup="listbox"
+            aria-expanded={open}
+            aria-controls={open ? listId : undefined}
+            aria-labelledby={`${labelId} ${buttonId}`}
+            aria-describedby={selected.description ? hintId : undefined}
+            onClick={() => (open ? close(false) : openList())}
+            onKeyDown={onButtonKeyDown}
+          >
+            <SelectedIcon size={18} className={styles.selectIcon} aria-hidden="true" />
+            <span className={styles.selectValue}>{selected.label}</span>
+            <ChevronDown
+              size={18}
+              className={`${styles.selectChevron}${open ? ` ${styles.selectChevronOpen}` : ''}`}
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+        {selected.description && (
+          <p id={hintId} className={styles.selectHint}>
+            {selected.description}
+          </p>
+        )}
         {open && (
           <ul
             ref={listRef}

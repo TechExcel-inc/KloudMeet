@@ -795,11 +795,11 @@
 .selectButton {
   flex: 1;
   min-width: 0;
-  min-height: 50px;
+  height: 50px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 14px 8px 0;
+  padding: 0 14px 0 0;
   border: 0;
   background: transparent;
   color: var(--km-text);
@@ -814,21 +814,26 @@
   color: var(--km-primary);
 }
 
-.selectText {
-  flex: 1;
-  min-width: 0;
-  display: flex;
+/* A select field is one box: the label + dropdown row, then the choice's help across the box */
+.selectField {
   flex-direction: column;
-  gap: 2px;
+  align-items: stretch;
 }
 
-/* The choice's one-line explanation, inside the field under its value */
+.selectRow {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+}
+
 .selectHint {
+  margin: 0;
+  padding: 10px 16px 12px;
+  border-top: 1px solid var(--km-border);
   color: var(--km-text-muted);
   font-size: 12.5px;
   font-weight: 500;
-  line-height: 1.35;
-  white-space: normal;
+  line-height: 1.45;
 }
 
 .selectValue {
@@ -1394,6 +1399,9 @@
     width: 104px;
     padding: 0 8px 0 14px;
     font-size: 13px;
+  }
+  .selectHint {
+    padding: 9px 14px 11px;
   }
   .selectButton,
   .rowInput {
