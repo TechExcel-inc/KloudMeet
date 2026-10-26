@@ -20,6 +20,7 @@ import {
 } from '@livekit/components-react';
 import { ParticipantTileRoleMoreMenu } from '@/lib/ParticipantRoleMenu';
 import { getInitials } from '@/lib/getInitials';
+import { tileHue } from '@/lib/tileLayout';
 import { useI18n } from '@/lib/i18n';
 import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import {
@@ -674,6 +675,8 @@ export function LiveDocFloatingGridTile({
   return (
     <div
       className={`floating-grid-tile lk-participant-tile floating-grid-tile--${size}`}
+      // The same soft tint as this person's stage tile
+      style={{ ['--km-tile-hue' as string]: String(tileHue(name || identity)) }}
       data-lk-participant={participant.identity}
       data-lk-speaking={isSpeaking}
       data-lk-audio-muted={micMuted}
@@ -706,6 +709,7 @@ export function LiveDocFloatingGridTile({
         <div className="floating-grid-name-row lk-participant-metadata-item">
           <KloudFloatingMicIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
           <KloudFloatingCamIndicator participant={participant} mediaRestrictions={mediaRestrictions} />
+          {size === 'hero' && <span className="floating-grid-label">{name}</span>}
         </div>
       </div>
     </div>
