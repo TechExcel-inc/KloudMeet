@@ -6,8 +6,12 @@
  */
 
 import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
+import { CaptionEngineError, httpFailure, micFailure, toCaptionError } from './captionErrors';
+import { defaultMicSource, type CaptionMicSource } from './captionMic';
 
 const TARGET_SAMPLE_RATE = 16000;
+/** ~30 s of 16 kHz PCM16 the relay has not taken: the connection is stuck though not closed. */
+const MAX_BUFFERED_BYTES = 1_000_000;
 
 interface FunLine {
   type?: string;
@@ -38,6 +42,8 @@ function relayUrl(token: string): string {
 
 export class FunAsrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
+  public OnDropped?: (err: CaptionEngineError) => void;
+  public micSource?: CaptionMicSource;
   public languageCode = 'zh';
   public roomName?: string;
 
@@ -52,7 +58,7 @@ export class FunAsrHelper implements CaptionEngine {
   /** @param getToken 每次取最新的 LiveKit 参会 token（会中会续期） */
   constructor(private readonly getToken: () => string) {}
 
-  async Start(deviceId = '') {
+  async Start() {
     if (this._running) return;
     const gen = ++this._gen;
     this._running = true;
@@ -67,12 +73,12 @@ export class FunAsrHelper implements CaptionEngine {
         headers: { Authorization: `Bearer ${this.getToken()}` },
       });
       if (gen !== this._gen) return;
-      if (!res.ok) throw new Error(`Fun-ASR token failed: ${res.status}`);
+      if (!res.ok) throw new CaptionEngineError(httpFailure(res.status), `Fun-ASR token failed: ${res.status}`);
       const data: unknown = await res.json();
       const token = data && typeof data === 'object' && 'token' in data && typeof data.token === 'string'
         ? data.token
         : '';
-      if (!token) throw new Error('Fun-ASR token is empty');
+      if (!token) throw new CaptionEngineError('unavailable', 'Fun-ASR token is empty');
 
       this._socket = new WebSocket(relayUrl(token));
       await new Promise<void>((resolve, reject) => {
@@ -116,22 +122,26 @@ export class FunAsrHelper implements CaptionEngine {
         };
         this._socket.onclose = () => {
           finish(new Error('Fun-ASR relay closed before ready'));
-          if (this._running) console.warn('[FunAsr] relay closed');
-          this._running = false;
         };
       });
       if (gen !== this._gen) return;
 
-      const base: MediaTrackConstraints = {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
+      // Ready: from now on a close or error is a drop mid-meeting.
+      this._socket.onerror = null;
+      this._socket.onclose = (event) => {
+        if (gen === this._gen) this._drop(`relay closed (${event.code})`);
       };
-      this._stream = await navigator.mediaDevices.getUserMedia({
-        audio: deviceId ? { ...base, deviceId: { exact: deviceId } } : base,
-        video: false,
-      });
+
+      try {
+        // The meeting's own microphone (captionMic.ts).
+        this._stream = await (this.micSource ?? defaultMicSource)();
+      } catch (err) {
+        throw new CaptionEngineError(micFailure(err), err instanceof Error ? err.message : 'microphone failed');
+      }
+      if (gen !== this._gen) {
+        this._stopMic();
+        return;
+      }
       try {
         this._context = new AudioContext({ sampleRate: TARGET_SAMPLE_RATE });
       } catch (err) {
@@ -145,8 +155,8 @@ export class FunAsrHelper implements CaptionEngine {
       this._startProcessor(this._context.sampleRate);
     } catch (err) {
       if (gen !== this._gen) return;
-      console.warn('[FunAsr] start failed', err);
       this.Stop();
+      throw toCaptionError(err);
     }
   }
 
@@ -161,6 +171,12 @@ export class FunAsrHelper implements CaptionEngine {
       this._socket = null;
     }
     this._stopMic();
+  }
+
+  /** The relay went away after it was ready: release the mic and tell the supervisor. */
+  private _drop(reason: string) {
+    this.Stop();
+    this.OnDropped?.(new CaptionEngineError('network', `Fun-ASR ${reason}`));
   }
 
   private _takeEvent(parsed: FunLine) {
@@ -186,6 +202,10 @@ export class FunAsrHelper implements CaptionEngine {
     this._processor.connect(this._context.destination);
     this._processor.onaudioprocess = (e) => {
       if (!this._running || !this._socket || this._socket.readyState !== WebSocket.OPEN) return;
+      if (this._socket.bufferedAmount > MAX_BUFFERED_BYTES) {
+        this._drop('relay stalled');
+        return;
+      }
       const float32 = e.inputBuffer.getChannelData(0);
       const resampled = srcRate === TARGET_SAMPLE_RATE
         ? float32

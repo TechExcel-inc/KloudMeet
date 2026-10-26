@@ -162,6 +162,8 @@ interface KloudMeetToolbarProps {
   canToggleCaptions?: boolean;
   /** Whether captions are currently active */
   captionsEnabled?: boolean;
+  /** This participant's own captions while they are on: a dot on the CC button when not ok */
+  captionsHealth?: 'ok' | 'reconnecting' | 'failed';
   onToggleCaptions?: () => void;
   /** 网页端 Document PiP：本次会议内记住 */
   canDocumentPip?: boolean;
@@ -312,6 +314,7 @@ export function KloudMeetToolbar({
   isCamDisabledByHost,
   canToggleCaptions,
   captionsEnabled,
+  captionsHealth = 'ok',
   onToggleCaptions,
   canDocumentPip = false,
   documentPipEnabled = false,
@@ -1723,6 +1726,14 @@ export function KloudMeetToolbar({
     );
   };
 
+  const captionsTitle = !captionsEnabled
+    ? t('toolbar.captionsOff')
+    : captionsHealth === 'failed'
+      ? t('toolbar.captionsUnavailable')
+      : captionsHealth === 'reconnecting'
+        ? t('toolbar.captionsReconnecting')
+        : t('toolbar.captionsOn');
+
   const renderCountBadge = (count: number) =>
     count > 0 ? (
       <span className={styles.countBadge} aria-hidden="true">
@@ -2153,10 +2164,18 @@ export function KloudMeetToolbar({
                       setShowSTTSettings(true);
                     }}
                     aria-pressed={!!captionsEnabled}
-                    aria-label={captionsEnabled ? t('toolbar.captionsOn') : t('toolbar.captionsOff')}
-                    title={captionsEnabled ? t('toolbar.captionsOn') : t('toolbar.captionsOff')}
+                    aria-label={captionsTitle}
+                    title={captionsTitle}
                   >
-                    <IconCaptions />
+                    <span className={styles.actIcon}>
+                      <IconCaptions />
+                      {captionsEnabled && captionsHealth !== 'ok' && (
+                        <span
+                          className={`${styles.captionsHealthDot} ${captionsHealth === 'failed' ? styles.captionsHealthFailed : ''}`}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </span>
                     <span className={styles.actLabel}>{t('toolbar.captionsShort')}</span>
                   </button>
                 )}
