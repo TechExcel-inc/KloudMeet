@@ -643,19 +643,26 @@ export function KloudMeetToolbar({
   const closeViewModeMenu = () => setViewModeMenuOpen(false);
 
 
-  /* 桌面：Esc 关闭底栏自身的菜单（More / Exit / Recording / 邀请 / 摄像头布局） */
+  /* 桌面：Esc 关闭底栏自身的菜单（More / Exit / Recording / 邀请 / 摄像头布局 / 共享工具） */
   useEffect(() => {
     if (isMobile) return;
-    if (!inviteMenuOpen && !viewModeMenuOpen && !activeSheet) return;
+    if (!inviteMenuOpen && !viewModeMenuOpen && !shareToolsOpen && !activeSheet) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       setInviteMenuOpen(false);
       setViewModeMenuOpen(false);
+      setShareToolsOpen(false);
       setActiveSheet(null);
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isMobile, inviteMenuOpen, viewModeMenuOpen, activeSheet]);
+  }, [isMobile, inviteMenuOpen, viewModeMenuOpen, shareToolsOpen, activeSheet]);
+
+  // The share tools menu goes with the share: never reopen by itself at the next one.
+  const shareToolsAvailable = canSwitchViews && isDesktop && hasScreenShare;
+  useEffect(() => {
+    if (!shareToolsAvailable || !visible) setShareToolsOpen(false);
+  }, [shareToolsAvailable, visible]);
 
   const showInviteToast = (msg: string) => {
     setToastMsg(msg);
@@ -1675,7 +1682,7 @@ export function KloudMeetToolbar({
         <span className={styles.segLabel}>{t('toolbar.shareScreen')}</span>
       </button>
     );
-    if (!(canSwitchViews && isDesktop && hasScreenShare)) {
+    if (!shareToolsAvailable) {
       return shareButton(activeView === 'shareScreen' ? styles.segActive : '');
     }
     const toolOn = isDrawingMode || isRemoteControlMode || !!remoteControlPending;

@@ -120,10 +120,10 @@ let updateInstallStarted = false;
 
 /**
  * macOS: a window can only float over another app's full-screen Space while this app is a UI
- * element — no Dock icon, no menu bar, so no ⌘Q or ⌘Tab either. Be one only while a floating
- * surface is on screen (a share with its annotation overlay, remote control, the update
- * progress bar) and a normal app the rest of the time. The windows set their full-screen
- * collection behaviour with skipTransformProcessType, so creating them changes nothing.
+ * element — no Dock icon, no menu bar, so no ⌘Q or ⌘Tab either. Be one only while a share is
+ * on (its annotation overlay and the remote-control bar must stay visible) and a normal app the
+ * rest of the time; an update download is not worth losing the Dock for. The windows set their
+ * full-screen collection behaviour with skipTransformProcessType, so creating them changes nothing.
  * @type {Set<string>}
  */
 const floatingReasons = new Set();
@@ -142,8 +142,12 @@ function reconcileDock() {
   if (process.platform !== 'darwin' || !app.dock) return;
   const wantHidden = floatingReasons.size > 0 && !isAppQuitting;
   if (wantHidden === !app.dock.isVisible()) return;
-  if (wantHidden) app.dock.hide();
-  else app.dock.show().catch(() => {});
+  if (wantHidden) {
+    app.dock.hide();
+    refloatWindows();
+  } else {
+    app.dock.show().catch(() => {});
+  }
   // Electron ignores a hide within a second of a show; check again once that has passed.
   if (dockReconcileTimer) clearTimeout(dockReconcileTimer);
   dockReconcileTimer = setTimeout(() => {
@@ -156,6 +160,18 @@ function reconcileDock() {
 /** Visible on every Space, including full-screen ones, without touching the Dock. */
 function floatOnAllSpaces(win) {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+}
+
+/** Electron hides the Dock before setting full-screen behaviour; do the same once hidden. */
+function refloatWindows() {
+  for (const win of [overlayWindow, rcBarWindow, updateProgressWindow]) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      floatOnAllSpaces(win);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 /**
@@ -267,7 +283,6 @@ function destroyUpdateProgressWindow() {
   pendingUpdateProgressPayload = null;
   lastUpdaterProgressRounded = -1;
   releaseOverlayHide('update-progress');
-  setFloatingReason('update-progress', false);
 }
 
 function raiseUpdateProgressWindow() {
@@ -482,7 +497,6 @@ function ensureUpdateProgressWindow() {
   } catch {
     /* ignore */
   }
-  setFloatingReason('update-progress', true);
   raiseUpdateProgressWindow();
   startUpdateProgressRaiseLoop();
 
@@ -507,7 +521,6 @@ function ensureUpdateProgressWindow() {
   updateProgressWindow.on('closed', () => {
     updateProgressWindow = null;
     releaseOverlayHide('update-progress');
-    setFloatingReason('update-progress', false);
   });
 
   updateProgressWindow.loadFile(path.join(__dirname, 'update-progress.html')).catch((e) => {
@@ -895,12 +908,11 @@ function handleDeepLink(rawUrl) {
     return;
   }
   if (!mainWindow || mainWindow.isDestroyed()) {
-    try {
-      createWindows();
-    } catch (e) {
-      appendStartupLog(`auth deep link createWindows: ${e}`);
-      return;
-    }
+    void reopenMainWindow().then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) void completeGoogleSignIn(auth.code);
+      else appendStartupLog('auth deep link: no window to sign in');
+    });
+    return;
   }
   void completeGoogleSignIn(auth.code);
 }
@@ -1547,7 +1559,8 @@ function createWindows() {
   mainWindow.webContents.on('did-navigate', meetingPageGone);
   mainWindow.webContents.on('render-process-gone', meetingPageGone);
   // Leaving the room inside the page (no reload) ends any share too.
-  mainWindow.webContents.on('did-navigate-in-page', (_event, url) => {
+  mainWindow.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+    if (!isMainFrame) return; // LiveDoc / Design iframes route on their own
     try {
       if (!new URL(url).pathname.startsWith('/rooms/')) meetingPageGone();
     } catch {
@@ -1666,13 +1679,37 @@ function waitForHttpReady(port, timeoutMs = 90000) {
 /** @type {Promise<void> | null} */
 let reopenInFlight = null;
 
-/** macOS Dock click after the main window was closed: local server first, then the windows. */
+/** Resolves once nothing answers on the port (the previous local server has exited), or after ~4 s. */
+function waitForPortFree(port, timeoutMs = 4000) {
+  const net = require('net');
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const probe = () => {
+      const socket = net.connect({ host: '127.0.0.1', port });
+      socket.once('connect', () => {
+        socket.destroy();
+        if (Date.now() - started > timeoutMs) resolve();
+        else setTimeout(probe, 150);
+      });
+      socket.once('error', () => resolve());
+    };
+    probe();
+  });
+}
+
+/**
+ * The main window is gone (closed on macOS) and something needs it again — a Dock click, a
+ * deep link, a second launch: local server first, then the windows.
+ */
 function reopenMainWindow() {
   if (reopenInFlight) return reopenInFlight;
   reopenInFlight = (async () => {
     isAppQuitting = false;
     try {
-      if (app.isPackaged && !nextServerProcess) await startPackagedNextServer();
+      if (app.isPackaged && !nextServerProcess) {
+        await waitForPortFree(APP_PORT);
+        await startPackagedNextServer();
+      }
       if (BrowserWindow.getAllWindows().length === 0) createWindows();
     } catch (e) {
       showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
@@ -1760,12 +1797,10 @@ if (!gotLock) {
     const url = getDeepLinkFromArgv(commandLine);
     const hasMain = mainWindow && !mainWindow.isDestroyed();
     if (!hasMain) {
-      try {
-        createWindows();
-      } catch (e) {
-        appendStartupLog(`second-instance createWindows: ${e}`);
-        return;
-      }
+      void reopenMainWindow().then(() => {
+        if (url) handleDeepLink(url);
+      });
+      return;
     }
     if (url) handleDeepLink(url);
     else if (mainWindow && !mainWindow.isDestroyed()) {
