@@ -28,6 +28,10 @@ const SKIP_PACKAGE_NAMES = new Set([
 const SHELL_FILES = [
   'main.js',
   'preload.js',
+  // Remote control: main.js requires remote-input.js at startup; rc-bar is the presenter's Stop bar
+  'remote-input.js',
+  'rc-bar.html',
+  'rc-bar-preload.js',
   'update-progress.html',
   'update-progress-preload.js',
   'update-ready.html',
@@ -225,12 +229,7 @@ const slimPkg = {
     },
     npmRebuild: false,
     files: [
-      'main.js',
-      'preload.js',
-      'update-progress.html',
-      'update-progress-preload.js',
-      'update-ready.html',
-      'update-ready-preload.js',
+      ...SHELL_FILES,
       'package.json',
       // Windows 精简包排除 darwin；Mac 包需带上原生模块
       ...(isMacBuild
