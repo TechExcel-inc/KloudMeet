@@ -6,7 +6,7 @@ import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { parseMeetingRoomView, setMeetingRoomDesignLink } from '@/lib/meetingRoomView';
 
 /**
- * POST — Design mode: set the link everyone views ({ url }) or clear it ({ url: null, view }).
+ * POST — Design mode: set the link everyone views ({ url, embed? }) or clear it ({ url: null, view }).
  * Bearer: the caller's LiveKit token for this room. Signed-in participants only, so a guest
  * can't leave a link behind for late joiners; who may switch the stage is enforced in the
  * meeting UI, as for the other views.
@@ -29,7 +29,7 @@ export async function POST(
       return NextResponse.json({ error: 'Sign in to show a link to everyone' }, { status: 403 });
     }
 
-    let payload: { url?: unknown; view?: unknown };
+    let payload: { url?: unknown; view?: unknown; embed?: unknown };
     try {
       payload = await request.json();
     } catch {
@@ -57,6 +57,8 @@ export async function POST(
       setBy: participant.identity,
       ...(participant.name ? { setByName: participant.name.slice(0, 120) } : {}),
       setAt: Date.now(),
+      // What the presenter's embed check found, so late joiners see the same state
+      ...(payload.embed === 'blocked' ? { embed: 'blocked' as const } : {}),
     };
     const ok = await setMeetingRoomDesignLink(roomName, designLink, 'design');
     if (!ok) return NextResponse.json({ error: 'Failed to update room' }, { status: 502 });

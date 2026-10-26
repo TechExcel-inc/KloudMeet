@@ -197,7 +197,8 @@ import {
   type DesignLink,
   type StoredDesignLink,
 } from '@/lib/designLink';
-import { persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
+import { checkDesignLinkEmbed, persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
+import type { DesignEmbedCheck } from '@/lib/designEmbed';
 import { DESIGN_TOPIC, parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
 
@@ -2602,7 +2603,11 @@ export function VideoConferenceComponent(props: {
       send(msg, opts) {
         if (room.state !== ConnectionState.Connected) return;
         room.localParticipant
-          .publishData(designEncoder.encode(JSON.stringify(msg)), { reliable: !opts?.lossy, topic: DESIGN_TOPIC })
+          .publishData(designEncoder.encode(JSON.stringify(msg)), {
+            reliable: !opts?.lossy,
+            topic: DESIGN_TOPIC,
+            ...(opts?.to ? { destinationIdentities: [opts.to] } : {}),
+          })
           .catch(() => {});
       },
       subscribe(handler) {
@@ -2618,6 +2623,15 @@ export function VideoConferenceComponent(props: {
         room.on(RoomEvent.DataReceived, onData);
         return () => {
           room.off(RoomEvent.DataReceived, onData);
+        };
+      },
+      onConnected(handler) {
+        // A hello sent before the room connected went nowhere; after a reconnect, messages were missed
+        room.on(RoomEvent.Connected, handler);
+        room.on(RoomEvent.Reconnected, handler);
+        return () => {
+          room.off(RoomEvent.Connected, handler);
+          room.off(RoomEvent.Reconnected, handler);
         };
       },
     };
@@ -3433,12 +3447,12 @@ export function VideoConferenceComponent(props: {
   }, [broadcastViewChange]);
 
   /* ── Design mode: a link everyone views ── */
-  const persistDesignLink = React.useCallback((url: string | null, view?: ViewMode) => {
+  const persistDesignLink = React.useCallback((url: string | null, view?: ViewMode, embed?: 'blocked') => {
     const token = connectionDetailsRef.current.participantToken;
     const rn = connectionDetailsRef.current.roomName;
     if (!token || !rn) return;
     // Guests can't store it for late joiners (403); the live message still reached everyone.
-    void persistMeetingDesignLink({ roomName: rn, url, view, livekitToken: token }).catch((err) =>
+    void persistMeetingDesignLink({ roomName: rn, url, view, embed, livekitToken: token }).catch((err) =>
       console.warn('[design] persist failed', err),
     );
   }, []);
@@ -3448,7 +3462,7 @@ export function VideoConferenceComponent(props: {
       setDesignStored(next);
       if (isHost) authState.current.designLink = next;
       sendMeetingMsg({ type: 'DESIGN_LINK', link: next });
-      persistDesignLink(next?.url ?? null, nextView);
+      persistDesignLink(next?.url ?? null, nextView, next?.embed);
     },
     [isHost, sendMeetingMsg, persistDesignLink],
   );
@@ -3474,18 +3488,29 @@ export function VideoConferenceComponent(props: {
   }, [canSwitchViews]);
 
   const submitDesignLink = React.useCallback(
-    (link: DesignLink) => {
+    (link: DesignLink, check?: DesignEmbedCheck) => {
       applyDesignLink({
         url: link.url,
         setBy: room.localParticipant.identity,
         setByName: props.userChoices.username || undefined,
         setAt: Date.now(),
+        ...(check?.embed === 'blocked' ? { embed: 'blocked' as const } : {}),
       });
       rememberDesignLink({ url: link.url, label: link.kind === 'figma' ? link.label : link.host, kind: link.kind });
       setDesignDialogOpen(false);
       handleViewChange('design');
     },
     [applyDesignLink, room, props.userChoices.username, handleViewChange],
+  );
+
+  const checkDesignEmbed = React.useCallback(
+    (url: string) =>
+      checkDesignLinkEmbed({
+        roomName: connectionDetailsRef.current.roomName,
+        url,
+        livekitToken: connectionDetailsRef.current.participantToken,
+      }),
+    [],
   );
 
   const stopDesign = React.useCallback(() => {
@@ -6380,6 +6405,7 @@ export function VideoConferenceComponent(props: {
                 isDriver={isDesignDriver}
                 canControl={canSwitchViews}
                 sync={designSync}
+                embedBlocked={designStored?.embed === 'blocked'}
                 onChangeLink={() => setDesignDialogOpen(true)}
                 onStop={stopDesign}
               />
@@ -9130,6 +9156,7 @@ export function VideoConferenceComponent(props: {
             currentUrl={designLink?.url}
             appOrigin={typeof window !== 'undefined' ? window.location.origin : ''}
             onSubmit={submitDesignLink}
+            checkEmbed={checkDesignEmbed}
             onClose={() => setDesignDialogOpen(false)}
           />
         )}

@@ -1,16 +1,20 @@
 import type { StoredDesignLink } from '@/lib/designLink';
+import { parseDesignEmbedCheck, type DesignEmbedCheck } from '@/lib/designEmbed';
 
 /** Persist the Design-mode link for late joiners (null clears it). Throws on failure. */
 export async function persistMeetingDesignLink({
   roomName,
   url,
   view,
+  embed,
   livekitToken,
 }: {
   roomName: string;
   url: string | null;
   /** When clearing: the view the stage goes back to */
   view?: string;
+  /** The site refuses to be framed (from checkDesignLinkEmbed) */
+  embed?: 'blocked';
   livekitToken: string;
 }): Promise<StoredDesignLink | null> {
   const response = await fetch(`/api/meetings/${encodeURIComponent(roomName)}/design`, {
@@ -19,13 +23,43 @@ export async function persistMeetingDesignLink({
       'Content-Type': 'application/json',
       Authorization: `Bearer ${livekitToken}`,
     },
-    body: JSON.stringify(url === null && view ? { url, view } : { url }),
+    body: JSON.stringify(url === null && view ? { url, view } : { url, ...(embed ? { embed } : {}) }),
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) {
     throw new Error(`persistMeetingDesignLink: ${response.status} ${data?.code || data?.error || ''}`);
   }
   return (data?.designLink as StoredDesignLink | null) ?? null;
+}
+
+/** Ask the server whether the site allows being shown inside the meeting ('unknown' on any failure). */
+export async function checkDesignLinkEmbed({
+  roomName,
+  url,
+  livekitToken,
+  signal,
+}: {
+  roomName: string;
+  url: string;
+  /** Omitted only by the development preview */
+  livekitToken?: string;
+  signal?: AbortSignal;
+}): Promise<DesignEmbedCheck> {
+  try {
+    const response = await fetch(`/api/meetings/${encodeURIComponent(roomName)}/design/check`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(livekitToken ? { Authorization: `Bearer ${livekitToken}` } : {}),
+      },
+      body: JSON.stringify({ url }),
+      signal,
+    });
+    if (!response.ok) return { embed: 'unknown' };
+    return parseDesignEmbedCheck(await response.json());
+  } catch {
+    return { embed: 'unknown' };
+  }
 }
 
 export interface RecentDesignLink {
