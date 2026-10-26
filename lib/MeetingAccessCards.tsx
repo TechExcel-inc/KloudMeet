@@ -6,6 +6,7 @@
  * They show the meeting's title and host only — never who is in it.
  */
 import React from 'react';
+import Link from 'next/link';
 import { AlertTriangle, Ban, Globe, Info, Lock, LogIn, ShieldCheck, UserPlus, X } from 'lucide-react';
 import styles from '@/styles/MeetingAccess.module.css';
 import { useI18n } from './i18n';
@@ -204,9 +205,9 @@ export function AccessRefusedPage({
             {retryInMs > 0 ? t('access.askAgainIn', { n: waitSeconds }) : t('access.askAgain')}
           </button>
         )}
-        <a className={styles.secondary} href="/">
+        <Link className={styles.secondary} href="/">
           {t('access.backHome')}
-        </a>
+        </Link>
       </div>
     </section>
   );

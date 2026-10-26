@@ -5,6 +5,7 @@
  * bar for answering requests. Protected meetings: ask the host. Private: attendees only.
  */
 import React from 'react';
+import Link from 'next/link';
 import { Bell, Check, Info, Lock, ShieldCheck } from 'lucide-react';
 import styles from '@/styles/MeetingAccess.module.css';
 import { useI18n } from './i18n';
@@ -103,9 +104,9 @@ export function RecordingAccessBlocked({ recordingKey, blocked }: { recordingKey
             </span>
           </div>
         )}
-        <a className={styles.secondary} href="/">
+        <Link className={styles.secondary} href="/">
           {t('access.backHome')}
-        </a>
+        </Link>
       </section>
     );
   }
@@ -139,9 +140,9 @@ export function RecordingAccessBlocked({ recordingKey, blocked }: { recordingKey
           )}
         </>
       )}
-      <a className={styles.secondary} href="/">
+      <Link className={styles.secondary} href="/">
         {t('access.backHome')}
-      </a>
+      </Link>
     </section>
   );
 }
