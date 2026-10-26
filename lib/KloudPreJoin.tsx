@@ -638,7 +638,6 @@ export function KloudPreJoin({
               </div>
             </>
           )}
-          {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
         </div>
         {!canUseMediaDevices && mediaUnavailableLabel && (
           <p className={styles.mediaNote} role="status">
@@ -662,6 +661,9 @@ export function KloudPreJoin({
               ))}
           </div>
         )}
+
+        {/* Who is in the room, above the host's meeting settings */}
+        {nobodyHereText && <p className={styles.nobodyHere}>{nobodyHereText}</p>}
 
         {/* Injected settings above the name (host meeting settings) */}
         {beforeName}
