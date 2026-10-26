@@ -8,13 +8,16 @@ import {
   type PlanLimits,
   hoursPackPriceId,
   isSeatPlan,
+  isSelfServePlan,
   stripePriceIdFor,
+  type SelfServePlanId,
 } from '@/lib/billing/plans';
 import {
   countAiSummaries,
   getReplayBalance,
   isBillingEnabled,
   resolveEntitlements,
+  type Entitlements,
 } from '@/lib/billing/entitlements';
 import { isAccountAdminOf } from '@/lib/billing/account';
 import { RECORDING_STATUS_ARCHIVED } from '@/lib/billing/limits';
@@ -33,6 +36,8 @@ export interface BillingSummary {
   planName: string;
   status: string | null;
   source: string | null;
+  /** Paid plan bought with a delayed payment method that has not cleared yet. */
+  pendingPlan: SelfServePlanId | null;
   interval: BillingInterval | null;
   seats: number;
   seatsUsed: number;
@@ -55,6 +60,14 @@ export interface BillingSummary {
 }
 
 export type BillingSummaryResponse = BillingSummary | { enabled: false };
+
+/** A Stripe subscription still waiting for its first payment (e.g. a bank debit) keeps the account on Free. */
+function pendingPlanOf(ent: Entitlements): SelfServePlanId | null {
+  const sub = ent.subscription;
+  if (ent.plan !== 'FREE' || !sub || sub.source === 'MANUAL') return null;
+  if ((sub.status || '').toLowerCase() !== 'incomplete') return null;
+  return isSelfServePlan(sub.plan) ? sub.plan : null;
+}
 
 export async function buildBillingSummary(teamMemberId: number): Promise<BillingSummaryResponse> {
   if (!isBillingEnabled()) return { enabled: false };
@@ -90,6 +103,7 @@ export async function buildBillingSummary(teamMemberId: number): Promise<Billing
     planName: PLANS[ent.plan].name,
     status: ent.status,
     source: ent.source,
+    pendingPlan: pendingPlanOf(ent),
     interval: ent.interval,
     seats: ent.seats,
     seatsUsed: isSeatPlan(ent.plan) ? seatsUsed : 1,

@@ -233,6 +233,45 @@ describe('checkout.session.completed', () => {
     ).toBe('account_not_found');
     expect(prisma.billingCredit.create).not.toHaveBeenCalled();
   });
+
+  it('keeps a Business subscription paid by bank debit pending until the money clears', async () => {
+    const outcome = await handleStripeEvent(
+      event('checkout.session.completed', {
+        id: 'cs_ach',
+        mode: 'subscription',
+        payment_status: 'unpaid',
+        customer: 'cus_1',
+        subscription: 'sub_ach',
+        metadata: { accountId: '10', plan: 'BUSINESS', interval: 'year', seats: '6' },
+      }),
+    );
+    expect(outcome).toBe('subscription_linked');
+    expect(prisma.billingSubscription.upsert.mock.calls[0][0].create).toMatchObject({
+      plan: 'BUSINESS',
+      seats: 6,
+      status: 'incomplete',
+    });
+    // Not paid yet: no seat for the owner and no replays restored.
+    expect(prisma.billingSeat.createMany).not.toHaveBeenCalled();
+    expect(prisma.recording.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('adds an hour pack when a delayed payment clears', async () => {
+    prisma.billingCredit.create.mockResolvedValueOnce({});
+    const outcome = await handleStripeEvent(
+      event('checkout.session.async_payment_succeeded', {
+        id: 'cs_pack_sepa',
+        mode: 'payment',
+        payment_status: 'paid',
+        created: unix('2026-10-20T10:00:00Z'),
+        metadata: { kind: 'hours_pack', accountId: '10', packs: '1' },
+      }),
+    );
+    expect(outcome).toBe('credits_added');
+    expect(await handleStripeEvent(event('checkout.session.async_payment_failed', { id: 'cs_x', mode: 'payment' }))).toBe(
+      'ignored',
+    );
+  });
 });
 
 describe('customer.subscription.*', () => {
