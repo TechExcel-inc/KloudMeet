@@ -296,7 +296,7 @@ export function BillingPageClient() {
       cls = `${css.btn} ${css.btnFill}`;
       onClick = available ? () => setDialog({ kind: 'upgrade', plan: id as SelfServePlanId }) : undefined;
     }
-    const disabled = isCurrent || !onClick || !canManage || busy;
+    const disabled = isCurrent || !onClick || !canManage || busy || Boolean(s.pendingPlan);
     let note = '';
     if (price) {
       note = yearly
@@ -371,7 +371,7 @@ export function BillingPageClient() {
           {!s.canManage && <span className={css.small}>{t('billing.adminOnly')}</span>}
         </div>
         <div className={css.actions}>
-          {s.plan === 'FREE' && !manual && (
+          {s.plan === 'FREE' && !manual && !s.pendingPlan && (
             <button
               type="button"
               className={`${css.btn} ${css.btnFill}`}

@@ -55,6 +55,17 @@ export async function POST(request: NextRequest) {
         { status: 409 },
       );
     }
+    if (
+      subscription?.source === 'STRIPE' &&
+      subscription.stripeSubscriptionId &&
+      (subscription.status || '').toLowerCase() === 'incomplete'
+    ) {
+      // A bank-debit payment is still clearing; a second checkout would charge twice.
+      return NextResponse.json(
+        { error: 'A payment for this account is still processing. Please wait for it to clear.', code: 'PAYMENT_PROCESSING' },
+        { status: 409 },
+      );
+    }
 
     const customerId = await ensureStripeCustomer(member, accountId, subscription);
     const base = billingBaseUrl(request);
