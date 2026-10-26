@@ -27,6 +27,15 @@ export interface MeetingDocumentPipLabels {
   inviteCopied: string;
   settings: string;
   backToMain: string;
+  /** "{n} people" / "1 person" */
+  people: string;
+  person: string;
+  recording: string;
+  aloneTitle: string;
+  aloneBody: string;
+  copyInvite: string;
+  youAreSharing: string;
+  stop: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -46,19 +55,17 @@ export interface MeetingDocumentPipPanelProps {
   onEndForAll?: () => void;
   initialMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  meetingTitle?: string;
+  startedAtMs?: number | null;
+  isRecording?: boolean;
 }
 
 export const PIP_EXPANDED_W = 240;
-export const PIP_EXPANDED_H = 420;
+export const PIP_EXPANDED_H = 340;
+/** Small tiles under the speaker: up to 3, the last one becomes "+N" when more */
+const STRIP_MAX = 3;
 export const PIP_MINIMIZED_H = 59.2;
-const HERO_ROWS = 2;
-const HERO_GAP = 6;
-const HERO_MIN = 64;
 const PREVIEW_TILE = 108;
-const COMPACT_GAP = 6;
-const COMPACT_MIN = 48;
-const COMPACT_COLS_MIN = 4;
-const COMPACT_COLS_MAX = 8;
 const COLLAPSED_MAX = 5;
 const SHARE_PREVIEW_ID = '__share__';
 const AVATAR_SIZE = 30;
@@ -200,14 +207,6 @@ function ShareGlyph() {
   );
 }
 
-function fitCols(width: number, gap: number, min: number, max?: number): number {
-  const inner = Math.max(0, width);
-  const byMin = Math.floor((inner + gap) / (min + gap));
-  const cols = Math.max(1, byMin);
-  if (max === undefined) return cols;
-  return Math.min(max, cols);
-}
-
 function pillEntries(
   entries: { id: string; name: string }[],
   shareId: string | null,
@@ -218,80 +217,6 @@ function pillEntries(
   if (!sharer) return shown;
   if (shown.length < COLLAPSED_MAX) return [...shown, sharer];
   return [...shown.slice(0, COLLAPSED_MAX - 1), sharer];
-}
-
-function splitRoster(
-  room: Room,
-  entries: { id: string; name: string }[],
-  hostIdentity: string,
-  cohostIdentities: string[],
-  heroCap: number,
-): { heroes: RosterRow[]; rest: RosterRow[] } {
-  const resolve = (id: string): Participant | undefined =>
-    id === 'local' ? room.localParticipant : room.remoteParticipants.get(id);
-
-  const identityFor = (id: string) => (id === 'local' ? room.localParticipant.identity : id);
-
-  const hasVideo = (p: Participant) => {
-    const camPub = p.getTrackPublication(Track.Source.Camera);
-    return !!(camPub?.track && !camPub.isMuted);
-  };
-
-  const micLive = (p: Participant) => {
-    const micPub = p.getTrackPublication(Track.Source.Microphone);
-    return !!(micPub?.track && !micPub.isMuted);
-  };
-
-  const roleRank = (identity: string) => {
-    if (identity === hostIdentity) return 0;
-    if (cohostIdentities.includes(identity)) return 1;
-    return 2;
-  };
-
-  const rows = entries
-    .map((e) => {
-      const participant = resolve(e.id);
-      if (!participant) return null;
-      return {
-        id: e.id,
-        name: e.name,
-        participant,
-        identity: identityFor(e.id),
-        joinedAt: participant.joinedAt?.getTime() ?? 0,
-        hasVideo: hasVideo(participant),
-        micLive: micLive(participant),
-      };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
-
-  const byJoin = (a: (typeof rows)[0], b: (typeof rows)[0]) => a.joinedAt - b.joinedAt;
-
-  const heroTier = (r: (typeof rows)[0]): number => {
-    if (r.micLive && r.hasVideo) return 0;
-    if (r.hasVideo && !r.micLive) return 1;
-    if (r.micLive && !r.hasVideo) return 2;
-    return 3;
-  };
-
-  const sortedForHero = [...rows].sort((a, b) => {
-    const ta = heroTier(a);
-    const tb = heroTier(b);
-    if (ta !== tb) return ta - tb;
-    const poolSize = rows.filter((x) => heroTier(x) === ta).length;
-    if (poolSize > heroCap) {
-      const rr = roleRank(a.identity) - roleRank(b.identity);
-      if (rr !== 0) return rr;
-    }
-    return byJoin(a, b);
-  });
-
-  const hero = sortedForHero.slice(0, Math.max(1, heroCap));
-  const used = new Set(hero.map((r) => r.id));
-  const rest = rows.filter((r) => !used.has(r.id)).sort(byJoin);
-  return {
-    heroes: hero.map(({ id, name, participant }) => ({ id, name, participant })),
-    rest: rest.map(({ id, name, participant }) => ({ id, name, participant })),
-  };
 }
 
 export function MeetingDocumentPipPanel({
@@ -311,6 +236,9 @@ export function MeetingDocumentPipPanel({
   onEndForAll,
   initialMinimized = false,
   onMinimizedChange,
+  meetingTitle,
+  startedAtMs = null,
+  isRecording = false,
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
@@ -324,7 +252,6 @@ export function MeetingDocumentPipPanel({
   const [previewId, setPreviewId] = React.useState<string | null>(null);
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
-  const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
 
   React.useEffect(() => {
     const bump = () => setRosterTick((n) => n + 1);
@@ -340,6 +267,7 @@ export function MeetingDocumentPipPanel({
       RoomEvent.TrackUnsubscribed,
       RoomEvent.LocalTrackPublished,
       RoomEvent.LocalTrackUnpublished,
+      RoomEvent.ActiveSpeakersChanged,
     ] as const;
     for (const e of evs) {
       room.on(e, bump);
@@ -351,24 +279,13 @@ export function MeetingDocumentPipPanel({
     };
   }, [room]);
 
+  // Header clock: time since the meeting started
+  const [now, setNow] = React.useState(() => Date.now());
   React.useEffect(() => {
-    if (minimized) return;
-    const el = stageRef.current;
-    if (!el) return;
-    const sync = () => {
-      const cs = pipWindow.getComputedStyle(el);
-      const pad = Number.parseFloat(cs.paddingLeft) + Number.parseFloat(cs.paddingRight);
-      setStageW(Math.max(1, el.clientWidth - pad));
-    };
-    sync();
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
-    ro?.observe(el);
-    pipWindow.addEventListener('resize', sync);
-    return () => {
-      ro?.disconnect();
-      pipWindow.removeEventListener('resize', sync);
-    };
-  }, [pipWindow, minimized]);
+    if (minimized || !startedAtMs) return;
+    const id = pipWindow.setInterval(() => setNow(Date.now()), 1000);
+    return () => pipWindow.clearInterval(id);
+  }, [minimized, startedAtMs, pipWindow]);
 
   React.useEffect(() => {
     return () => {
@@ -472,25 +389,58 @@ export function MeetingDocumentPipPanel({
 
   const share = React.useMemo(() => findShare(room), [room, rosterTick]);
 
-  const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
-  const compactCols = Math.max(
-    COMPACT_COLS_MIN,
-    fitCols(stageW, COMPACT_GAP, COMPACT_MIN, COMPACT_COLS_MAX),
-  );
-  const heroCap = heroCols * HERO_ROWS;
-  const heroW = Math.max(1, (stageW - HERO_GAP * Math.max(0, heroCols - 1)) / heroCols);
+  // Speaker view: whoever is talking (else someone on camera) large, the rest below
+  const lastSpeakerRef = React.useRef<string | null>(null);
+  const stageView = React.useMemo(() => {
+    const rows: RosterRow[] = sortedEntries
+      .map((e): RosterRow | null => {
+        const participant: Participant | undefined =
+          e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
+        return participant ? { id: e.id, name: e.name, participant } : null;
+      })
+      .filter((r): r is RosterRow => r !== null);
+    const remotes = rows.filter((r) => r.id !== 'local');
+    const camOn = (r: RosterRow) => {
+      const pub = r.participant.getTrackPublication(Track.Source.Camera);
+      return Boolean(pub?.track && !pub.isMuted);
+    };
+    const speakingIds = room.activeSpeakers.map((p) => (p.isLocal ? 'local' : p.identity));
+    const remoteSpeaker = speakingIds.find((id) => id !== 'local' && remotes.some((r) => r.id === id));
+    if (remoteSpeaker) lastSpeakerRef.current = remoteSpeaker;
+    const remoteShare = share && !share.local ? share : null;
+    const alone = remotes.length === 0;
+    const featured = remoteShare
+      ? null
+      : alone
+        ? rows.find((r) => r.id === 'local') ?? null
+        : remotes.find((r) => r.id === lastSpeakerRef.current) ?? remotes.find(camOn) ?? remotes[0];
+    const rank = (r: RosterRow) => {
+      const speaking = speakingIds.indexOf(r.id);
+      return speaking >= 0 ? speaking : camOn(r) ? 100 : 200;
+    };
+    const others = alone
+      ? []
+      : rows
+          .filter((r) => r !== featured)
+          .map((r, i) => ({ r, i }))
+          .sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i)
+          .map(({ r }) => r);
+    const strip = others.length <= STRIP_MAX ? others : others.slice(0, STRIP_MAX - 1);
+    return { featured, remoteShare, alone, strip, overflow: others.length - strip.length };
+  }, [room, sortedEntries, share, rosterTick]);
 
-  const { heroes, rest } = React.useMemo(
-    () =>
-      splitRoster(
-        room,
-        sortedEntries,
-        mediaRestrictions.hostIdentity,
-        mediaRestrictions.cohostIdentities,
-        heroCap,
-      ),
-    [room, sortedEntries, mediaRestrictions.hostIdentity, mediaRestrictions.cohostIdentities, heroCap],
-  );
+  const elapsedText = (() => {
+    if (!startedAtMs) return '';
+    const total = Math.max(0, Math.floor((now - startedAtMs) / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+  })();
+  const peopleCount = sortedEntries.length;
+  const peopleText = peopleCount === 1 ? labels.person : labels.people.replace('{n}', String(peopleCount));
+  const localSharing = Boolean(share?.local);
 
   const handleMinimize = () => {
     setPreviewId(null);
@@ -530,16 +480,12 @@ export function MeetingDocumentPipPanel({
   const sharePreviewOpen = previewId === SHARE_PREVIEW_ID && Boolean(share);
   const previewOpen = Boolean(previewRow && previewParticipant) || sharePreviewOpen;
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
-  const shareInHero = Boolean(share && rest.length === 0);
   const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null);
 
   const backToTab = (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
     focusOpener(pipWindow);
   };
-
-  const personBadge = (id: string) =>
-    isSharer(id) ? <span className={styles.shareBadge}>{labels.shareBadge}</span> : null;
 
   const shareVideo = share ? (
     <div
@@ -602,7 +548,7 @@ export function MeetingDocumentPipPanel({
           ) : (
             <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
               <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
-              <path d="M4 4l16 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+              <path d="M4 4l16 16" className={styles.offSlash} strokeWidth="2" fill="none" strokeLinecap="round" />
             </svg>
           )}
         </button>
@@ -620,7 +566,7 @@ export function MeetingDocumentPipPanel({
           ) : (
             <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
               <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
-              <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
+              <path d="M3 3l18 18" className={styles.offSlash} strokeWidth="2" fill="none" strokeLinecap="round" />
             </svg>
           )}
         </button>
@@ -902,7 +848,21 @@ export function MeetingDocumentPipPanel({
       ) : (
         <>
           <header className={styles.header}>
-            <span className={styles.title}>{labels.meeting}</span>
+            <div className={styles.headText}>
+              <span className={styles.title} title={meetingTitle?.trim() || labels.meeting}>
+                {meetingTitle?.trim() || labels.meeting}
+              </span>
+              <span className={styles.headMeta}>
+                {elapsedText ? <span>{elapsedText}</span> : null}
+                <span>{peopleText}</span>
+                {isRecording ? (
+                  <span className={styles.rec}>
+                    <i className={styles.recDot} aria-hidden="true" />
+                    {labels.recording}
+                  </span>
+                ) : null}
+              </span>
+            </div>
             <div className={styles.headerActions}>
               <button
                 type="button"
@@ -917,59 +877,69 @@ export function MeetingDocumentPipPanel({
               </button>
             </div>
           </header>
-          <div
-            ref={stageRef}
-            className={`${styles.stage} lk-room-container`}
-            style={
-              {
-                ['--pip-hero-cols' as string]: String(heroCols),
-                ['--pip-compact-cols' as string]: String(compactCols),
-                ['--pip-hero-gap' as string]: `${HERO_GAP}px`,
-                ['--pip-compact-gap' as string]: `${COMPACT_GAP}px`,
-                ['--pip-hero-tile' as string]: `${heroW}px`,
-              } as React.CSSProperties
-            }
-          >
-            <div className={styles.heroGrid}>
-              {heroes.map((e) => (
-                <div key={e.id} className={styles.heroCell}>
-                  <LiveDocFloatingGridTile
-                    participant={e.participant}
-                    name={e.name}
-                    size="hero"
-                    mediaRestrictions={mediaRestrictions}
-                  />
-                  {personBadge(e.id)}
-                </div>
-              ))}
-              {shareInHero && shareVideo ? <div className={styles.heroCell}>{shareVideo}</div> : null}
-            </div>
+          <div ref={stageRef} className={`${styles.stage} ${styles.speakerStage} lk-room-container`}>
+            {localSharing ? (
+              <div className={styles.sharingBanner} role="status">
+                <span className={styles.sharingDot} aria-hidden="true" />
+                <span className={styles.sharingText}>{labels.youAreSharing}</span>
+                <button type="button" className={styles.sharingStop} onClick={onToggleShare}>
+                  {labels.stop}
+                </button>
+              </div>
+            ) : null}
 
-            {(rest.length > 0 || (share && !shareInHero)) && (
-              <div className={styles.compactGrid}>
-                {rest.map((e, i) => (
-                  <div
-                    key={e.id}
-                    className={`${styles.compactCell}${(i + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
-                  >
+            {stageView.remoteShare && shareVideo ? (
+              <div className={`${styles.featuredCell} ${styles.featuredShare}`}>
+                {shareVideo}
+                <span className={styles.shareBadge}>{labels.shareBadge}</span>
+              </div>
+            ) : stageView.featured ? (
+              <div className={styles.featuredCell}>
+                <LiveDocFloatingGridTile
+                  participant={stageView.featured.participant}
+                  name={stageView.featured.name}
+                  size="hero"
+                  mediaRestrictions={mediaRestrictions}
+                />
+              </div>
+            ) : null}
+
+            {stageView.alone ? (
+              <div className={styles.aloneCard}>
+                <b>{labels.aloneTitle}</b>
+                <span>{labels.aloneBody}</span>
+                <button type="button" className={styles.aloneCta} onClick={flashCopied}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                  {labels.copyInvite}
+                </button>
+              </div>
+            ) : stageView.strip.length > 0 || stageView.overflow > 0 ? (
+              <div className={styles.strip}>
+                {stageView.strip.map((e) => (
+                  <div key={e.id} className={styles.stripCell}>
                     <LiveDocFloatingGridTile
                       participant={e.participant}
                       name={e.name}
                       size="compact"
                       mediaRestrictions={mediaRestrictions}
                     />
-                    {personBadge(e.id)}
                   </div>
                 ))}
-                {share && !shareInHero && shareVideo ? (
-                  <div
-                    className={`${styles.compactCell}${(rest.length + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
+                {stageView.overflow > 0 ? (
+                  <button
+                    type="button"
+                    className={styles.stripMore}
+                    onClick={backToTab}
+                    title={labels.backToMain}
+                    aria-label={`+${stageView.overflow} · ${labels.backToMain}`}
                   >
-                    {shareVideo}
-                  </div>
+                    +{stageView.overflow}
+                  </button>
                 ) : null}
               </div>
-            )}
+            ) : null}
           </div>
 
           {renderControls(false)}

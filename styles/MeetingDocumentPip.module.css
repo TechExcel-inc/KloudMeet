@@ -475,7 +475,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 6px 8px;
+  padding: 8px 8px 8px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
@@ -834,12 +834,17 @@
 }
 
 .controlOff {
-  background: #fce8e6;
-  color: #c5221f;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
 }
 
 .controlOff:hover {
-  background: #fad2cf;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Off = the main toolbar's look: grey button, red slash */
+.offSlash {
+  stroke: #ff5a52;
 }
 
 .leaveWrap {
@@ -968,12 +973,7 @@
 }
 
 .inviteBtn {
-  color: rgba(52, 211, 153, 0.95);
-}
-
-.inviteBtn:hover {
-  color: #6ee7b7;
-  background: rgba(16, 185, 129, 0.14);
+  color: #fff;
 }
 
 .shareBtnConflict {
@@ -1030,4 +1030,217 @@
 
 .exitMenuItemDanger {
   color: #f87171;
+}
+
+/* ── Expanded SmartCam: speaker view ─────────────────────────────── */
+.headText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+
+.headMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.headMeta > span + span::before {
+  content: '·';
+  margin-right: 6px;
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.rec {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #ff8a80;
+  font-weight: 700;
+}
+
+.recDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff4d4f;
+}
+
+.speakerStage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sharingBanner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 6px 6px 10px;
+  border-radius: 9px;
+  background: rgba(34, 197, 94, 0.14);
+  color: #86efac;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.sharingDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+}
+
+.sharingText {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sharingStop {
+  flex: none;
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #d93025;
+  color: #fff;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sharingStop:hover {
+  background: #c5221f;
+}
+
+.featuredCell,
+.stripCell {
+  position: relative;
+  min-width: 0;
+}
+
+.featuredCell :global(.floating-grid-tile),
+.stripCell :global(.floating-grid-tile) {
+  display: block;
+  position: relative;
+  width: 100%;
+  background: transparent !important;
+}
+
+.featuredCell :global(.floating-grid-video),
+.stripCell :global(.floating-grid-video) {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+  display: block;
+}
+
+.stripCell :global(.floating-grid-video) {
+  border-radius: 8px;
+}
+
+/* Small tiles stay quiet: initials (name on hover), speaking outline, raised hand */
+.stripCell :global(.webcam-floating-participant-metadata) {
+  display: none !important;
+}
+
+/* The large tile: name and mic, no camera badge (as on the stage) */
+.featuredCell :global(.kloud-custom-cam-indicator) {
+  display: none !important;
+}
+
+.featuredCell :global(.floating-grid-video video),
+.stripCell :global(.floating-grid-video video) {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Speaking: the stage's green outline */
+.featuredCell :global(.floating-grid-tile[data-lk-speaking='true'] .floating-grid-video),
+.stripCell :global(.floating-grid-tile[data-lk-speaking='true'] .floating-grid-video) {
+  box-shadow: inset 0 0 0 2px #22c55e;
+}
+
+.featuredShare .shareTile {
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+}
+
+.strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.stripMore {
+  aspect-ratio: 16 / 9;
+  border: 0;
+  border-radius: 8px;
+  background: #2a2c33;
+  color: rgba(255, 255, 255, 0.8);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.stripMore:hover {
+  background: #33363e;
+  color: #fff;
+}
+
+.aloneCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 12px 10px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.aloneCard b {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.aloneCta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #5e5ce6;
+  color: #fff;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.aloneCta:hover {
+  background: #4f4dd8;
 }

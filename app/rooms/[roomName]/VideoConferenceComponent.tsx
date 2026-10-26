@@ -2718,6 +2718,14 @@ export function VideoConferenceComponent(props: {
       inviteCopied: t('meeting.documentPipCopied'),
       settings: t('meeting.documentPipSettings'),
       backToMain: t('meeting.documentPipBack'),
+      people: t('meeting.documentPipPeople'),
+      person: t('meeting.documentPipPerson'),
+      recording: t('meeting.documentPipRec'),
+      aloneTitle: t('meeting.documentPipAloneTitle'),
+      aloneBody: t('meeting.documentPipAloneBody'),
+      copyInvite: t('meeting.documentPipCopyInvite'),
+      youAreSharing: t('meeting.documentPipYouSharing'),
+      stop: t('meeting.documentPipStop'),
     }),
     [t],
   );
@@ -4950,6 +4958,18 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
+  /** SmartCam header clock: when this meeting started (set by the join page) */
+  const meetingStartedAtMs = React.useMemo(() => {
+    if (!livekitConnected) return null;
+    try {
+      const raw = localStorage.getItem('activeMeetingStartedAt');
+      const ms = raw ? Date.parse(raw) : NaN;
+      return Number.isFinite(ms) ? ms : null;
+    } catch {
+      return null;
+    }
+  }, [livekitConnected]);
+
   const documentPip = useMeetingDocumentPip({
     enabled:
       livekitConnected &&
@@ -4973,6 +4993,9 @@ export function VideoConferenceComponent(props: {
     onEndForAll: handleEndForAll,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
+    meetingTitle: props.meetingTitle,
+    startedAtMs: meetingStartedAtMs,
+    isRecording,
   });
   documentPipOpenRef.current = documentPip.open;
   /** 画中画已打开时参会者都在那个窗口里，主界面不再重复挂浮窗 */
