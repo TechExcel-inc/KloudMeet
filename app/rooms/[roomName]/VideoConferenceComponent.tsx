@@ -27,6 +27,7 @@ import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
+import { peerStateOf } from '@/lib/RtasrHelper/captionPeers';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
@@ -4993,6 +4994,9 @@ export function VideoConferenceComponent(props: {
     readLanguage: captionReadLanguage,
     roomLanguages: captionRoomLanguages,
     setReadLanguage: setCaptionReadLanguage,
+    captionStatus,
+    retryCaptions,
+    peerCaptionIssues,
   } = useCaptions({
     room,
     micEnabled,
@@ -8808,6 +8812,9 @@ export function VideoConferenceComponent(props: {
           readLanguage={captionReadLanguage}
           roomLanguages={captionRoomLanguages}
           onChangeLanguage={setCaptionReadLanguage}
+          status={captionStatus}
+          onRetry={retryCaptions}
+          peerIssues={isHost || isCohost ? peerCaptionIssues : undefined}
         />
 
         {/* Custom toolbar overlay */}
@@ -8929,6 +8936,7 @@ export function VideoConferenceComponent(props: {
           isCamDisabledByHost={isLocalCamRestricted}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
+          captionsHealth={peerStateOf(captionStatus)}
           onToggleCaptions={handleToggleCaptions}
           canDocumentPip={
             livekitConnected &&

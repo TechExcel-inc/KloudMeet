@@ -17,6 +17,8 @@
  *       传入空字符串或 'auto' 时由 OpenAI 自动检测语言
  */
 
+import { CaptionEngineError, httpFailure, micFailure, toCaptionError } from './captionErrors';
+
 export interface RtasrMessage {
   id: string | number;
   src: string;
@@ -31,14 +33,19 @@ export interface CaptionEngine {
   /** LiveKit room name; sent to the caption token endpoint for the billing check. */
   roomName?: string;
   OnMessage?: (msg: RtasrMessage) => void;
+  /** The connection was lost after Start resolved; the engine has already released the mic. */
+  OnDropped?: (err: CaptionEngineError) => void;
+  /** Resolves once audio is flowing; rejects with a CaptionEngineError (mic already released). */
   Start(deviceId?: string): Promise<void>;
   Stop(): void;
 }
 
 const TARGET_SAMPLE_RATE = 24000;
+const CONNECT_TIMEOUT_MS = 12000;
 
 export class RtasrHelper implements CaptionEngine {
   public OnMessage?: (msg: RtasrMessage) => void;
+  public OnDropped?: (err: CaptionEngineError) => void;
 
   /** ISO-639-1 语言代码（zh/en/ja/ko/fr/de/es/pt/ru/ar/hi/vi 等）
    *  空字符串或 'auto' 表示自动检测 */
@@ -55,6 +62,7 @@ export class RtasrHelper implements CaptionEngine {
   private _processor: ScriptProcessorNode | null = null;
   private _source: MediaStreamAudioSourceNode | null = null;
   private _running = false;
+  private _gen = 0;
 
   /** 累积每个 item_id 的增量文字，用于 partial 显示 */
   private _partialTexts = new Map<string, string>();
@@ -67,6 +75,7 @@ export class RtasrHelper implements CaptionEngine {
 
   async Start(deviceId = '') {
     if (this._running) return;
+    const gen = ++this._gen;
     this._running = true;
 
     try {
@@ -82,11 +91,12 @@ export class RtasrHelper implements CaptionEngine {
       const tokenRes = await fetch(tokenUrl, {
         headers: { Authorization: `Bearer ${this.getToken()}` },
       });
+      if (gen !== this._gen) return;
       if (!tokenRes.ok) {
-        throw new Error(`Token fetch failed: ${tokenRes.status} ${await tokenRes.text()}`);
+        throw new CaptionEngineError(httpFailure(tokenRes.status), `Token fetch failed: ${tokenRes.status}`);
       }
       const { token, error: tokenErr } = await tokenRes.json();
-      if (tokenErr || !token) throw new Error(`Token error: ${tokenErr || 'empty'}`);
+      if (tokenErr || !token) throw new CaptionEngineError('unavailable', `Token error: ${tokenErr || 'empty'}`);
       // ── Step 2: 打开麦克风 ──────────────────────────────────────────────
       const baseConstraints: MediaTrackConstraints = {
         channelCount: 1,
@@ -98,10 +108,18 @@ export class RtasrHelper implements CaptionEngine {
         ? { ...baseConstraints, deviceId: { exact: deviceId } }
         : baseConstraints;
 
-      this._stream = await navigator.mediaDevices.getUserMedia({
-        audio: audioConstraints,
-        video: false,
-      });
+      try {
+        this._stream = await navigator.mediaDevices.getUserMedia({
+          audio: audioConstraints,
+          video: false,
+        });
+      } catch (err) {
+        throw new CaptionEngineError(micFailure(err), err instanceof Error ? err.message : 'microphone failed');
+      }
+      if (gen !== this._gen) {
+        this._stopMic();
+        return;
+      }
 
       // 直接以 24kHz 创建 AudioContext，由浏览器做高质量重采样
       // 大多数浏览器会接受这个 hint；若不接受会自己挑就近采样率
@@ -114,16 +132,13 @@ export class RtasrHelper implements CaptionEngine {
       // ── Step 3: 用 ephemeral key 连 OpenAI Realtime ─────────────────────
       // URL 不带 model，session 配置在服务端创建 ek 时已锁死为 transcription
       const wsUrl = 'wss://api.openai.com/v1/realtime';
-      this._ws = new WebSocket(wsUrl, [
+      const ws = new WebSocket(wsUrl, [
         'realtime',
         `openai-insecure-api-key.${token}`,
       ]);
+      this._ws = ws;
 
-      this._ws.onopen = () => {
-        this._startProcessor(srcSampleRate);
-      };
-
-      this._ws.onmessage = (e) => {
+      ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data as string);
           const type: string = msg.type || '';
@@ -189,17 +204,36 @@ export class RtasrHelper implements CaptionEngine {
         } catch (_) {}
       };
 
-      this._ws.onerror = () => {};
-      this._ws.onclose = () => {
-        this._running = false;
+      await new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('OpenAI realtime timed out')), CONNECT_TIMEOUT_MS);
+        ws.onopen = () => {
+          clearTimeout(timer);
+          resolve();
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+          clearTimeout(timer);
+          reject(new Error('OpenAI realtime closed before open'));
+        };
+      });
+      if (gen !== this._gen) return;
+
+      // Open: from now on a close is a drop mid-meeting (network, session limit, server restart).
+      ws.onclose = (event) => {
+        if (gen !== this._gen) return;
+        this.Stop();
+        this.OnDropped?.(new CaptionEngineError('network', `OpenAI realtime closed (${event.code})`));
       };
-    } catch (_) {
-      this._stopMic();
-      this._running = false;
+      this._startProcessor(srcSampleRate);
+    } catch (err) {
+      if (gen !== this._gen) return;
+      this.Stop();
+      throw toCaptionError(err);
     }
   }
 
   Stop() {
+    this._gen += 1;
     this._running = false;
     if (this._ws) {
       this._ws.close();

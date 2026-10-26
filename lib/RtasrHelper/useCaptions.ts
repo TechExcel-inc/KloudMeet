@@ -25,6 +25,14 @@ import { FunAsrHelper } from './FunAsrHelper';
 import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
+import { CaptionSupervisor, IDLE_CAPTION_STATUS, type CaptionStatus } from './captionSupervisor';
+import {
+  CAPTION_STATUS_TOPIC,
+  parsePeerCaptionState,
+  peerStateOf,
+  type PeerCaptionIssue,
+  type PeerCaptionState,
+} from './captionPeers';
 import {
   CAPTION_SETTINGS_EVENT,
   captionLanguageFor,
@@ -123,6 +131,12 @@ export interface UseCaptionsReturn {
   readLanguage: CaptionLanguage;
   roomLanguages: CaptionLanguage[];
   setReadLanguage: (lang: CaptionLanguage) => void;
+  /** This participant's own recognition: live, reconnecting, failed… */
+  captionStatus: CaptionStatus;
+  /** Try again after captions gave up. */
+  retryCaptions: () => void;
+  /** Other speakers whose captions have stopped working (for the host). */
+  peerCaptionIssues: PeerCaptionIssue[];
 }
 
 // ── 工具：从 localStorage 读取当前 meetingId ─────────────────────────────
@@ -199,6 +213,11 @@ export function useCaptions({
   const [engineEpoch, setEngineEpoch] = React.useState(0);
 
   const rtasrRef = React.useRef<CaptionEngine | null>(null);
+  const supervisorRef = React.useRef<CaptionSupervisor | null>(null);
+  const [captionStatus, setCaptionStatus] = React.useState<CaptionStatus>(IDLE_CAPTION_STATUS);
+  const peerStatesRef = React.useRef(new Map<string, PeerCaptionState>());
+  const [peerCaptionIssues, setPeerCaptionIssues] = React.useState<PeerCaptionIssue[]>([]);
+  const sentPeerStateRef = React.useRef<PeerCaptionState>('ok');
   const providerRef = React.useRef<SttProvider | null>(null);
   const hideTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const micEnabledRef = React.useRef(micEnabled);
@@ -360,18 +379,91 @@ export function useCaptions({
   }, [room, decoder, showCaptionsToGUI, uiLanguage]);
 
   // 识别只由这里启动和停止。开字幕本身不连引擎，避免和开麦各打一次 token。
+  // 断线重连、失败后的状态由 supervisor 负责。
   React.useEffect(() => {
-    const engine = rtasrRef.current;
-    if (!captionsRunning || !engine) return;
+    const supervisor = supervisorRef.current;
+    if (!captionsRunning || !supervisor) return;
     if (!micEnabled) {
-      engine.Stop();
+      supervisor.stop();
       return;
     }
     const defaultMic = localStorage.getItem('DefaultMic') || '';
-    engine.Start(defaultMic).catch((err: unknown) => {
-      console.warn('[useCaptions] Failed to restart recognition:', err);
-    });
+    supervisor.start(defaultMic);
   }, [micEnabled, captionsRunning, engineEpoch]);
+
+  // Network back: don't sit out the rest of a backoff wait.
+  React.useEffect(() => {
+    const onOnline = () => supervisorRef.current?.nudge();
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, []);
+
+  const retryCaptions = React.useCallback(() => supervisorRef.current?.retry(), []);
+
+  // ── Speakers' caption health (host sees who is missing) ────────────────
+
+  const announceCaptionState = React.useCallback(
+    (state: PeerCaptionState) => {
+      if (room.state !== 'connected') return;
+      const data = encoder.encode(JSON.stringify({ state }));
+      room.localParticipant.publishData(data, { reliable: true, topic: CAPTION_STATUS_TOPIC }).catch(() => {});
+    },
+    [room, encoder],
+  );
+
+  React.useEffect(() => {
+    const state = peerStateOf(captionStatus);
+    if (state === sentPeerStateRef.current) return;
+    sentPeerStateRef.current = state;
+    announceCaptionState(state);
+  }, [captionStatus, announceCaptionState]);
+
+  const refreshPeerIssues = React.useCallback(() => {
+    const issues: PeerCaptionIssue[] = [];
+    for (const [identity, state] of peerStatesRef.current) {
+      if (state !== 'failed') continue;
+      const p = room.remoteParticipants.get(identity);
+      issues.push({ identity, name: p?.name || identity });
+    }
+    setPeerCaptionIssues(issues);
+  }, [room]);
+
+  React.useEffect(() => {
+    const onData = (payload: Uint8Array, participant?: { identity: string }, _kind?: unknown, topic?: string) => {
+      if (topic !== CAPTION_STATUS_TOPIC || !participant) return;
+      const state = parsePeerCaptionState(decoder.decode(payload));
+      if (!state) return;
+      peerStatesRef.current.set(participant.identity, state);
+      refreshPeerIssues();
+    };
+    // Someone joining late (e.g. the host rejoining), or us coming back after a reconnect,
+    // still learns that our captions are down.
+    const reannounce = () => {
+      if (sentPeerStateRef.current !== 'ok') announceCaptionState(sentPeerStateRef.current);
+    };
+    const onLeave = (participant: { identity: string }) => {
+      if (peerStatesRef.current.delete(participant.identity)) refreshPeerIssues();
+    };
+    room.on(RoomEvent.DataReceived, onData);
+    room.on(RoomEvent.ParticipantConnected, reannounce);
+    room.on(RoomEvent.Connected, reannounce);
+    room.on(RoomEvent.Reconnected, reannounce);
+    room.on(RoomEvent.ParticipantDisconnected, onLeave);
+    return () => {
+      room.off(RoomEvent.DataReceived, onData);
+      room.off(RoomEvent.ParticipantConnected, reannounce);
+      room.off(RoomEvent.Connected, reannounce);
+      room.off(RoomEvent.Reconnected, reannounce);
+      room.off(RoomEvent.ParticipantDisconnected, onLeave);
+    };
+  }, [room, decoder, refreshPeerIssues, announceCaptionState]);
+
+  // Captions off for the room: nobody's captions are "down" any more.
+  React.useEffect(() => {
+    if (captionsRunning) return;
+    peerStatesRef.current.clear();
+    setPeerCaptionIssues([]);
+  }, [captionsRunning]);
 
   // ── 监听设置变更 ────────────────────────────────────────────────────────
   React.useEffect(() => {
@@ -398,7 +490,7 @@ export function useCaptions({
         const provider = await resolveSttProvider();
         if (seq !== openSeqRef.current) return;
         if (!rtasrRef.current || providerRef.current !== provider) {
-          rtasrRef.current?.Stop();
+          supervisorRef.current?.dispose();
           const token = () => getTokenRef.current();
           const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
           helper.languageCode = uiLanguage;
@@ -500,6 +592,7 @@ export function useCaptions({
           };
 
           rtasrRef.current = helper;
+          supervisorRef.current = new CaptionSupervisor(helper, setCaptionStatus);
           providerRef.current = provider;
           setEngineEpoch((n) => n + 1);
         } else {
@@ -523,7 +616,7 @@ export function useCaptions({
         setCaptionsRunning(true);
       } else {
         if (rtasrRef.current) {
-          rtasrRef.current.Stop();
+          supervisorRef.current?.stop();
           setCaptionsRunning(false);
         }
         setCaptionsInfo((prev) => ({ ...prev, show: false }));
@@ -537,7 +630,8 @@ export function useCaptions({
   React.useEffect(() => {
     return () => {
       if (rtasrRef.current) {
-        rtasrRef.current.Stop();
+        supervisorRef.current?.dispose();
+        supervisorRef.current = null;
         rtasrRef.current = null;
         providerRef.current = null;
       }
@@ -547,5 +641,15 @@ export function useCaptions({
     };
   }, []);
 
-  return { captionsInfo, setCaptionsOpen, captionsRunning, readLanguage, roomLanguages, setReadLanguage };
+  return {
+    captionsInfo,
+    setCaptionsOpen,
+    captionsRunning,
+    readLanguage,
+    roomLanguages,
+    setReadLanguage,
+    captionStatus,
+    retryCaptions,
+    peerCaptionIssues,
+  };
 }
