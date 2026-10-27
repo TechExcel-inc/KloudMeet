@@ -169,7 +169,25 @@ export function resolveJitsiInstanceId({
   return roomName;
 }
 
-export async function createLivedocInstance({
+/**
+ * One create per meeting at a time. MeetingServer's find-or-create is not atomic: two overlapping
+ * calls for the same meeting store two rows, and from then on every call for that meeting fails
+ * ("Expected one result ... but found: 2"). The host bootstrap effect can re-run while a call is
+ * still out (connection, role or LiveDoc mount changes), so overlapping calls share one request.
+ */
+const createInstanceInFlight = new Map<string, Promise<string>>();
+
+export function createLivedocInstance(opts: { userToken: string; jitsiInstanceId: string }): Promise<string> {
+  const existing = createInstanceInFlight.get(opts.jitsiInstanceId);
+  if (existing) return existing;
+  const request = requestLivedocInstance(opts).finally(() => {
+    createInstanceInFlight.delete(opts.jitsiInstanceId);
+  });
+  createInstanceInFlight.set(opts.jitsiInstanceId, request);
+  return request;
+}
+
+async function requestLivedocInstance({
   userToken,
   jitsiInstanceId,
 }: {
