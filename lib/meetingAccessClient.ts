@@ -141,7 +141,12 @@ export interface WaitingPerson {
   requestedAt: string;
 }
 
-export async function fetchWaitingList(roomName: string): Promise<{ requests: WaitingPerson[]; companyName: string | null } | null> {
+export async function fetchWaitingList(roomName: string): Promise<{
+  requests: WaitingPerson[];
+  companyName: string | null;
+  /** False for Public / Private: knocking does not apply, so the host can stop polling. */
+  acceptsKnocks: boolean;
+} | null> {
   try {
     const res = await fetch(`${roomPath(roomName)}/join-requests`, { headers: authHeaders(), cache: 'no-store' });
     if (!res.ok) return null;

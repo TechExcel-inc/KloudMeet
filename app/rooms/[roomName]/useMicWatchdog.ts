@@ -1,5 +1,6 @@
 import React from 'react';
 import { ConnectionState, LocalAudioTrack, Track, type Room } from 'livekit-client';
+import { isToolbarMobileUserAgent } from '@/lib/useToolbarIsMobile';
 import {
   MIC_REPUBLISH_MAX_COOLDOWN_TICKS,
   MIC_STALL_REPUBLISH_TICKS,
@@ -22,8 +23,9 @@ interface MicWatchdogOptions {
 /**
  * useMicWatchdog — 麦克风保活巡检
  *
- * 每隔 MIC_WATCHDOG_MS 检查一次本地麦克风：没发布就补发，轨道结束就重启，
- * 上行字节长时间不涨先 restartTrack、再取消发布后重新发布。
+ * 每隔 MIC_WATCHDOG_MS 检查一次本地麦克风：没发布就补发，轨道结束就重启。
+ * 桌面端另看上行字节：长时间不涨先 restartTrack、再取消发布后重新发布。
+ * 手机开了 DTX，安静时 bytesSent 不涨，不能当卡死。
  */
 export function useMicWatchdog({
   room,
@@ -87,6 +89,11 @@ export function useMicWatchdog({
         if (media.readyState === 'ended') {
           console.warn('[KloudMeet] Mic track ended — restarting');
           await track.restartTrack();
+          reset();
+          return;
+        }
+        // 手机 DTX：不说话时上行字节不涨，不能当发送卡死
+        if (isToolbarMobileUserAgent()) {
           reset();
           return;
         }

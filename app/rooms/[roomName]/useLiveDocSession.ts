@@ -63,6 +63,38 @@ export function useLiveDocSession({
 }: LiveDocSessionOptions): void {
   const livedocHostBootstrappedRef = React.useRef(false);
   const livedocMemberSyncedRef = React.useRef<string | null>(null);
+  const aliveRef = React.useRef(true);
+  const bootRef = React.useRef({
+    username,
+    jitsiInstanceId,
+    meetingRoomName,
+    livedocInstanceId,
+    sendMeetingMsg,
+    setLivedocInstanceId,
+    setLivedocInitError,
+    setLivedocInitInProgress,
+    setAuthLivedocInstanceId,
+    connectionDetailsRef,
+  });
+  bootRef.current = {
+    username,
+    jitsiInstanceId,
+    meetingRoomName,
+    livedocInstanceId,
+    sendMeetingMsg,
+    setLivedocInstanceId,
+    setLivedocInitError,
+    setLivedocInitInProgress,
+    setAuthLivedocInstanceId,
+    connectionDetailsRef,
+  };
+
+  React.useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
 
   React.useEffect(() => {
     const onDisconnected = () => {
@@ -130,27 +162,36 @@ export function useLiveDocSession({
   React.useEffect(() => {
     if (!shouldMountLiveDoc) return;
     if (!livekitConnected || !isHost) return;
+    // 先占位再发请求。父组件一重渲染就会重跑 effect，请求还没回来时旧逻辑会再打一次 create。
     if (livedocHostBootstrappedRef.current) return;
-    let cancelled = false;
-    (async () => {
-      setLivedocInitInProgress(true);
-      setLivedocInitError(null);
+    livedocHostBootstrappedRef.current = true;
+
+    const boot = bootRef.current;
+    const existing = boot.livedocInstanceId;
+    if (existing) {
+      boot.setAuthLivedocInstanceId(existing);
+      boot.sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: existing });
+      return;
+    }
+
+    void (async () => {
+      boot.setLivedocInitInProgress(true);
+      boot.setLivedocInitError(null);
       try {
-        const userToken = await createOrUpdateInstantAccount(username);
+        const userToken = await createOrUpdateInstantAccount(boot.username);
         const id = await createLivedocInstance({
           userToken,
-          jitsiInstanceId,
+          jitsiInstanceId: boot.jitsiInstanceId,
         });
-        if (cancelled) return;
-        livedocHostBootstrappedRef.current = true;
-        setLivedocInstanceId(id);
-        setAuthLivedocInstanceId(id);
-        sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
+        if (!aliveRef.current) return;
+        boot.setLivedocInstanceId(id);
+        boot.setAuthLivedocInstanceId(id);
+        boot.sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
         try {
           await bindLivedocToMeeting({
-            roomName: meetingRoomName,
+            roomName: boot.meetingRoomName,
             livedocInstanceId: id,
-            livekitToken: connectionDetailsRef.current.participantToken,
+            livekitToken: boot.connectionDetailsRef.current.participantToken,
           });
         } catch (bindError) {
           console.warn('[LiveDoc] bind-livedoc failed', bindError);
@@ -161,33 +202,13 @@ export function useLiveDocSession({
           console.warn('[LiveDoc] sync-member failed', syncError);
         }
       } catch (e) {
-        if (!cancelled) {
-          livedocHostBootstrappedRef.current = true;
-          setLivedocInitError((e as Error).message ?? String(e));
-        }
+        if (!aliveRef.current) return;
+        boot.setLivedocInitError((e as Error).message ?? String(e));
       } finally {
-        if (!cancelled) {
-          setLivedocInitInProgress(false);
-        }
+        if (aliveRef.current) boot.setLivedocInitInProgress(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    shouldMountLiveDoc,
-    livekitConnected,
-    isHost,
-    jitsiInstanceId,
-    meetingRoomName,
-    username,
-    sendMeetingMsg,
-    setLivedocInstanceId,
-    setLivedocInitError,
-    setLivedocInitInProgress,
-    setAuthLivedocInstanceId,
-    connectionDetailsRef,
-  ]);
+  }, [shouldMountLiveDoc, livekitConnected, isHost]);
 
   React.useEffect(() => {
     if (!livekitConnected || meetingEndedByHost || !livedocInstanceId) return;

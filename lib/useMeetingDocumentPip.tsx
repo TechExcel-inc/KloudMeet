@@ -11,6 +11,7 @@ import {
   setMediaSessionActionHandler,
 } from '@/lib/documentPipSupport';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
+import { I18nScope, useI18n } from '@/lib/i18n';
 import {
   ParticipantRoleMenuProvider,
   type ParticipantRoleActionsConfig,
@@ -185,6 +186,7 @@ export function useMeetingDocumentPip({
   onMuteParticipant,
   onDisableParticipantVideo,
 }: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
+  const i18n = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const pipWindowRef = useRef<Window | null>(null);
   const rootRef = useRef<Root | null>(null);
@@ -211,6 +213,7 @@ export function useMeetingDocumentPip({
   const roomRef = useRef(room);
   const minimizedRef = useRef(false);
   const openedInMeetingRef = useRef(false);
+  const i18nRef = useRef(i18n);
 
   micRef.current = micEnabled;
   camRef.current = camEnabled;
@@ -228,6 +231,7 @@ export function useMeetingDocumentPip({
   onMuteRef.current = onMuteParticipant;
   onDisableVideoRef.current = onDisableParticipantVideo;
   roomRef.current = room;
+  i18nRef.current = i18n;
 
   const closePip = useRef(() => {
     const win = pipWindowRef.current;
@@ -263,65 +267,67 @@ export function useMeetingDocumentPip({
     if (!root || !win || win.closed) return;
 
     root.render(
-      <RoomContext.Provider value={roomRef.current}>
-        <ParticipantRoleMenuProvider
-          {...roleActionsRef.current}
-          doc={win.document}
-          registerBridge={false}
-        >
-          <MeetingDocumentPipPanel
-            room={roomRef.current}
-            pipWindow={win}
-            micEnabled={micRef.current}
-            camEnabled={camRef.current}
-            labels={labelsRef.current}
-            localName={localNameRef.current}
-            mediaRestrictions={restrictionsRef.current}
-            initialMinimized={minimizedRef.current}
-            onMinimizedChange={(next) => {
-              minimizedRef.current = next;
-              writeSessionFlag(pipMiniKey(roomRef.current.name), next);
-            }}
-            onToggleMic={() => {
-              releaseDocumentPipKeepalive();
-              onToggleMicRef.current();
-            }}
-            onToggleCam={() => {
-              releaseDocumentPipKeepalive();
-              onToggleCamRef.current();
-            }}
-            onToggleShare={() => {
-              if (!shareActiveRef.current) {
-                stickyRef.current = true;
-                const pip = pipWindowRef.current;
-                const opener = pip?.opener;
-                if (opener && !opener.closed) {
-                  try {
-                    opener.focus();
-                  } catch {
-                    // 部分环境不允许跨窗 focus
+      <I18nScope value={i18nRef.current}>
+        <RoomContext.Provider value={roomRef.current}>
+          <ParticipantRoleMenuProvider
+            {...roleActionsRef.current}
+            doc={win.document}
+            registerBridge={false}
+          >
+            <MeetingDocumentPipPanel
+              room={roomRef.current}
+              pipWindow={win}
+              micEnabled={micRef.current}
+              camEnabled={camRef.current}
+              labels={labelsRef.current}
+              localName={localNameRef.current}
+              mediaRestrictions={restrictionsRef.current}
+              initialMinimized={minimizedRef.current}
+              onMinimizedChange={(next) => {
+                minimizedRef.current = next;
+                writeSessionFlag(pipMiniKey(roomRef.current.name), next);
+              }}
+              onToggleMic={() => {
+                releaseDocumentPipKeepalive();
+                onToggleMicRef.current();
+              }}
+              onToggleCam={() => {
+                releaseDocumentPipKeepalive();
+                onToggleCamRef.current();
+              }}
+              onToggleShare={() => {
+                if (!shareActiveRef.current) {
+                  stickyRef.current = true;
+                  const pip = pipWindowRef.current;
+                  const opener = pip?.opener;
+                  if (opener && !opener.closed) {
+                    try {
+                      opener.focus();
+                    } catch {
+                      // 部分环境不允许跨窗 focus
+                    }
                   }
                 }
+                onToggleShareRef.current();
+              }}
+              shareActive={shareActiveRef.current}
+              hasScreenShare={hasScreenShareRef.current}
+              onLeave={() => {
+                onLeaveRef.current();
+                closePip();
+              }}
+              onEndForAll={
+                onEndForAllRef.current
+                  ? () => {
+                      onEndForAllRef.current?.();
+                      closePip();
+                    }
+                  : undefined
               }
-              onToggleShareRef.current();
-            }}
-            shareActive={shareActiveRef.current}
-            hasScreenShare={hasScreenShareRef.current}
-            onLeave={() => {
-              onLeaveRef.current();
-              closePip();
-            }}
-            onEndForAll={
-              onEndForAllRef.current
-                ? () => {
-                    onEndForAllRef.current?.();
-                    closePip();
-                  }
-                : undefined
-            }
-          />
-        </ParticipantRoleMenuProvider>
-      </RoomContext.Provider>,
+            />
+          </ParticipantRoleMenuProvider>
+        </RoomContext.Provider>
+      </I18nScope>,
     );
   }).current;
 
@@ -438,7 +444,7 @@ export function useMeetingDocumentPip({
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       renderPanel();
     }
-  }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, renderPanel]);
+  }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, renderPanel]);
 
   useEffect(() => {
     if (!enabled || !isWebDocumentPipEligible()) {

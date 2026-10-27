@@ -52,7 +52,7 @@ function getInitialLocale(): Locale {
 }
 
 /* ────────── Context ────────── */
-interface I18nContextValue {
+export interface I18nContextValue {
   locale: Locale;
   setLocale: (l: Locale) => void;
   /** Translate a key. Returns the key itself when no translation found. */
@@ -113,4 +113,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 /* ────────── Hook ────────── */
 export function useI18n() {
   return useContext(I18nContext);
+}
+
+/** 给 Document PiP 等独立 React 树接上主窗口语言，避免 t() 回退成 key */
+export function I18nScope({
+  value,
+  children,
+}: {
+  value: I18nContextValue;
+  children: React.ReactNode;
+}) {
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }

@@ -4,7 +4,7 @@
  * Host and co-hosts: people knocking on a Protected meeting (screen s5 of the access design).
  * A card at the top right — name, email, "Not in <company>", Admit / Deny — with a short chime
  * when someone new asks. It stays until answered; with several waiting, "View all" opens the
- * list with Admit all. Refreshes every few seconds and whenever the server nudges the room.
+ * list with Admit all. Refresh is driven by the meeting heartbeat; a knock also nudges the room.
  */
 import React from 'react';
 import { RoomEvent, type Room } from 'livekit-client';
@@ -15,7 +15,14 @@ import { getInitials } from './getInitials';
 import { JOIN_REQUESTS_TOPIC } from './meetingAccess';
 import { answerKnocks, fetchWaitingList, type WaitingPerson } from './meetingAccessClient';
 
-const POLL_MS = 5_000;
+export interface JoinRequestsPromptProps {
+  room: Room;
+  canAdmit: boolean;
+  /** Only Protected meetings take knocks; Public / Private never fetch. */
+  acceptsKnocks: boolean;
+  /** Meeting heartbeat (5s) calls this to refresh the waiting list. */
+  refreshRef?: React.MutableRefObject<(() => void) | null>;
+}
 
 /** Two soft notes, no audio file needed. Browsers may block it before the first click. */
 function playChime() {
@@ -50,7 +57,12 @@ function Avatar({ person, size = 40 }: { person: WaitingPerson; size?: number })
   );
 }
 
-export function JoinRequestsPrompt({ room, canAdmit }: { room: Room; canAdmit: boolean }) {
+export function JoinRequestsPrompt({
+  room,
+  canAdmit,
+  acceptsKnocks,
+  refreshRef,
+}: JoinRequestsPromptProps) {
   const { t } = useI18n();
   const [waiting, setWaiting] = React.useState<WaitingPerson[]>([]);
   const [companyName, setCompanyName] = React.useState<string | null>(null);
@@ -60,7 +72,7 @@ export function JoinRequestsPrompt({ room, canAdmit }: { room: Room; canAdmit: b
   const roomName = room.name;
 
   const refresh = React.useCallback(async () => {
-    if (!roomName) return;
+    if (!roomName || !acceptsKnocks) return;
     const data = await fetchWaitingList(roomName);
     if (!data) return;
     setCompanyName(data.companyName);
@@ -68,26 +80,25 @@ export function JoinRequestsPrompt({ room, canAdmit }: { room: Room; canAdmit: b
     const fresh = data.requests.some((r) => !seenRef.current.has(r.id));
     data.requests.forEach((r) => seenRef.current.add(r.id));
     if (fresh) playChime();
-  }, [roomName]);
+  }, [roomName, acceptsKnocks]);
 
   React.useEffect(() => {
-    if (!canAdmit) {
+    if (!canAdmit || !acceptsKnocks) {
       setWaiting([]);
+      if (refreshRef) refreshRef.current = null;
       return;
     }
     void refresh();
-    const id = window.setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
-    }, POLL_MS);
+    if (refreshRef) refreshRef.current = () => { void refresh(); };
     const onData = (_payload: Uint8Array, _participant?: unknown, _kind?: unknown, topic?: string) => {
       if (topic === JOIN_REQUESTS_TOPIC) void refresh();
     };
     room.on(RoomEvent.DataReceived, onData);
     return () => {
-      window.clearInterval(id);
+      if (refreshRef) refreshRef.current = null;
       room.off(RoomEvent.DataReceived, onData);
     };
-  }, [canAdmit, room, refresh]);
+  }, [canAdmit, acceptsKnocks, room, refresh, refreshRef]);
 
   React.useEffect(() => {
     if (waiting.length <= 1) setShowAll(false);

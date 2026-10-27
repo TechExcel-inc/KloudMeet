@@ -859,21 +859,22 @@ export function useMeetingConnection({
   }, []);
 
   React.useEffect(() => {
-    const setDesired = (source: Track.Source, on: boolean) => {
-      if (source === Track.Source.Microphone) desiredMicRef.current = on;
-      if (source === Track.Source.Camera) desiredCamRef.current = on;
+    const setDesiredCam = (on: boolean) => {
+      desiredCamRef.current = on;
     };
     const onMuted = (pub: TrackPublication, participant: Participant) => {
       if (participant !== room.localParticipant) return;
-      setDesired(pub.source, false);
+      // 麦意图只由用户操作 / 主持人禁麦写入。重连卸轨会发 TrackMuted，
+      // 跟过去会把 desiredMic 打成 false，恢复时对方就听不到。
+      if (pub.source === Track.Source.Camera) setDesiredCam(false);
     };
     const onUnmuted = (pub: TrackPublication, participant: Participant) => {
       if (participant !== room.localParticipant) return;
-      setDesired(pub.source, true);
+      if (pub.source === Track.Source.Camera) setDesiredCam(true);
     };
     const onPublished = (pub: LocalTrackPublication) => {
       if (pub.isMuted) return;
-      setDesired(pub.source, true);
+      if (pub.source === Track.Source.Camera) setDesiredCam(true);
     };
     room.on(RoomEvent.TrackMuted, onMuted);
     room.on(RoomEvent.TrackUnmuted, onUnmuted);
@@ -883,7 +884,7 @@ export function useMeetingConnection({
       room.off(RoomEvent.TrackUnmuted, onUnmuted);
       room.off(RoomEvent.LocalTrackPublished, onPublished);
     };
-  }, [room, desiredMicRef, desiredCamRef]);
+  }, [room, desiredCamRef]);
 
   return {
     connectError,

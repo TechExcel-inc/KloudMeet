@@ -34,7 +34,6 @@ import {
 } from '@/lib/meetingAccessClient';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import type { AuthUser } from '@/app/home/types';
-import { createLivedocInstance, createOrUpdateInstantAccount } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';

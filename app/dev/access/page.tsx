@@ -51,7 +51,7 @@ function useMockedWaitingList(count: number) {
         waiting = body.all ? [] : waiting.filter((p) => !body.ids.includes(p.id));
         return new Response(JSON.stringify({ updated: 1 }), { status: 200 });
       }
-      return new Response(JSON.stringify({ companyName: 'Acme', requests: waiting }), { status: 200 });
+      return new Response(JSON.stringify({ companyName: 'Acme', acceptsKnocks: true, requests: waiting }), { status: 200 });
     };
     setReady(true);
     return () => {
@@ -97,7 +97,7 @@ export default function DevAccessPage() {
           {name}
         </div>
       ))}
-      {ready && <JoinRequestsPrompt room={stubRoom} canAdmit />}
+      {ready && <JoinRequestsPrompt room={stubRoom} canAdmit acceptsKnocks />}
     </div>
   );
 }

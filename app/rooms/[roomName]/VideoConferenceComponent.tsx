@@ -110,7 +110,6 @@ import {
 import { authHeaders } from '@/lib/kloudSession';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
-import dynamic from 'next/dynamic';
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
@@ -126,11 +125,7 @@ import { checkDesignLinkEmbed, persistMeetingDesignLink, rememberDesignLink } fr
 import type { DesignEmbedCheck } from '@/lib/designEmbed';
 import { DESIGN_TOPIC, parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
-
-const LiveDocView = dynamic(
-  () => import('@/lib/LiveDocView').then((mod) => mod.LiveDocView),
-  { ssr: false },
-);
+import { LiveDocView } from '@/lib/LiveDocView';
 import {
   AUTO_LOWER_HAND_MS,
   E2EE_UNSUPPORTED,
@@ -236,6 +231,7 @@ export function VideoConferenceComponent(props: {
   /**
    * 用户当前“想不想开麦/开摄像头”。重连恢复与麦克风保活以此为准，
    * 不能用 props.userChoices（那只是准备页的初始选择）。
+   * 麦意图不跟 TrackMuted：重连卸轨不能改成“不想开麦”。
    */
   const desiredMicRef = React.useRef(props.userChoices.audioEnabled);
   const desiredCamRef = React.useRef(props.userChoices.videoEnabled);
@@ -881,10 +877,12 @@ export function VideoConferenceComponent(props: {
       const camLive = Boolean(camPub?.track && !camPub.isMuted);
 
       if (micLive) {
+        desiredMicRef.current = false;
         setMicEnabled(false);
         room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
       }
       if (camLive) {
+        desiredCamRef.current = false;
         setCamEnabled(false);
         room.localParticipant.setCameraEnabled(false).catch(handleError);
       }
@@ -1280,6 +1278,7 @@ export function VideoConferenceComponent(props: {
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       const micIsLive = !!micPub?.track && !micPub.isMuted;
       if (micEnabled || micIsLive) {
+        desiredMicRef.current = false;
         setMicEnabled(false);
         room.localParticipant.setMicrophoneEnabled(false).catch(handleError);
       }
@@ -1320,6 +1319,8 @@ export function VideoConferenceComponent(props: {
     };
   }, [isLocalCamRestricted, camEnabled, room, handleError]);
 
+  const acceptsKnocks = props.connectionDetails.accessLevel === 'PROTECTED';
+  const joinRequestsRefreshRef = React.useRef<(() => void) | null>(null);
   const meetingRoomName = props.connectionDetails.roomName;
   const jitsiInstanceId = resolveJitsiInstanceId({
     roomName: meetingRoomName,
@@ -2282,6 +2283,7 @@ export function VideoConferenceComponent(props: {
             if (preMuteAllMicRef.current === null) {
               preMuteAllMicRef.current = micEnabled;
             }
+            desiredMicRef.current = false;
             room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
             setMicEnabled(false);
           }
@@ -2295,6 +2297,7 @@ export function VideoConferenceComponent(props: {
           setHostMutedUntilByIdentity({});
           setExemptFromMuteAllIdentities([]);
           if (restoreTo !== null) {
+            desiredMicRef.current = restoreTo;
             room.localParticipant.setMicrophoneEnabled(restoreTo).catch(console.error);
             setMicEnabled(restoreTo);
           }
@@ -2305,6 +2308,7 @@ export function VideoConferenceComponent(props: {
               : Date.now() + HOST_MIC_LOCK_MS;
           // If this is the targeted participant, mute their mic
           if (msg.targetIdentity === room.localParticipant.identity) {
+            desiredMicRef.current = false;
             room.localParticipant.setMicrophoneEnabled(false).catch(console.error);
             setMicEnabled(false);
           }
@@ -2702,11 +2706,15 @@ export function VideoConferenceComponent(props: {
     };
   }, [room, isHost, applyHostHands]);
 
-  // All participants: send heartbeat every 5s to the authoritative host identity
+  // All participants: send heartbeat every 5s to the authoritative host identity.
+  // Protected meetings also refresh the waiting list on this clock (host / co-host only).
   React.useEffect(() => {
     if (!room.localParticipant.identity) return;
 
     const interval = setInterval(() => {
+      if (acceptsKnocks && (isHost || isCohost)) {
+        joinRequestsRefreshRef.current?.();
+      }
       if (hostIdentity === room.localParticipant.identity) return;
       sendMeetingMsg(
         {
@@ -2752,6 +2760,9 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentities,
     hostDisabledVideoUntilByIdentity,
     sendMeetingMsg,
+    acceptsKnocks,
+    isHost,
+    isCohost,
   ]);
 
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
@@ -4059,7 +4070,14 @@ export function VideoConferenceComponent(props: {
 
         {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
         <RecordingIndicator />
-        {!isRecorderBot && <JoinRequestsPrompt room={room} canAdmit={isHost || isCohost} />}
+        {!isRecorderBot && acceptsKnocks && (isHost || isCohost) && (
+          <JoinRequestsPrompt
+            room={room}
+            canAdmit
+            acceptsKnocks
+            refreshRef={joinRequestsRefreshRef}
+          />
+        )}
         {!isRecorderBot && (
           <MeetingTimeLimitBanner
             meetingEndsAt={props.connectionDetails.meetingEndsAt}

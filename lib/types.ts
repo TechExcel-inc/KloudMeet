@@ -1,4 +1,5 @@
 import type { StoredDesignLink } from '@/lib/designLink';
+import type { MeetingAccessLevel } from '@/lib/meetingAccess';
 import { LocalAudioTrack, LocalVideoTrack, videoCodecs } from 'livekit-client';
 import { VideoCodec } from 'livekit-client';
 
@@ -43,6 +44,8 @@ export type ConnectionDetails = {
   participantLiveDocAi?: boolean;
   /** PeerTime lesson id already bound to this meeting (if any). */
   livedocInstanceId?: string | null;
+  /** Who may join. Null = a meeting from before access levels (same as Public). */
+  accessLevel?: MeetingAccessLevel | null;
   /**
    * Billing: ISO time the host's plan ends this meeting (Free = 40 min).
    * Absent when billing is off or the plan has no length limit.

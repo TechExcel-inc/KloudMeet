@@ -14,7 +14,7 @@ import {
   isToolbarMobileUserAgent,
   postLivedocRoleToIframe,
 } from '@/lib/useToolbarIsMobile';
-import styles from '../styles/LiveDocView.module.css';
+import styles from '@/styles/LiveDocView.module.css';
 
 const IFRAME_LOAD_TIMEOUT_MS = 60_000;
 

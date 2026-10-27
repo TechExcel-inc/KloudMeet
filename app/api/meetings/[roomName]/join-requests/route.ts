@@ -105,8 +105,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (!mayAdmit(member.id, target)) return forbidden('Only the host or a co-host can see who is waiting');
-    if (parseAccessLevel(target.accessLevel) !== 'PROTECTED') {
-      return NextResponse.json({ requests: [], companyName: null });
+    const acceptsKnocks = parseAccessLevel(target.accessLevel) === 'PROTECTED';
+    if (!acceptsKnocks) {
+      return NextResponse.json({ requests: [], companyName: null, acceptsKnocks: false });
     }
     const rows = await prisma.meetingJoinRequest.findMany({
       where: {
@@ -125,6 +126,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       : [];
     const byId = new Map(people.map((p) => [p.id, p]));
     return NextResponse.json({
+      acceptsKnocks: true,
       companyName: await companyNameOf(target.accountId),
       requests: rows.map((r) => ({
         id: r.id,

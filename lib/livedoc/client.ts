@@ -99,6 +99,8 @@ type CreateMeetingInstanceResponse = {
 
 /** 并发调用合并为一次 HTTP，避免 LiveDocView + Host bootstrap 同时打两次 instant-account */
 const instantAccountInFlight = new Map<string, Promise<string>>();
+/** 同一次会议的 create 合并为一次，避免主持人 bootstrap 被重渲染打断后打出第二次 */
+const createInstanceInFlight = new Map<string, Promise<string>>();
 
 /**
  * Anonymous PeerTime account — calls same-origin API route to avoid third-party CORS.
@@ -169,13 +171,7 @@ export function resolveJitsiInstanceId({
   return roomName;
 }
 
-export async function createLivedocInstance({
-  userToken,
-  jitsiInstanceId,
-}: {
-  userToken: string;
-  jitsiInstanceId: string;
-}): Promise<string> {
+async function requestLivedocInstance(userToken: string, jitsiInstanceId: string): Promise<string> {
   const response = await fetch('/api/livedoc/create-meeting-instance', {
     method: 'POST',
     headers: {
@@ -199,6 +195,31 @@ export async function createLivedocInstance({
     );
   }
   return String(result.data);
+}
+
+/**
+ * createLivedocInstance — 按 jitsi 会议 id 创建 LiveDoc 实例。
+ * 同一 id 上尚未结束的调用共用一个请求，避免主持人入会时打出两次。
+ */
+export async function createLivedocInstance({
+  userToken,
+  jitsiInstanceId,
+}: {
+  userToken: string;
+  jitsiInstanceId: string;
+}): Promise<string> {
+  const pending = createInstanceInFlight.get(jitsiInstanceId);
+  if (pending) return pending;
+
+  const request = requestLivedocInstance(userToken, jitsiInstanceId);
+  createInstanceInFlight.set(jitsiInstanceId, request);
+  try {
+    return await request;
+  } finally {
+    if (createInstanceInFlight.get(jitsiInstanceId) === request) {
+      createInstanceInFlight.delete(jitsiInstanceId);
+    }
+  }
 }
 
 export async function keepLivedocInstanceActive({

@@ -273,6 +273,7 @@ export async function GET(request: NextRequest) {
       ...(roomFlags.designLink ? { designLink: roomFlags.designLink } : {}),
       participantLiveDocAi,
       livedocInstanceId,
+      accessLevel: parseAccessLevel(accessMeeting.accessLevel),
       ...(meetingEndsAt ? { meetingEndsAt: meetingEndsAt.toISOString() } : {}),
     };
     return new NextResponse(JSON.stringify(data), {
