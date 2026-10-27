@@ -27,4 +27,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   clearShareTarget: () => ipcRenderer.invoke('clear-share-target'),
   /** Google sign-in opens the system browser and returns via kloudmeet://auth. */
   googleSignInInBrowser: true,
+  /**
+   * The meeting mini window (main.js): the page opens it with window.open('about:blank', name),
+   * renders into it, and shows, hides and sizes it through these. It stays out of screen shares.
+   */
+  miniWindow: {
+    name: 'kloud-meet-mini',
+    show: () => ipcRenderer.send('mini-window', 'show'),
+    hide: () => ipcRenderer.send('mini-window', 'hide'),
+    dispose: () => ipcRenderer.send('mini-window', 'dispose'),
+    focusMain: () => ipcRenderer.send('mini-window', 'focus-main'),
+    setSize: (width, height) => ipcRenderer.send('mini-window-size', { width, height }),
+    onHidden: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('mini-window-hidden', handler);
+      return () => ipcRenderer.removeListener('mini-window-hidden', handler);
+    },
+  },
 });
