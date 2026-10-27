@@ -214,6 +214,8 @@
   "access.askToJoin": "参加をリクエスト",
   "access.askingTitle": "参加をリクエストしています",
   "access.askingText": "主催者が許可するとすぐに参加できます。",
+  "access.notStartedTitle": "会議はまだ始まっていません",
+  "access.notStartedText": "{name} さんが会議を開始すると、自動的に参加します。",
   "access.askingHostAway": "主催者はまだ参加していません。主催者が参加して許可すると入室できます。",
   "access.joiningAs": "参加名",
   "access.privateTitle": "この会議は非公開です",

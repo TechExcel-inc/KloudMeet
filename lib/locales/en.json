@@ -222,6 +222,8 @@
   "access.askToJoin": "Ask to join",
   "access.askingTitle": "Asking to join",
   "access.askingText": "You'll join as soon as the host lets you in.",
+  "access.notStartedTitle": "The meeting hasn't started yet",
+  "access.notStartedText": "You'll join automatically as soon as {name} starts it.",
   "access.askingHostAway": "The host hasn't joined yet. You'll get in once they arrive and let you in.",
   "access.joiningAs": "Joining as",
   "access.privateTitle": "This meeting is private",

@@ -21,7 +21,7 @@ import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoom
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { joinBlockCode, parseAccessLevel } from '@/lib/meetingAccess';
-import { INVITE_PARAM, evaluateJoin, meetingAccessSelect } from '@/lib/meetingAccess.server';
+import { INVITE_PARAM, evaluateJoin, meetingAccessSelect, meetingHasStarted } from '@/lib/meetingAccess.server';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
 import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlements';
@@ -99,6 +99,16 @@ export async function GET(request: NextRequest) {
       if (activeMeeting) {
         return NextResponse.json({ code: 'HOST_ALREADY_IN_MEETING', activeMeeting }, { status: 409 });
       }
+    }
+
+    // Waiting for the host: until the creator has joined this meeting (and again once everyone has
+    // left) others stay on the pre-join page, which lets them in as soon as it starts.
+    const joinerIsCreator = Boolean(member && member.id === meeting.createdByMemberId);
+    if (!joinerIsCreator && !(await meetingHasStarted(meeting))) {
+      return NextResponse.json(
+        { code: 'NOT_STARTED', error: 'The host hasn’t started this meeting yet' },
+        { status: 403 },
+      );
     }
 
     meeting = await prepareMeetingForJoin(meeting);

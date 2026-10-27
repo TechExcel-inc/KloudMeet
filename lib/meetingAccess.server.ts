@@ -9,6 +9,7 @@ import { JOIN_TOKEN_RE } from './meetingInviteLinks';
 import { memberIdOfIdentity, parseMeetingRoles } from './recordingControls';
 import { findPersonalRoomOwner, resolveCanonicalRoomName } from './personalRoom';
 import { followOwnerLiveRoom } from './oneMeetingPerHost';
+import { isWithinIdleGrace } from './meetingRejoin';
 import { getRoomServiceClient } from './livekitRooms';
 import { parseKloudMemberIdFromIdentity } from './meetingOwner';
 import {
@@ -190,6 +191,8 @@ export interface AccessTarget extends MeetingForAccess {
   roomName: string;
   title: string | null;
   status: string;
+  /** Idle meetings: until when people may come back (lib/meetingRejoin.ts). */
+  rejoinableUntil?: Date | null;
   host: { id: number; fullName: string | null; username: string; avatarUrl: string | null; email: string | null };
   /** No session row yet: the next session of a personal meeting ID (id is 0, nothing to look up). */
   upcomingPersonalSession: boolean;
@@ -211,6 +214,7 @@ export async function resolveAccessTarget(roomParam: string): Promise<AccessTarg
     roomName: true,
     title: true,
     status: true,
+    rejoinableUntil: true,
     deletedAt: true,
     createdByMember: hostSelect,
   } as const;
@@ -246,6 +250,27 @@ export async function resolveAccessTarget(roomParam: string): Promise<AccessTarg
   if (!meeting) return null;
   const { createdByMember, deletedAt: _deletedAt, ...rest } = meeting;
   return { ...rest, host: createdByMember, upcomingPersonalSession: false };
+}
+
+/**
+ * Whether the host has started this meeting: its creator has joined it and it isn't idle (everyone
+ * left). Until then everyone else waits on the pre-join page. A meeting that has ended, or an idle
+ * one past its rejoin window, counts as started here; the join route reports "ended" for it.
+ */
+export async function meetingHasStarted(meeting: {
+  id: number;
+  status: string;
+  createdByMemberId: number;
+  rejoinableUntil?: Date | null;
+}): Promise<boolean> {
+  if (!meeting.id) return false; // the next session of a personal meeting ID: nothing yet
+  if (meeting.status === 'IDLE') return !isWithinIdleGrace(meeting.rejoinableUntil ?? null);
+  if (meeting.status !== 'ACTIVE') return true;
+  const hostJoin = await prisma.meetingParticipant.findFirst({
+    where: { meetingId: meeting.id, teamMemberId: meeting.createdByMemberId },
+    select: { id: true },
+  });
+  return Boolean(hostJoin);
 }
 
 /** Whether the creator, the current host or a co-host is in the LiveKit room (null: unknown). */

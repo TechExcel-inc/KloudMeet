@@ -214,6 +214,8 @@
   "access.askToJoin": "请求加入",
   "access.askingTitle": "正在请求加入",
   "access.askingText": "主持人同意后你会立即进入会议。",
+  "access.notStartedTitle": "会议尚未开始",
+  "access.notStartedText": "{name} 开始会议后，你会自动进入。",
   "access.askingHostAway": "主持人还没进会。主持人到了并同意后，你就能进入。",
   "access.joiningAs": "加入身份",
   "access.privateTitle": "这是一场私密会议",

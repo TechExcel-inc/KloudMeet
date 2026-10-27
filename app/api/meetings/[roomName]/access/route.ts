@@ -6,6 +6,7 @@ import {
   companyNameOf,
   evaluateJoin,
   hostIsPresent,
+  meetingHasStarted,
   resolveAccessTarget,
 } from '@/lib/meetingAccess.server';
 import { prisma } from '@/lib/db';
@@ -46,6 +47,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       roomName: target.roomName,
       level: parseAccessLevel(target.accessLevel),
       isHost,
+      // false: the host hasn't started it yet; the pre-join page waits and joins when it has
+      started: isHost || (await meetingHasStarted(target)),
       decision: decision.kind,
       ...(decision.kind === 'refused' ? { reason: decision.reason, retryAfterMs } : {}),
       ...(decision.kind === 'knock' ? { pending: decision.pending } : {}),

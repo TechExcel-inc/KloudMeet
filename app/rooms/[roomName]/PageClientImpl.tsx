@@ -19,6 +19,7 @@ import {
   AccessRefusedPage,
   AccessSignInCard,
   AccessWaitingCard,
+  HostNotStartedCard,
   PrivateInviteBox,
   type InviteChip,
 } from '@/lib/MeetingAccessCards';
@@ -237,6 +238,8 @@ export function PageClientImpl(props: {
   const admittedRef = React.useRef(false);
   /** Can't get in: a Private meeting without an invitation, or the host said no. */
   const [refusal, setRefusal] = React.useState<{ reason: 'NOT_INVITED' | 'DENIED'; retryAt: number } | null>(null);
+  /** The host hasn't started the meeting yet: wait here and join with these choices once they have. */
+  const [waitingForStart, setWaitingForStart] = React.useState<{ values: LocalUserChoices } | null>(null);
   const [refusalNow, setRefusalNow] = React.useState(() => Date.now());
   /** One host, one meeting: the server refused to start this one while another of theirs is live. */
   const [hostConflict, setHostConflict] = React.useState<{
@@ -713,9 +716,11 @@ export function PageClientImpl(props: {
   const preJoinSubtitle = React.useMemo(() => {
     if (isHost && !isActive) return undefined;
     if (isHost && isActive) return t('prejoin.alreadyHosting');
+    // Not "in progress for …" before the host has started it (startedAt is just when it was created)
+    if (access?.started === false) return t('access.notStartedTitle');
     if (meetingInfo?.startedAt) return t('prejoin.inProgress', { time: elapsedTime || '00:00' });
     return t('prejoin.checkDevices');
-  }, [isHost, isActive, meetingInfo, elapsedTime, t]);
+  }, [isHost, isActive, access?.started, meetingInfo, elapsedTime, t]);
 
   const preJoinButtonText = React.useMemo(() => {
     if (personalRoomSwitching) return t('common.loading');
@@ -822,7 +827,7 @@ export function PageClientImpl(props: {
           // Not allowed in (sign in / ask the host / not invited / turned away): show why.
           const blocked = await connectionDetailsResp.clone().json().catch(() => null);
           const code = typeof blocked?.code === 'string' ? blocked.code : null;
-          if (code && ['SIGN_IN_REQUIRED', 'KNOCK_REQUIRED', 'NOT_INVITED', 'DENIED'].includes(code)) {
+          if (code && ['SIGN_IN_REQUIRED', 'KNOCK_REQUIRED', 'NOT_INVITED', 'DENIED', 'NOT_STARTED'].includes(code)) {
             setPreJoinChoices(undefined);
             if (isSameTabRefresh) {
               setIsSameTabRefresh(false);
@@ -831,6 +836,10 @@ export function PageClientImpl(props: {
               } catch {
                 /* ignore */
               }
+            }
+            if (code === 'NOT_STARTED') {
+              setWaitingForStart({ values });
+              return;
             }
             const state = await loadAccess();
             if (code === 'KNOCK_REQUIRED' && state?.decision === 'knock' && !admittedRef.current) {
@@ -976,6 +985,24 @@ export function PageClientImpl(props: {
       window.removeEventListener('pagehide', onPageHide);
     };
   }, [knockRoom]);
+
+  // The host hasn't started yet: check every 4 s and join with the same choices once they have.
+  const waitingValues = waitingForStart?.values ?? null;
+  React.useEffect(() => {
+    if (!waitingValues) return;
+    let stopped = false;
+    const id = window.setInterval(async () => {
+      const state = await loadAccess();
+      if (stopped || state?.started !== true) return;
+      stopped = true;
+      setWaitingForStart(null);
+      void submitRef.current(waitingValues);
+    }, 4000);
+    return () => {
+      stopped = true;
+      window.clearInterval(id);
+    };
+  }, [waitingValues, loadAccess]);
 
   const handleKnockCancel = React.useCallback(() => {
     if (knockRef.current) cancelKnock(knockRef.current.room);
@@ -1389,7 +1416,14 @@ export function PageClientImpl(props: {
                   ) : null
                 }
                 panelOverride={
-                  knock && access ? (
+                  waitingForStart && access ? (
+                    <HostNotStartedCard
+                      access={access}
+                      displayName={waitingForStart.values.username}
+                      email={access.signedInAs?.email ?? null}
+                      onCancel={() => setWaitingForStart(null)}
+                    />
+                  ) : knock && access ? (
                     <AccessWaitingCard
                       access={access}
                       displayName={knock.values.username}

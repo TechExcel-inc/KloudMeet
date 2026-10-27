@@ -15,6 +15,8 @@ export interface MeetingAccessState {
   /** null = a meeting from before access levels (anyone with the link joins). */
   level: AccessLevelValue | null;
   isHost: boolean;
+  /** false until the host has joined (and again once everyone has left): others wait. */
+  started?: boolean;
   decision: 'join' | 'sign_in' | 'knock' | 'refused';
   reason?: 'NOT_INVITED' | 'DENIED';
   retryAfterMs?: number | null;

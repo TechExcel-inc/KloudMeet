@@ -2,7 +2,8 @@
 
 /**
  * Pre-join screens for meeting access levels (lib/meetingAccess.ts): the meeting card, "Sign in
- * to join", "Asking to join…", the two refusal pages, and the host's Private invite box.
+ * to join", "Asking to join…", "The meeting hasn't started yet", the two refusal pages, and the
+ * host's Private invite box.
  * They show the meeting's title and host only — never who is in it.
  */
 import React from 'react';
@@ -123,6 +124,46 @@ export function AccessWaitingCard({
         {hostPresent === false ? t('access.askingHostAway') : t('access.askingText')}
       </p>
       <MeetingAccessCard access={access} meta={meta} />
+      <div className={styles.infoRow}>
+        <Info size={15} aria-hidden="true" />
+        <span>
+          {t('access.joiningAs')} <strong>{displayName}</strong>
+          {email ? ` · ${email}` : ''}
+        </span>
+      </div>
+      <div className={styles.cardActions}>
+        <button type="button" className={styles.secondary} onClick={onCancel}>
+          {t('common.cancel')}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** The host hasn't started the meeting yet: wait here, joining automatically once they have. */
+export function HostNotStartedCard({
+  access,
+  displayName,
+  email,
+  onCancel,
+}: {
+  access: MeetingAccessState;
+  displayName: string;
+  email: string | null;
+  onCancel: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className={styles.panelCard} role="status" aria-live="polite">
+      <span className={styles.waitAvatar} aria-hidden="true">
+        <span>{getInitials(displayName)}</span>
+      </span>
+      <h1 className={styles.cardTitle}>
+        {t('access.notStartedTitle')}
+        <span className={styles.dots} aria-hidden="true" />
+      </h1>
+      <p className={styles.cardText}>{t('access.notStartedText', { name: access.meeting.hostName })}</p>
+      <MeetingAccessCard access={access} />
       <div className={styles.infoRow}>
         <Info size={15} aria-hidden="true" />
         <span>
