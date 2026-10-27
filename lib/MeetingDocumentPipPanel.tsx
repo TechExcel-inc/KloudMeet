@@ -5,6 +5,7 @@ import { RoomEvent, Track, type Participant, type Room, type TrackPublication } 
 import { VideoTrack } from '@livekit/components-react';
 import { LiveDocFloatingCollapsedAvatar, LiveDocFloatingGridTile } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
+import { getDesktopMiniWindow } from '@/lib/documentPipSupport';
 import { getInitials } from '@/lib/getInitials';
 import styles from '@/styles/MeetingDocumentPip.module.css';
 
@@ -29,6 +30,8 @@ export interface MeetingDocumentPipLabels {
   inviteCopied: string;
   settings: string;
   backToMain: string;
+  /** Desktop app's close button */
+  close: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -48,6 +51,8 @@ export interface MeetingDocumentPipPanelProps {
   onEndForAll?: () => void;
   initialMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /** Desktop app only: its frameless window needs its own close button */
+  onClose?: () => void;
 }
 
 export const PIP_EXPANDED_W = 240;
@@ -89,6 +94,12 @@ type RosterRow = {
 };
 
 function resizePip(win: Window, innerW: number, innerH: number): boolean {
+  // The desktop app sizes its own window (keeping the bottom-right corner in place)
+  const desktop = getDesktopMiniWindow();
+  if (desktop) {
+    desktop.setSize(Math.ceil(innerW), Math.ceil(innerH));
+    return true;
+  }
   const chromeW = Math.max(0, win.outerWidth - win.innerWidth);
   const chromeH = Math.max(0, win.outerHeight - win.innerHeight);
   try {
@@ -162,6 +173,11 @@ function findShare(room: Room): ShareInfo | null {
 }
 
 function focusOpener(win: Window): void {
+  const desktop = getDesktopMiniWindow();
+  if (desktop) {
+    desktop.focusMain();
+    return;
+  }
   const opener = win.opener;
   if (!opener || opener.closed) return;
   try {
@@ -342,6 +358,7 @@ export function MeetingDocumentPipPanel({
   hasScreenShare,
   onLeave,
   onEndForAll,
+  onClose,
   initialMinimized = false,
   onMinimizedChange,
 }: MeetingDocumentPipPanelProps) {
@@ -980,6 +997,19 @@ export function MeetingDocumentPipPanel({
                   <polyline points="6 15 12 9 18 15" />
                 </svg>
               </button>
+              {onClose ? (
+                <button
+                  type="button"
+                  className={styles.iconBtn}
+                  onClick={onClose}
+                  aria-label={labels.close}
+                  title={labels.close}
+                >
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+                    <path d="M6 6l12 12M18 6L6 18" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
           </header>
           <div

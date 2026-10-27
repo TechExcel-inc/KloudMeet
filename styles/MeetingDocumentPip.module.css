@@ -1173,3 +1173,22 @@
 .exitMenuItemDanger {
   color: #f87171;
 }
+
+/* Desktop app: the mini window is frameless and transparent (main.js). The expanded panel draws
+ * its own rounded edge; the header and the pill are where you drag it. */
+:global(html[data-kloud-desktop-mini]) .root:not(.rootMinimized) {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+:global(html[data-kloud-desktop-mini]) .header,
+:global(html[data-kloud-desktop-mini]) .pill {
+  -webkit-app-region: drag;
+}
+
+:global(html[data-kloud-desktop-mini]) .header button,
+:global(html[data-kloud-desktop-mini]) .pill button,
+:global(html[data-kloud-desktop-mini]) .pill [role='button'],
+:global(html[data-kloud-desktop-mini]) .pill .pillPerson {
+  -webkit-app-region: no-drag;
+}

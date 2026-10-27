@@ -33,6 +33,31 @@ export function isWebDocumentPipEligible(): boolean {
   return getDocumentPictureInPicture() !== null;
 }
 
+/** Desktop app: its own mini window, kept out of screen shares (main.js, preload.js) */
+export type DesktopMiniWindow = {
+  name: string;
+  show(): void;
+  hide(): void;
+  /** Leaving the meeting: the window may close for real */
+  dispose(): void;
+  focusMain(): void;
+  setSize(width: number, height: number): void;
+  /** The user closed it (⌘W): it was hidden, not closed */
+  onHidden(callback: () => void): () => void;
+};
+
+/** Null in the browser and in desktop builds from before the mini window */
+export function getDesktopMiniWindow(): DesktopMiniWindow | null {
+  if (typeof window === 'undefined') return null;
+  const api = (window as Window & { electronAPI?: { miniWindow?: DesktopMiniWindow } }).electronAPI;
+  return api?.miniWindow ?? null;
+}
+
+/** The meeting can show a mini window: the browser's Document PiP or the desktop app's own */
+export function isMiniWindowEligible(): boolean {
+  return isWebDocumentPipEligible() || getDesktopMiniWindow() !== null;
+}
+
 export function setMediaSessionActionHandler(
   action: string,
   handler: MediaSessionActionHandler | null,
