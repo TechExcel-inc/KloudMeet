@@ -197,14 +197,18 @@
   align-items: center;
   justify-content: center;
   flex-wrap: wrap;
-  gap: 16px;
+  gap: 12px;
   row-gap: 8px;
 }
 
+/* Mic, camera and speaker share one dark track instead of three separate pills */
 .deviceGroup {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: #1c1d22;
 }
 
 .actionGroup {
@@ -370,23 +374,25 @@
   display: block;
 }
 
-/* ---------- Round 48px controls ---------- */
-/* Device pill: a dark track holding the round button and its device-menu chevron */
+/* ---------- Round device controls ---------- */
+/* One device: the round button and its device-menu chevron, inside the shared track */
 .split {
   display: inline-flex;
   align-items: center;
-  padding: 3px;
-  border-radius: 999px;
-  background: #1c1d22;
   flex-shrink: 0;
 }
 
 /* On: neutral grey, clearly lighter than the track */
 .split .roundBtn {
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   background: #3c4043;
   color: #fff;
+}
+
+.split .roundBtn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .split .roundBtn:hover {
@@ -504,8 +510,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 40px;
+  width: 16px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 999px;
@@ -532,8 +538,8 @@
 }
 
 .splitChevron svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
 }
 
 /* Recording-in-progress button (host / co-host) */
@@ -616,7 +622,7 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  border-radius: 15px;
+  border-radius: 14px;
   background: #26272d;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
@@ -628,12 +634,12 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  min-width: 64px;
-  height: 48px;
-  padding: 0 8px;
+  gap: 2px;
+  min-width: 52px;
+  height: 42px;
+  padding: 0 7px;
   border: 0;
-  border-radius: 12px;
+  border-radius: 11px;
   background: transparent;
   color: #c4c7cc;
   font: 600 11px/1.2 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
@@ -648,8 +654,8 @@
 }
 
 .seg svg {
-  width: 19px;
-  height: 19px;
+  width: 18px;
+  height: 18px;
   flex-shrink: 0;
 }
 
@@ -707,8 +713,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 48px;
+  width: 16px;
+  height: 42px;
   margin-right: 2px;
   padding: 0;
   border: 0;
@@ -723,8 +729,8 @@
 }
 
 .segChevron svg {
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
 }
 
 /* Someone else is sharing: warning colour + pulsing dot */
@@ -778,7 +784,7 @@
 /* Annotate or remote control is on */
 .segToolDot {
   position: absolute;
-  top: 9px;
+  top: 7px;
   right: 3px;
   width: 7px;
   height: 7px;
@@ -911,10 +917,6 @@
   .actBtn {
     min-width: 52px;
   }
-
-  .seg {
-    min-width: 60px;
-  }
 }
 
 @media (max-width: 1100px) {
@@ -926,14 +928,6 @@
 
   .zoneCenter {
     gap: 10px;
-  }
-
-  .deviceGroup {
-    gap: 6px;
-  }
-
-  .seg {
-    min-width: 52px;
   }
 
   .zoneRight {
@@ -974,7 +968,7 @@
   }
 
   .seg {
-    min-width: 50px;
+    min-width: 48px;
     padding: 0 6px;
   }
 }
@@ -986,35 +980,18 @@
   }
 
   .zoneCenter,
-  .deviceGroup,
   .actionGroup {
     gap: 6px;
   }
 
-  .roundBtn,
   .iconBtn {
     width: 40px;
     height: 40px;
   }
 
-  .roundBtn svg,
   .iconBtn svg {
     width: 20px;
     height: 20px;
-  }
-
-  .splitChevron {
-    width: 22px;
-    height: 40px;
-  }
-
-  .seg {
-    height: 48px;
-    min-width: 50px;
-  }
-
-  .segChevron {
-    height: 48px;
   }
 
   .exitPill {
