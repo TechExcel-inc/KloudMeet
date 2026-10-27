@@ -56,12 +56,19 @@ export const PIP_MINIMIZED_H = 59.2;
 const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 64;
+const TILE_RATIO = 9 / 16;
+/** Your own share is a slim "Presenting" strip above the people, not a picture */
+const PRESENTING_STRIP_H = 30;
 const PREVIEW_TILE = 108;
 const COMPACT_GAP = 6;
 const COMPACT_MIN = 48;
 const COMPACT_COLS_MIN = 4;
 const COMPACT_COLS_MAX = 8;
 const COLLAPSED_MAX = 5;
+/** With a share in the pill one face makes room for it */
+const COLLAPSED_MAX_WITH_SHARE = 4;
+/** Up to this many people your "Presenting" chip keeps its word; past it, just the icon */
+const PRESENTING_CHIP_WORD_MAX = 3;
 const SHARE_PREVIEW_ID = '__share__';
 const AVATAR_SIZE = 30;
 const AVATAR_STEP = 22;
@@ -210,16 +217,38 @@ function fitCols(width: number, gap: number, min: number, max?: number): number 
   return Math.min(max, cols);
 }
 
+/**
+ * Fewest columns (so the biggest 16:9 tiles) that still fit every person in the stage height.
+ * null when even the narrowest allowed tiles don't fit; then the top rows stay big and the rest
+ * go to the small grid below.
+ */
+function galleryCols(
+  count: number,
+  width: number,
+  height: number,
+  gap: number,
+  maxCols: number,
+): number | null {
+  if (count <= 0) return 1;
+  for (let cols = 1; cols <= maxCols; cols++) {
+    const tileH = ((width - gap * (cols - 1)) / cols) * TILE_RATIO;
+    const rows = Math.ceil(count / cols);
+    if (rows * tileH + gap * (rows - 1) <= height + 0.5) return cols;
+  }
+  return null;
+}
+
 function pillEntries(
   entries: { id: string; name: string }[],
   shareId: string | null,
+  max: number,
 ): { id: string; name: string }[] {
-  const shown = entries.slice(0, COLLAPSED_MAX);
+  const shown = entries.slice(0, max);
   if (!shareId || shown.some((e) => e.id === shareId)) return shown;
   const sharer = entries.find((e) => e.id === shareId);
   if (!sharer) return shown;
-  if (shown.length < COLLAPSED_MAX) return [...shown, sharer];
-  return [...shown.slice(0, COLLAPSED_MAX - 1), sharer];
+  if (shown.length < max) return [...shown, sharer];
+  return [...shown.slice(0, max - 1), sharer];
 }
 
 function splitRoster(
@@ -327,6 +356,7 @@ export function MeetingDocumentPipPanel({
   const [rosterTick, setRosterTick] = React.useState(0);
   const stageRef = React.useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = React.useState(() => Math.max(160, pipWindow.innerWidth - 16));
+  const [stageH, setStageH] = React.useState(() => Math.max(120, pipWindow.innerHeight - 110));
 
   React.useEffect(() => {
     const bump = () => setRosterTick((n) => n + 1);
@@ -360,7 +390,9 @@ export function MeetingDocumentPipPanel({
     const sync = () => {
       const cs = pipWindow.getComputedStyle(el);
       const pad = Number.parseFloat(cs.paddingLeft) + Number.parseFloat(cs.paddingRight);
+      const padV = Number.parseFloat(cs.paddingTop) + Number.parseFloat(cs.paddingBottom);
       setStageW(Math.max(1, el.clientWidth - pad));
+      setStageH(Math.max(1, el.clientHeight - padV));
     };
     sync();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(sync) : null;
@@ -474,12 +506,16 @@ export function MeetingDocumentPipPanel({
 
   const share = React.useMemo(() => findShare(room), [room, rosterTick]);
 
-  const heroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
+  // The share sits above everyone at full width: someone else's as a 16:9 picture, yours as a slim strip
+  const shareLeadH = share ? (share.local ? PRESENTING_STRIP_H : stageW * TILE_RATIO) + HERO_GAP : 0;
+  const maxHeroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
+  const fitAll = galleryCols(sortedEntries.length, stageW, stageH - shareLeadH, HERO_GAP, maxHeroCols);
+  const heroCols = fitAll ?? maxHeroCols;
   const compactCols = Math.max(
     COMPACT_COLS_MIN,
     fitCols(stageW, COMPACT_GAP, COMPACT_MIN, COMPACT_COLS_MAX),
   );
-  const heroCap = heroCols * HERO_ROWS;
+  const heroCap = fitAll ? sortedEntries.length : heroCols * HERO_ROWS;
   const heroW = Math.max(1, (stageW - HERO_GAP * Math.max(0, heroCols - 1)) / heroCols);
 
   const { heroes, rest } = React.useMemo(
@@ -532,8 +568,9 @@ export function MeetingDocumentPipPanel({
   const sharePreviewOpen = previewId === SHARE_PREVIEW_ID && Boolean(share);
   const previewOpen = Boolean(previewRow && previewParticipant) || sharePreviewOpen;
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
-  const shareInHero = Boolean(share && rest.length === 0);
-  const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null);
+  const pillMax = share ? COLLAPSED_MAX_WITH_SHARE : COLLAPSED_MAX;
+  const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null, pillMax);
+  const presentingWord = sortedEntries.length <= PRESENTING_CHIP_WORD_MAX;
 
   const backToTab = (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
@@ -581,6 +618,28 @@ export function MeetingDocumentPipPanel({
     >
       {sharePicture}
     </div>
+  ) : null;
+
+  const shareLead = share ? (
+    share.local ? (
+      <div
+        className={styles.presentingStrip}
+        role="button"
+        tabIndex={0}
+        title={labels.backToMain}
+        onClick={backToTab}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          backToTab(e);
+        }}
+      >
+        <ShareGlyph />
+        <span>{labels.presentingSelf}</span>
+      </div>
+    ) : (
+      <div className={styles.shareLead}>{shareVideo}</div>
+    )
   ) : null;
 
   const flashCopied = () => {
@@ -672,14 +731,16 @@ export function MeetingDocumentPipPanel({
             ) : null}
             <button
               type="button"
-              className={`${styles.controlBtn}${hasScreenShare ? ` ${styles.shareBtnConflict}` : ''}`}
+              className={`${styles.controlBtn}${
+                shareActive ? ` ${styles.shareBtnOn}` : shareConflict ? ` ${styles.shareBtnConflict}` : ''
+              }`}
               onClick={handleShareClick}
               aria-label={shareLabel}
               title={shareLabel}
               aria-haspopup={shareActive ? 'menu' : undefined}
               aria-expanded={shareActive ? shareMenuOpen : undefined}
             >
-              {hasScreenShare ? <span className={styles.shareConflictDot} /> : null}
+              {shareConflict ? <span className={styles.shareConflictDot} /> : null}
               <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
               </svg>
@@ -812,7 +873,7 @@ export function MeetingDocumentPipPanel({
                     </div>
                   );
                 })}
-                {sortedEntries.length > COLLAPSED_MAX && (
+                {sortedEntries.length > pillMax && (
                   <button
                     type="button"
                     className={`${styles.avatar} ${styles.overflow}`}
@@ -820,43 +881,44 @@ export function MeetingDocumentPipPanel({
                     aria-label={labels.restore}
                     title={labels.restore}
                   >
-                    +{sortedEntries.length - COLLAPSED_MAX}
+                    +{sortedEntries.length - pillMax}
                   </button>
                 )}
-                {share ? (
-                  <div className={styles.pillPerson} style={{ zIndex: 0 }}>
-                    <div
-                      className={`${styles.pillShareTile}${
-                        previewId === SHARE_PREVIEW_ID ? ` ${styles.pillShareTileSelected}` : ''
-                      }`}
-                      title={labels.shareBadge}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => togglePreview(SHARE_PREVIEW_ID)}
-                      onKeyDown={(e) => {
-                        if (e.key !== 'Enter' && e.key !== ' ') return;
-                        e.preventDefault();
-                        togglePreview(SHARE_PREVIEW_ID);
-                      }}
-                    >
-                      {share.local ? (
-                        <span className={styles.pillSharePresenting} aria-hidden>
-                          <ShareGlyph />
-                        </span>
-                      ) : (
-                        <VideoTrack
-                          trackRef={{
-                            participant: share.participant,
-                            source: Track.Source.ScreenShare,
-                            publication: share.publication,
-                          }}
-                        />
-                      )}
-                    </div>
-                  </div>
-                ) : null}
               </div>
             )}
+            {share && !miniControls ? (
+              <div
+                className={`${styles.pillShareTile}${
+                  share.local ? ` ${styles.pillShareTileSelf}${presentingWord ? '' : ` ${styles.pillShareTileIcon}`}` : ''
+                }${
+                  previewId === SHARE_PREVIEW_ID ? ` ${styles.pillShareTileSelected}` : ''
+                }`}
+                title={share.local ? labels.presentingSelf : labels.shareBadge}
+                role="button"
+                tabIndex={0}
+                onClick={() => togglePreview(SHARE_PREVIEW_ID)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  togglePreview(SHARE_PREVIEW_ID);
+                }}
+              >
+                {share.local ? (
+                  <span className={styles.pillSharePresenting}>
+                    <ShareGlyph />
+                    {presentingWord ? labels.presentingSelf : null}
+                  </span>
+                ) : (
+                  <VideoTrack
+                    trackRef={{
+                      participant: share.participant,
+                      source: Track.Source.ScreenShare,
+                      publication: share.publication,
+                    }}
+                  />
+                )}
+              </div>
+            ) : null}
             {previewOpen && !miniControls ? (
               <button
                 type="button"
@@ -943,7 +1005,7 @@ export function MeetingDocumentPipPanel({
           </header>
           <div
             ref={stageRef}
-            className={`${styles.stage} lk-room-container`}
+            className={`${styles.stage}${fitAll ? ` ${styles.stageFit}` : ''} lk-room-container`}
             style={
               {
                 ['--pip-hero-cols' as string]: String(heroCols),
@@ -954,6 +1016,7 @@ export function MeetingDocumentPipPanel({
               } as React.CSSProperties
             }
           >
+            {shareLead}
             <div className={styles.heroGrid}>
               {heroes.map((e) => (
                 <div key={e.id} className={styles.heroCell}>
@@ -966,10 +1029,9 @@ export function MeetingDocumentPipPanel({
                   {personBadge(e.id)}
                 </div>
               ))}
-              {shareInHero && shareVideo ? <div className={styles.heroCell}>{shareVideo}</div> : null}
             </div>
 
-            {(rest.length > 0 || (share && !shareInHero)) && (
+            {rest.length > 0 && (
               <div className={styles.compactGrid}>
                 {rest.map((e, i) => (
                   <div
@@ -985,13 +1047,6 @@ export function MeetingDocumentPipPanel({
                     {personBadge(e.id)}
                   </div>
                 ))}
-                {share && !shareInHero && shareVideo ? (
-                  <div
-                    className={`${styles.compactCell}${(rest.length + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
-                  >
-                    {shareVideo}
-                  </div>
-                ) : null}
               </div>
             )}
           </div>

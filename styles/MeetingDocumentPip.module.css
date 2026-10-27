@@ -105,16 +105,39 @@
 }
 
 .pillShareTile {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
+  position: relative;
+  width: 50px;
+  height: 28px;
+  margin-left: 2px;
+  border-radius: 7px;
   overflow: hidden;
   background: #0b0c0e;
-  border: 2px solid rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   box-sizing: border-box;
   cursor: pointer;
   padding: 0;
   flex-shrink: 0;
+}
+
+.pillShareTile:hover {
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* Your own share: a chip that says so (the picture would be the mini window filming itself) */
+.pillShareTileSelf {
+  width: auto;
+  padding: 0 9px;
+  background: rgba(124, 121, 255, 0.2);
+  border-color: rgba(124, 121, 255, 0.42);
+}
+
+.pillShareTileIcon {
+  width: 30px;
+  padding: 0;
+}
+
+.pillShareTileSelf:hover {
+  border-color: rgba(124, 121, 255, 0.7);
 }
 
 .pillShareTile :global(div),
@@ -128,7 +151,8 @@
   display: block;
 }
 
-.pillShareTileSelected {
+.pillShareTileSelected,
+.pillShareTileSelected:hover {
   border-color: rgba(255, 255, 255, 0.92);
 }
 
@@ -180,6 +204,8 @@
   flex-shrink: 0;
   position: relative;
   box-sizing: border-box;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
 }
 
 .overflow {
@@ -194,10 +220,10 @@
 
 .pillShareMark {
   position: absolute;
-  top: 18px;
-  right: -2px;
-  width: 14px;
-  height: 14px;
+  top: -3px;
+  right: -3px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
   background: #ea580c;
   color: #fff;
@@ -353,9 +379,9 @@
 }
 
 .previewWrapShare .shareTile {
-  width: var(--pip-preview-tile, 108px);
+  width: calc(var(--pip-preview-tile, 108px) * 16 / 9);
   height: var(--pip-preview-tile, 108px);
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 16 / 9;
   border-radius: 12px;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -376,7 +402,7 @@
 .previewWrap :global(.floating-grid-tile.lk-participant-tile) {
   display: block !important;
   position: relative;
-  width: var(--pip-preview-tile, 108px);
+  width: calc(var(--pip-preview-tile, 108px) * 16 / 9);
   height: var(--pip-preview-tile, 108px);
   overflow: hidden;
   background: transparent !important;
@@ -386,7 +412,7 @@
 .previewWrap :global(.floating-grid-video) {
   width: 100%;
   height: 100%;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 16 / 9;
   border-radius: 12px;
   overflow: hidden;
   background: #1e293b;
@@ -527,6 +553,13 @@
   box-sizing: border-box;
 }
 
+/* Everyone fits: the group sits in the middle of the window instead of leaving the bottom empty */
+.stageFit {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .shareTile {
   position: relative;
   width: 100%;
@@ -576,13 +609,58 @@
 }
 
 .pillSharePresenting {
-  width: 100%;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(124, 121, 255, 0.28);
+  gap: 5px;
   color: #c9c8ff;
+  font: 600 11px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  white-space: nowrap;
+}
+
+.pillSharePresenting svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* Someone else's share leads at full width, above the people */
+.shareLead {
+  margin-bottom: var(--pip-hero-gap, 6px);
+}
+
+.shareLead .shareTile {
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.presentingStrip {
+  height: 30px;
+  margin-bottom: var(--pip-hero-gap, 6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid rgba(124, 121, 255, 0.3);
+  background: rgba(124, 121, 255, 0.16);
+  color: #c9c8ff;
+  font: 600 12px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.presentingStrip:hover {
+  background: rgba(124, 121, 255, 0.24);
+}
+
+.presentingStrip svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 /* Who is sharing: a small icon in the corner, so it never covers the person's initials */
@@ -607,14 +685,17 @@
   height: 10px;
 }
 
+/* Rows wrap and a short last row sits in the middle, not hugging the left */
 .heroGrid {
-  display: grid;
-  grid-template-columns: repeat(var(--pip-hero-cols, 3), minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: var(--pip-hero-gap, 6px);
   width: 100%;
 }
 
 .heroCell {
+  flex: 0 0 calc((100% - var(--pip-hero-gap, 6px) * (var(--pip-hero-cols, 3) - 1)) / var(--pip-hero-cols, 3));
   min-width: 0;
   position: relative;
 }
@@ -623,7 +704,7 @@
   position: relative;
   box-sizing: border-box;
   min-width: 0;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 16 / 9;
   z-index: 0;
 }
 
@@ -645,7 +726,7 @@
 .compactCell :global(.floating-grid-video) {
   width: 100%;
   height: auto;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 16 / 9;
   border-radius: 10px;
   overflow: hidden;
   background: #1e293b;
@@ -695,7 +776,7 @@
   left: 0;
   top: 0;
   width: var(--pip-hero-tile);
-  height: var(--pip-hero-tile);
+  height: calc(var(--pip-hero-tile) * 9 / 16);
   z-index: 6;
 }
 
