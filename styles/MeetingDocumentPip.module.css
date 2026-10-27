@@ -193,8 +193,9 @@
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #3b82f6, #6366f1);
-  color: #fff;
+  /* The person's tone (.tone0–5 on .pillPerson) */
+  background: var(--pip-avatar-bg, #353a65);
+  color: var(--pip-avatar-ink, #c3c1ff);
   font-size: 10px;
   font-weight: 700;
   display: flex;
@@ -217,6 +218,16 @@
   padding: 0;
   cursor: pointer;
 }
+
+/* Avatar tones: the calm set of the replay page (styles/Replay.module.css .tone0–5) in its dark-theme
+ * form, a soft tint of each hue with light ink. Solid colours (each hue at 30% over the pill), so
+ * overlapping circles don't show through each other. */
+.tone0 { --pip-avatar-bg: #353a65; --pip-avatar-ink: #c3c1ff; }
+.tone1 { --pip-avatar-bg: #22474e; --pip-avatar-ink: #8fe0cd; }
+.tone2 { --pip-avatar-bg: #4e4234; --pip-avatar-ink: #f2cc8a; }
+.tone3 { --pip-avatar-bg: #4e354a; --pip-avatar-ink: #f4b2c3; }
+.tone4 { --pip-avatar-bg: #264360; --pip-avatar-ink: #a8d4f2; }
+.tone5 { --pip-avatar-bg: #3c3861; --pip-avatar-ink: #d3bff5; }
 
 .pillShareMark {
   position: absolute;

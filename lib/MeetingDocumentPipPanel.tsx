@@ -69,6 +69,8 @@ const COLLAPSED_MAX = 5;
 const COLLAPSED_MAX_WITH_SHARE = 4;
 /** Up to this many people your "Presenting" chip keeps its word; past it, just the icon */
 const PRESENTING_CHIP_WORD_MAX = 3;
+/** Avatar tones in the pill (.tone0–5), the same calm set as the replay page */
+const AVATAR_TONES = 6;
 const SHARE_PREVIEW_ID = '__share__';
 const AVATAR_SIZE = 30;
 const AVATAR_STEP = 22;
@@ -570,6 +572,12 @@ export function MeetingDocumentPipPanel({
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
   const pillMax = share ? COLLAPSED_MAX_WITH_SHARE : COLLAPSED_MAX;
   const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null, pillMax);
+  // A tone per person in join order, as on the replay page: neighbours differ, and nobody's tone
+  // changes when the sharer moves to the front
+  const avatarToneById = React.useMemo(
+    () => new Map(sortedEntries.map((e, i) => [e.id, i % AVATAR_TONES])),
+    [sortedEntries],
+  );
   const presentingWord = sortedEntries.length <= PRESENTING_CHIP_WORD_MAX;
 
   const backToTab = (e?: React.SyntheticEvent) => {
@@ -837,10 +845,11 @@ export function MeetingDocumentPipPanel({
                   const participant =
                     e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
                   const z = { zIndex: COLLAPSED_MAX - i };
+                  const personClass = `${styles.pillPerson} ${styles[`tone${avatarToneById.get(e.id) ?? 0}`]}`;
                   const mark = isSharer(e.id);
                   if (!participant) {
                     return (
-                      <div key={e.id} className={styles.pillPerson} style={z}>
+                      <div key={e.id} className={personClass} style={z}>
                         <div
                           className={`${styles.avatar}${previewId === e.id ? ` ${styles.avatarSelected}` : ''}`}
                           title={e.name}
@@ -857,7 +866,7 @@ export function MeetingDocumentPipPanel({
                     );
                   }
                   return (
-                    <div key={e.id} className={styles.pillPerson} style={z}>
+                    <div key={e.id} className={personClass} style={z}>
                       <LiveDocFloatingCollapsedAvatar
                         participant={participant}
                         name={e.name}
