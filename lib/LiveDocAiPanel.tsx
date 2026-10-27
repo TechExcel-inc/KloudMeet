@@ -77,16 +77,8 @@ interface CaptionGroup {
   items: MeetingCaption[];
 }
 
-const SPEAKER_COLORS = [
-  '#6366f1',
-  '#ec4899',
-  '#14b8a6',
-  '#f59e0b',
-  '#8b5cf6',
-  '#10b981',
-  '#ef4444',
-  '#3b82f6',
-];
+/** Speaker avatar tones (.tone0–5), the calm set of the replay page and the mini window */
+const SPEAKER_TONES = 6;
 
 const TRANSCRIPT_POLL_MS = 5000;
 const COPY_NOTICE_MS = 1600;
@@ -349,10 +341,13 @@ function getInitials(name: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
-function speakerColor(name: string): string {
-  let h = 0;
-  for (let i = 0; i < name.length; i += 1) h = name.charCodeAt(i) + ((h << 5) - h);
-  return SPEAKER_COLORS[Math.abs(h) % SPEAKER_COLORS.length];
+/** A tone per speaker in order of appearance, as on the replay page, so neighbours differ */
+function speakerTones(items: MeetingCaption[]): Map<string, number> {
+  const tones = new Map<string, number>();
+  for (const item of items) {
+    if (!tones.has(item.speakerName)) tones.set(item.speakerName, tones.size % SPEAKER_TONES);
+  }
+  return tones;
 }
 
 function parseCaption(value: unknown): MeetingCaption | null {
@@ -536,9 +531,6 @@ export function LiveDocAiPanel({
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
-  React.useEffect(() => {
-    if (requestedTab) setActiveTab(requestedTab.tab);
-  }, [requestedTab]);
   const [documentSearch, setDocumentSearch] = React.useState('');
   const [transcriptSearch, setTranscriptSearch] = React.useState('');
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);
@@ -597,6 +589,12 @@ export function LiveDocAiPanel({
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, onClose]);
+
+  // After the reset above: when the panel opens straight onto a tab (Recording → Live transcript),
+  // both change in the same render and the requested tab has to win
+  React.useEffect(() => {
+    if (requestedTab) setActiveTab(requestedTab.tab);
+  }, [requestedTab]);
 
   React.useEffect(() => {
     if (!open || busy) return;
@@ -687,6 +685,32 @@ export function LiveDocAiPanel({
       )
     : meetingCaptions.items;
   const captionGroups = groupBySpeaker(filteredCaptions);
+  // From every caption, not just the search hits, so a search doesn't recolour people
+  const speakerToneByName = speakerTones(meetingCaptions.items);
+  const addSources: Array<{ key: string; icon: GlyphName; label: string; onClick: () => void }> = [
+    {
+      key: 'local',
+      icon: 'upload',
+      label: t('liveDocAi.uploadFromLocal'),
+      onClick: () => fileInputRef.current?.click(),
+    },
+    { key: 'space', icon: 'space', label: t('liveDocAi.uploadFromSpace'), onClick: () => openPicker('space') },
+    {
+      key: 'files',
+      icon: 'files',
+      label: t('liveDocAi.uploadFromFiles'),
+      onClick: () => openPicker('favorite'),
+    },
+    {
+      key: 'whiteboard',
+      icon: 'whiteboard',
+      label: t('liveDocAi.newWhiteboard'),
+      onClick: () => runAction('document.addBlank'),
+    },
+    ...(onAddDesignLink
+      ? [{ key: 'link', icon: 'link' as GlyphName, label: t('liveDocAi.linkSource'), onClick: onAddDesignLink }]
+      : []),
+  ];
 
   const handleLocalFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -827,9 +851,7 @@ export function LiveDocAiPanel({
               onClick={onClose}
               aria-label={t('common.close')}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />
-              </svg>
+              <Glyph name="close" size={18} />
             </button>
           </div>
           <nav className={styles.tabs} aria-label={t('toolbar.liveDocMenu')}>
@@ -855,6 +877,7 @@ export function LiveDocAiPanel({
 
         {error && (
           <div className={styles.error} role="alert">
+            <Glyph name="alert" size={16} />
             <span>{error}</span>
             <button type="button" onClick={onClearError}>
               {t('common.close')}
@@ -864,7 +887,8 @@ export function LiveDocAiPanel({
 
         {!canManage && (
           <div className={styles.readOnlyNotice} role="note">
-            {t('liveDocAi.readOnlyNotice')}
+            <Glyph name="info" size={16} />
+            <span>{t('liveDocAi.readOnlyNotice')}</span>
           </div>
         )}
 
@@ -873,7 +897,7 @@ export function LiveDocAiPanel({
             <div className={styles.transcriptTab}>
               <div className={styles.transcriptToolbar}>
                 <div className={styles.searchBox}>
-                  <span aria-hidden>⌕</span>
+                  <Glyph name="search" size={16} />
                   <input
                     value={transcriptSearch}
                     onChange={(event) => setTranscriptSearch(event.target.value)}
@@ -900,7 +924,7 @@ export function LiveDocAiPanel({
                       setTranscriptMenuOpen((value) => !value);
                     }}
                   >
-                    •••
+                    <Glyph name="more" size={18} />
                   </button>
                 </div>
               </div>
@@ -915,10 +939,18 @@ export function LiveDocAiPanel({
                 }}
               >
                 {meetingCaptions.loading && !meetingCaptions.items.length && (
-                  <div className={styles.empty}>{t('liveDocAi.loadingTranscript')}</div>
+                  <div className={styles.loading} role="status">
+                    <span className={styles.loadingSpinner} aria-hidden />
+                    <span>{t('liveDocAi.loadingTranscript')}</span>
+                  </div>
                 )}
                 {!meetingCaptions.loading && !captionGroups.length && (
-                  <div className={styles.empty}>{t('liveDocAi.noTranscript')}</div>
+                  <div className={styles.empty}>
+                    <span className={styles.emptyIcon}>
+                      <Glyph name="transcript" size={22} />
+                    </span>
+                    <span>{t('liveDocAi.noTranscript')}</span>
+                  </div>
                 )}
                 {captionGroups.map((group, groupIndex) => (
                   <section
@@ -927,8 +959,7 @@ export function LiveDocAiPanel({
                   >
                     <div className={styles.speakerRow}>
                       <span
-                        className={styles.speakerAvatar}
-                        style={{ ['--speaker-bg' as string]: speakerColor(group.speaker) }}
+                        className={`${styles.speakerAvatar} ${styles[`tone${speakerToneByName.get(group.speaker) ?? 0}`]}`}
                       >
                         {getInitials(group.speaker)}
                       </span>
@@ -963,7 +994,7 @@ export function LiveDocAiPanel({
             </div>
             {activeTab === 'file' && onAddDesignLink && (
               <footer className={styles.documentFooter}>
-                <div className={styles.uploadActions}>
+                <div className={styles.footerEnd}>
                   <DesignLinkButton onClick={onAddDesignLink} />
                 </div>
               </footer>
@@ -973,15 +1004,17 @@ export function LiveDocAiPanel({
           <main className={styles.body}>
             {activeTab === 'file' && (
               <div className={styles.documentsTab}>
-                <div className={styles.searchBox}>
-                  <span aria-hidden>⌕</span>
-                  <input
-                    value={documentSearch}
-                    onChange={(event) => setDocumentSearch(event.target.value)}
-                    placeholder={t('liveDocAi.searchDocuments')}
-                    aria-label={t('liveDocAi.searchDocuments')}
-                  />
-                </div>
+                {documents.length > 0 && (
+                  <div className={styles.searchBox}>
+                    <Glyph name="search" size={16} />
+                    <input
+                      value={documentSearch}
+                      onChange={(event) => setDocumentSearch(event.target.value)}
+                      placeholder={t('liveDocAi.searchDocuments')}
+                      aria-label={t('liveDocAi.searchDocuments')}
+                    />
+                  </div>
+                )}
                 {designItem && (
                   <>
                     <div className={styles.sectionLabel}>{t('liveDocAi.designSection')}</div>
@@ -990,7 +1023,41 @@ export function LiveDocAiPanel({
                   </>
                 )}
                 <div className={styles.documentList}>
-                  {!filteredDocuments.length && (
+                  {!documents.length && canManage && (
+                    <div className={styles.emptyStart}>
+                      <span className={styles.emptyIcon}>
+                        <Glyph name="files" size={22} />
+                      </span>
+                      <span className={styles.emptyTitle}>{t('liveDocAi.noDocuments')}</span>
+                      <span className={styles.emptyHint}>{t('liveDocAi.emptyHint')}</span>
+                      <div className={styles.sourceGrid}>
+                        {addSources.map((source) => (
+                          <button
+                            key={source.key}
+                            type="button"
+                            className={styles.sourceCard}
+                            disabled={busy}
+                            onClick={source.onClick}
+                            title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
+                          >
+                            <span className={styles.sourceIcon}>
+                              <Glyph name={source.icon} size={18} />
+                            </span>
+                            <span>{source.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!documents.length && !canManage && (
+                    <div className={styles.empty}>
+                      <span className={styles.emptyIcon}>
+                        <Glyph name="files" size={22} />
+                      </span>
+                      <span>{t('liveDocAi.noDocuments')}</span>
+                    </div>
+                  )}
+                  {documents.length > 0 && !filteredDocuments.length && (
                     <div className={styles.empty}>{t('liveDocAi.noDocuments')}</div>
                   )}
                   {filteredDocuments.map((item) => (
@@ -1046,7 +1113,7 @@ export function LiveDocAiPanel({
                             );
                           }}
                         >
-                          •••
+                          <Glyph name="more" size={18} />
                         </button>
                       </div>
                       )}
@@ -1054,24 +1121,33 @@ export function LiveDocAiPanel({
                   ))}
                 </div>
 
+                {(canManage || onAddDesignLink || state.documents.upload.active) && (
                 <footer className={styles.documentFooter}>
                   {state.documents.upload.active && (
-                    <div className={styles.uploadProgress}>
-                      <div
-                        className={styles.uploadProgressFill}
-                        style={{ width: `${state.documents.upload.percent}%` }}
-                      />
-                      <span>
-                        {state.documents.upload.fileName || t('liveDocAi.uploading')}{' '}
-                        {state.documents.upload.percent}%
-                      </span>
+                    <div className={styles.uploadProgress} role="status">
+                      <div className={styles.uploadProgressText}>
+                        <span>{state.documents.upload.fileName || t('liveDocAi.uploading')}</span>
+                        <span>{state.documents.upload.percent}%</span>
+                      </div>
+                      <div className={styles.uploadProgressTrack}>
+                        <div
+                          className={styles.uploadProgressFill}
+                          style={{ width: `${state.documents.upload.percent}%` }}
+                        />
+                      </div>
                     </div>
                   )}
                   {canManage && (
                   <div className={styles.footerActions}>
-                    <label className={styles.annotation}>
+                    <label
+                      className={`${styles.annotation}${
+                        !state.documents.annotation.canToggle || busy ? ` ${styles.annotationDisabled}` : ''
+                      }`}
+                    >
                       <input
                         type="checkbox"
+                        role="switch"
+                        className={styles.switch}
                         checked={state.documents.annotation.enabled}
                         disabled={!state.documents.annotation.canToggle || busy}
                         onChange={(event) =>
@@ -1080,59 +1156,44 @@ export function LiveDocAiPanel({
                       />
                       {t('liveDocAi.enableAnnotation')}
                     </label>
-                    <div className={styles.uploadActions}>
-                      <input
-                        ref={fileInputRef}
-                        className={styles.hiddenInput}
-                        type="file"
-                        accept={FILE_ACCEPT}
-                        onChange={handleLocalFile}
-                      />
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => fileInputRef.current?.click()}
-                      >
-                        {t('liveDocAi.uploadFromLocal')}
-                      </button>
-                      <button type="button" disabled={busy} onClick={() => openPicker('space')}>
-                        {t('liveDocAi.uploadFromSpace')}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => runAction('document.addBlank')}
-                        title={t('liveDocAi.newWhiteboard')}
-                      >
-                        {t('liveDocAi.whiteboard')}
-                      </button>
-                      {onAddDesignLink && <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />}
+                    <input
+                      ref={fileInputRef}
+                      className={styles.hiddenInput}
+                      type="file"
+                      accept={FILE_ACCEPT}
+                      onChange={handleLocalFile}
+                    />
+                    {/* With no documents yet the sources sit in the list as cards; then they move here */}
+                    {documents.length > 0 && (
                       <div className={styles.menuAnchor}>
                         <button
                           ref={uploadMenuBtnRef}
                           type="button"
-                          className={styles.compactButton}
+                          className={styles.addButton}
                           disabled={busy}
+                          aria-expanded={uploadMenuOpen}
+                          aria-haspopup="menu"
                           onClick={() => {
                             setFileMenuItemId(null);
                             setSummaryMenuOpen(false);
                             setUploadMenuOpen((value) => !value);
                           }}
-                          aria-label={t('liveDocAi.moreUploadOptions')}
                         >
-                          •••
+                          <Glyph name="plus" size={16} />
+                          {t('liveDocAi.add')}
                         </button>
                       </div>
-                    </div>
+                    )}
                   </div>
                   )}
                   {/* A presenter who can't manage LiveDocs can still show a design link */}
                   {!canManage && onAddDesignLink && (
-                    <div className={styles.uploadActions}>
+                    <div className={styles.footerEnd}>
                       <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />
                     </div>
                   )}
                 </footer>
+                )}
               </div>
             )}
 
@@ -1158,20 +1219,31 @@ export function LiveDocAiPanel({
                         setSummaryMenuOpen((value) => !value);
                       }}
                     >
-                      •••
+                      <Glyph name="more" size={18} />
                     </button>
                   </div>
                 </div>
                 <div className={styles.summaryContent}>
                   {state.summary.phase === 'error' && !summaryPreparing ? (
                     <div className={styles.empty}>
-                      {state.summary.error || t('liveDocAi.summaryError')}
+                      <span className={`${styles.emptyIcon} ${styles.emptyIconError}`}>
+                        <Glyph name="alert" size={22} />
+                      </span>
+                      <span>{state.summary.error || t('liveDocAi.summaryError')}</span>
                     </div>
                   ) : summaryPreparing || state.summary.phase === 'loading' ? (
-                    <div className={styles.empty}>
-                      {t('liveDocAi.summaryGenerating', {
-                        percent: Math.round(state.summary.progress * 100),
-                      })}
+                    <div className={styles.loading} role="status" aria-live="polite">
+                      <span className={styles.emptyIcon}>
+                        <Glyph name="sparkle" size={22} />
+                      </span>
+                      <span>
+                        {t('liveDocAi.summaryGenerating', {
+                          percent: Math.round(state.summary.progress * 100),
+                        })}
+                      </span>
+                      <span className={styles.summaryProgress}>
+                        <span style={{ width: `${Math.round(state.summary.progress * 100)}%` }} />
+                      </span>
                     </div>
                   ) : state.summary.roadmap.length ? (
                     state.summary.roadmap.map((item, index) => (
@@ -1188,9 +1260,16 @@ export function LiveDocAiPanel({
                     ))
                   ) : (
                     <div className={styles.empty}>
+                      <span className={styles.emptyIcon}>
+                        <Glyph name="sparkle" size={22} />
+                      </span>
                       <span>{t('liveDocAi.noSummary')}</span>
                       {canManage && (
-                        <button type="button" onClick={() => setSummaryOptionsOpen(true)}>
+                        <button
+                          type="button"
+                          className={styles.primaryButton}
+                          onClick={() => setSummaryOptionsOpen(true)}
+                        >
                           {t('liveDocAi.generateNow')}
                         </button>
                       )}
@@ -1343,26 +1422,23 @@ export function LiveDocAiPanel({
       {uploadMenuOpen && (
         <FloatingMenu
           anchorRef={uploadMenuBtnRef}
+          className={styles.sourceMenu}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          <button
-            type="button"
-            onClick={() => {
-              setUploadMenuOpen(false);
-              runAction('document.addBlank');
-            }}
-          >
-            {t('liveDocAi.newWhiteboard')}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setUploadMenuOpen(false);
-              openPicker('favorite');
-            }}
-          >
-            {t('liveDocAi.uploadFromFiles')}
-          </button>
+          {addSources.map((source) => (
+            <button
+              key={source.key}
+              type="button"
+              title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
+              onClick={() => {
+                setUploadMenuOpen(false);
+                source.onClick();
+              }}
+            >
+              <Glyph name={source.icon} size={18} />
+              {source.label}
+            </button>
+          ))}
         </FloatingMenu>
       )}
 
@@ -1630,7 +1706,7 @@ function PickerDialog({
             </div>
           )}
           <div className={styles.searchBox}>
-            <span aria-hidden>⌕</span>
+            <Glyph name="search" size={16} />
             <input
               value={searchDraft}
               placeholder={t('liveDocAi.searchFiles')}
@@ -1766,11 +1842,136 @@ function DesignRow({ item, onShow }: { item: LiveDocDesignItem; onShow?: () => v
 function DesignLinkButton({ onClick, disabled }: { onClick: () => void; disabled?: boolean }) {
   const { t } = useI18n();
   return (
-    <button type="button" disabled={disabled} onClick={onClick} title={t('liveDocAi.addLinkTip')}>
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-        <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
-      </svg>
+    <button
+      type="button"
+      className={styles.addButton}
+      disabled={disabled}
+      onClick={onClick}
+      title={t('liveDocAi.addLinkTip')}
+    >
+      <Glyph name="link" size={16} />
       {t('liveDocAi.addLink')}
     </button>
   );
+}
+
+type GlyphName =
+  | 'search'
+  | 'more'
+  | 'close'
+  | 'plus'
+  | 'upload'
+  | 'space'
+  | 'files'
+  | 'whiteboard'
+  | 'link'
+  | 'sparkle'
+  | 'transcript'
+  | 'info'
+  | 'alert';
+
+/** Line icons of the panel, 24-unit grid, drawn in the current text colour */
+function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+    className: styles.glyph,
+  };
+  switch (name) {
+    case 'search':
+      return (
+        <svg {...common}>
+          <circle cx="11" cy="11" r="6.5" />
+          <path d="M16 16l4 4" />
+        </svg>
+      );
+    case 'more':
+      return (
+        <svg {...common} fill="currentColor" stroke="none">
+          <circle cx="6" cy="12" r="1.7" />
+          <circle cx="12" cy="12" r="1.7" />
+          <circle cx="18" cy="12" r="1.7" />
+        </svg>
+      );
+    case 'close':
+      return (
+        <svg {...common} strokeWidth={2}>
+          <path d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      );
+    case 'plus':
+      return (
+        <svg {...common} strokeWidth={2}>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      );
+    case 'upload':
+      return (
+        <svg {...common}>
+          <path d="M12 15V4M7.5 8.5L12 4l4.5 4.5" />
+          <path d="M5 14.5V18a2 2 0 002 2h10a2 2 0 002-2v-3.5" />
+        </svg>
+      );
+    case 'space':
+      return (
+        <svg {...common}>
+          <path d="M3.5 7.5a2 2 0 012-2h3.8l2 2h7.2a2 2 0 012 2v7.5a2 2 0 01-2 2h-13a2 2 0 01-2-2z" />
+        </svg>
+      );
+    case 'files':
+      return (
+        <svg {...common}>
+          <path d="M8 3.5h6l4.5 4.5V18.5a2 2 0 01-2 2H8a2 2 0 01-2-2v-13a2 2 0 012-2z" />
+          <path d="M14 3.5V8h4.5M9.5 12.5h5M9.5 16h5" />
+        </svg>
+      );
+    case 'whiteboard':
+      return (
+        <svg {...common}>
+          <rect x="3.5" y="4.5" width="17" height="12" rx="2" />
+          <path d="M12 16.5V20M8.5 20h7M7.5 12.5l3-3 2 2 4-4" />
+        </svg>
+      );
+    case 'link':
+      return (
+        <svg {...common}>
+          <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+        </svg>
+      );
+    case 'sparkle':
+      return (
+        <svg {...common}>
+          <path d="M11 4l1.6 4.4L17 10l-4.4 1.6L11 16l-1.6-4.4L5 10l4.4-1.6z" />
+          <path d="M18 14.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+        </svg>
+      );
+    case 'transcript':
+      return (
+        <svg {...common}>
+          <path d="M5 6.5h14M5 10.5h14M5 14.5h9" />
+          <path d="M16.5 15.5v3l2.5-1.5" />
+        </svg>
+      );
+    case 'info':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 11v5M12 7.8v.2" />
+        </svg>
+      );
+    case 'alert':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V13M12 16.2v.2" />
+        </svg>
+      );
+  }
 }
