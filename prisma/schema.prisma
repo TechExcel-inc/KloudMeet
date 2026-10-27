@@ -121,7 +121,7 @@ model Meeting {
   reminderOffsets         Json?
   /// Who may join and watch the recordings: PUBLIC | PROTECTED | PRIVATE (prisma/add_meeting_access_levels.sql).
   /// NULL = a meeting from before access levels: anyone with the link joins, recordings keep the old rule.
-  accessLevel             String?                  @default("PROTECTED") @db.VarChar(16)
+  accessLevel             String?                  @default("PUBLIC") @db.VarChar(16)
   invitees                MeetingInvitee[]
   joinRequests            MeetingJoinRequest[]
   reminderLogs            MeetingReminderLog[]

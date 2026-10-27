@@ -168,7 +168,7 @@ export async function evaluateJoin(opts: Parameters<typeof gatherJoinFacts>[0]):
 
 /**
  * Level for a new session of a personal meeting ID: the same as its previous session
- * (Protected the first time, or when the previous one was a legacy meeting).
+ * (Public the first time, or when the previous one was a legacy meeting).
  */
 export function inheritedAccessLevel(previous: string | null | undefined): MeetingAccessLevel {
   return parseAccessLevel(previous) ?? DEFAULT_ACCESS_LEVEL;

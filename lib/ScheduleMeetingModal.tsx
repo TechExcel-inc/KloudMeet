@@ -26,11 +26,11 @@ import { fetchCompanyPeople, type AccessLevelValue } from '@/lib/meetingAccessCl
 
 const ACCESS_LEVELS: AccessLevelValue[] = ['PUBLIC', 'PROTECTED', 'PRIVATE'];
 
-/** Saved level; a meeting from before access levels works as Public, a new one starts Protected. */
+/** Saved level; a new meeting, or one from before access levels, is Public. */
 function initialAccessLevel(meeting: { accessLevel?: unknown } | null | undefined): AccessLevelValue {
   const saved = typeof meeting?.accessLevel === 'string' ? meeting.accessLevel.toUpperCase() : '';
   if ((ACCESS_LEVELS as string[]).includes(saved)) return saved as AccessLevelValue;
-  return meeting ? 'PUBLIC' : 'PROTECTED';
+  return 'PUBLIC';
 }
 
 /** AI assistant / repeat / linked events (enterprise features; shown under "More options" — not saved yet). */
