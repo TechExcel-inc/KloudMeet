@@ -6,9 +6,12 @@ import { RoomContext } from '@livekit/components-react';
 import { RoomEvent, Track, type Room } from 'livekit-client';
 import {
   copyDocumentStyles,
+  getDesktopMiniWindow,
   getDocumentPictureInPicture,
+  isMiniWindowEligible,
   isWebDocumentPipEligible,
   setMediaSessionActionHandler,
+  type DesktopMiniWindow,
 } from '@/lib/documentPipSupport';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import { I18nScope, useI18n } from '@/lib/i18n';
@@ -18,6 +21,7 @@ import {
 } from '@/lib/ParticipantRoleMenu';
 import {
   MeetingDocumentPipPanel,
+  PIP_EXPANDED_H,
   PIP_EXPANDED_W,
   PIP_MINIMIZED_H,
   type MeetingDocumentPipLabels,
@@ -165,7 +169,25 @@ function bindPipTileClicks(
 }
 
 /**
+ * The desktop app's mini window: opened hidden as the meeting starts and kept until it ends, so
+ * it already exists when a share starts (macOS keeps it out of the capture only then).
+ */
+function openDesktopMiniWindow(desktop: DesktopMiniWindow): Window | null {
+  try {
+    return window.open(
+      'about:blank',
+      desktop.name,
+      `popup=yes,width=${PIP_EXPANDED_W},height=${Math.round(PIP_MINIMIZED_H)}`,
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
  * useMeetingDocumentPip — 网页端切 tab 打开 Document PiP；人员列表与主界面静音机制一致。
+ * In the desktop app the same panel goes into the app's own mini window, which a screen share
+ * leaves out (lib/documentPipSupport.ts getDesktopMiniWindow).
  */
 export function useMeetingDocumentPip({
   enabled,
@@ -189,6 +211,8 @@ export function useMeetingDocumentPip({
   const i18n = useI18n();
   const [isOpen, setIsOpen] = useState(false);
   const pipWindowRef = useRef<Window | null>(null);
+  /** Desktop app: the mini window, open (shown or hidden) for the whole meeting */
+  const desktopWindowRef = useRef<Window | null>(null);
   const rootRef = useRef<Root | null>(null);
   const openingRef = useRef(false);
   const closingFromApiRef = useRef(false);
@@ -250,6 +274,14 @@ export function useMeetingDocumentPip({
       }
     }
     pipWindowRef.current = null;
+    const desktop = getDesktopMiniWindow();
+    if (desktop && win && win === desktopWindowRef.current && !win.closed) {
+      // Hidden, not closed: it has to exist before the next share starts
+      win.document.getElementById('meeting-document-pip-root')?.remove();
+      desktop.hide();
+      closingFromApiRef.current = false;
+      return;
+    }
     if (win && !win.closed) {
       try {
         win.close();
@@ -259,6 +291,30 @@ export function useMeetingDocumentPip({
     } else {
       closingFromApiRef.current = false;
     }
+  }).current;
+
+  /** Desktop app: leaving the meeting closes the mini window for real */
+  const disposeDesktopWindow = useRef(() => {
+    const win = desktopWindowRef.current;
+    desktopWindowRef.current = null;
+    const desktop = getDesktopMiniWindow();
+    if (!desktop || !win || win.closed) return;
+    desktop.dispose();
+    try {
+      win.close();
+    } catch {
+      // ignore
+    }
+  }).current;
+
+  const ensureDesktopWindow = useRef((): Window | null => {
+    const desktop = getDesktopMiniWindow();
+    if (!desktop) return null;
+    const existing = desktopWindowRef.current;
+    if (existing && !existing.closed) return existing;
+    const win = openDesktopMiniWindow(desktop);
+    desktopWindowRef.current = win;
+    return win;
   }).current;
 
   const renderPanel = useRef(() => {
@@ -324,6 +380,8 @@ export function useMeetingDocumentPip({
                     }
                   : undefined
               }
+              // The browser's PiP window has its own close button; the desktop one is frameless
+              onClose={getDesktopMiniWindow() ? () => closePip() : undefined}
             />
           </ParticipantRoleMenuProvider>
         </RoomContext.Provider>
@@ -335,7 +393,7 @@ export function useMeetingDocumentPip({
     sticky?: boolean;
     minimized?: boolean;
   }): Promise<boolean> => {
-    if (!isWebDocumentPipEligible()) return false;
+    if (!isMiniWindowEligible()) return false;
     if (opts?.sticky) stickyRef.current = true;
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       setIsOpen(true);
@@ -343,8 +401,9 @@ export function useMeetingDocumentPip({
     }
     if (openingRef.current) return false;
 
-    const api = getDocumentPictureInPicture();
-    if (!api) return false;
+    const desktop = getDesktopMiniWindow();
+    const api = desktop ? null : getDocumentPictureInPicture();
+    if (!desktop && !api) return false;
 
     const roomName = roomRef.current.name;
     if (opts?.minimized !== undefined) {
@@ -361,14 +420,23 @@ export function useMeetingDocumentPip({
     try {
       // Chrome 用 requestWindow 的宽高当位置缓存键，变了就丢；moveTo 禁用，打开后 resizeTo 也常无效。
       // 本场第一次：按缩小固定高度 59.2 打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
-      const pipWindow = firstOpen
-        ? await api.requestWindow({
-            width: PIP_EXPANDED_W,
-            height: PIP_MINIMIZED_H,
-            preferInitialWindowPlacement: true,
-            disallowReturnToOpener: true,
-          })
-        : await api.requestWindow({ disallowReturnToOpener: true });
+      const pipWindow = desktop
+        ? ensureDesktopWindow()
+        : firstOpen
+          ? await api!.requestWindow({
+              width: PIP_EXPANDED_W,
+              height: PIP_MINIMIZED_H,
+              preferInitialWindowPlacement: true,
+              disallowReturnToOpener: true,
+            })
+          : await api!.requestWindow({ disallowReturnToOpener: true });
+      if (!pipWindow) return false;
+      if (desktop) {
+        // The same document every time: start from a clean one
+        pipWindow.document.head.replaceChildren();
+        pipWindow.document.body.replaceChildren();
+        pipWindow.document.title = labelsRef.current.meeting;
+      }
 
       pipWindowRef.current = pipWindow;
       openedInMeetingRef.current = true;
@@ -382,7 +450,9 @@ export function useMeetingDocumentPip({
       pipWindow.document.body.style.margin = '0';
       pipWindow.document.body.style.height = '100%';
       pipWindow.document.body.style.overflow = 'hidden';
-      pipWindow.document.body.style.background = '#1a1b1e';
+      // The desktop window is transparent: the pill keeps its round ends
+      pipWindow.document.body.style.background = desktop ? 'transparent' : '#1a1b1e';
+      if (desktop) pipWindow.document.documentElement.setAttribute('data-kloud-desktop-mini', 'true');
 
       const mount = pipWindow.document.createElement('div');
       mount.id = 'meeting-document-pip-root';
@@ -408,6 +478,11 @@ export function useMeetingDocumentPip({
           onToggleCamRef.current();
         },
       );
+
+      if (desktop) {
+        desktop.setSize(PIP_EXPANDED_W, minimizedRef.current ? PIP_MINIMIZED_H : PIP_EXPANDED_H);
+        desktop.show();
+      }
 
       pipWindow.addEventListener('pagehide', () => {
         if (pipWindowRef.current !== pipWindow) return;
@@ -447,37 +522,57 @@ export function useMeetingDocumentPip({
   }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, renderPanel]);
 
   useEffect(() => {
-    if (!enabled || !isWebDocumentPipEligible()) {
+    if (!enabled || !isMiniWindowEligible()) {
       closePip();
+      disposeDesktopWindow();
       return;
     }
 
-    setMediaSessionActionHandler('enterpictureinpicture', () => {
-      void openPip();
-    });
-    setMediaSessionActionHandler('togglemicrophone', null);
-    setMediaSessionActionHandler('hangup', () => {
-      onLeaveRef.current();
-      closePip();
-    });
+    const desktop = getDesktopMiniWindow();
+    const web = isWebDocumentPipEligible();
+    // Desktop: there before any share starts
+    if (desktop) ensureDesktopWindow();
+
+    if (web) {
+      setMediaSessionActionHandler('enterpictureinpicture', () => {
+        void openPip();
+      });
+      setMediaSessionActionHandler('togglemicrophone', null);
+      setMediaSessionActionHandler('hangup', () => {
+        onLeaveRef.current();
+        closePip();
+      });
+    }
 
     const onVisibility = () => {
-      if (stickyRef.current) return;
-      if (!document.hidden) {
-        closePip();
+      // Chrome opens its PiP by itself when the tab goes; the desktop app does it here
+      if (document.hidden) {
+        if (desktop && !pipWindowRef.current) void openPip();
+        return;
       }
+      if (stickyRef.current) return;
+      closePip();
     };
 
     document.addEventListener('visibilitychange', onVisibility);
+    // ⌘W on the desktop mini window hides it; the panel goes with it
+    const offHidden = desktop?.onHidden(() => {
+      if (!pipWindowRef.current) return;
+      closePip();
+    });
 
     return () => {
-      setMediaSessionActionHandler('enterpictureinpicture', null);
-      setMediaSessionActionHandler('togglemicrophone', null);
-      setMediaSessionActionHandler('hangup', null);
+      if (web) {
+        setMediaSessionActionHandler('enterpictureinpicture', null);
+        setMediaSessionActionHandler('togglemicrophone', null);
+        setMediaSessionActionHandler('hangup', null);
+      }
       document.removeEventListener('visibilitychange', onVisibility);
+      offHidden?.();
       closePip();
+      disposeDesktopWindow();
     };
-  }, [enabled, openPip, closePip]);
+  }, [enabled, openPip, closePip, disposeDesktopWindow, ensureDesktopWindow]);
 
   useEffect(() => {
     if (!enabled) return;

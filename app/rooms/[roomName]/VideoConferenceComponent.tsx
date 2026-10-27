@@ -30,7 +30,7 @@ import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
-import { isWebDocumentPipEligible } from '@/lib/documentPipSupport';
+import { getDesktopMiniWindow, isMiniWindowEligible, isWebDocumentPipEligible } from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import {
@@ -1473,6 +1473,7 @@ export function VideoConferenceComponent(props: {
       inviteCopied: t('meeting.documentPipCopied'),
       settings: t('meeting.documentPipSettings'),
       backToMain: t('meeting.documentPipBack'),
+      close: t('common.close'),
     }),
     [t],
   );
@@ -3150,10 +3151,12 @@ export function VideoConferenceComponent(props: {
     ],
   );
 
+  // Desktop builds with their own mini window (kept out of screen shares) get one too
+  const desktopMiniWindow = React.useMemo(() => getDesktopMiniWindow() !== null, []);
   const documentPip = useMeetingDocumentPip({
     enabled:
       livekitConnected &&
-      !isDesktop &&
+      (!isDesktop || desktopMiniWindow) &&
       !isToolbarMobile &&
       !isRecorderBot &&
       !meetingEndedByHost,
@@ -4063,11 +4066,11 @@ export function VideoConferenceComponent(props: {
           onToggleCaptions={handleToggleCaptions}
           canDocumentPip={
             livekitConnected &&
-            !isDesktop &&
+            (!isDesktop || desktopMiniWindow) &&
             !isToolbarMobile &&
             !isRecorderBot &&
             !meetingEndedByHost &&
-            isWebDocumentPipEligible()
+            isMiniWindowEligible()
           }
           documentPipEnabled={documentPip.isOpen}
           onToggleDocumentPip={() => {

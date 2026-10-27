@@ -58,6 +58,7 @@ const labels = {
   inviteCopied: 'Link copied',
   settings: 'Controls',
   backToMain: 'Back to meeting',
+  close: 'Close',
 };
 
 type Case = {
