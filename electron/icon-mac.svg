@@ -1,18 +1,14 @@
 <svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
-<!-- Kloud Meet app icon for macOS: the product mark (app/icon.svg) on Apple's 1024 grid,
-     an 824px body with 100px margins and the standard drop shadow. Render to electron/icon-mac.png. -->
+<!-- Kloud Meet app icon for macOS: the product mark (app/icon.svg) on a white body on Apple's 1024 grid,
+     824px with 100px margins and the standard drop shadow. Render to electron/icon-mac.png. -->
 <defs>
 <filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-<feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+<feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#000" flood-opacity="0.25"/>
 </filter>
 <linearGradient id="body" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
-<stop stop-color="#2B2B37"/>
-<stop offset="1" stop-color="#121218"/>
+<stop stop-color="#FFFFFF"/>
+<stop offset="1" stop-color="#F0F1F5"/>
 </linearGradient>
-<radialGradient id="sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 120) scale(620 420)">
-<stop stop-color="#FFFFFF" stop-opacity="0.07"/>
-<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
-</radialGradient>
 <radialGradient id="mark0" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(14.7954 -8.48745 4.85496 43.7084 34.258 18.5688)">
 <stop stop-color="#7E21FF"/>
 <stop offset="1" stop-color="#3EC5FF"/>
@@ -25,8 +21,7 @@
 <g filter="url(#shadow)">
 <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)"/>
 </g>
-<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
-<rect x="101" y="101" width="822" height="822" rx="184" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
+<rect x="101" y="101" width="822" height="822" rx="184" stroke="#0F1020" stroke-opacity="0.06" stroke-width="2"/>
 <!-- Mark: 45.45 × 34.96 units, scaled to 540px wide and centred in the body -->
 <g transform="translate(242 304.4) scale(11.882)">
 <path fill-rule="evenodd" clip-rule="evenodd" d="M32.877 18.7526L42.6038 28.5005C43.2532 29.1513 44.3073 29.1524 44.9582 28.503C45.2712 28.1907 45.4471 27.7667 45.4471 27.3245V7.82887C45.4471 6.90942 44.7017 6.16406 43.7823 6.16406C43.3401 6.16406 42.9161 6.33995 42.6038 6.65294L32.877 16.4008C32.2285 17.0506 32.2285 18.1028 32.877 18.7526Z" fill="url(#mark0)"/>
