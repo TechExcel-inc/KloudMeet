@@ -347,7 +347,6 @@ export function MeetingDocumentPipPanel({
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
-  const [shareMenuOpen, setShareMenuOpen] = React.useState(false);
   const [miniControls, setMiniControls] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const copiedTimerRef = React.useRef<number | null>(null);
@@ -419,7 +418,6 @@ export function MeetingDocumentPipPanel({
   React.useEffect(() => {
     if (minimized) {
       setExitMenuOpen(false);
-      setShareMenuOpen(false);
     } else {
       setMiniControls(false);
     }
@@ -430,7 +428,6 @@ export function MeetingDocumentPipPanel({
     const root = pipWindow.document.documentElement;
     const hide = () => {
       setExitMenuOpen(false);
-      setShareMenuOpen(false);
       setMiniControls(false);
     };
     root.addEventListener('mouseleave', hide);
@@ -440,30 +437,24 @@ export function MeetingDocumentPipPanel({
   }, [minimized, pipWindow]);
 
   React.useEffect(() => {
-    if (!shareActive) setShareMenuOpen(false);
-  }, [shareActive]);
-
-  React.useEffect(() => {
-    if (!exitMenuOpen && !shareMenuOpen) return;
+    if (!exitMenuOpen) return;
     const onPointer = (e: Event) => {
       const target = e.target as Node | null;
       if (leaveWrapRef.current?.contains(target)) return;
       if (leaveMenuInlineRef.current?.contains(target)) return;
       if (shareWrapRef.current?.contains(target)) return;
       // 最小化退出菜单只在鼠标移出 PiP 窗口时关闭，窗口内点击不收起
-      if (!(minimized && exitMenuOpen)) {
+      if (!minimized) {
         setExitMenuOpen(false);
       }
-      setShareMenuOpen(false);
     };
     pipWindow.document.addEventListener('pointerdown', onPointer, true);
     return () => pipWindow.document.removeEventListener('pointerdown', onPointer, true);
-  }, [exitMenuOpen, shareMenuOpen, minimized, pipWindow]);
+  }, [exitMenuOpen, minimized, pipWindow]);
 
   React.useEffect(() => {
     const hideMenus = () => {
       setExitMenuOpen(false);
-      setShareMenuOpen(false);
     };
     pipWindow.addEventListener('blur', hideMenus);
     const opener = pipWindow.opener;
@@ -480,19 +471,16 @@ export function MeetingDocumentPipPanel({
 
   const handleLeaveClick = () => {
     if (canEndForAll) {
-      setShareMenuOpen(false);
       setExitMenuOpen((open) => !open);
       return;
     }
     onLeave();
   };
 
+  // One click starts or stops your share, like the toolbar's Screen share button. The one-item
+  // "Stop sharing" menu it used to open looked like a tooltip, and stopping from it didn't work.
   const handleShareClick = () => {
-    if (shareActive) {
-      setExitMenuOpen(false);
-      setShareMenuOpen((open) => !open);
-      return;
-    }
+    setExitMenuOpen(false);
     onToggleShare();
   };
 
@@ -722,21 +710,6 @@ export function MeetingDocumentPipPanel({
         </button>
         {compact ? null : (
           <div ref={shareWrapRef} className={styles.shareWrap}>
-            {shareMenuOpen && shareActive ? (
-              <div className={styles.shareMenuAbove} role="menu">
-                <button
-                  type="button"
-                  className={styles.exitMenuItem}
-                  role="menuitem"
-                  onClick={() => {
-                    setShareMenuOpen(false);
-                    onToggleShare();
-                  }}
-                >
-                  {labels.stopSharing}
-                </button>
-              </div>
-            ) : null}
             <button
               type="button"
               className={`${styles.controlBtn}${
@@ -745,8 +718,6 @@ export function MeetingDocumentPipPanel({
               onClick={handleShareClick}
               aria-label={shareLabel}
               title={shareLabel}
-              aria-haspopup={shareActive ? 'menu' : undefined}
-              aria-expanded={shareActive ? shareMenuOpen : undefined}
             >
               {shareConflict ? <span className={styles.shareConflictDot} /> : null}
               <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -816,7 +787,6 @@ export function MeetingDocumentPipPanel({
         <div
           className={`${styles.mini}${previewOpen ? ` ${styles.miniOpen}` : ''}`}
           onMouseLeave={() => {
-            setShareMenuOpen(false);
             // 退出菜单保留到鼠标移出整个 PiP 窗口（documentElement mouseleave）
             if (!exitMenuOpen) setMiniControls(false);
           }}
