@@ -1035,6 +1035,8 @@ function applyOverlayToShareTarget(target) {
 
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
+  // Before the capture starts, or macOS lets viewers see the bar (see ensureRcBarWindow)
+  ensureRcBarWindow();
   applyOverlayToShareTarget(currentShareTarget);
   setFloatingReason('share', true);
   appendStartupLog(`[share] start ${currentShareTarget.kind} ${currentShareTarget.width}x${currentShareTarget.height}`);
@@ -1426,54 +1428,69 @@ function setRemoteControlRequest(request) {
   else hideRcBar();
 }
 
-function showRcBar() {
+function rcBarBounds() {
   const bounds = currentShareTarget || primaryDisplayBoundsFallback();
-  const x = Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2);
-  const y = Math.round(bounds.y + 14);
+  return {
+    x: Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2),
+    y: Math.round(bounds.y + 14),
+    width: RC_BAR_WIDTH,
+    height: RC_BAR_HEIGHT,
+  };
+}
+
+/**
+ * Creates the (hidden) bar window if it is missing. macOS keeps a content-protected window out of
+ * a screen capture only if the window already existed when the capture started; one created
+ * mid-share is captured anyway. So a share creates it up front, before the capture begins.
+ */
+function ensureRcBarWindow() {
+  if (rcBarWindow && !rcBarWindow.isDestroyed()) return;
+  rcBarWindow = new BrowserWindow({
+    ...rcBarBounds(),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    acceptFirstMouse: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'rc-bar-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
+  floatOnAllSpaces(rcBarWindow);
+  // Viewers see the shared screen, not the presenter's controls.
+  rcBarWindow.setContentProtection(true);
+  rcBarWindow.on('closed', () => {
+    rcBarWindow = null;
+  });
+  rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
+  rcBarWindow.once('ready-to-show', () => {
+    if (rcBarNeeded() && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
+  });
+  rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
+    console.warn('rc-bar load failed:', e);
+  });
+}
+
+function showRcBar() {
   if (!rcBarWindow || rcBarWindow.isDestroyed()) {
-    rcBarWindow = new BrowserWindow({
-      x,
-      y,
-      width: RC_BAR_WIDTH,
-      height: RC_BAR_HEIGHT,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      movable: true,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      hasShadow: false,
-      focusable: false,
-      acceptFirstMouse: true,
-      alwaysOnTop: true,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'rc-bar-preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-    rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
-    floatOnAllSpaces(rcBarWindow);
-    // Viewers see the shared screen, not the presenter's controls.
-    rcBarWindow.setContentProtection(true);
-    rcBarWindow.on('closed', () => {
-      rcBarWindow = null;
-    });
-    rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
-    rcBarWindow.once('ready-to-show', () => {
-      if (rcBarNeeded() && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
-    });
-    rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
-      console.warn('rc-bar load failed:', e);
-    });
-  } else {
-    rcBarWindow.setBounds({ x, y, width: RC_BAR_WIDTH, height: RC_BAR_HEIGHT });
-    if (!rcBarWindow.isVisible()) rcBarWindow.showInactive();
-    sendRcBarState();
+    // ready-to-show shows it once loaded
+    ensureRcBarWindow();
+    return;
   }
+  rcBarWindow.setBounds(rcBarBounds());
+  if (!rcBarWindow.isVisible()) rcBarWindow.showInactive();
+  sendRcBarState();
 }
 
 function hideRcBar() {
