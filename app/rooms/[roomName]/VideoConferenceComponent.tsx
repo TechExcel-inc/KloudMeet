@@ -950,6 +950,8 @@ export function VideoConferenceComponent(props: {
       setScreenShareActive(false);
       screenShareRestorePendingRef.current = false;
       if (next) {
+        // The desktop app already took the picked source as shared; let it go again.
+        void window.electronAPI?.clearShareTarget?.();
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
         showScreenShareFailureToast(e);
@@ -1917,6 +1919,7 @@ export function VideoConferenceComponent(props: {
       beginLocalScreenShareView();
       room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e: unknown) => {
         setScreenShareActive(false);
+        void window.electronAPI?.clearShareTarget?.();
         const restored = endLocalScreenShareView();
         if (restored) setActiveView(restored);
         showScreenShareFailureToast(e);
@@ -2911,6 +2914,16 @@ export function VideoConferenceComponent(props: {
     updateCustomMicsRef.current?.();
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare, activeView]);
 
+  // Our own share ended while someone else's goes on: the desktop app stops floating its overlay.
+  const prevScreenShareActiveRef = React.useRef(false);
+  React.useEffect(() => {
+    const wasSharing = prevScreenShareActiveRef.current;
+    prevScreenShareActiveRef.current = screenShareActive;
+    if (wasSharing && !screenShareActive && hasScreenShare) {
+      void window.electronAPI?.clearShareTarget?.();
+    }
+  }, [screenShareActive, hasScreenShare]);
+
   // Clear remote-control + Electron share-target only when a share session ends
   const prevHasScreenShareRef = React.useRef(false);
   React.useEffect(() => {
@@ -2958,6 +2971,26 @@ export function VideoConferenceComponent(props: {
     },
     [sendMeetingMsg],
   );
+
+  // Desktop app: the meeting window is usually behind the shared app, so the waiting request
+  // also shows in the app's floating bar, where it can be allowed or denied.
+  const pendingRcRequest = remoteControlRequest && screenShareActive ? remoteControlRequest : null;
+  const pendingRcRequestRef = React.useRef(pendingRcRequest);
+  pendingRcRequestRef.current = pendingRcRequest;
+  React.useEffect(() => {
+    window.electronAPI?.setRemoteControlRequest?.(
+      pendingRcRequest ? { name: pendingRcRequest.requesterName || pendingRcRequest.requesterIdentity } : null,
+    );
+  }, [pendingRcRequest]);
+  React.useEffect(() => {
+    const off = window.electronAPI?.onRemoteControlAnswer?.((allow) => {
+      const request = pendingRcRequestRef.current;
+      if (!request) return;
+      if (allow) handleApproveRcRequest(request.requesterIdentity);
+      else handleDenyRcRequest(request.requesterIdentity);
+    });
+    return () => off?.();
+  }, [handleApproveRcRequest, handleDenyRcRequest]);
 
   /** Presenter revokes an active remote-control session */
   const handleRevokeRc = React.useCallback(

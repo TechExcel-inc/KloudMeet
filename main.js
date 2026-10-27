@@ -6,6 +6,13 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
+// The package is still named livekit-meet, and Electron shows that name until a page sets its own
+// title (window title, "Quit …" in the Mac app menu). Show Kloud Meet instead, but keep the data
+// folder named after the package so people stay signed in and keep their settings.
+const userDataDir = app.getPath('userData');
+app.setName('Kloud Meet');
+app.setPath('userData', userDataDir);
+
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
@@ -117,6 +124,62 @@ let updateReadyVersion = null;
 /** 安装包已落盘：退出时要先放开单实例锁，否则新进程会被立刻关掉 */
 let updateInstallPending = false;
 let updateInstallStarted = false;
+
+/**
+ * macOS: a window can only float over another app's full-screen Space while this app is a UI
+ * element — no Dock icon, no menu bar, so no ⌘Q or ⌘Tab either. Be one only while a share is
+ * on (its annotation overlay and the remote-control bar must stay visible) and a normal app the
+ * rest of the time; an update download is not worth losing the Dock for. The windows set their
+ * full-screen collection behaviour with skipTransformProcessType, so creating them changes nothing.
+ * @type {Set<string>}
+ */
+const floatingReasons = new Set();
+const DOCK_TOGGLE_SETTLE_MS = 1100;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let dockReconcileTimer = null;
+
+function setFloatingReason(reason, on) {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  if (on) floatingReasons.add(reason);
+  else floatingReasons.delete(reason);
+  reconcileDock();
+}
+
+function reconcileDock() {
+  if (process.platform !== 'darwin' || !app.dock) return;
+  const wantHidden = floatingReasons.size > 0 && !isAppQuitting;
+  if (wantHidden === !app.dock.isVisible()) return;
+  if (wantHidden) {
+    app.dock.hide();
+    refloatWindows();
+  } else {
+    app.dock.show().catch(() => {});
+  }
+  // Electron ignores a hide within a second of a show; check again once that has passed.
+  if (dockReconcileTimer) clearTimeout(dockReconcileTimer);
+  dockReconcileTimer = setTimeout(() => {
+    dockReconcileTimer = null;
+    const hidden = !app.dock.isVisible();
+    if (hidden !== (floatingReasons.size > 0 && !isAppQuitting)) reconcileDock();
+  }, DOCK_TOGGLE_SETTLE_MS);
+}
+
+/** Visible on every Space, including full-screen ones, without touching the Dock. */
+function floatOnAllSpaces(win) {
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+}
+
+/** Electron hides the Dock before setting full-screen behaviour; do the same once hidden. */
+function refloatWindows() {
+  for (const win of [overlayWindow, rcBarWindow, updateProgressWindow, miniWindow]) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      floatOnAllSpaces(win);
+    } catch {
+      /* ignore */
+    }
+  }
+}
 
 /**
  * 全屏 annotation overlay 会盖住更新进度条 / 弹窗。
@@ -437,7 +500,7 @@ function ensureUpdateProgressWindow() {
   });
 
   try {
-    updateProgressWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    floatOnAllSpaces(updateProgressWindow);
   } catch {
     /* ignore */
   }
@@ -852,12 +915,11 @@ function handleDeepLink(rawUrl) {
     return;
   }
   if (!mainWindow || mainWindow.isDestroyed()) {
-    try {
-      createWindows();
-    } catch (e) {
-      appendStartupLog(`auth deep link createWindows: ${e}`);
-      return;
-    }
+    void reopenMainWindow().then(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) void completeGoogleSignIn(auth.code);
+      else appendStartupLog('auth deep link: no window to sign in');
+    });
+    return;
   }
   void completeGoogleSignIn(auth.code);
 }
@@ -980,18 +1042,43 @@ function applyOverlayToShareTarget(target) {
 
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
+  // Before the capture starts, or macOS lets viewers see the bar (see ensureRcBarWindow)
+  ensureRcBarWindow();
   applyOverlayToShareTarget(currentShareTarget);
+  setFloatingReason('share', true);
+  appendStartupLog(`[share] start ${currentShareTarget.kind} ${currentShareTarget.width}x${currentShareTarget.height}`);
   return currentShareTarget;
 }
 
 function clearCurrentShareTarget() {
+  if (currentShareTarget) appendStartupLog('[share] stop');
   currentShareTarget = null;
   applyOverlayToShareTarget(primaryDisplayBoundsFallback());
+  setFloatingReason('share', false);
+}
+
+/**
+ * A shared screen has been seen to freeze on macOS (the picture stops while the share stays on).
+ * Log what the system does during a share so the next report says what happened at that moment.
+ */
+function watchShareInterruptions() {
+  const { screen, powerMonitor } = require('electron');
+  const note = (what) => {
+    if (currentShareTarget) appendStartupLog(`[share] ${what}`);
+  };
+  screen.on('display-added', () => note('display added'));
+  screen.on('display-removed', () => note('display removed'));
+  screen.on('display-metrics-changed', (_e, _display, changed) => note(`display changed: ${changed.join(',')}`));
+  for (const event of ['suspend', 'resume', 'lock-screen', 'unlock-screen']) {
+    powerMonitor.on(event, () => note(event));
+  }
 }
 
 function installSessionAndIpcOnce() {
   if (sessionAndIpcHandlersInstalled) return;
   sessionAndIpcHandlersInstalled = true;
+  watchShareInterruptions();
+  installMiniWindowIpc();
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
@@ -1053,6 +1140,23 @@ function installSessionAndIpcOnce() {
   ipcMain.on('remote-control-session', (event, session) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     setRemoteControlSession(session);
+  });
+
+  ipcMain.on('remote-control-request', (event, request) => {
+    if (!mainWindow || event.sender !== mainWindow.webContents) return;
+    setRemoteControlRequest(request);
+  });
+
+  ipcMain.on('rc-bar-answer', (event, allow) => {
+    if (!rcBarWindow || rcBarWindow.isDestroyed() || event.sender !== rcBarWindow.webContents) return;
+    if (!rcRequest) return;
+    setRemoteControlRequest(null);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('remote-control-answer', allow === true);
+  });
+
+  ipcMain.on('rc-bar-accessibility', (event) => {
+    if (!rcBarWindow || rcBarWindow.isDestroyed() || event.sender !== rcBarWindow.webContents) return;
+    openAccessibilitySettings();
   });
 
   ipcMain.on('rc-bar-stop', (event) => {
@@ -1163,6 +1267,46 @@ async function executeRemoteInput(data) {
   }
 }
 
+/**
+ * macOS drops injected input silently unless this app has Accessibility. Checked when a session
+ * starts (asking macOS to show its prompt once); the bar says so and links to the setting.
+ */
+let rcNeedsAccessibility = false;
+/** @type {ReturnType<typeof setInterval> | null} */
+let rcAccessibilityPoll = null;
+
+function checkAccessibilityForRemoteControl(prompt) {
+  if (process.platform !== 'darwin') return true;
+  const { systemPreferences } = require('electron');
+  const trusted = systemPreferences.isTrustedAccessibilityClient(!!prompt);
+  rcNeedsAccessibility = !trusted;
+  if (!trusted) {
+    appendStartupLog('[remote-control] Accessibility is off: input will not reach other apps');
+    // Turned on in System Settings mid-session: clear the notice as soon as it takes effect.
+    if (!rcAccessibilityPoll) {
+      rcAccessibilityPoll = setInterval(() => {
+        if (!rcSession.active || systemPreferences.isTrustedAccessibilityClient(false)) {
+          stopAccessibilityPoll();
+          rcNeedsAccessibility = false;
+          sendRcBarState();
+        }
+      }, 2000);
+    }
+  }
+  return trusted;
+}
+
+function stopAccessibilityPoll() {
+  if (rcAccessibilityPoll) clearInterval(rcAccessibilityPoll);
+  rcAccessibilityPoll = null;
+}
+
+function openAccessibilitySettings() {
+  shell
+    .openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
+    .catch(() => {});
+}
+
 function setRemoteControlSession(session) {
   rcSession.protocol = true;
   const active = !!(session && session.active);
@@ -1179,7 +1323,9 @@ function setRemoteControlSession(session) {
         console.warn('remote-control stop shortcut not registered:', e);
       }
       startLocalMouseWatch();
+      checkAccessibilityForRemoteControl(true);
     }
+    setFloatingReason('remote-control', true);
     showRcBar();
   } else if (wasActive) {
     endRemoteControlLocally();
@@ -1190,6 +1336,7 @@ function setRemoteControlSession(session) {
 function endRemoteControlLocally() {
   rcGeneration += 1;
   rcSession.active = false;
+  stopAccessibilityPoll();
   rcSession.controllerName = '';
   try {
     globalShortcut.unregister(remoteInput.STOP_SHORTCUT);
@@ -1197,7 +1344,9 @@ function endRemoteControlLocally() {
     /* ignore */
   }
   stopLocalMouseWatch();
-  hideRcBar();
+  if (rcRequest) sendRcBarState();
+  else hideRcBar();
+  setFloatingReason('remote-control', false);
   // Runs after an event that is mid-execution, so a button it just pressed is released too.
   rcQueue = rcQueue
     .then(async () => {
@@ -1254,9 +1403,20 @@ function stopLocalMouseWatch() {
   rcLocalWatch = null;
 }
 
-/* Floating bar on the shared screen: who is in control + Stop. Hidden from the capture. */
-const RC_BAR_WIDTH = 460;
+/*
+ * Floating bar on the shared screen: who is in control + Stop, or a waiting control request
+ * with Allow / Deny (the meeting window is usually behind the app being shared).
+ * Hidden from the capture.
+ */
+const RC_BAR_WIDTH = 540;
 const RC_BAR_HEIGHT = 52;
+
+/** @type {{ name: string } | null} */
+let rcRequest = null;
+
+function rcBarNeeded() {
+  return rcSession.active || !!rcRequest;
+}
 
 function sendRcBarState() {
   if (!rcBarWindow || rcBarWindow.isDestroyed()) return;
@@ -1264,61 +1424,217 @@ function sendRcBarState() {
     name: rcSession.controllerName,
     paused: Date.now() < rcSession.pausedUntil,
     shortcut: process.platform === 'darwin' ? '⌃⌥S' : remoteInput.STOP_SHORTCUT.replace('Control', 'Ctrl'),
+    request: !rcSession.active && rcRequest ? { name: rcRequest.name } : null,
+    needsAccessibility: rcSession.active && rcNeedsAccessibility,
+  });
+}
+
+function setRemoteControlRequest(request) {
+  const name = request && typeof request.name === 'string' ? request.name.slice(0, 80) : '';
+  rcRequest = request ? { name } : null;
+  if (rcBarNeeded()) showRcBar();
+  else hideRcBar();
+}
+
+function rcBarBounds() {
+  const bounds = currentShareTarget || primaryDisplayBoundsFallback();
+  return {
+    x: Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2),
+    y: Math.round(bounds.y + 14),
+    width: RC_BAR_WIDTH,
+    height: RC_BAR_HEIGHT,
+  };
+}
+
+/**
+ * Creates the (hidden) bar window if it is missing. macOS keeps a content-protected window out of
+ * a screen capture only if the window already existed when the capture started; one created
+ * mid-share is captured anyway. So a share creates it up front, before the capture begins.
+ */
+function ensureRcBarWindow() {
+  if (rcBarWindow && !rcBarWindow.isDestroyed()) return;
+  rcBarWindow = new BrowserWindow({
+    ...rcBarBounds(),
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    acceptFirstMouse: true,
+    alwaysOnTop: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'rc-bar-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
+  floatOnAllSpaces(rcBarWindow);
+  // Viewers see the shared screen, not the presenter's controls.
+  rcBarWindow.setContentProtection(true);
+  rcBarWindow.on('closed', () => {
+    rcBarWindow = null;
+  });
+  rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
+  rcBarWindow.once('ready-to-show', () => {
+    if (rcBarNeeded() && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
+  });
+  rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
+    console.warn('rc-bar load failed:', e);
   });
 }
 
 function showRcBar() {
-  const bounds = currentShareTarget || primaryDisplayBoundsFallback();
-  const x = Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2);
-  const y = Math.round(bounds.y + 14);
   if (!rcBarWindow || rcBarWindow.isDestroyed()) {
-    rcBarWindow = new BrowserWindow({
-      x,
-      y,
-      width: RC_BAR_WIDTH,
-      height: RC_BAR_HEIGHT,
-      frame: false,
-      transparent: true,
-      resizable: false,
-      movable: true,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      skipTaskbar: true,
-      hasShadow: false,
-      focusable: false,
-      acceptFirstMouse: true,
-      alwaysOnTop: true,
-      show: false,
-      webPreferences: {
-        preload: path.join(__dirname, 'rc-bar-preload.js'),
-        contextIsolation: true,
-        nodeIntegration: false,
-      },
-    });
-    rcBarWindow.setAlwaysOnTop(true, 'screen-saver', 2);
-    rcBarWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-    // Viewers see the shared screen, not the presenter's controls.
-    rcBarWindow.setContentProtection(true);
-    rcBarWindow.on('closed', () => {
-      rcBarWindow = null;
-    });
-    rcBarWindow.webContents.on('did-finish-load', sendRcBarState);
-    rcBarWindow.once('ready-to-show', () => {
-      if (rcSession.active && rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.showInactive();
-    });
-    rcBarWindow.loadFile(path.join(__dirname, 'rc-bar.html')).catch((e) => {
-      console.warn('rc-bar load failed:', e);
-    });
-  } else {
-    rcBarWindow.setBounds({ x, y, width: RC_BAR_WIDTH, height: RC_BAR_HEIGHT });
-    if (!rcBarWindow.isVisible()) rcBarWindow.showInactive();
-    sendRcBarState();
+    // ready-to-show shows it once loaded
+    ensureRcBarWindow();
+    return;
   }
+  rcBarWindow.setBounds(rcBarBounds());
+  if (!rcBarWindow.isVisible()) rcBarWindow.showInactive();
+  sendRcBarState();
 }
 
 function hideRcBar() {
   if (rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.hide();
+}
+
+/*
+ * Meeting mini window. The meeting page opens it with window.open('about:blank', MINI_WINDOW_NAME)
+ * and renders into it the same panel the browser shows in Document Picture-in-Picture. It stays out
+ * of screen captures: viewers see the shared screen, not the presenter's meeting. macOS honours
+ * that only for a window that already existed when the capture started, so the page opens it hidden
+ * as the meeting starts and from then on only shows and hides it; it goes when the page leaves.
+ */
+const MINI_WINDOW_NAME = 'kloud-meet-mini';
+const MINI_WINDOW_MARGIN = 16;
+/** @type {BrowserWindow | null} */
+let miniWindow = null;
+/** The page is done with it (left the meeting); otherwise closing it only hides it */
+let miniWindowMayClose = false;
+/** Placed once in the corner; after that it stays wherever the user drags it */
+let miniWindowPlaced = false;
+
+function miniWindowOptions() {
+  return {
+    width: 240,
+    height: 60,
+    show: false,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: true,
+    alwaysOnTop: true,
+    acceptFirstMouse: true,
+    title: 'Kloud Meet',
+  };
+}
+
+function miniWindowWorkArea() {
+  const { screen } = require('electron');
+  const ref = mainWindow && !mainWindow.isDestroyed() ? mainWindow.getBounds() : null;
+  const display = ref ? screen.getDisplayMatching(ref) : screen.getPrimaryDisplay();
+  return display.workArea;
+}
+
+/** Bottom-right corner of the screen the meeting is on */
+function placeMiniWindow(win) {
+  const area = miniWindowWorkArea();
+  const { width, height } = win.getBounds();
+  win.setBounds({
+    x: Math.round(area.x + area.width - width - MINI_WINDOW_MARGIN),
+    y: Math.round(area.y + area.height - height - MINI_WINDOW_MARGIN),
+    width,
+    height,
+  });
+  miniWindowPlaced = true;
+}
+
+/** New size keeping the bottom-right corner where it is, so the pill grows upward into the panel */
+function resizeMiniWindow(width, height) {
+  if (!miniWindow || miniWindow.isDestroyed()) return;
+  const w = Math.round(Math.min(Math.max(width, 120), 800));
+  const h = Math.round(Math.min(Math.max(height, 40), 900));
+  const b = miniWindow.getBounds();
+  const area = miniWindowWorkArea();
+  const x = Math.min(Math.max(b.x + b.width - w, area.x), area.x + area.width - w);
+  const y = Math.min(Math.max(b.y + b.height - h, area.y), area.y + area.height - h);
+  miniWindow.setBounds({ x, y, width: w, height: h });
+}
+
+function setupMiniWindow(win) {
+  if (miniWindow && miniWindow !== win && !miniWindow.isDestroyed()) {
+    miniWindowMayClose = true;
+    miniWindow.destroy();
+  }
+  miniWindow = win;
+  miniWindowMayClose = false;
+  miniWindowPlaced = false;
+  // Viewers see the shared screen, not the presenter's meeting
+  win.setContentProtection(true);
+  win.setAlwaysOnTop(true, 'floating');
+  floatOnAllSpaces(win);
+  win.on('close', (event) => {
+    if (miniWindowMayClose || isAppQuitting) return;
+    // ⌘W and the like hide it; the page decides when it really goes
+    event.preventDefault();
+    win.hide();
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('mini-window-hidden');
+  });
+  win.on('closed', () => {
+    if (miniWindow === win) miniWindow = null;
+  });
+}
+
+function destroyMiniWindow() {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindowMayClose = true;
+    try {
+      miniWindow.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  miniWindow = null;
+}
+
+function installMiniWindowIpc() {
+  ipcMain.on('mini-window', (event, action) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+    const win = miniWindow && !miniWindow.isDestroyed() ? miniWindow : null;
+    if (action === 'show' && win) {
+      if (!miniWindowPlaced) placeMiniWindow(win);
+      // Without taking focus from whatever the presenter is showing
+      if (!win.isVisible()) win.showInactive();
+    } else if (action === 'hide' && win) {
+      win.hide();
+    } else if (action === 'dispose') {
+      miniWindowMayClose = true;
+    } else if (action === 'focus-main') {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      if (process.platform === 'darwin') app.focus({ steal: true });
+    }
+  });
+  ipcMain.on('mini-window-size', (event, size) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+    const width = Number(size && size.width);
+    const height = Number(size && size.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+    resizeMiniWindow(width, height);
+  });
 }
 
 function createWindows() {
@@ -1327,11 +1643,23 @@ function createWindows() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'Kloud Meet',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
+  });
+
+  // The meeting's mini window (see setupMiniWindow); other window.open calls behave as before
+  mainWindow.webContents.setWindowOpenHandler(({ frameName, url }) => {
+    if (frameName === MINI_WINDOW_NAME && (url === 'about:blank' || url === '')) {
+      return { action: 'allow', overrideBrowserWindowOptions: miniWindowOptions() };
+    }
+    return { action: 'allow' };
+  });
+  mainWindow.webContents.on('did-create-window', (win, details) => {
+    if (details.frameName === MINI_WINDOW_NAME) setupMiniWindow(win);
   });
 
   // "Continue with Google" → system browser (Google blocks sign-in in embedded windows).
@@ -1362,7 +1690,7 @@ function createWindows() {
   });
 
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu', 1);
-  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  floatOnAllSpaces(overlayWindow);
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   const syncUpdateProgressLayout = () => {
@@ -1378,6 +1706,7 @@ function createWindows() {
     // 关主窗口 = 退出应用：清掉所有附属窗 + 本地 Next，避免 KloudMeet.exe 残留占 3201
     isAppQuitting = true;
     destroyAllAuxiliaryWindows();
+    if (currentShareTarget) clearCurrentShareTarget();
     killNextServerProcess();
     if (process.platform !== 'darwin') {
       setImmediate(() => {
@@ -1391,8 +1720,23 @@ function createWindows() {
   });
 
   // A reload or navigation drops the meeting page without telling us the session ended.
-  mainWindow.webContents.on('did-navigate', () => endRemoteControlLocally());
-  mainWindow.webContents.on('render-process-gone', () => endRemoteControlLocally());
+  const meetingPageGone = () => {
+    if (miniWindow && !miniWindow.isDestroyed()) miniWindow.hide();
+    rcRequest = null;
+    endRemoteControlLocally();
+    if (currentShareTarget) clearCurrentShareTarget();
+  };
+  mainWindow.webContents.on('did-navigate', meetingPageGone);
+  mainWindow.webContents.on('render-process-gone', meetingPageGone);
+  // Leaving the room inside the page (no reload) ends any share too.
+  mainWindow.webContents.on('did-navigate-in-page', (_event, url, isMainFrame) => {
+    if (!isMainFrame) return; // LiveDoc / Design iframes route on their own
+    try {
+      if (!new URL(url).pathname.startsWith('/rooms/')) meetingPageGone();
+    } catch {
+      /* ignore */
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -1423,6 +1767,7 @@ function destroyAllAuxiliaryWindows() {
     }
   }
   updateReadyPromptWindow = null;
+  rcRequest = null;
   endRemoteControlLocally();
   if (rcBarWindow && !rcBarWindow.isDestroyed()) {
     try {
@@ -1432,6 +1777,7 @@ function destroyAllAuxiliaryWindows() {
     }
   }
   rcBarWindow = null;
+  destroyMiniWindow();
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     try {
       overlayWindow.destroy();
@@ -1499,6 +1845,50 @@ function waitForHttpReady(port, timeoutMs = 90000) {
     }
     ping();
   });
+}
+
+/** @type {Promise<void> | null} */
+let reopenInFlight = null;
+
+/** Resolves once nothing answers on the port (the previous local server has exited), or after ~4 s. */
+function waitForPortFree(port, timeoutMs = 4000) {
+  const net = require('net');
+  const started = Date.now();
+  return new Promise((resolve) => {
+    const probe = () => {
+      const socket = net.connect({ host: '127.0.0.1', port });
+      socket.once('connect', () => {
+        socket.destroy();
+        if (Date.now() - started > timeoutMs) resolve();
+        else setTimeout(probe, 150);
+      });
+      socket.once('error', () => resolve());
+    };
+    probe();
+  });
+}
+
+/**
+ * The main window is gone (closed on macOS) and something needs it again — a Dock click, a
+ * deep link, a second launch: local server first, then the windows.
+ */
+function reopenMainWindow() {
+  if (reopenInFlight) return reopenInFlight;
+  reopenInFlight = (async () => {
+    isAppQuitting = false;
+    try {
+      if (app.isPackaged && !nextServerProcess) {
+        await waitForPortFree(APP_PORT);
+        await startPackagedNextServer();
+      }
+      if (BrowserWindow.getAllWindows().length === 0) createWindows();
+    } catch (e) {
+      showFatal('Kloud Meet 启动失败', e instanceof Error ? e.message : String(e));
+    }
+  })().finally(() => {
+    reopenInFlight = null;
+  });
+  return reopenInFlight;
 }
 
 async function startPackagedNextServer() {
@@ -1578,12 +1968,10 @@ if (!gotLock) {
     const url = getDeepLinkFromArgv(commandLine);
     const hasMain = mainWindow && !mainWindow.isDestroyed();
     if (!hasMain) {
-      try {
-        createWindows();
-      } catch (e) {
-        appendStartupLog(`second-instance createWindows: ${e}`);
-        return;
-      }
+      void reopenMainWindow().then(() => {
+        if (url) handleDeepLink(url);
+      });
+      return;
     }
     if (url) handleDeepLink(url);
     else if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1632,8 +2020,10 @@ if (!gotLock) {
     // ── 自动更新（仅打包版；开发模式连本地 Next，不查安装包） ──
     setupAutoUpdater();
 
+    // macOS keeps the app in the Dock after its window closes; closing stopped the local server
+    // the overlay pages come from, so start it again before reopening.
     app.on('activate', () => {
-      if (BrowserWindow.getAllWindows().length === 0) createWindows();
+      if (BrowserWindow.getAllWindows().length === 0) void reopenMainWindow();
     });
   });
 }

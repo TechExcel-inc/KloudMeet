@@ -187,16 +187,13 @@ if (isMacBuild) {
   }
   fs.copyFileSync(entitlementsSrc, path.join(iconDestDir, 'entitlements.mac.plist'));
 
-  // macOS 图标至少 512×512；本机没有 build/icon.png 时用仓库里的桌面图标放大顶上
-  if (!fs.existsSync(iconPngSrc)) {
-    const fallback = path.join(root, 'public', 'images', 'kloud-meet-desktop-icon.png');
-    const dest = path.join(iconDestDir, 'icon.png');
-    try {
-      require('child_process').execFileSync('sips', ['-z', '1024', '1024', fallback, '--out', dest], { stdio: 'ignore' });
-      console.warn('prepare-electron-app: 未找到 build/icon.png，Mac 包临时使用放大的 public/images/kloud-meet-desktop-icon.png（建议提供 1024×1024 原图）');
-    } catch {
-      console.warn('prepare-electron-app: 无法生成 Mac 图标，安装包将使用默认图标');
-    }
+  // macOS 图标：仓库里的 electron/icon-mac.png（1024×1024，按苹果图标网格留边、带阴影，源文件 electron/icon-mac.svg）。
+  // Mac 包一律用它：满铺的方图放进 Dock 会比别的 App 大一圈。
+  const macIcon = path.join(root, 'electron', 'icon-mac.png');
+  if (fs.existsSync(macIcon)) {
+    fs.copyFileSync(macIcon, path.join(iconDestDir, 'icon.png'));
+  } else if (!fs.existsSync(iconPngSrc)) {
+    console.warn('prepare-electron-app: 未找到 electron/icon-mac.png，Mac 包将使用默认图标');
   }
 }
 

@@ -156,6 +156,11 @@ export default function DevTilesPage() {
   const [mic, setMic] = React.useState(false);
   const [cam, setCam] = React.useState(false);
   const [hand, setHand] = React.useState(false);
+  // ?share=presenter|viewer previews a screen share in progress; ?desktop=1 as the desktop app.
+  const [share, setShare] = React.useState<'presenter' | 'viewer' | null>(null);
+  const [desktop, setDesktop] = React.useState(false);
+  const [drawing, setDrawing] = React.useState(false);
+  const [control, setControl] = React.useState(false);
   const noop = React.useCallback(() => {}, []);
   // The toolbar probes media devices, so (as in a real room) it only renders in the browser.
   const [mounted, setMounted] = React.useState(false);
@@ -171,6 +176,9 @@ export default function DevTilesPage() {
     if (query.get('as') === 'attendee') setHost(false);
     if (query.get('dialog') === '1') setDesignDialog(true);
     if (query.get('blocked') === '1') setDesignBlocked(true);
+    const shareQuery = query.get('share');
+    if (shareQuery === 'presenter' || shareQuery === 'viewer') setShare(shareQuery);
+    if (query.get('desktop') === '1') setDesktop(true);
     const preset = query.get('design');
     if (!preset) return;
     const parsed = parseDesignLink(preset, { appOrigin: window.location.origin, allowLocalHttp: true });
@@ -309,14 +317,14 @@ export default function DevTilesPage() {
         onToggleMic={() => setMic((v) => !v)}
         onToggleCam={() => setCam((v) => !v)}
         onShareScreen={noop}
-        screenShareActive={false}
+        screenShareActive={share === 'presenter'}
         canShareScreen
-        isDrawingMode={false}
-        onToggleDrawingMode={noop}
-        isRemoteControlMode={false}
-        onToggleRemoteControlMode={noop}
-        hasScreenShare={false}
-        isDesktop={false}
+        isDrawingMode={drawing}
+        onToggleDrawingMode={() => setDrawing((v) => !v)}
+        isRemoteControlMode={control}
+        onToggleRemoteControlMode={() => setControl((v) => !v)}
+        hasScreenShare={share !== null}
+        isDesktop={desktop}
         canSwitchViews
         designItem={
           designLink

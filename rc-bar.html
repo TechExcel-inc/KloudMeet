@@ -54,6 +54,18 @@
       flex-shrink: 0;
     }
     button:hover { background: #f87171; }
+    button.quiet { background: rgba(255, 255, 255, 0.1); padding: 0 14px; }
+    button.quiet:hover { background: rgba(255, 255, 255, 0.18); }
+    button.allow { background: #5552d9; }
+    button.allow:hover { background: #6764e6; }
+    .ask { display: none; gap: 6px; }
+    .request .ask { display: flex; }
+    .request #stop, .request .keys { display: none; }
+    .request .dot { background: #a5a3ff; animation: none; }
+    .settings { display: none; }
+    .blocked .dot { background: #fbbf24; animation: none; }
+    .blocked .keys { display: none; }
+    .blocked .settings { display: inline-flex; align-items: center; }
     @keyframes live { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
     @media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
   </style>
@@ -63,20 +75,39 @@
     <span class="dot" aria-hidden="true"></span>
     <span class="text" id="text">Someone is controlling your screen</span>
     <span class="keys" id="keys"></span>
+    <button type="button" class="quiet settings" id="settings">Open Settings</button>
     <button type="button" id="stop">Stop control</button>
+    <span class="ask">
+      <button type="button" class="quiet" id="deny">Deny</button>
+      <button type="button" class="allow" id="allow">Allow</button>
+    </span>
   </div>
   <script>
     const bar = document.getElementById('bar');
     const text = document.getElementById('text');
     const keys = document.getElementById('keys');
     document.getElementById('stop').addEventListener('click', () => window.rcBar && window.rcBar.stop());
+    document.getElementById('allow').addEventListener('click', () => window.rcBar && window.rcBar.answer(true));
+    document.getElementById('deny').addEventListener('click', () => window.rcBar && window.rcBar.answer(false));
+    document.getElementById('settings').addEventListener('click', () => window.rcBar && window.rcBar.openAccessibility());
     if (window.rcBar) {
       window.rcBar.onState((state) => {
+        const request = state && state.request;
+        bar.classList.toggle('request', !!request);
+        if (request) {
+          bar.classList.remove('paused', 'blocked');
+          text.textContent = (request.name || 'Someone') + ' wants to control your screen';
+          return;
+        }
         const name = (state && state.name) || 'Someone';
-        bar.classList.toggle('paused', !!(state && state.paused));
-        text.textContent = state && state.paused
-          ? 'Paused while you use your mouse'
-          : name + ' is controlling your screen';
+        const blocked = !!(state && state.needsAccessibility);
+        bar.classList.toggle('blocked', blocked);
+        bar.classList.toggle('paused', !blocked && !!(state && state.paused));
+        text.textContent = blocked
+          ? 'Turn on Accessibility to let ' + name + ' type'
+          : state && state.paused
+            ? 'Paused while you use your mouse'
+            : name + ' is controlling your screen';
         keys.textContent = state && state.shortcut ? state.shortcut + ' to stop' : '';
       });
     }
