@@ -6,6 +6,13 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const { autoUpdater } = require('electron-updater');
 
+// The package is still named livekit-meet, and Electron shows that name until a page sets its own
+// title (window title, "Quit …" in the Mac app menu). Show Kloud Meet instead, but keep the data
+// folder named after the package so people stay signed in and keep their settings.
+const userDataDir = app.getPath('userData');
+app.setName('Kloud Meet');
+app.setPath('userData', userDataDir);
+
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
@@ -1636,6 +1643,7 @@ function createWindows() {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'Kloud Meet',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
