@@ -126,15 +126,19 @@ export function KloudVideoConference({
     [tracks],
   );
 
-  /** 已订阅或已有 MediaStreamTrack 的屏幕共享：本地优先，否则取列表末路（通常为最新接管） */
+  /**
+   * 本地优先，否则取列表末路（通常为最新接管）。
+   * 有媒体轨的优先；订阅被暂停时仍留在焦点上，避免画面一卸掉 adaptiveStream 就不再恢复。
+   */
   const activeScreenShareTrack = React.useMemo(() => {
+    if (screenShareTracks.length === 0) return undefined;
     const live = screenShareTracks.filter(
       (track) => track.publication.isSubscribed || Boolean(track.publication.track),
     );
-    if (live.length === 0) return undefined;
+    const pool = live.length > 0 ? live : screenShareTracks;
     const localId = room.localParticipant.identity;
-    const localShare = live.find((track) => track.participant.identity === localId);
-    return localShare ?? live[live.length - 1];
+    const localShare = pool.find((track) => track.participant.identity === localId);
+    return localShare ?? pool[pool.length - 1];
   }, [room.localParticipant.identity, screenShareTracks]);
   const hasActiveScreenShare = Boolean(activeScreenShareTrack);
   const pinnedTracks = usePinnedTracks(layoutContext);

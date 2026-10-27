@@ -472,8 +472,9 @@ export function VideoConferenceComponent(props: {
 
   const room = React.useMemo(() => new Room(roomOptions), [roomOptions]);
 
-  // Check for any active screen share tracks in the room
-  const screenShareTracks = useTracks([Track.Source.ScreenShare], { room });
+  // 以「有没有共享发布」为准，而不是当前这一帧有没有媒体轨。
+  // adaptiveStream 会在画面被挡住时暂停订阅，若据此退出共享视图，视频元素被卸掉后订阅就不再恢复。
+  const screenShareTracks = useTracks([Track.Source.ScreenShare], { room, onlySubscribed: false });
   const hasScreenShare = screenShareTracks.length > 0;
 
   // LiveDoc Full: the page that started the recording reports each screen share that starts, so it is
@@ -575,15 +576,20 @@ export function VideoConferenceComponent(props: {
     if (hasScreenShare) {
       if (isLocalScreenShare) {
         setSurfaceDetected(false);
-        setTimeout(() => {
+        const surfaceTimer = window.setTimeout(() => {
           const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
           if (pub && pub.track) {
             const nativeStr = pub.track.mediaStreamTrack;
             if (nativeStr) {
               const settings = nativeStr.getSettings();
-              let surf = (settings.displaySurface as any) || 'unknown';
-              if ((nativeStr as any).getCaptureHandle) {
-                const handle = (nativeStr as any).getCaptureHandle();
+              const raw = settings.displaySurface;
+              let surf: 'monitor' | 'window' | 'browser' | 'current-tab' | 'unknown' =
+                raw === 'monitor' || raw === 'window' || raw === 'browser' ? raw : 'unknown';
+              const withHandle = nativeStr as MediaStreamTrack & {
+                getCaptureHandle?: () => { handle?: string } | null;
+              };
+              if (withHandle.getCaptureHandle) {
+                const handle = withHandle.getCaptureHandle();
                 if (handle && handle.handle === 'kloudmeet') {
                   surf = 'current-tab';
                 }
@@ -598,6 +604,7 @@ export function VideoConferenceComponent(props: {
           }
         }, 500);
         beginLocalScreenShareView();
+        return () => window.clearTimeout(surfaceTimer);
       } else {
         setScreenShareSurface('unknown');
         setSurfaceDetected(false);
