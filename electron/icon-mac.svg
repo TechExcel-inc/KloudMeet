@@ -1,0 +1,35 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+<!-- Kloud Meet app icon for macOS: the product mark (app/icon.svg) on Apple's 1024 grid,
+     an 824px body with 100px margins and the standard drop shadow. Render to electron/icon-mac.png. -->
+<defs>
+<filter id="shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+<feDropShadow dx="0" dy="10" stdDeviation="6" flood-color="#000" flood-opacity="0.3"/>
+</filter>
+<linearGradient id="body" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+<stop stop-color="#2B2B37"/>
+<stop offset="1" stop-color="#121218"/>
+</linearGradient>
+<radialGradient id="sheen" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 120) scale(620 420)">
+<stop stop-color="#FFFFFF" stop-opacity="0.07"/>
+<stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+</radialGradient>
+<radialGradient id="mark0" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(14.7954 -8.48745 4.85496 43.7084 34.258 18.5688)">
+<stop stop-color="#7E21FF"/>
+<stop offset="1" stop-color="#3EC5FF"/>
+</radialGradient>
+<radialGradient id="mark1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="matrix(38.5906 -13 12.6631 66.947 4.87066 19)">
+<stop stop-color="#7E21FF"/>
+<stop offset="1" stop-color="#3EC5FF"/>
+</radialGradient>
+</defs>
+<g filter="url(#shadow)">
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)"/>
+</g>
+<rect x="100" y="100" width="824" height="824" rx="185" fill="url(#sheen)"/>
+<rect x="101" y="101" width="822" height="822" rx="184" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="2"/>
+<!-- Mark: 45.45 × 34.96 units, scaled to 540px wide and centred in the body -->
+<g transform="translate(242 304.4) scale(11.882)">
+<path fill-rule="evenodd" clip-rule="evenodd" d="M32.877 18.7526L42.6038 28.5005C43.2532 29.1513 44.3073 29.1524 44.9582 28.503C45.2712 28.1907 45.4471 27.7667 45.4471 27.3245V7.82887C45.4471 6.90942 44.7017 6.16406 43.7823 6.16406C43.3401 6.16406 42.9161 6.33995 42.6038 6.65294L32.877 16.4008C32.2285 17.0506 32.2285 18.1028 32.877 18.7526Z" fill="url(#mark0)"/>
+<path fill-rule="evenodd" clip-rule="evenodd" d="M26.0639 0C30.4772 0 34.0549 3.57772 34.0549 7.99105L34.0549 8.65697H24.9355C20.5663 8.65697 17.0161 12.1635 16.9455 16.5159L16.9444 16.648V18.3128C16.9444 22.7262 20.5221 26.3039 24.9355 26.3039H34.0549L34.0549 26.9698C34.0549 31.3831 30.4772 34.9609 26.0639 34.9609H7.99105C3.57772 34.9609 0 31.3831 0 26.9698V7.99105C0 3.57772 3.57772 0 7.99105 0H26.0639Z" fill="url(#mark1)"/>
+</g>
+</svg>
