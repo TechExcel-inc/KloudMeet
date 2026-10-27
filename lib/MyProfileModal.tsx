@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import styles from '../styles/MyProfileModal.module.css';
 import { useI18n } from './i18n';
+import { ACCESS_LEVELS, parseAccessLevel, type MeetingAccessLevel } from './meetingAccess';
+import { fetchCompanyPeople } from './meetingAccessClient';
 
 /** API PUT /api/account/profile 校验错误码 → i18n key */
 const PROFILE_PUT_ERROR_I18N: Record<string, string> = {
@@ -10,6 +12,7 @@ const PROFILE_PUT_ERROR_I18N: Record<string, string> = {
   EMAIL_INVALID: 'profile.emailInvalid',
   EMAIL_IN_USE: 'profile.emailInUse',
   PHONE_INVALID: 'profile.phoneInvalid',
+  NEEDS_COMPANY: 'prejoin.accessLevelPrivateNeedsCompany',
 };
 
 function profilePutErrorMessage(
@@ -62,6 +65,10 @@ export function MyProfileModal({
   const [avatarUrl, setAvatarUrl] = useState('');
   const [emailVerified, setEmailVerified] = useState(false);
   const [phoneVerified, setPhoneVerified] = useState(false);
+  // Meeting settings: default access for new meetings (Public when never set)
+  const [defaultAccess, setDefaultAccess] = useState<MeetingAccessLevel>('PUBLIC');
+  const [defaultAccessTouched, setDefaultAccessTouched] = useState(false);
+  const [companyName, setCompanyName] = useState<string | null>(null);
   
   // Password change state
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -108,6 +115,7 @@ export function MyProfileModal({
           setAvatarUrl(data.avatarUrl || '');
           setEmailVerified(data.emailVerified || false);
           setPhoneVerified(data.phoneVerified || false);
+          setDefaultAccess(parseAccessLevel(data.defaultMeetingAccess) ?? 'PUBLIC');
         }
       })
       .catch((err) => {
@@ -117,6 +125,27 @@ export function MyProfileModal({
         setLoading(false);
       });
   }, [user.token]);
+
+  // The company decides whether Private is available and names it in the descriptions
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCompanyPeople({}).then((data) => {
+      if (!cancelled && data) setCompanyName(data.companyName);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const accessDescription = (level: MeetingAccessLevel) => {
+    if (level === 'PUBLIC') return t('prejoin.accessLevelPublicDesc');
+    if (level === 'PROTECTED') {
+      return companyName
+        ? t('prejoin.accessLevelProtectedDesc', { company: companyName })
+        : t('prejoin.accessLevelProtectedDescNoCompany');
+    }
+    return t('prejoin.accessLevelPrivateDesc', { company: companyName ?? '' });
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -143,6 +172,7 @@ export function MyProfileModal({
           personalRoomId: personalRoomEnabled ? personalRoomId : null,
           phone,
           email,
+          ...(defaultAccessTouched ? { defaultMeetingAccess: defaultAccess } : {}),
         }),
       });
       const data = await res.json();
@@ -618,6 +648,57 @@ export function MyProfileModal({
                 </div>
               </div>
               
+            </div>
+          </div>
+
+          {/* Meeting settings */}
+          <div className={styles.dividerContainer}>
+            <div className={styles.dividerIcon}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="6" width="14" height="12" rx="2" ry="2"/><path d="M16 10l6-3.5v11L16 14"/>
+              </svg>
+            </div>
+            <div className={styles.dividerText}>{t('profile.meetingSettings')}</div>
+            <div className={styles.dividerLine} />
+          </div>
+
+          <div className={styles.meetingSection}>
+            <div className={styles.formRow}>
+              <div className={styles.formLabel} id="profile-default-access-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="5" y="11" width="14" height="9.5" rx="2"/><path d="M8 11V8a4 4 0 018 0v3"/></svg>
+                {t('profile.defaultAccess')}
+              </div>
+              <div className={styles.accessField}>
+                <div className={styles.segmented} role="radiogroup" aria-labelledby="profile-default-access-label">
+                  {ACCESS_LEVELS.map((level) => {
+                    const needsCompany = level === 'PRIVATE' && !companyName;
+                    const on = defaultAccess === level;
+                    return (
+                      <button
+                        key={level}
+                        type="button"
+                        role="radio"
+                        aria-checked={on}
+                        className={on ? styles.segmentOn : styles.segment}
+                        disabled={loading || (needsCompany && !on)}
+                        title={needsCompany ? t('prejoin.accessLevelPrivateNeedsCompany') : undefined}
+                        onClick={() => {
+                          setDefaultAccess(level);
+                          setDefaultAccessTouched(true);
+                        }}
+                      >
+                        {level === 'PUBLIC'
+                          ? t('prejoin.accessLevelPublic')
+                          : level === 'PROTECTED'
+                            ? t('prejoin.accessLevelProtected')
+                            : t('prejoin.accessLevelPrivate')}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className={styles.accessHint}>{accessDescription(defaultAccess)}</p>
+                <p className={styles.accessNote}>{t('profile.defaultAccessNote')}</p>
+              </div>
             </div>
           </div>
 

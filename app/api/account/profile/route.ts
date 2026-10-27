@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { resolvePersonalRoomIdForSave } from '@/lib/personalRoom';
+import { parseAccessLevel } from '@/lib/meetingAccess';
+import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
 
 async function getAuthMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -34,6 +36,26 @@ export async function PUT(request: NextRequest) {
 
     const body = await request.json();
     const { firstName, middleName, lastName, biography, personalRoomId, phone, email, avatarUrl } = body;
+
+    // Meeting settings → default access for new meetings; null clears it (= Public)
+    let defaultMeetingAccessToSave: string | null | undefined = undefined;
+    if (body.defaultMeetingAccess !== undefined) {
+      if (body.defaultMeetingAccess === null || body.defaultMeetingAccess === '') {
+        defaultMeetingAccessToSave = null;
+      } else {
+        const level = parseAccessLevel(body.defaultMeetingAccess);
+        if (!level) {
+          return NextResponse.json({ error: 'Invalid access level', code: 'ACCESS_LEVEL_INVALID' }, { status: 400 });
+        }
+        if (level === 'PRIVATE' && !(await resolveMemberAccountId(member.id))) {
+          return NextResponse.json(
+            { error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' },
+            { status: 400 },
+          );
+        }
+        defaultMeetingAccessToSave = level;
+      }
+    }
     
     // Validate personalRoomId
     let personalRoomIdToSave: string | null | undefined = undefined;
@@ -106,6 +128,7 @@ export async function PUT(request: NextRequest) {
         phone: phone !== undefined ? (phone || null) : undefined,
         email: email !== undefined ? (email || null) : undefined,
         avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
+        defaultMeetingAccess: defaultMeetingAccessToSave,
         ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
         modifiedAt: new Date()
       }

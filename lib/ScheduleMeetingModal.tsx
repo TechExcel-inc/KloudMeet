@@ -22,11 +22,12 @@ import {
   isValidEmail,
   reminderEmail,
 } from '@/lib/meetingInvites';
-import { fetchCompanyPeople, type AccessLevelValue } from '@/lib/meetingAccessClient';
+import { fetchCompanyPeople, fetchMyDefaultMeetingAccess, type AccessLevelValue } from '@/lib/meetingAccessClient';
+import { memberDefaultAccessLevel } from '@/lib/meetingAccess';
 
 const ACCESS_LEVELS: AccessLevelValue[] = ['PUBLIC', 'PROTECTED', 'PRIVATE'];
 
-/** Saved level; a new meeting, or one from before access levels, is Public. */
+/** Saved level; a meeting from before access levels is Public. A new one shows Public until the host's default loads. */
 function initialAccessLevel(meeting: { accessLevel?: unknown } | null | undefined): AccessLevelValue {
   const saved = typeof meeting?.accessLevel === 'string' ? meeting.accessLevel.toUpperCase() : '';
   if ((ACCESS_LEVELS as string[]).includes(saved)) return saved as AccessLevelValue;
@@ -232,10 +233,13 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const [reminders, setReminders] = useState<ReminderRow[]>(() => offsetsToRows(DEFAULT_REMINDER_OFFSETS));
   const [invitesTouched, setInvitesTouched] = useState(false);
   // Access: who may join and watch the recording (lib/meetingAccess.ts). Sent only when changed,
-  // so editing an older meeting doesn't change who can watch its recordings.
+  // so editing an older meeting doesn't change who can watch its recordings, and a new meeting
+  // otherwise gets the host's default from My Profile on the server.
   const [accessLevel, setAccessLevel] = useState<AccessLevelValue>(() => initialAccessLevel(existingMeeting));
   const [accessTouched, setAccessTouched] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  /** New meeting: the host's default from My Profile, once loaded (undefined until then). */
+  const [myDefaultAccess, setMyDefaultAccess] = useState<string | null | undefined>(undefined);
   const [companyEmails, setCompanyEmails] = useState<{ key: string; emails: Set<string> }>({ key: '', emails: new Set() });
   const [inviteResult, setInviteResult] = useState<{ sent: number; failed: string[]; error?: boolean } | null>(null);
 
@@ -259,6 +263,23 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       cancelled = true;
     };
   }, [existingMeeting?.roomName]);
+
+  useEffect(() => {
+    if (existingMeeting) return;
+    let cancelled = false;
+    void fetchMyDefaultMeetingAccess().then((level) => {
+      if (!cancelled) setMyDefaultAccess(level);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [existingMeeting]);
+
+  // Show the host's default until they pick something (Private falls back without a company)
+  useEffect(() => {
+    if (existingMeeting || accessTouched || myDefaultAccess === undefined) return;
+    setAccessLevel(memberDefaultAccessLevel(myDefaultAccess, Boolean(companyName)));
+  }, [existingMeeting, accessTouched, myDefaultAccess, companyName]);
 
   // The host's company (Private invites only its members) and which attendees are in it.
   const attendeesKey = attendees.join(',');
@@ -528,7 +549,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
             durationMinutes,
             timezone,
             status: 'ACTIVE',
-            accessLevel,
+            ...(accessTouched ? { accessLevel } : {}),
           }),
         });
         if (!res.ok) throw new Error(`Create failed (${res.status})`);

@@ -440,6 +440,8 @@ model TeamMember {
   personalRoomId      String?                @unique(map: "TeamMember_personalRoomId_key")
   /// Secret for the private calendar subscription feed; null = feed disabled (prisma/add_calendar_feed.sql)
   calendarFeedToken   String?                @unique(map: "TeamMember_calendarFeedToken_key") @db.VarChar(64)
+  /// Access level for this person's new meetings (My Profile → Meeting settings); null = Public (prisma/add_member_default_meeting_access.sql)
+  defaultMeetingAccess String?               @db.VarChar(16)
   avatarUrl           String?
   emailVerified       Boolean                @default(false)
   emailVerifiedAt     DateTime?

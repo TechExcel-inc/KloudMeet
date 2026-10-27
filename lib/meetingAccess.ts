@@ -9,14 +9,15 @@
  * | anyone else, signed in  | join   | knock → host admits             | refuse                      |
  * | anyone else, signed out | join   | sign in, then knock             | sign in, then decide        |
  *
- * New meetings start Public (DEFAULT_ACCESS_LEVEL); the host can switch to Protected or Private.
+ * New meetings (and each new session of a personal meeting ID) start at the host's default from
+ * My Profile, Public when unset; the host can still switch before or during the meeting.
  * Someone who was already in this meeting (or was admitted) rejoins without knocking.
  * Meetings from before access levels (accessLevel NULL) let anyone with the link join.
  */
 
 export type MeetingAccessLevel = 'PUBLIC' | 'PROTECTED' | 'PRIVATE';
 
-/** New meetings, and the first session of a personal meeting ID. */
+/** New meetings of someone who never chose a default in My Profile. */
 export const DEFAULT_ACCESS_LEVEL: MeetingAccessLevel = 'PUBLIC';
 
 export const ACCESS_LEVELS: readonly MeetingAccessLevel[] = ['PUBLIC', 'PROTECTED', 'PRIVATE'];
@@ -26,6 +27,15 @@ export function parseAccessLevel(value: unknown): MeetingAccessLevel | null {
   if (typeof value !== 'string') return null;
   const upper = value.trim().toUpperCase();
   return (ACCESS_LEVELS as readonly string[]).includes(upper) ? (upper as MeetingAccessLevel) : null;
+}
+
+/**
+ * Level for a person's new meeting: their saved default (My Profile → Meeting settings), else Public.
+ * Private needs a company to invite from; without one it falls back to Protected.
+ */
+export function memberDefaultAccessLevel(saved: unknown, hasCompany: boolean): MeetingAccessLevel {
+  const level = parseAccessLevel(saved) ?? DEFAULT_ACCESS_LEVEL;
+  return level === 'PRIVATE' && !hasCompany ? 'PROTECTED' : level;
 }
 
 /** Joining a legacy meeting (no level stored) works as Public. */

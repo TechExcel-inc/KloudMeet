@@ -6,6 +6,7 @@ import {
   joinBlockCode,
   joinLevelOf,
   mayKnockAgain,
+  memberDefaultAccessLevel,
   parseAccessLevel,
   type JoinFacts,
   type RecordingFacts,
@@ -25,6 +26,24 @@ const nobody: JoinFacts = {
   request: null,
 };
 const join = (f: Partial<JoinFacts>) => decideJoin({ ...nobody, ...f });
+
+describe('memberDefaultAccessLevel', () => {
+  it('is Public when the person never chose one', () => {
+    expect(memberDefaultAccessLevel(null, true)).toBe('PUBLIC');
+    expect(memberDefaultAccessLevel(undefined, false)).toBe('PUBLIC');
+    expect(memberDefaultAccessLevel('nonsense', true)).toBe('PUBLIC');
+  });
+
+  it('uses the saved choice', () => {
+    expect(memberDefaultAccessLevel('PROTECTED', false)).toBe('PROTECTED');
+    expect(memberDefaultAccessLevel('PUBLIC', true)).toBe('PUBLIC');
+    expect(memberDefaultAccessLevel('PRIVATE', true)).toBe('PRIVATE');
+  });
+
+  it('turns Private into Protected without a company', () => {
+    expect(memberDefaultAccessLevel('PRIVATE', false)).toBe('PROTECTED');
+  });
+});
 
 describe('parseAccessLevel / joinLevelOf', () => {
   it('accepts stored and dropdown values', () => {

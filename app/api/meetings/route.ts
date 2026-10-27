@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
-import { DEFAULT_ACCESS_LEVEL, parseAccessLevel } from '@/lib/meetingAccess';
+import { parseAccessLevel } from '@/lib/meetingAccess';
+import { newMeetingAccessLevel } from '@/lib/meetingAccess.server';
 
 export async function POST(request: NextRequest) {
   const member = await requireSession(request);
@@ -19,17 +20,18 @@ export async function POST(request: NextRequest) {
       timezone,
       status,
     } = body;
-    // Schedule dialog → Access; left out, a new meeting is Public (set here, not left to the column default).
-    const accessLevel = parseAccessLevel(body.accessLevel) ?? DEFAULT_ACCESS_LEVEL;
+    // Schedule dialog → Access; left out, the host's default from My Profile (Public when unset).
+    const requestedLevel = parseAccessLevel(body.accessLevel);
 
     if (!roomName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     const accountId = await resolveMemberAccountId(member.id);
-    if (accessLevel === 'PRIVATE' && !accountId) {
+    if (requestedLevel === 'PRIVATE' && !accountId) {
       return NextResponse.json({ error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' }, { status: 400 });
     }
+    const accessLevel = requestedLevel ?? (await newMeetingAccessLevel(member.id, accountId));
 
     const meeting = await prisma.meeting.create({
       data: {

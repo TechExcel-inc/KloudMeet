@@ -13,10 +13,10 @@ import { isWithinIdleGrace } from './meetingRejoin';
 import { getRoomServiceClient } from './livekitRooms';
 import { parseKloudMemberIdFromIdentity } from './meetingOwner';
 import {
-  DEFAULT_ACCESS_LEVEL,
   JOIN_REQUESTS_TOPIC,
   decideJoin,
   decideRecordingView,
+  memberDefaultAccessLevel,
   parseAccessLevel,
   parseJoinRequestStatus,
   type JoinDecision,
@@ -168,21 +168,18 @@ export async function evaluateJoin(opts: Parameters<typeof gatherJoinFacts>[0]):
 }
 
 /**
- * Level for a new session of a personal meeting ID: the same as its previous session
- * (Public the first time, or when the previous one was a legacy meeting).
+ * Level for a new meeting someone hosts, including each new session of their personal meeting ID:
+ * their default from My Profile (Public when unset). `accountId` is the meeting's company.
  */
-export function inheritedAccessLevel(previous: string | null | undefined): MeetingAccessLevel {
-  return parseAccessLevel(previous) ?? DEFAULT_ACCESS_LEVEL;
-}
-
-/** The archived sessions of a personal room are renamed `<room>_<meetingId>`. */
-export async function previousPersonalRoomLevel(roomName: string, ownerId: number): Promise<string | null> {
-  const previous = await prisma.meeting.findFirst({
-    where: { createdByMemberId: ownerId, roomName: { startsWith: `${roomName}_` } },
-    orderBy: { id: 'desc' },
-    select: { accessLevel: true },
+export async function newMeetingAccessLevel(
+  memberId: number,
+  accountId: number | null | undefined,
+): Promise<MeetingAccessLevel> {
+  const member = await prisma.teamMember.findUnique({
+    where: { id: memberId },
+    select: { defaultMeetingAccess: true },
   });
-  return previous?.accessLevel ?? null;
+  return memberDefaultAccessLevel(member?.defaultMeetingAccess, Boolean(accountId));
 }
 
 const CLOSED_STATUSES = ['ENDED', 'CANCELED'];
@@ -201,7 +198,7 @@ export interface AccessTarget extends MeetingForAccess {
 /**
  * The meeting a link leads to, resolved the same way connection-details does (canonical
  * name, a personal ID follows its owner's live meeting). For a personal ID with no open
- * session, describes the session the next join would start, at its inherited level.
+ * session, describes the session the next join would start, at the owner's default level.
  */
 export async function resolveAccessTarget(roomParam: string): Promise<AccessTarget | null> {
   const trimmed = roomParam.trim();
@@ -226,13 +223,12 @@ export async function resolveAccessTarget(roomParam: string): Promise<AccessTarg
   const closed = !meeting || Boolean(meeting.deletedAt) || CLOSED_STATUSES.includes(meeting.status);
   if (owner && closed) {
     const { resolveMemberAccountId } = await import('@/lib/peerTimeCompany');
-    const previous =
-      meeting?.createdByMemberId === owner.id ? meeting.accessLevel : await previousPersonalRoomLevel(roomName, owner.id);
+    const accountId = await resolveMemberAccountId(owner.id);
     return {
       id: 0,
-      accountId: await resolveMemberAccountId(owner.id),
+      accountId,
       createdByMemberId: owner.id,
-      accessLevel: inheritedAccessLevel(previous),
+      accessLevel: await newMeetingAccessLevel(owner.id, accountId),
       meetingRoles: null,
       roomName,
       title: `${owner.fullName || owner.username}'s Room`,

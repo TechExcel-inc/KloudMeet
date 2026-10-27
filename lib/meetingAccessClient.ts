@@ -193,6 +193,18 @@ export async function fetchCompanyPeople(opts: { q?: string; check?: string[] })
   }
 }
 
+/** The signed-in person's default access for new meetings (My Profile); null when unset or unknown. */
+export async function fetchMyDefaultMeetingAccess(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/account/profile', { headers: authHeaders(), cache: 'no-store' });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data?.defaultMeetingAccess === 'string' ? data.defaultMeetingAccess : null;
+  } catch {
+    return null;
+  }
+}
+
 /** "?next=" path that brings someone back to this meeting after signing in. */
 export function signInHref(roomName: string, opts: { signup?: boolean } = {}): string {
   const next = encodeURIComponent(`/rooms/${encodeURIComponent(roomName)}`);

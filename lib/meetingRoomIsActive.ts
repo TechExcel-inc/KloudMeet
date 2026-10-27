@@ -138,13 +138,6 @@ export async function ensurePersonalRoomMeeting(
 
   if (shouldRecyclePersonalRoom) {
     if (owner) {
-      // A new session keeps the previous session's access level (Public the first time).
-      const { inheritedAccessLevel, previousPersonalRoomLevel } = await import('@/lib/meetingAccess.server');
-      const previousLevel =
-        meeting && closed
-          ? (await prisma.meeting.findUnique({ where: { id: meeting.id }, select: { accessLevel: true } }))
-              ?.accessLevel ?? null
-          : await previousPersonalRoomLevel(canonical, owner.id);
       if (meeting && closed) {
         const archiveFrom = meeting.roomName;
         const archivedName = `${archiveFrom}_${meeting.id}`;
@@ -157,6 +150,9 @@ export async function ensurePersonalRoomMeeting(
       }
       const { resolveMemberAccountId } = await import('@/lib/peerTimeCompany');
       const accountId = await resolveMemberAccountId(owner.id);
+      // Each new session starts at the owner's default from My Profile (Public when unset).
+      const { newMeetingAccessLevel } = await import('@/lib/meetingAccess.server');
+      const accessLevel = await newMeetingAccessLevel(owner.id, accountId);
       meeting = await prisma.meeting.create({
         data: {
           roomName: canonical,
@@ -164,7 +160,7 @@ export async function ensurePersonalRoomMeeting(
           accountId: accountId ?? undefined,
           title: `${owner.fullName || owner.username}'s Room`,
           status: 'ACTIVE',
-          accessLevel: inheritedAccessLevel(previousLevel),
+          accessLevel,
         },
         select: meetingSelect,
       });

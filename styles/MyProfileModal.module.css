@@ -612,6 +612,76 @@
   white-space: nowrap;
 }
 
+/* ── Meeting settings ── */
+.meetingSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding-left: 188px;
+  min-width: 0;
+}
+.accessField {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding-top: 2px;
+}
+.segmented {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 9px;
+  background: #f1f5f9;
+}
+.segment,
+.segmentOn {
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #64748b;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.segment:hover:not(:disabled) {
+  color: #1e293b;
+}
+.segmentOn {
+  background: #fff;
+  color: #1e293b;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.12);
+}
+.segment:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.segment:focus-visible,
+.segmentOn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 1px;
+}
+.accessHint {
+  margin: 0;
+  color: #334155;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.accessNote {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
 /* ── Security Section ── */
 .securitySection {
   display: flex;
@@ -854,7 +924,8 @@
   .formField {
     flex-direction: column;
   }
-  .securitySection {
+  .securitySection,
+  .meetingSection {
     padding-left: 0;
   }
   .headerBar {
