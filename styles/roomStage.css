@@ -3182,3 +3182,96 @@
             }
           }
 
+
+/* Sharing your own screen or window: a card instead of the picture (it would repeat inside itself) */
+.km-presenting-cover {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(120% 90% at 50% 0%, rgba(124, 121, 255, 0.14), transparent 60%), var(--km-stage, #17181c);
+}
+
+.km-presenting-card {
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  color: var(--km-stage-text, #e8eaed);
+}
+
+.km-presenting-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background: rgba(124, 121, 255, 0.18);
+  color: var(--km-on-dark-accent, #c9c8ff);
+  margin-bottom: 20px;
+}
+
+.km-presenting-icon svg {
+  width: 30px;
+  height: 30px;
+}
+
+.km-presenting-title {
+  margin: 0 0 8px;
+  font: 600 22px/1.3 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  letter-spacing: -0.01em;
+}
+
+.km-presenting-body {
+  margin: 0 0 24px;
+  font: 400 14px/1.6 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  color: #9aa0a6;
+}
+
+.km-presenting-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.km-presenting-stop,
+.km-presenting-doc {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 999px;
+  font: 600 14px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.km-presenting-stop {
+  border: 0;
+  background: var(--km-danger, #dc362e);
+  color: #fff;
+}
+
+.km-presenting-stop:hover {
+  background: #c5302a;
+}
+
+.km-presenting-doc {
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: transparent;
+  color: var(--km-stage-text, #e8eaed);
+}
+
+.km-presenting-doc:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.km-presenting-stop:focus-visible,
+.km-presenting-doc:focus-visible {
+  outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+  outline-offset: 2px;
+}

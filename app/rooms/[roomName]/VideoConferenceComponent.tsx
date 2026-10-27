@@ -546,7 +546,7 @@ export function VideoConferenceComponent(props: {
   /**
    * Sharer starts sharing:
    * - remember previous room mode (never capture shareScreen — use lastStable)
-   * - show liveDoc locally
+   * - stay on Screen share locally (the stage shows a "you're sharing" card, not the picture)
    * - broadcast shareScreen for everyone else
    */
   const beginLocalScreenShareView = React.useCallback(() => {
@@ -559,7 +559,7 @@ export function VideoConferenceComponent(props: {
       localShareViewSessionRef.current = { previousView };
       broadcastViewChangeRef.current?.('shareScreen');
     }
-    setActiveView('liveDoc');
+    setActiveView('shareScreen');
   }, []);
 
   /** Sharer stops: restore + broadcast. null if we were not the sharer. */
@@ -974,6 +974,17 @@ export function VideoConferenceComponent(props: {
     t,
   ]);
 
+  /**
+   * Toolbar Screen share segment. While you share and have stepped over to LiveDoc, it brings you
+   * back to the "you're sharing" view; from that view it stops the share (as before).
+   */
+  const handleShareSegment = React.useCallback(() => {
+    if (screenShareActive && activeViewRef.current !== 'shareScreen') {
+      setActiveView('shareScreen');
+      return;
+    }
+    handleShareScreen();
+  }, [screenShareActive, handleShareScreen]);
 
   // Leave: just disconnect without ending the meeting for everyone
   const handleLeave = React.useCallback(() => {
@@ -1050,6 +1061,9 @@ export function VideoConferenceComponent(props: {
   const isPureLiveDoc = activeView === 'liveDoc';
   // Mirror-blocked: presenter is sharing AND surface detected AND it's NOT a safe "browser tab" share
   const isMirrorBlocked = screenShareActive && surfaceDetected && screenShareSurface !== 'browser';
+  // Own share of a screen or window (or not known yet): the stage shows a card instead of the
+  // picture, which would repeat inside itself. Sharing another browser tab can still be previewed.
+  const ownShareHidden = screenShareActive && (!surfaceDetected || screenShareSurface !== 'browser');
 
   // Determine host: override (from transfer) takes precedence over join-time computation
   const [hostIdentityOverride, setHostIdentityOverride] = React.useState<string | null>(null);
@@ -1395,7 +1409,7 @@ export function VideoConferenceComponent(props: {
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
-  const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc;
+  const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
 
   React.useEffect(() => {
@@ -3385,6 +3399,30 @@ export function VideoConferenceComponent(props: {
             background: 'var(--km-stage)',
           }}
         >
+          {/* Sharing your own screen: say so instead of showing it (LiveDoc stays one click away) */}
+          {ownShareHidden && activeView === 'shareScreen' && !isRecorderBot && (
+            <div className="km-presenting-cover" role="status">
+              <div className="km-presenting-card">
+                <div className="km-presenting-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2" />
+                    <path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" />
+                  </svg>
+                </div>
+                <h2 className="km-presenting-title">{t('meeting.presentingTitle')}</h2>
+                <p className="km-presenting-body">{t('meeting.presentingBody')}</p>
+                <div className="km-presenting-actions">
+                  <button type="button" className="km-presenting-stop" onClick={handleShareScreen}>
+                    {t('toolbar.stopSharing')}
+                  </button>
+                  <button type="button" className="km-presenting-doc" onClick={() => setActiveView('liveDoc')}>
+                    {t('meeting.presentingShowDoc')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
           <div
             style={
@@ -3554,7 +3592,7 @@ export function VideoConferenceComponent(props: {
             )}
 
             {/* Safe preview badge (hidden during remote control for clear view) */}
-            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !isRemoteControlMode && (
+            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !ownShareHidden && !isRemoteControlMode && (
               <div className="screenshare-overlay-container">
                 <div className="screenshare-overlay-badge">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -3880,7 +3918,7 @@ export function VideoConferenceComponent(props: {
           camEnabled={camEnabled}
           onToggleMic={handleToggleMic}
           onToggleCam={handleToggleCam}
-          onShareScreen={handleShareScreen}
+          onShareScreen={handleShareSegment}
           screenShareActive={screenShareActive}
           canShareScreen={!hasScreenShare || screenShareActive}
           isDrawingMode={isDrawingMode}
