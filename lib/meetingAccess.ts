@@ -2,13 +2,14 @@
  * Meeting access levels: who may join a meeting and who may watch its recordings.
  * Pure rules only (unit-tested); lib/meetingAccess.server.ts collects the facts from the database.
  *
- * |                         | Public | Protected (new meetings)        | Private                     |
+ * |                         | Public | Protected                       | Private                     |
  * | host / co-host          | join   | join                            | join                        |
  * | host's company members  | join   | join                            | invited → join, else refuse |
  * | invited, outside company| join   | join (own email link, no sign-in)| refuse                     |
  * | anyone else, signed in  | join   | knock → host admits             | refuse                      |
  * | anyone else, signed out | join   | sign in, then knock             | sign in, then decide        |
  *
+ * New meetings start Public (DEFAULT_ACCESS_LEVEL); the host can switch to Protected or Private.
  * Someone who was already in this meeting (or was admitted) rejoins without knocking.
  * Meetings from before access levels (accessLevel NULL) let anyone with the link join.
  */
@@ -16,7 +17,7 @@
 export type MeetingAccessLevel = 'PUBLIC' | 'PROTECTED' | 'PRIVATE';
 
 /** New meetings, and the first session of a personal meeting ID. */
-export const DEFAULT_ACCESS_LEVEL: MeetingAccessLevel = 'PROTECTED';
+export const DEFAULT_ACCESS_LEVEL: MeetingAccessLevel = 'PUBLIC';
 
 export const ACCESS_LEVELS: readonly MeetingAccessLevel[] = ['PUBLIC', 'PROTECTED', 'PRIVATE'];
 

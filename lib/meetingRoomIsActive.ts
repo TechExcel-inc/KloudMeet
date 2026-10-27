@@ -138,7 +138,7 @@ export async function ensurePersonalRoomMeeting(
 
   if (shouldRecyclePersonalRoom) {
     if (owner) {
-      // A new session keeps the previous session's access level (Protected the first time).
+      // A new session keeps the previous session's access level (Public the first time).
       const { inheritedAccessLevel, previousPersonalRoomLevel } = await import('@/lib/meetingAccess.server');
       const previousLevel =
         meeting && closed

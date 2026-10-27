@@ -218,7 +218,7 @@ export function PageClientImpl(props: {
   const [personalRoomSwitching, setPersonalRoomSwitching] = React.useState(false);
   /** 每次打开准备页都从「参会者可分享文档 AI」开始，不读取上场选择。 */
   const [participantLiveDocShow, setParticipantLiveDocShow] = React.useState(true);
-  const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('protected');
+  const [accessLevel, setAccessLevel] = React.useState<AccessLevel>('public');
   /** The host changed the dropdown: the level loaded from the server no longer overrides it. */
   const accessLevelTouchedRef = React.useRef(false);
   /** Who may join (lib/meetingAccess.ts), from /api/meetings/[room]/access; null until loaded. */
