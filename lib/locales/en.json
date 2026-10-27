@@ -306,6 +306,7 @@
   "meeting.documentPipRestore": "Restore",
   "meeting.documentPipSharing": "{name} is sharing",
   "meeting.documentPipShareBadge": "Sharing",
+  "meeting.documentPipPresentingSelf": "Presenting",
   "meeting.documentPipCopied": "Link copied",
   "meeting.documentPipSettings": "Settings",
   "meeting.documentPipBack": "Back to meeting",

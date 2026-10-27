@@ -159,6 +159,7 @@ import { useMeetingConnection } from './useMeetingConnection';
 import { useLiveDocSession } from './useLiveDocSession';
 import { useMeetingChat } from './useMeetingChat';
 import '@/styles/roomStage.css';
+import '@/styles/floatingTiles.css';
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -1440,6 +1441,7 @@ export function VideoConferenceComponent(props: {
       minimize: t('meeting.documentPipMinimize'),
       restore: t('meeting.documentPipRestore'),
       shareBadge: t('meeting.documentPipShareBadge'),
+      presentingSelf: t('meeting.documentPipPresentingSelf'),
       shareScreen: t('toolbar.shareScreen'),
       stopSharing: t('toolbar.stopSharing'),
       shareConflict: t('toolbar.shareConflictTitle'),

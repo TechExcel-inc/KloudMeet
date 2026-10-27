@@ -298,6 +298,7 @@
   "meeting.documentPipRestore": "복원",
   "meeting.documentPipSharing": "{name} 공유 중",
   "meeting.documentPipShareBadge": "공유",
+  "meeting.documentPipPresentingSelf": "공유 중",
   "meeting.documentPipCopied": "복사됨",
   "meeting.documentPipSettings": "설정",
   "meeting.documentPipBack": "메인 화면으로",

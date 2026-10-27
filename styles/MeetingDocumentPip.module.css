@@ -537,8 +537,10 @@
   cursor: pointer;
 }
 
+/* Same shape as the people next to it */
 .heroCell .shareTile {
   border-radius: 12px;
+  aspect-ratio: 16 / 9;
 }
 
 .shareTile :global(video) {
@@ -548,18 +550,61 @@
   display: block;
 }
 
+/* Your own share: a thumbnail card instead of the picture (the mini window would film itself) */
+.sharePresenting {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 2px;
+  box-sizing: border-box;
+  overflow: hidden;
+  background: rgba(124, 121, 255, 0.16);
+  color: #c9c8ff;
+  font: 600 9.5px/1.2 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.sharePresenting svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.pillSharePresenting {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(124, 121, 255, 0.28);
+  color: #c9c8ff;
+}
+
+/* Who is sharing: a small icon in the corner, so it never covers the person's initials */
 .shareBadge {
   position: absolute;
-  left: 4px;
-  top: 4px;
+  right: 3px;
+  top: 3px;
   z-index: 7;
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: rgba(234, 88, 12, 0.92);
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(234, 88, 12, 0.95);
   color: #fff;
-  font-size: 9px;
-  font-weight: 700;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.shareBadge svg {
+  width: 10px;
+  height: 10px;
 }
 
 .heroGrid {
@@ -753,6 +798,11 @@
 
 :is(.stage, .previewWrap) :global(.floating-grid-name-row) {
   gap: 4px !important;
+}
+
+/* Thumbnails only: no name text on or under the small tiles (the enlarged preview keeps it) */
+.stage :global(.floating-grid-label) {
+  display: none !important;
 }
 
 :is(.stage, .previewWrap) :global(.webcam-floating-participant-metadata) {

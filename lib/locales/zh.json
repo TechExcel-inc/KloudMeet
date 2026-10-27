@@ -298,6 +298,7 @@
   "meeting.documentPipRestore": "还原",
   "meeting.documentPipSharing": "{name} 正在共享",
   "meeting.documentPipShareBadge": "共享",
+  "meeting.documentPipPresentingSelf": "共享中",
   "meeting.documentPipCopied": "链接已复制",
   "meeting.documentPipSettings": "设置",
   "meeting.documentPipBack": "返回主界面",

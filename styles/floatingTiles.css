@@ -1,0 +1,446 @@
+/* Participant tiles and avatars of the meeting mini window (lib/MeetingDocumentPipPanel.tsx uses
+ * LiveDocFloatingGridTile / LiveDocFloatingCollapsedAvatar from roomVideoLayouts.tsx). Restored from the
+ * former roomStyles.ts: they were dropped with the floating webcam panel, but the mini window still
+ * needs them. The mini window copies the page's stylesheets when it opens, so this stays a global
+ * stylesheet loaded with the meeting page. */
+
+.floating-stacked-avatars .floating-avatar,
+.floating-stacked-avatars .floating-avatar-shell {
+  margin-left: -8px;
+  transition: transform 0.15s ease;
+}
+
+.floating-stacked-avatars .floating-avatar:first-child,
+.floating-stacked-avatars .floating-avatar-shell:first-child {
+  margin-left: 0;
+}
+
+.floating-stacked-avatars .floating-avatar:hover,
+.floating-stacked-avatars .floating-avatar-shell:hover {
+  transform: scale(1.15);
+}
+
+.floating-stacked-avatars .floating-avatar:not(.overflow-badge),
+.floating-stacked-avatars .floating-avatar-shell {
+  cursor: pointer;
+}
+
+.floating-stacked-avatars .floating-avatar.selected,
+.floating-stacked-avatars .floating-avatar-shell.selected .floating-avatar {
+  border-color: var(--km-on-dark-accent);
+  box-shadow: 0 0 0 2px rgba(201, 200, 255, 0.45);
+}
+
+.floating-stacked-avatars > :nth-child(5n+2) .floating-avatar,
+.floating-stacked-avatars > .floating-avatar:nth-child(5n+2):not(.overflow-badge) {
+  background: #ffd0b0; color: #7a3e0a;
+}
+
+.floating-stacked-avatars > :nth-child(5n+3) .floating-avatar,
+.floating-stacked-avatars > .floating-avatar:nth-child(5n+3):not(.overflow-badge) {
+  background: #bfe0ff; color: #0b4a75;
+}
+
+.floating-stacked-avatars > :nth-child(5n+4) .floating-avatar,
+.floating-stacked-avatars > .floating-avatar:nth-child(5n+4):not(.overflow-badge) {
+  background: #bdebd3; color: #135b33;
+}
+
+.floating-stacked-avatars > :nth-child(5n+5) .floating-avatar,
+.floating-stacked-avatars > .floating-avatar:nth-child(5n+5):not(.overflow-badge) {
+  background: #ffd0df; color: #7d1c45;
+}
+
+.floating-avatar-shell.lk-participant-tile {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  --lk-border-radius: 50%;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 0 !important;
+  flex-direction: row !important;
+}
+
+.floating-avatar-shell.lk-participant-tile[data-lk-speaking="true"]:not([data-lk-source="screen_share"])::after {
+  border-color: var(--km-speaking);
+}
+
+.floating-avatar-shell .floating-avatar {
+  border: none !important;
+  width: 100%;
+  height: 100%;
+}
+
+.floating-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #3b3a63;
+  color: var(--km-on-dark-accent);
+  font-size: 11px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--km-panel);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.floating-avatar.overflow-badge {
+  background: var(--km-control);
+  font-size: 10px;
+  color: #bdc1c6;
+  border-color: var(--km-panel);
+}
+
+.floating-expanded-rest-scroll .floating-compact-slot .floating-grid-tile--compact {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-tile--compact .floating-grid-avatar {
+  font-size: calc(var(--floating-rest-tile) * 0.68);
+}
+
+.floating-grid-tile--hero .floating-grid-video {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+}
+
+.floating-grid-tile--hero .floating-grid-avatar {
+  font-size: 22px;
+}
+
+.floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-video,
+.floating-expanded-rest-scroll .floating-compact-slot .floating-grid-video {
+  width: 100%;
+  height: 100%;
+  aspect-ratio: auto;
+  min-height: 0;
+  min-width: 0;
+  border-radius: 8px;
+  transition: border-radius 0.22s ease;
+}
+
+.floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-video {
+  border-radius: 12px;
+}
+
+.floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar {
+  font-size: calc(var(--floating-rest-tile) * 0.34);
+}
+
+.floating-grid-tile--hero .floating-grid-name {
+  font-size: 10px;
+}
+
+.floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-name {
+  font-size: 9px;
+}
+
+.floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-name-row {
+  padding: 2px 5px;
+  gap: 0.75rem;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-tile--compact .floating-grid-name-row {
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.floating-webcam-panel .floating-grid-tile--hero .kloud-custom-mic-indicator,
+.floating-webcam-panel .floating-grid-tile--hero .kloud-custom-cam-indicator {
+  opacity: 1 !important;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 3px !important;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.floating-webcam-panel .floating-grid-tile--compact .kloud-custom-mic-indicator,
+.floating-webcam-panel .floating-grid-tile--compact .kloud-custom-cam-indicator,
+.floating-webcam-panel .floating-compact-slot .kloud-custom-mic-indicator,
+.floating-webcam-panel .floating-compact-slot .kloud-custom-cam-indicator {
+  opacity: 0;
+  width: 0 !important;
+  min-width: 0 !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, width 0.18s ease, min-width 0.18s ease, height 0.18s ease;
+}
+
+.floating-webcam-panel .floating-compact-slot:hover .kloud-custom-mic-indicator,
+.floating-webcam-panel .floating-compact-slot:hover .kloud-custom-cam-indicator,
+.floating-webcam-panel .floating-grid-tile--compact:hover .kloud-custom-mic-indicator,
+.floating-webcam-panel .floating-grid-tile--compact:hover .kloud-custom-cam-indicator {
+  opacity: 1;
+  width: 20px !important;
+  min-width: 20px !important;
+  height: 20px !important;
+  min-height: 20px !important;
+  padding: 3px !important;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.floating-grid-tile {
+  display: block;
+  position: relative;
+}
+
+.floating-grid-tile.lk-participant-tile {
+  gap: 0 !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  background: transparent !important;
+}
+
+.floating-grid-video {
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--km-tile);
+  position: relative;
+  display: block;
+}
+
+.floating-webcam-panel .webcam-floating-participant-metadata {
+  position: absolute !important;
+  inset: auto auto 4px 4px !important;
+  left: 4px !important;
+  right: auto !important;
+  bottom: 4px !important;
+  top: auto !important;
+  width: auto !important;
+  max-width: calc(100% - 8px);
+  justify-content: flex-start !important;
+  z-index: 4;
+  pointer-events: none;
+}
+
+.floating-webcam-panel .floating-grid-name-row {
+  pointer-events: none;
+}
+
+.floating-grid-name-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1.25rem;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  line-height: 1;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.floating-grid-name-row .lk-track-muted-indicator-microphone {
+  flex-shrink: 0;
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.floating-grid-video video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.floating-grid-avatar {
+  width: 100%;
+  height: 100%;
+  background-color: hsl(var(--km-tile-hue, 230) 12% 19%);
+  background-image: radial-gradient(
+  120% 110% at 50% 0%,
+  hsl(var(--km-tile-hue, 230) 24% 27%) 0%,
+  hsl(var(--km-tile-hue, 230) 14% 21%) 55%,
+  hsl(var(--km-tile-hue, 230) 10% 17%) 100%
+  );
+  color: rgba(255, 255, 255, 0.96);
+  font-size: 16px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+}
+
+.floating-grid-avatar-initials,
+.floating-grid-avatar-fullname {
+  max-width: 100%;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.floating-grid-avatar-fullname {
+  display: none;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: var(--km-stage-text);
+}
+
+.floating-grid-avatar-initials {
+  display: block;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.96);
+  font-size: clamp(11px, 34cqh, 30px);
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+  transform: translateY(-8%);
+}
+
+.floating-grid-tile--compact.lk-participant-tile:hover .floating-grid-avatar-initials,
+.floating-grid-tile--compact.lk-participant-tile:focus-within .floating-grid-avatar-initials {
+  display: none;
+}
+
+.floating-grid-tile--compact.lk-participant-tile:hover .floating-grid-avatar-fullname,
+.floating-grid-tile--compact.lk-participant-tile:focus-within .floating-grid-avatar-fullname {
+  display: block;
+}
+
+.floating-grid-label {
+  min-width: 0;
+  max-width: calc(var(--floating-hero-col-w, 168px) - 64px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+.floating-grid-tile--hero .floating-grid-name-row {
+  gap: 4px;
+}
+
+.floating-grid-tile--hero .floating-grid-avatar-fullname {
+  font-size: 14px;
+}
+
+.floating-expanded-rest-scroll .floating-grid-tile--compact .floating-grid-avatar-fullname {
+  font-size: calc(var(--floating-rest-tile) * 0.18);
+}
+
+.floating-grid-video::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow 0.35s ease;
+}
+
+.floating-grid-tile.lk-participant-tile:hover .floating-grid-video::after {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18);
+}
+
+.floating-webcam-panel .floating-grid-tile.lk-participant-tile::after {
+  display: none;
+}
+
+.floating-webcam-panel .floating-grid-tile[data-lk-speaking="true"] .floating-grid-video::after {
+  box-shadow: inset 0 0 0 2px var(--km-speaking), inset 0 0 18px rgba(34, 197, 94, 0.18);
+}
+
+.floating-webcam-panel .floating-grid-name {
+  display: none !important;
+}
+
+.floating-grid-name {
+  color: rgba(255,255,255,0.92);
+  font-size: 9px;
+  font-weight: 500;
+  min-width: 0;
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  transition: max-width 0.18s ease, opacity 0.18s ease;
+}
+
+.floating-grid-tile.lk-participant-tile:hover .floating-grid-name {
+  opacity: 1;
+  max-width: 72px;
+}
+
+.floating-grid-tile.lk-participant-tile.floating-grid-tile--hero:hover .floating-grid-name {
+  max-width: 120px;
+}
+
+.floating-expanded-rest-scroll .floating-compact-slot:hover .floating-grid-name {
+  max-width: calc(var(--floating-rest-tile) * 2 - 8px);
+}
+
+.floating-grid-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+.webcam-sidebar-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+.webcam-sidebar-tile:hover .kloud-tile-more-menu-wrap--inline,
+.lk-grid-layout-wrapper .lk-participant-tile:hover .kloud-tile-more-menu-wrap--inline,
+.lk-mobile-scroll-grid .lk-participant-tile:hover .kloud-tile-more-menu-wrap--inline,
+.lk-grid-layout-wrapper .lk-participant-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+.lk-mobile-scroll-grid .lk-participant-tile:hover > .kloud-tile-more-menu-wrap:not(.kloud-tile-more-menu-wrap--inline),
+.sky-meet-video-wrapper .lk-carousel > .lk-participant-tile:hover > .kloud-tile-more-menu-wrap {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.webcam-sidebar-panel .webcam-sidebar-name,
+.floating-webcam-panel .floating-grid-name {
+  display: none !important;
+}
+
+.lk-room-container .lk-participant-metadata-item .lk-participant-name,
+.lk-room-container .lk-participant-metadata-item .webcam-sidebar-name,
+.lk-room-container .floating-grid-name-row .floating-grid-name {
+  padding: 0;
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .webcam-sidebar-tile,
+  .webcam-sidebar-avatar-initials,
+  .chat-overlay-panel,
+  .kloud-tile-hand-badge,
+  .webcam-collapse-toggle,
+  .floating-webcam-panel,
+  .floating-webcam-panel .floating-grid-video {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

@@ -20,6 +20,8 @@ export interface MeetingDocumentPipLabels {
   minimize: string;
   restore: string;
   shareBadge: string;
+  /** Shown instead of your own screen: the mini window sits on that screen and would film itself */
+  presentingSelf: string;
   shareScreen: string;
   stopSharing: string;
   shareConflict: string;
@@ -539,7 +541,29 @@ export function MeetingDocumentPipPanel({
   };
 
   const personBadge = (id: string) =>
-    isSharer(id) ? <span className={styles.shareBadge}>{labels.shareBadge}</span> : null;
+    isSharer(id) ? (
+      <span className={styles.shareBadge} title={labels.shareBadge} aria-label={labels.shareBadge} role="img">
+        <ShareGlyph />
+      </span>
+    ) : null;
+
+  // Your own share is not drawn: the mini window is on the shared screen and would show itself, endlessly
+  const sharePicture = share ? (
+    share.local ? (
+      <div className={styles.sharePresenting}>
+        <ShareGlyph />
+        <span>{labels.presentingSelf}</span>
+      </div>
+    ) : (
+      <VideoTrack
+        trackRef={{
+          participant: share.participant,
+          source: Track.Source.ScreenShare,
+          publication: share.publication,
+        }}
+      />
+    )
+  ) : null;
 
   const shareVideo = share ? (
     <div
@@ -555,13 +579,7 @@ export function MeetingDocumentPipPanel({
         backToTab(e);
       }}
     >
-      <VideoTrack
-        trackRef={{
-          participant: share.participant,
-          source: Track.Source.ScreenShare,
-          publication: share.publication,
-        }}
-      />
+      {sharePicture}
     </div>
   ) : null;
 
@@ -821,13 +839,19 @@ export function MeetingDocumentPipPanel({
                         togglePreview(SHARE_PREVIEW_ID);
                       }}
                     >
-                      <VideoTrack
-                        trackRef={{
-                          participant: share.participant,
-                          source: Track.Source.ScreenShare,
-                          publication: share.publication,
-                        }}
-                      />
+                      {share.local ? (
+                        <span className={styles.pillSharePresenting} aria-hidden>
+                          <ShareGlyph />
+                        </span>
+                      ) : (
+                        <VideoTrack
+                          trackRef={{
+                            participant: share.participant,
+                            source: Track.Source.ScreenShare,
+                            publication: share.publication,
+                          }}
+                        />
+                      )}
                     </div>
                   </div>
                 ) : null}
