@@ -3325,13 +3325,14 @@ export function VideoConferenceComponent(props: {
     setCaptionsOpen(newState);
   }, [captionsRunning, setCaptionsOpen, sendMeetingMsg]);
 
-  const { chatPanelNode } = useMeetingChat({
+  const { chatPanelNode, chatUnread } = useMeetingChat({
     room,
     meetingRoomName,
     livedocInstanceId,
     connectionDetailsRef,
     setLivedocHasBeenActivated,
     setActiveView,
+    chatOpen,
   });
 
   return (
@@ -4082,6 +4083,7 @@ export function VideoConferenceComponent(props: {
           }}
           livekitToken={props.connectionDetails.participantToken}
           chatOpen={chatOpen}
+          chatBadgeCount={chatUnread}
           onToggleChat={() => {
             setChatOpen((prev) => !prev);
             setAttendeeOpen(false);

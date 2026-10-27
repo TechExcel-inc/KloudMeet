@@ -21,7 +21,14 @@ export interface ChatMsg {
   isLocal: boolean;
   kind?: ChatMessageKind;
   attachment?: ChatAttachment;
+  /** Local only: the server didn't take it (network / 5xx); the panel offers Retry */
+  sendFailed?: boolean;
 }
+
+/** The sender's own file share as it goes: shown only to them, under the messages */
+export type ChatUploadState =
+  | { state: 'uploading'; fileName: string }
+  | { state: 'failed'; fileName: string; reason: 'notReady' | 'failed' | 'timeout' };
 
 export interface ChatWireMessage {
   type: 'chat';
@@ -177,3 +184,22 @@ export const CHAT_UPLOAD_REQUEST_TYPE = 'Kloud-ChatUploadFile';
 export const CHAT_OPEN_DOCUMENT_TYPE = 'Kloud-OpenDocument';
 export const CHAT_PING_TYPE = 'Kloud-ChatPing';
 export const CHAT_PONG_TYPE = 'Kloud-ChatPong';
+
+/** Merge by id, oldest first. A later copy replaces an earlier one (history wins over a local draft). */
+export function mergeChatMessages(current: ChatMsg[], incoming: ChatMsg[]): ChatMsg[] {
+  const byId = new Map(current.map((message) => [message.clientMessageId, message]));
+  for (const message of incoming) {
+    byId.set(message.clientMessageId, message);
+  }
+  return Array.from(byId.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/** Messages from others that arrive while the chat is closed count as unread. */
+export function countNewUnread(current: ChatMsg[], incoming: ChatMsg[]): number {
+  const known = new Set(current.map((m) => m.clientMessageId));
+  return incoming.filter((m) => !m.isLocal && !known.has(m.clientMessageId)).length;
+}
+
+export function setChatSendFailed(current: ChatMsg[], clientMessageId: string, failed: boolean): ChatMsg[] {
+  return current.map((m) => (m.clientMessageId === clientMessageId ? { ...m, sendFailed: failed || undefined } : m));
+}

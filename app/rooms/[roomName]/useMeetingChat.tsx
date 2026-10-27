@@ -14,13 +14,16 @@ import {
   CHAT_PONG_TYPE,
   CHAT_UPLOAD_REQUEST_TYPE,
   CHAT_UPLOAD_RESULT_TYPE,
+  countNewUnread,
   createChatMessageId,
   getLiveDocIframe,
   isChatWireMessage,
   postToLiveDocIframe,
+  setChatSendFailed,
   wireToChatMsg,
   type ChatAttachment,
   type ChatMsg,
+  type ChatUploadState,
   type ChatWireMessage,
 } from '@/lib/chatProtocol';
 import { fetchWithTimeout } from '@/lib/fetchWithTimeout';
@@ -38,11 +41,15 @@ export interface MeetingChatOptions {
   connectionDetailsRef: React.MutableRefObject<ConnectionDetails>;
   setLivedocHasBeenActivated: React.Dispatch<React.SetStateAction<boolean>>;
   setActiveView: React.Dispatch<React.SetStateAction<ViewMode>>;
+  /** Whether the chat panel is open; messages that arrive while it is closed count as unread */
+  chatOpen: boolean;
 }
 
 export interface MeetingChatApi {
   chatMessages: ChatMsg[];
   chatAttachBusy: boolean;
+  /** Messages from others that arrived while the chat was closed */
+  chatUnread: number;
   sendChatMessage: (text: string) => void;
   handleAttachFile: (file: File) => Promise<void>;
   openLivedocFromChat: (msg: ChatMsg) => Promise<void>;
@@ -59,6 +66,7 @@ export function useMeetingChat({
   connectionDetailsRef,
   setLivedocHasBeenActivated,
   setActiveView,
+  chatOpen,
 }: MeetingChatOptions): MeetingChatApi {
   const { t } = useI18n();
   const chatEncoder = React.useMemo(() => new TextEncoder(), []);
@@ -66,6 +74,15 @@ export function useMeetingChat({
   const [chatMessages, setChatMessages] = React.useState<ChatMsg[]>([]);
   const [chatAttachBusy, setChatAttachBusy] = React.useState(false);
   const pendingChatUploadRef = React.useRef<{ requestId: string } | null>(null);
+  /** The local user's file share as it goes (shown only to them in the chat) */
+  const [chatUpload, setChatUpload] = React.useState<ChatUploadState | null>(null);
+  const chatUploadFileRef = React.useRef<File | null>(null);
+  const [chatUnread, setChatUnread] = React.useState(0);
+  const chatOpenRef = React.useRef(chatOpen);
+  chatOpenRef.current = chatOpen;
+  React.useEffect(() => {
+    if (chatOpen) setChatUnread(0);
+  }, [chatOpen]);
   const livedocInstanceIdRef = React.useRef(livedocInstanceId);
   livedocInstanceIdRef.current = livedocInstanceId;
 
@@ -181,7 +198,7 @@ export function useMeetingChat({
       message: string;
       kind?: ChatMsg['kind'];
       attachment?: ChatAttachment;
-    }): Promise<void> => {
+    }): Promise<'ok' | 'rejected' | 'failed'> => {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           const response = await fetchWithTimeout(
@@ -195,12 +212,15 @@ export function useMeetingChat({
               body: JSON.stringify(body),
             },
           );
-          if (response.ok || response.status < 500) return;
+          if (response.ok) return 'ok';
+          // 4xx: the server won't take it whatever we do (e.g. the meeting ended); not a retry case
+          if (response.status < 500) return 'rejected';
         } catch (error) {
-          if (attempt === 1 || (error instanceof Error && error.name === 'AbortError')) return;
+          if (attempt === 1 || (error instanceof Error && error.name === 'AbortError')) return 'failed';
         }
         await new Promise((resolve) => window.setTimeout(resolve, 500));
       }
+      return 'failed';
     },
     [meetingRoomName, connectionDetailsRef],
   );
@@ -218,7 +238,7 @@ export function useMeetingChat({
   );
 
   React.useEffect(() => {
-    const controller = new AbortController();
+    let controller = new AbortController();
     const loadChatHistory = async (): Promise<void> => {
       try {
         const response = await fetchWithTimeout(
@@ -247,7 +267,13 @@ export function useMeetingChat({
             kind: message.kind,
             attachment: message.attachment,
           }));
-        setChatMessages((current) => mergeChatMessages(current, history));
+        setChatMessages((current) => {
+          if (!chatOpenRef.current && current.length > 0) {
+            const missed = countNewUnread(current, history);
+            if (missed > 0) setChatUnread((n) => n + missed);
+          }
+          return mergeChatMessages(current, history);
+        });
       } catch (error) {
         if (controller.signal.aborted) return;
         if (error instanceof Error && error.name === 'AbortError') return;
@@ -255,8 +281,18 @@ export function useMeetingChat({
     };
 
     void loadChatHistory();
-    return () => controller.abort();
-  }, [meetingRoomName, room.localParticipant.identity, connectionDetailsRef]);
+    // Messages sent while we were reconnecting never reached us over the data channel
+    const onReconnected = () => {
+      controller.abort();
+      controller = new AbortController();
+      void loadChatHistory();
+    };
+    room.on(RoomEvent.Reconnected, onReconnected);
+    return () => {
+      room.off(RoomEvent.Reconnected, onReconnected);
+      controller.abort();
+    };
+  }, [meetingRoomName, room, room.localParticipant.identity, connectionDetailsRef]);
 
   React.useEffect(() => {
     const handleChatData = (
@@ -270,7 +306,13 @@ export function useMeetingChat({
         const data: unknown = JSON.parse(chatDecoder.decode(payload));
         if (!isChatWireMessage(data)) return;
         const incoming = wireToChatMsg(data, room.localParticipant.identity);
-        setChatMessages((current) => mergeChatMessages(current, [incoming]));
+        setChatMessages((current) => {
+          if (!chatOpenRef.current) {
+            const fresh = countNewUnread(current, [incoming]);
+            if (fresh > 0) setChatUnread((n) => n + fresh);
+          }
+          return mergeChatMessages(current, [incoming]);
+        });
       } catch (e) {
         console.error('Chat message parse error:', e);
       }
@@ -300,7 +342,36 @@ export function useMeetingChat({
         mergeChatMessages(current, [wireToChatMsg(wire, room.localParticipant.identity)]),
       );
       publishChatWire(wire);
-      void persistChatMessage({ clientMessageId, message: text, kind: 'text' });
+      void persistChatMessage({ clientMessageId, message: text, kind: 'text' }).then((result) => {
+        if (result === 'failed') setChatMessages((current) => setChatSendFailed(current, clientMessageId, true));
+      });
+    },
+    [room, publishChatWire, persistChatMessage],
+  );
+
+  /** "Not sent · Retry": the same message (same id, so nobody sees it twice) */
+  const retryChatMessage = React.useCallback(
+    (msg: ChatMsg) => {
+      setChatMessages((current) => setChatSendFailed(current, msg.clientMessageId, false));
+      const wire: ChatWireMessage = {
+        type: 'chat',
+        clientMessageId: msg.clientMessageId,
+        senderIdentity: room.localParticipant.identity,
+        senderName: msg.senderName,
+        message: msg.message,
+        timestamp: msg.timestamp,
+        kind: msg.kind ?? 'text',
+        attachment: msg.attachment,
+      };
+      publishChatWire(wire);
+      void persistChatMessage({
+        clientMessageId: msg.clientMessageId,
+        message: msg.message,
+        kind: msg.kind ?? 'text',
+        attachment: msg.attachment,
+      }).then((result) => {
+        if (result === 'failed') setChatMessages((current) => setChatSendFailed(current, msg.clientMessageId, true));
+      });
     },
     [room, publishChatWire, persistChatMessage],
   );
@@ -364,12 +435,17 @@ export function useMeetingChat({
       setChatAttachBusy(true);
       const requestId = createChatMessageId();
       pendingChatUploadRef.current = { requestId };
+      chatUploadFileRef.current = file;
+      setChatUpload({ state: 'uploading', fileName: file.name });
+      const fail = (reason: 'notReady' | 'failed' | 'timeout') =>
+        setChatUpload({ state: 'failed', fileName: file.name, reason });
       try {
         const ready = await ensureLiveDocViewReady();
         if (!ready) {
           console.warn('[chat] LiveDoc not ready for upload (no instance or iframe)');
           pendingChatUploadRef.current = null;
           setChatAttachBusy(false);
+          fail('notReady');
           return;
         }
         const fileBuffer = await file.arrayBuffer();
@@ -391,18 +467,21 @@ export function useMeetingChat({
         if (!posted) {
           pendingChatUploadRef.current = null;
           setChatAttachBusy(false);
+          fail('notReady');
           return;
         }
         window.setTimeout(() => {
           if (pendingChatUploadRef.current?.requestId === requestId) {
             pendingChatUploadRef.current = null;
             setChatAttachBusy(false);
+            fail('timeout');
           }
         }, 180000);
       } catch (error) {
         console.error('[chat] attach file failed', error);
         pendingChatUploadRef.current = null;
         setChatAttachBusy(false);
+        fail('failed');
       }
     },
     [chatAttachBusy, ensureLiveDocViewReady],
@@ -428,8 +507,11 @@ export function useMeetingChat({
           ? data.fileName.trim()
           : 'Document';
       if (status === 'failed' || !Number.isFinite(itemId) || itemId <= 0) {
+        setChatUpload({ state: 'failed', fileName: chatUploadFileRef.current?.name || fileName, reason: 'failed' });
         return;
       }
+      setChatUpload(null);
+      chatUploadFileRef.current = null;
       const attachmentIdRaw = data.attachmentId;
       const attachmentId =
         typeof attachmentIdRaw === 'number'
@@ -467,12 +549,23 @@ export function useMeetingChat({
       onAttachFile={handleAttachFile}
       onOpenLivedoc={openLivedocFromChat}
       attachBusy={chatAttachBusy}
+      onRetrySend={retryChatMessage}
+      upload={chatUpload}
+      onRetryUpload={() => {
+        const file = chatUploadFileRef.current;
+        if (file) void handleAttachFile(file);
+      }}
+      onDismissUpload={() => {
+        setChatUpload(null);
+        chatUploadFileRef.current = null;
+      }}
     />
   );
 
   return {
     chatMessages,
     chatAttachBusy,
+    chatUnread,
     sendChatMessage,
     handleAttachFile,
     openLivedocFromChat,
