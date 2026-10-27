@@ -536,7 +536,7 @@ export function useMeetingConnection({
     try {
       const roomName = connectionDetailsRef.current?.roomName;
       if (!firstConnect && roomName) {
-        const ended = await isMeetingEnded(roomName, attempt === 1 ? 4 : 1);
+        const ended = await isMeetingEnded(roomName, attempt === 1 ? 4 : 1, connectionDetailsRef.current?.meetingId);
         if (ended) {
           if (!isDbMeetingOwner(meetingOwnerMemberId, room.localParticipant.metadata)) {
             handleClosedByHostExit();
@@ -711,6 +711,13 @@ export function useMeetingConnection({
         intentionalDisconnectRef.current,
       );
       if (intentionalDisconnectRef.current) return;
+      // The server deleted the room: the meeting was ended (by the host, or its time limit).
+      // Reconnecting with the old token would make LiveKit create the room again.
+      if (reason === DisconnectReason.ROOM_DELETED) {
+        clearReconnectTimer();
+        handleClosedByHostExit();
+        return;
+      }
       if (
         reason === DisconnectReason.PARTICIPANT_REMOVED ||
         reason === DisconnectReason.DUPLICATE_IDENTITY
@@ -744,7 +751,7 @@ export function useMeetingConnection({
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
     };
-  }, [room, router, handleError, handleEncryptionError, clearActiveKloudRoom, clearReconnectTimer]);
+  }, [room, router, handleError, handleEncryptionError, clearActiveKloudRoom, clearReconnectTimer, handleClosedByHostExit]);
 
   const rejoinAfterDuplicateSession = React.useCallback(() => {
     void (async () => {

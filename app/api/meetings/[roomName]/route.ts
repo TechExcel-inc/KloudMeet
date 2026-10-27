@@ -41,6 +41,21 @@ export async function GET(
       return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
     }
 
+    // Reconnect check (?meetingId=): the session this client joined. A personal ID's ended session
+    // is renamed `<room>_<id>`, and the room name alone already leads to the next one.
+    const sessionId = Number(request.nextUrl.searchParams.get('meetingId'));
+    if (Number.isInteger(sessionId) && sessionId > 0) {
+      const session = await prisma.meeting.findUnique({
+        where: { id: sessionId },
+        select: { id: true, roomName: true, status: true },
+      });
+      const sessionRoom = session?.roomName.toLowerCase() ?? '';
+      const asked = roomName.toLowerCase();
+      if (session && (sessionRoom === asked || sessionRoom === `${asked}_${session.id}`)) {
+        return NextResponse.json({ id: session.id, roomName: session.roomName, status: session.status });
+      }
+    }
+
     let meetingCore = await findMeetingByRoomName(roomName);
     if (!meetingCore && resolvedParams?.roomName?.trim()) {
       meetingCore = await findMeetingByRoomName(resolvedParams.roomName.trim());

@@ -27,13 +27,18 @@ export function consumeMeetingClosedNotice(): string | null {
   }
 }
 
-/** True only when meeting is permanently closed (ENDED / CANCELED), not IDLE. */
-export async function isMeetingEnded(roomName: string, maxAttempts = 4): Promise<boolean> {
+/**
+ * True only when meeting is permanently closed (ENDED / CANCELED), not IDLE.
+ * Pass the session's meetingId: once a personal ID's session ends, its room name already leads to
+ * the next session (not ended), and a reconnect would bring the closed room back.
+ */
+export async function isMeetingEnded(roomName: string, maxAttempts = 4, meetingId?: number): Promise<boolean> {
   const encoded = encodeURIComponent(roomName);
+  const query = meetingId ? `?meetingId=${meetingId}` : '';
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       const res = await fetchWithTimeout(
-        `/api/meetings/${encoded}`,
+        `/api/meetings/${encoded}${query}`,
         { cache: 'no-store', headers: authHeaders() },
         MEETING_STATUS_TIMEOUT_MS,
       );
