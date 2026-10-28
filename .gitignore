@@ -66,3 +66,6 @@ KloudMeet.env/
 # Cursor local config (personal, never commit)
 .cursor/
 登录数据.txt
+
+# MediaPipe wasm, copied from node_modules by scripts/copy-mediapipe-wasm.cjs
+/public/mediapipe/wasm/

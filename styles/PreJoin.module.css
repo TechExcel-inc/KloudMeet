@@ -427,6 +427,72 @@
   gap: 22px;
 }
 
+/* Camera background: a quiet round button bottom-right, filled while a background is on */
+.backgroundBtn {
+  position: absolute;
+  right: 20px;
+  bottom: 30px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(32, 33, 36, 0.55);
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.backgroundBtn:hover {
+  background: rgba(32, 33, 36, 0.75);
+}
+
+.backgroundBtn[data-active] {
+  background: var(--km-primary);
+}
+
+.backgroundBtn[data-active]:hover {
+  background: var(--km-primary-hover);
+}
+
+.backgroundBtn[data-state='failed']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #ffffff;
+  background: var(--km-danger);
+}
+
+.backgroundBtn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px #ffffff,
+    0 0 0 6px var(--km-primary);
+}
+
+.backgroundBtnSpinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #ffffff;
+  animation: km-background-spin 0.8s linear infinite;
+}
+
+@keyframes km-background-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Round mic / camera toggles. On = white outline circle, off or failed = red rounded square. */
 .previewControls .roundToggle[aria-pressed] {
   position: relative;
@@ -1394,6 +1460,7 @@
   .previewControls .roundToggle[aria-pressed],
   .avatarSpeaking,
   .levelBadge i,
+  .backgroundBtnSpinner,
   .menu,
   .selectMenu,
   .selectChevron {
@@ -1475,6 +1542,10 @@
   .previewControls .roundToggle[aria-pressed] {
     width: 48px;
     height: 48px;
+  }
+  .backgroundBtn {
+    right: 14px;
+    bottom: 16px;
   }
   .previewControls .roundToggle[aria-pressed='false'],
   .previewControls .roundToggle[data-state='error'] {

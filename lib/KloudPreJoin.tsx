@@ -13,6 +13,8 @@ import styles from '../styles/PreJoin.module.css';
 import { useI18n } from './i18n';
 import { saveAudioOutputDeviceId, loadAudioOutputDeviceId } from './audioOutputChoice';
 import { classifyDeviceError, type DeviceIssue } from './deviceIssue';
+import { VideoBackgroundDialog, backgroundLabel } from './VideoBackgroundDialog';
+import { usePreviewVideoBackground } from './useVideoBackground';
 
 export interface KloudPreJoinProps {
   defaults?: Partial<LocalUserChoices>;
@@ -250,6 +252,7 @@ export function KloudPreJoin({
   panelOverride,
 }: KloudPreJoinProps) {
   const tf = useTextWithFallback();
+  const { t } = useI18n();
   const canUseMediaDevices =
     typeof navigator !== 'undefined' &&
     typeof window !== 'undefined' &&
@@ -307,6 +310,8 @@ export function KloudPreJoin({
 
   const mic = useDevicePreview('audio', canUseMediaDevices && audioEnabled, audioDeviceId, onError);
   const cam = useDevicePreview('video', canUseMediaDevices && videoEnabled, videoDeviceId, onError);
+  const videoBackground = usePreviewVideoBackground(cam.track);
+  const [backgroundOpen, setBackgroundOpen] = React.useState(false);
 
   // A capture request that hasn't settled after a few seconds is almost always waiting on the
   // browser's permission prompt; say so instead of "Starting camera…" forever.
@@ -433,6 +438,10 @@ export function KloudPreJoin({
   const camToggleLabel = camOn
     ? tf('toolbar.turnOffCam', 'Turn off camera')
     : tf('toolbar.turnOnCam', 'Turn on camera');
+  const backgroundButtonLabel =
+    videoBackground.background === 'none'
+      ? tf('background.button', 'Change background')
+      : `${tf('background.title', 'Background')}: ${backgroundLabel(t, videoBackground.background)}`;
 
   return (
     <div className={styles.layout}>
@@ -505,6 +514,30 @@ export function KloudPreJoin({
             )
           )}
 
+          {/* Camera background, bottom-right of the preview */}
+          {canUseMediaDevices && videoBackground.offered && (
+            <button
+              type="button"
+              className={styles.backgroundBtn}
+              data-active={videoBackground.background !== 'none' || undefined}
+              data-state={videoBackground.status}
+              aria-haspopup="dialog"
+              aria-label={backgroundButtonLabel}
+              title={backgroundButtonLabel}
+              onClick={() => setBackgroundOpen(true)}
+            >
+              {videoBackground.status === 'starting' ? (
+                <span className={styles.backgroundBtnSpinner} aria-hidden="true" />
+              ) : (
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="3" y="4" width="18" height="16" rx="3" />
+                  <circle cx="12" cy="10.5" r="2.6" />
+                  <path d="M7.5 20c.6-2.6 2.3-4.1 4.5-4.1s3.9 1.5 4.5 4.1" />
+                </svg>
+              )}
+            </button>
+          )}
+
           {/* Mic + Camera toggles */}
           <div className={styles.previewControls}>
             <button
@@ -548,6 +581,15 @@ export function KloudPreJoin({
             </button>
           </div>
         </div>
+
+        {videoBackground.status === 'failed' && cam.status === 'live' && !backgroundOpen && (
+          <p className={styles.mediaNote} role="status">
+            <span>{tf('background.failed', "Couldn't apply your background. Others will see your camera without it.")}</span>
+            <button type="button" className={styles.noteBtn} onClick={videoBackground.retry}>
+              {tryAgainLabel}
+            </button>
+          </p>
+        )}
 
         {mic.status === 'error' && (
           <p className={styles.mediaNote} role="status">
@@ -718,6 +760,22 @@ export function KloudPreJoin({
 
           {footer}
         </section>
+      )}
+
+      {videoBackground.offered && (
+        <VideoBackgroundDialog
+          isOpen={backgroundOpen}
+          onClose={() => setBackgroundOpen(false)}
+          tone="page"
+          background={videoBackground.background}
+          onChange={videoBackground.changeBackground}
+          status={videoBackground.status}
+          supported={videoBackground.supported}
+          onRetry={videoBackground.retry}
+          track={cam.status === 'live' ? cam.track : undefined}
+          onTurnOnCamera={canUseMediaDevices ? () => (cam.status === 'error' ? retry(setVideoEnabled) : setVideoEnabled(true)) : undefined}
+          hint={tf('background.hintPrejoin', 'Others see it when you join. Saved on this device.')}
+        />
       )}
     </div>
   );

@@ -7,9 +7,9 @@
   "main": "main.js",
   "scripts": {
     "electron:dev": "concurrently -k \"pnpm dev\" \"wait-on http://127.0.0.1:3201 && electron .\"",
-    "dev": "node scripts/run-next-with-funasr.cjs dev -p 3201 --turbopack",
-    "dev:https": "node scripts/run-next-with-funasr.cjs dev -p 3201 --turbopack --experimental-https --experimental-https-key ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem",
-    "build": "next build",
+    "dev": "node scripts/copy-mediapipe-wasm.cjs && node scripts/run-next-with-funasr.cjs dev -p 3201 --turbopack",
+    "dev:https": "node scripts/copy-mediapipe-wasm.cjs && node scripts/run-next-with-funasr.cjs dev -p 3201 --turbopack --experimental-https --experimental-https-key ./certificates/localhost-key.pem --experimental-https-cert ./certificates/localhost.pem",
+    "build": "node scripts/copy-mediapipe-wasm.cjs && next build",
     "build:deploy": "npm run build && npm run electron:prepare-standalone",
     "deploy": "bash scripts/deploy-meet.sh",
     "electron:ensure": "node scripts/ensure-electron.js",
@@ -29,7 +29,7 @@
     "test": "vitest run",
     "format:check": "prettier --check \"**/*.{ts,tsx,md,json}\"",
     "format:write": "prettier --write \"**/*.{ts,tsx,md,json}\"",
-    "build:electron": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && electron-builder --mac"
+    "build:electron": "node scripts/copy-mediapipe-wasm.cjs && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && electron-builder --mac"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1020.0",

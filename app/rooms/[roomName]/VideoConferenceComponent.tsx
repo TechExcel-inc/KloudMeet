@@ -4,6 +4,7 @@ import React from 'react';
 import toast from 'react-hot-toast';
 import { decodePassphrase } from '@/lib/client-utils';
 import { DebugMode } from '@/lib/Debug';
+import { initialBackgroundProcessor } from '@/lib/videoBackground';
 import { KeyboardShortcuts } from '@/lib/KeyboardShortcuts';
 import { RecordingIndicator } from '@/lib/RecordingIndicator';
 import { JoinRequestsPrompt } from '@/lib/JoinRequestsPrompt';
@@ -438,6 +439,8 @@ export function VideoConferenceComponent(props: {
       ...(isMobileClient && !normalizeCaptureDeviceId(props.userChoices.videoDeviceId)
         ? { facingMode: 'user' as const }
         : {}),
+      // The saved camera background goes on before the first frame is sent (lib/videoBackground.ts)
+      processor: initialBackgroundProcessor(),
     };
     const publishDefaults: TrackPublishDefaults = {
       // 手机开 dtx，静音时段少发包，弱网更稳

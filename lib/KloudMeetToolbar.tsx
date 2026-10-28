@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { MediaDeviceMenu } from '@livekit/components-react';
+import { MediaDeviceMenu, useMaybeRoomContext } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
 import { useToolbarIsMobile } from './useToolbarIsMobile';
 import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
@@ -11,6 +11,9 @@ import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
 import { CaptionSettingsDialog } from './RtasrHelper/CaptionSettingsDialog';
+import { CameraDeviceMenu } from './CameraDeviceMenu';
+import { VideoBackgroundDialog, backgroundLabel } from './VideoBackgroundDialog';
+import { useRoomVideoBackground } from './useVideoBackground';
 import { saveCaptionSettings, type CaptionLanguage } from './RtasrHelper/captionLanguage';
 import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
@@ -341,6 +344,8 @@ export function KloudMeetToolbar({
   );
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const videoBackground = useRoomVideoBackground(useMaybeRoomContext());
+  const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
   const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
   /** Screen share segment's menu: annotate / remote control (desktop app, during a share) */
@@ -689,6 +694,15 @@ export function KloudMeetToolbar({
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     toastTimerRef.current = setTimeout(() => setToastMsg(null), 5000);
   }, [liveDocUploads.active, liveDocMenuVisible, liveDocUploadFailureCount, t]);
+
+  // The background couldn't start (often at join): say so, since the camera then goes out without it.
+  const backgroundFailed = videoBackground.status === 'failed';
+  useEffect(() => {
+    if (!backgroundFailed || backgroundDialogOpen) return;
+    setToastMsg(t('background.failed'));
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 6000);
+  }, [backgroundFailed, backgroundDialogOpen, t]);
 
   const showInviteToast = (msg: string) => {
     setToastMsg(msg);
@@ -2191,7 +2205,18 @@ export function KloudMeetToolbar({
                     >
                       {camEnabled ? <IconCamOn /> : <IconCamOff />}
                     </button>
-                    {canEnumerateDevices ? (
+                    {canEnumerateDevices && videoBackground.offered ? (
+                      <CameraDeviceMenu
+                        className={styles.splitChevron}
+                        aria-label={t('toolbar.camSettings')}
+                        data-tip={t('toolbar.camSettings')}
+                        backgroundLabel={t('background.menuItem')}
+                        backgroundValue={backgroundLabel(t, videoBackground.background)}
+                        onOpenBackground={() => setBackgroundDialogOpen(true)}
+                      >
+                        <IconChevronUp />
+                      </CameraDeviceMenu>
+                    ) : canEnumerateDevices ? (
                       <MediaDeviceMenu
                         kind="videoinput"
                         className={styles.splitChevron}
@@ -2789,6 +2814,22 @@ export function KloudMeetToolbar({
         </div>
       )}
       
+      {videoBackground.offered && (
+        <VideoBackgroundDialog
+          isOpen={backgroundDialogOpen}
+          onClose={() => setBackgroundDialogOpen(false)}
+          tone="stage"
+          background={videoBackground.background}
+          onChange={videoBackground.changeBackground}
+          status={videoBackground.status}
+          supported={videoBackground.supported}
+          onRetry={videoBackground.retry}
+          track={camEnabled ? videoBackground.cameraTrack : undefined}
+          onTurnOnCamera={!isCamDisabledByHost && canUseMediaDevices ? onToggleCam : undefined}
+          hint={t('background.hintMeeting')}
+        />
+      )}
+
       <CaptionSettingsDialog
         isOpen={showSTTSettings}
         onClose={() => setShowSTTSettings(false)}
