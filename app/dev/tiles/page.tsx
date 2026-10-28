@@ -153,6 +153,7 @@ export default function DevTilesPage() {
   const shown = NAMES.slice(0, count).slice(pageStart, pageStart + perPage);
   const [view, setView] = React.useState<ViewMode>('webcam');
   const [host, setHost] = React.useState(true);
+  const [captions, setCaptions] = React.useState(true);
   const [mic, setMic] = React.useState(false);
   const [cam, setCam] = React.useState(false);
   const [hand, setHand] = React.useState(false);
@@ -363,7 +364,9 @@ export default function DevTilesPage() {
           setPage(1);
         }}
         canToggleCaptions={host}
-        captionsEnabled
+        captionsEnabled={captions}
+        onToggleCaptions={() => setCaptions((v) => !v)}
+        captionRoomLanguages={['zh', 'en', 'ja']}
         meetingTitle="Weekly product review"
       />
       )}

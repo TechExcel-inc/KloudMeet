@@ -10,7 +10,8 @@ import { RECORDING_MODES, type RecordingMode, type RecordingState } from './reco
 import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
-import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
+import { CaptionSettingsDialog } from './RtasrHelper/CaptionSettingsDialog';
+import { saveCaptionSettings, type CaptionLanguage } from './RtasrHelper/captionLanguage';
 import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 import { useLiveDocUploadQueue } from './useLiveDocUploadQueue';
@@ -166,6 +167,8 @@ interface KloudMeetToolbarProps {
   /** This participant's own captions while they are on: a dot on the CC button when not ok */
   captionsHealth?: 'ok' | 'reconnecting' | 'failed';
   onToggleCaptions?: () => void;
+  /** Reading languages in the meeting, shown in the captions dialog */
+  captionRoomLanguages?: CaptionLanguage[];
   /** 网页端 Document PiP：本次会议内记住 */
   canDocumentPip?: boolean;
   documentPipEnabled?: boolean;
@@ -317,6 +320,7 @@ export function KloudMeetToolbar({
   captionsEnabled,
   captionsHealth = 'ok',
   onToggleCaptions,
+  captionRoomLanguages,
   canDocumentPip = false,
   documentPipEnabled = false,
   onToggleDocumentPip,
@@ -407,7 +411,6 @@ export function KloudMeetToolbar({
   inviteMenuOpenRef.current = inviteMenuOpen;
   const isMobile = useToolbarIsMobile();
   const [showSTTSettings, setShowSTTSettings] = useState(false);
-  const [sttSettingsTab, setSttSettingsTab] = useState<'my' | 'defaults'>('my');
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
   const [liveDocActionDialogVisible, setLiveDocActionDialogVisible] = useState(false);
@@ -2269,7 +2272,6 @@ export function KloudMeetToolbar({
                     onClick={() => {
                       closeInviteMenu();
                       setActiveSheet(null);
-                      setSttSettingsTab('my');
                       setShowSTTSettings(true);
                     }}
                     aria-pressed={!!captionsEnabled}
@@ -2477,14 +2479,7 @@ export function KloudMeetToolbar({
                 mobileAudioState={mobileAudioState}
                 setMobileAudioState={setMobileAudioState}
                 handleToggleChat={handleToggleChat}
-                onOpenSTTSettings={() => {
-                  setSttSettingsTab('my');
-                  setShowSTTSettings(true);
-                }}
-                onOpenCCSettings={() => {
-                  setSttSettingsTab('my');
-                  setShowSTTSettings(true);
-                }}
+                onOpenCaptionSettings={() => setShowSTTSettings(true)}
                 localSubtitleVisible={localSubtitleVisible}
                 onOpenDesktopApp={onOpenDesktopApp}
                 isMobile={isMobile}
@@ -2651,14 +2646,7 @@ export function KloudMeetToolbar({
                       mobileAudioState={mobileAudioState}
                       setMobileAudioState={setMobileAudioState}
                       handleToggleChat={handleToggleChat}
-                      onOpenSTTSettings={() => {
-                        setSttSettingsTab('my');
-                        setShowSTTSettings(true);
-                      }}
-                      onOpenCCSettings={() => {
-                        setSttSettingsTab('my');
-                        setShowSTTSettings(true);
-                      }}
+                      onOpenCaptionSettings={() => setShowSTTSettings(true)}
                       localSubtitleVisible={localSubtitleVisible}
                       onOpenDesktopApp={onOpenDesktopApp}
                       isMobile={false}
@@ -2801,15 +2789,13 @@ export function KloudMeetToolbar({
         </div>
       )}
       
-      <STTSettingsDialog
+      <CaptionSettingsDialog
         isOpen={showSTTSettings}
         onClose={() => setShowSTTSettings(false)}
         captionsEnabled={captionsEnabled}
         onToggleCaptions={onToggleCaptions}
         canToggleCaptions={canToggleCaptions}
-        canManageDefaults={!!canToggleCaptions}
-        initialTab={sttSettingsTab}
-        subtitleVisible={localSubtitleVisible}
+        roomLanguages={captionRoomLanguages}
       />
     </>
   );
@@ -2848,8 +2834,7 @@ function ActiveSheetContent({
   mobileAudioState,
   setMobileAudioState,
   handleToggleChat,
-  onOpenSTTSettings,
-  onOpenCCSettings,
+  onOpenCaptionSettings,
   localSubtitleVisible,
   onOpenDesktopApp,
   isMobile,
@@ -3067,31 +3052,38 @@ function ActiveSheetContent({
               {muteAllActive ? t('toolbar.unmuteAll') : t('toolbar.muteAll')}
             </button>
           )}
-          {canToggleCaptions && (
+          {/* Captions: the host sets them up; everyone can open their own settings once they run */}
+          {(canToggleCaptions || captionsEnabled) && (
             <button
-              className={`${styles.actionSheetItem} ${captionsEnabled ? styles.active : ''}`}
-              onClick={() => { onOpenSTTSettings?.(); setActiveSheet(null); }}
+              className={styles.actionSheetItem}
+              onClick={() => { onOpenCaptionSettings?.(); setActiveSheet(null); }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <path d="M6 12h4M6 16h8" strokeLinecap="round" />
-                {captionsEnabled && (
-                  <circle cx="18" cy="8" r="3.5" fill="currentColor" stroke="none" />
-                )}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                <path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6" />
               </svg>
-              {captionsEnabled ? t('toolbar.captionsOn') : t('toolbar.captionsOff')}
+              <span className={styles.actionSheetItemLabel}>{t('toolbar.captionsMenu')}</span>
+              <span className={styles.actionSheetItemMeta}>
+                {captionsEnabled && <span className={styles.captionsStateDot} aria-hidden="true" />}
+                {captionsEnabled ? t('captions.settings.on') : t('captions.settings.off')}
+              </span>
             </button>
           )}
+          {/* Hide / show captions on my own screen, at once */}
           {captionsEnabled && (
             <button
               className={styles.actionSheetItem}
-              onClick={() => { onOpenCCSettings?.(); setActiveSheet(null); }}
+              onClick={() => { saveCaptionSettings({ subtitleVisible: !localSubtitleVisible }); setActiveSheet(null); }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <path d="M6 12h4M6 16h8" strokeLinecap="round" />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="2.5" y="5" width="19" height="14" rx="3" />
+                {localSubtitleVisible ? (
+                  <path d="M3 3l18 18" />
+                ) : (
+                  <path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6" />
+                )}
               </svg>
-              {localSubtitleVisible ? t('toolbar.ccShow') || 'Closed Caption - Show' : t('toolbar.ccHide') || 'Closed Caption - Hide'}
+              {localSubtitleVisible ? t('toolbar.hideCaptions') : t('toolbar.showCaptions')}
             </button>
           )}
           <div className={styles.menuDivider} role="separator" />

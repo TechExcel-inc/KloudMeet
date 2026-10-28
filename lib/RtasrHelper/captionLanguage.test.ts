@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { captionLanguageFor, pickCaptionText, translationTargets } from './captionLanguage';
+import {
+  captionLanguageFor,
+  mergeCaptionSettings,
+  parseCaptionSettings,
+  pickCaptionText,
+  translationTargets,
+} from './captionLanguage';
 
 describe('captionLanguageFor', () => {
   it('follows the interface language', () => {
@@ -53,5 +59,38 @@ describe('pickCaptionText', () => {
   it('still understands older clients that send a single default translation', () => {
     const old = { speakLanguage: 'zh', defaultTargetLanguage: 'en', defaultTranslatedText: 'Hello' };
     expect(pickCaptionText(old, 'en')).toEqual({ kind: 'translated', text: 'Hello' });
+  });
+});
+
+describe('parseCaptionSettings', () => {
+  it('follows the interface language until something is chosen', () => {
+    expect(parseCaptionSettings(null, 'ja')).toEqual({ subtitleVisible: true, speakLanguage: 'ja', readLanguage: 'ja' });
+    expect(parseCaptionSettings('not json', 'en')).toEqual({ subtitleVisible: true, speakLanguage: 'en', readLanguage: 'en' });
+  });
+
+  it('reads what the earlier dialog saved (only the first spoken language was ever used)', () => {
+    const raw = JSON.stringify({ subtitleVisible: false, speakLanguages: ['ko', 'en'], defaultReadLanguage: 'zh' });
+    expect(parseCaptionSettings(raw, 'en')).toEqual({ subtitleVisible: false, speakLanguage: 'ko', readLanguage: 'zh' });
+  });
+
+  it('ignores languages captions do not support', () => {
+    const raw = JSON.stringify({ speakLanguage: 'fr', readLanguage: 'auto' });
+    expect(parseCaptionSettings(raw, 'en')).toEqual({ subtitleVisible: true, speakLanguage: 'en', readLanguage: 'en' });
+  });
+});
+
+describe('mergeCaptionSettings', () => {
+  it('writes only what changed, so an unchosen language keeps following the interface', () => {
+    expect(mergeCaptionSettings({}, { readLanguage: 'ja' })).toEqual({ readLanguage: 'ja', defaultReadLanguage: 'ja' });
+  });
+
+  it('keeps the older field names in step and leaves other fields alone', () => {
+    const stored = { speakLanguages: ['zh', 'en'], speakLanguage: 'zh', other: 1 };
+    expect(mergeCaptionSettings(stored, { speakLanguage: 'en', subtitleVisible: false })).toEqual({
+      speakLanguages: ['en'],
+      speakLanguage: 'en',
+      subtitleVisible: false,
+      other: 1,
+    });
   });
 });

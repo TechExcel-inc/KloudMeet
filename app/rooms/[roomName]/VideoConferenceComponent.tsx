@@ -4085,6 +4085,7 @@ export function VideoConferenceComponent(props: {
           captionsEnabled={captionsRunning}
           captionsHealth={peerStateOf(captionStatus)}
           onToggleCaptions={handleToggleCaptions}
+          captionRoomLanguages={captionRoomLanguages}
           canDocumentPip={
             livekitConnected &&
             (!isDesktop || desktopMiniWindow) &&

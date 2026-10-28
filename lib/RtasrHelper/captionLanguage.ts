@@ -30,32 +30,85 @@ export function nativeLanguageName(lang: string | undefined): string {
   return lang && isCaptionLanguage(lang) ? CAPTION_LANGUAGE_NATIVE[lang] : (lang || '').toUpperCase();
 }
 
-/** The reading language saved in caption settings, else the interface language. */
-export function readCaptionLanguage(uiLanguage: CaptionLanguage): CaptionLanguage {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    const saved = raw ? (JSON.parse(raw) as { readLanguage?: unknown }).readLanguage : undefined;
-    if (isCaptionLanguage(saved)) return saved;
-  } catch {
-    /* unreadable settings → interface language */
-  }
-  return uiLanguage;
+/** One person's caption choices, kept per browser. */
+export interface CaptionSettings {
+  /** Captions shown on my own screen (my voice is captioned for others either way). */
+  subtitleVisible: boolean;
+  /** The language the engine listens for in my voice. */
+  speakLanguage: CaptionLanguage;
+  /** The language other people's captions are translated into for me. */
+  readLanguage: CaptionLanguage;
 }
 
-/** Saves a new reading language (also the default-read and read lists the settings dialog shows). */
-export function saveReadCaptionLanguage(lang: CaptionLanguage): void {
+function parseStored(raw: string | null): Record<string, unknown> {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    const settings = raw ? JSON.parse(raw) : {};
-    settings.readLanguage = lang;
-    settings.defaultReadLanguage = lang;
-    const list: string[] = Array.isArray(settings.readLanguages) ? settings.readLanguages : [];
-    settings.readLanguages = [lang, ...list.filter((l) => l !== lang)];
+    const value: unknown = raw ? JSON.parse(raw) : null;
+    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** Saved settings in any earlier shape; anything not chosen yet follows the interface language. */
+export function parseCaptionSettings(raw: string | null, uiLanguage: CaptionLanguage): CaptionSettings {
+  const saved = parseStored(raw);
+  const firstSpoken = Array.isArray(saved.speakLanguages) ? saved.speakLanguages[0] : undefined;
+  return {
+    subtitleVisible: saved.subtitleVisible !== false,
+    speakLanguage: [saved.speakLanguage, firstSpoken].find(isCaptionLanguage) ?? uiLanguage,
+    readLanguage: [saved.readLanguage, saved.defaultReadLanguage].find(isCaptionLanguage) ?? uiLanguage,
+  };
+}
+
+/**
+ * The stored object after a change. Only the changed fields are written, so a language never
+ * chosen keeps following the interface language; the older field names are kept in step.
+ */
+export function mergeCaptionSettings(
+  stored: Record<string, unknown>,
+  patch: Partial<CaptionSettings>,
+): Record<string, unknown> {
+  const out = { ...stored };
+  if (typeof patch.subtitleVisible === 'boolean') out.subtitleVisible = patch.subtitleVisible;
+  if (patch.speakLanguage) {
+    out.speakLanguage = patch.speakLanguage;
+    out.speakLanguages = [patch.speakLanguage];
+  }
+  if (patch.readLanguage) {
+    out.readLanguage = patch.readLanguage;
+    out.defaultReadLanguage = patch.readLanguage;
+  }
+  return out;
+}
+
+/** This browser's caption settings. */
+export function loadCaptionSettings(uiLanguage: CaptionLanguage): CaptionSettings {
+  try {
+    return parseCaptionSettings(localStorage.getItem(SETTINGS_KEY), uiLanguage);
+  } catch {
+    return parseCaptionSettings(null, uiLanguage);
+  }
+}
+
+/** Saves a change right away and tells the meeting (captions engine, toolbar, caption bar). */
+export function saveCaptionSettings(patch: Partial<CaptionSettings>): void {
+  try {
+    const settings = mergeCaptionSettings(parseStored(localStorage.getItem(SETTINGS_KEY)), patch);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     window.dispatchEvent(new CustomEvent(CAPTION_SETTINGS_EVENT, { detail: settings }));
   } catch {
     /* storage unavailable: nothing to persist */
   }
+}
+
+/** The reading language saved in caption settings, else the interface language. */
+export function readCaptionLanguage(uiLanguage: CaptionLanguage): CaptionLanguage {
+  return loadCaptionSettings(uiLanguage).readLanguage;
+}
+
+/** Saves a new reading language (the caption bar's language menu). */
+export function saveReadCaptionLanguage(lang: CaptionLanguage): void {
+  saveCaptionSettings({ readLanguage: lang });
 }
 
 /** Languages a sentence must be translated into: everyone's reading language except the spoken one. */
