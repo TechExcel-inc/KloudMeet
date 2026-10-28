@@ -5,10 +5,12 @@
  * case side by side: 1–9 people, your own share, someone else's share, and the minimized pill.
  * Fake participants, no meeting needed. Not served in production.
  *
- * ?only=<id>[,<id>] shows just those cases, ?h=<px> changes the expanded window height.
+ * ?only=<id>[,<id>] shows just those cases, ?h=<px> / ?w=<px> change the expanded window size,
+ * ?speak=<n>[,<n>] marks people as speaking (0 is you, 1 is Tieren, …).
  */
 
 import React from 'react';
+import { createRoot, type Root } from 'react-dom/client';
 import { notFound } from 'next/navigation';
 import {
   LocalVideoTrack,
@@ -23,6 +25,7 @@ import {
   PIP_EXPANDED_W,
   PIP_MINIMIZED_H,
 } from '@/lib/MeetingDocumentPipPanel';
+import { copyDocumentStyles } from '@/lib/documentPipSupport';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
 
@@ -131,7 +134,7 @@ function shareWith(p: Participant, publication: unknown) {
     src === Track.Source.ScreenShare ? publication : orig(src);
 }
 
-function makeRoom(c: Case): Room {
+function makeRoom(c: Case, speaking: number[]): Room {
   const room = new Room();
   const lp = room.localParticipant;
   Object.defineProperty(lp, 'identity', { value: 'kloud_1_ying', configurable: true });
@@ -148,6 +151,21 @@ function makeRoom(c: Case): Room {
     );
     Object.defineProperty(p, 'joinedAt', { value: new Date(base + i * 1000), configurable: true });
     room.remoteParticipants.set(identity, p);
+  }
+  // A speaker's mic is on: the tile shows the voice bars instead of the muted mic
+  for (const n of speaking) {
+    const p = n === 0 ? lp : room.remoteParticipants.get(`kloud_${n + 1}`);
+    if (!p) continue;
+    const orig = p.getTrackPublication.bind(p);
+    const mic = {
+      track: {},
+      isMuted: false,
+      source: Track.Source.Microphone,
+      kind: Track.Kind.Audio,
+    };
+    (p as unknown as { getTrackPublication: unknown }).getTrackPublication = (src: Track.Source) =>
+      src === Track.Source.Microphone ? mic : orig(src);
+    (p as unknown as { setIsSpeaking?: (s: boolean) => void }).setIsSpeaking?.(true);
   }
   if (c.share === 'local') {
     shareWith(lp, { track: {}, isMuted: false, source: Track.Source.ScreenShare });
@@ -169,59 +187,113 @@ function makeRoom(c: Case): Room {
   return room;
 }
 
-function PipCase({ c, expandedH }: { c: Case; expandedH: number }) {
-  const [room] = React.useState(() => makeRoom(c));
+function PipCase({
+  c,
+  expandedW,
+  expandedH,
+  speaking,
+}: {
+  c: Case;
+  expandedW: number;
+  expandedH: number;
+  speaking: number[];
+}) {
+  const [room] = React.useState(() => makeRoom(c, speaking));
   const [minimized, setMinimized] = React.useState(Boolean(c.minimized));
+  const frameRef = React.useRef<HTMLIFrameElement>(null);
+  const rootRef = React.useRef<Root | null>(null);
+  const [pipWindow, setPipWindow] = React.useState<Window | null>(null);
+
+  // The real mini window is a separate document without a doctype, so it lays out in quirks mode
+  // (percent heights behave differently there). Each case gets a blank frame set up the same way
+  // as useMeetingDocumentPip does it, so what shows here is what shows in the meeting.
+  React.useEffect(() => {
+    const win = frameRef.current?.contentWindow;
+    if (!win) return;
+    const doc = win.document;
+    const headBefore = doc.head.childNodes.length;
+    copyDocumentStyles(document, doc);
+    const styles = Array.from(doc.head.childNodes).slice(headBefore);
+    doc.documentElement.setAttribute('data-lk-theme', 'default');
+    doc.documentElement.setAttribute('data-kloud-pip', 'true');
+    doc.documentElement.style.height = '100%';
+    doc.body.style.margin = '0';
+    doc.body.style.height = '100%';
+    doc.body.style.overflow = 'hidden';
+    const mount = doc.createElement('div');
+    mount.style.height = '100%';
+    mount.style.width = '100%';
+    doc.body.appendChild(mount);
+    const root = createRoot(mount);
+    rootRef.current = root;
+    setPipWindow(win);
+    return () => {
+      rootRef.current = null;
+      styles.forEach((node) => node.remove());
+      mount.remove();
+      // Not while the page itself is still unmounting
+      setTimeout(() => root.unmount());
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!pipWindow || !rootRef.current) return;
+    pipWindow.document.body.style.background = minimized ? 'transparent' : '#1a1b1e';
+    rootRef.current.render(
+      <MeetingDocumentPipPanel
+        room={room}
+        pipWindow={pipWindow}
+        micEnabled={c.id !== 'p1'}
+        camEnabled={false}
+        labels={labels}
+        localName={NAMES[0]}
+        mediaRestrictions={{
+          hostMutedIdentities: [],
+          hostDisabledVideoIdentities: [],
+          muteAllActive: false,
+          exemptFromMuteAllIdentities: [],
+          hostIdentity: 'kloud_1_ying',
+          cohostIdentities: [],
+          autoPresenterIdentity: null,
+          copresenterIdentities: [],
+          roomLocalIdentity: 'kloud_1_ying',
+          isHost: true,
+          isCohost: false,
+          raisedHands: [],
+        }}
+        onToggleMic={() => {}}
+        onToggleCam={() => {}}
+        onToggleShare={() => {}}
+        shareActive={c.share === 'local'}
+        hasScreenShare={c.share !== 'none'}
+        onLeave={() => {}}
+        onEndForAll={() => {}}
+        initialMinimized={Boolean(c.minimized)}
+        onMinimizedChange={setMinimized}
+        // Header: instant meetings have no name; a recording case shows REC
+        meetingTitle={c.people > 2 ? 'Weekly product review' : undefined}
+        startedAtMs={DEV_STARTED_AT}
+        isRecording={c.share === 'remote'}
+      />,
+    );
+  }, [pipWindow, minimized, room, c]);
+
   return (
     <figure style={{ margin: 0 }}>
       <figcaption style={{ color: '#aab', font: '600 12px system-ui', margin: '0 0 6px' }}>
         {c.title}
       </figcaption>
-      <div
-        data-kloud-pip="true"
+      <iframe
+        ref={frameRef}
+        title={c.title}
         style={{
-          width: PIP_EXPANDED_W,
+          display: 'block',
+          border: 0,
+          width: minimized ? PIP_EXPANDED_W : expandedW,
           height: minimized ? PIP_MINIMIZED_H : expandedH,
-          background: minimized ? 'transparent' : '#1a1b1e',
-          position: 'relative',
+          background: 'transparent',
         }}
-      >
-        <MeetingDocumentPipPanel
-          room={room}
-          pipWindow={window}
-          micEnabled={c.id !== 'p1'}
-          camEnabled={false}
-          labels={labels}
-          localName={NAMES[0]}
-          mediaRestrictions={{
-            hostMutedIdentities: [],
-            hostDisabledVideoIdentities: [],
-            muteAllActive: false,
-            exemptFromMuteAllIdentities: [],
-            hostIdentity: 'kloud_1_ying',
-            cohostIdentities: [],
-            autoPresenterIdentity: null,
-            copresenterIdentities: [],
-            roomLocalIdentity: 'kloud_1_ying',
-            isHost: true,
-            isCohost: false,
-            raisedHands: [],
-          }}
-          onToggleMic={() => {}}
-          onToggleCam={() => {}}
-          onToggleShare={() => {}}
-          shareActive={c.share === 'local'}
-          hasScreenShare={c.share !== 'none'}
-          onLeave={() => {}}
-          onEndForAll={() => {}}
-          initialMinimized={Boolean(c.minimized)}
-          onMinimizedChange={setMinimized}
-          // Header: instant meetings have no name; a recording case shows REC
-          meetingTitle={c.people > 2 ? 'Weekly product review' : undefined}
-          startedAtMs={DEV_STARTED_AT}
-          isRecording={c.share === 'remote'}
-        />
-      </div>
+      />
     </figure>
   );
 }
@@ -231,14 +303,24 @@ export default function DevPipPage() {
   const [ready, setReady] = React.useState(false);
   const [only, setOnly] = React.useState<string[] | null>(null);
   const [expandedH, setExpandedH] = React.useState(420);
+  const [expandedW, setExpandedW] = React.useState(PIP_EXPANDED_W);
+  const [speaking, setSpeaking] = React.useState<number[]>([]);
   React.useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const ids = q.get('only');
     if (ids) setOnly(ids.split(','));
     const h = Number(q.get('h'));
     if (h > 0) setExpandedH(h);
-    // The real mini window flags its own <html>; the tile styles only apply under it
-    document.documentElement.setAttribute('data-kloud-pip', 'true');
+    const w = Number(q.get('w'));
+    if (w > 0) setExpandedW(w);
+    const speak = q.get('speak');
+    if (speak)
+      setSpeaking(
+        speak
+          .split(',')
+          .map(Number)
+          .filter((n) => Number.isInteger(n) && n >= 0),
+      );
     setReady(true);
   }, []);
   if (!ready) return null;
@@ -256,7 +338,7 @@ export default function DevPipPage() {
       }}
     >
       {cases.map((c) => (
-        <PipCase key={c.id} c={c} expandedH={expandedH} />
+        <PipCase key={c.id} c={c} expandedW={expandedW} expandedH={expandedH} speaking={speaking} />
       ))}
     </div>
   );

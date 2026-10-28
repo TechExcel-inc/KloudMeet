@@ -733,6 +733,13 @@
   overflow: visible;
 }
 
+/* A big tile is as tall as its 16:9 picture. Not height: 100%: the mini window's document has no
+   doctype (quirks mode), where that resolves against the whole centred group, so every tile grew
+   to the height of all the rows together. */
+.heroCell :global(.floating-grid-tile) {
+  height: auto;
+}
+
 .heroCell :global(.floating-grid-video),
 .compactCell :global(.floating-grid-video) {
   width: 100%;
