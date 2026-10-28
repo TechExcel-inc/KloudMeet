@@ -30,6 +30,8 @@ import type {
 
 export const HANDLED_STRIPE_EVENTS = [
   'checkout.session.completed',
+  'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed',
   'customer.subscription.created',
   'customer.subscription.updated',
   'customer.subscription.deleted',
@@ -76,7 +78,12 @@ export async function handleStripeEvent(event: StripeEvent): Promise<WebhookOutc
   const eventAt = new Date(event.created * 1000);
   switch (event.type) {
     case 'checkout.session.completed':
+    // Bank debits (ACH, SEPA, Bacs…) complete checkout unpaid; the money clears days later.
+    case 'checkout.session.async_payment_succeeded':
       return handleCheckoutCompleted(event.data.object as StripeCheckoutSession, eventAt);
+    case 'checkout.session.async_payment_failed':
+      // Nothing to undo: an unpaid subscription stays incomplete and Stripe expires it.
+      return 'ignored';
     case 'customer.subscription.created':
     case 'customer.subscription.updated':
     case 'customer.subscription.deleted':
@@ -135,11 +142,13 @@ async function handleCheckoutCompleted(session: StripeCheckoutSession, eventAt: 
     source: 'STRIPE',
     modifiedAt: new Date(),
   };
+  // Unpaid at checkout = a delayed bank debit; the plan starts when Stripe reports the payment.
+  const paid = session.payment_status !== 'unpaid';
   const fill = alreadySynced
     ? {}
     : {
         plan,
-        status: 'active',
+        status: paid ? 'active' : 'incomplete',
         interval: isBillingInterval(metaInterval) ? metaInterval : null,
         seats,
         cancelAtPeriodEnd: false,

@@ -178,6 +178,7 @@ export function BillingPageClient() {
   /* ── current plan card ── */
   const badge = (() => {
     if (manual) return { text: t('billing.badge.managed'), cls: css.badgeTonal };
+    if (s.pendingPlan) return { text: t('billing.badge.processing'), cls: css.badgeWarn };
     if (s.plan === 'FREE') return { text: t('billing.badge.free'), cls: css.badgeNeutral };
     if (s.status === 'past_due') return { text: t('billing.badge.pastDue'), cls: css.badgeWarn };
     if (s.cancelAtPeriodEnd) return { text: t('billing.badge.canceling', { date: f.date(s.currentPeriodEnd) }), cls: css.badgeWarn };
@@ -186,6 +187,7 @@ export function BillingPageClient() {
 
   const planLine = (() => {
     if (manual) return t('billing.planLine.managed');
+    if (s.pendingPlan) return t('billing.planLine.processing', { plan: planById(s.pendingPlan)?.name ?? s.pendingPlan });
     if (s.plan === 'FREE') return t('billing.planLine.free');
     const rate = planById(s.plan)?.prices[s.interval ?? 'month']?.monthlyRateCents ?? 0;
     const period = t(s.interval === 'year' ? 'billing.period.yearly' : 'billing.period.monthly');
@@ -294,7 +296,7 @@ export function BillingPageClient() {
       cls = `${css.btn} ${css.btnFill}`;
       onClick = available ? () => setDialog({ kind: 'upgrade', plan: id as SelfServePlanId }) : undefined;
     }
-    const disabled = isCurrent || !onClick || !canManage || busy;
+    const disabled = isCurrent || !onClick || !canManage || busy || Boolean(s.pendingPlan);
     let note = '';
     if (price) {
       note = yearly
@@ -369,7 +371,7 @@ export function BillingPageClient() {
           {!s.canManage && <span className={css.small}>{t('billing.adminOnly')}</span>}
         </div>
         <div className={css.actions}>
-          {s.plan === 'FREE' && !manual && (
+          {s.plan === 'FREE' && !manual && !s.pendingPlan && (
             <button
               type="button"
               className={`${css.btn} ${css.btnFill}`}
