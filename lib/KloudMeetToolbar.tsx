@@ -13,6 +13,7 @@ import type { Locale } from './i18n';
 import { STTSettingsDialog } from './RtasrHelper/STTSettingsDialog';
 import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
+import { useLiveDocUploadQueue } from './useLiveDocUploadQueue';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen' | 'design';
 export type WebcamLayoutMode = 'tile' | 'spotlight';
@@ -423,7 +424,11 @@ export function KloudMeetToolbar({
     height: number;
     arrowLeft: number;
   } | null>(null);
-  const liveDocAiBridge = useLiveDocAiBridge(liveDocMenuVisible);
+  // Uploads keep LiveDoc connected after the panel closes, so every file still gets its answer
+  const [liveDocUploadsPending, setLiveDocUploadsPending] = useState(false);
+  const liveDocAiBridge = useLiveDocAiBridge(liveDocMenuVisible || liveDocUploadsPending);
+  const liveDocUploads = useLiveDocUploadQueue(liveDocAiBridge);
+  useEffect(() => setLiveDocUploadsPending(liveDocUploads.active), [liveDocUploads.active]);
   const closeLiveDocAiMenu = React.useCallback(() => setLiveDocMenuVisible(false), []);
 
   const clampChatBubbleRect = React.useCallback((rect: ChatBubbleRect): ChatBubbleRect => {
@@ -663,6 +668,24 @@ export function KloudMeetToolbar({
   useEffect(() => {
     if (!shareToolsAvailable || !visible) setShareToolsOpen(false);
   }, [shareToolsAvailable, visible]);
+
+  // Uploads that end while the panel is closed: say so here, the panel lists them for a retry
+  const liveDocUploadFailureCount = liveDocUploads.failures.length;
+  const liveDocUploadsWereActiveRef = useRef(false);
+  useEffect(() => {
+    const wasActive = liveDocUploadsWereActiveRef.current;
+    liveDocUploadsWereActiveRef.current = liveDocUploads.active;
+    if (!wasActive || liveDocUploads.active || liveDocMenuVisible || !liveDocUploadFailureCount) {
+      return;
+    }
+    setToastMsg(
+      liveDocUploadFailureCount === 1
+        ? t('liveDocAi.uploadFailedToastOne')
+        : t('liveDocAi.uploadFailedToastMany', { count: liveDocUploadFailureCount }),
+    );
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToastMsg(null), 5000);
+  }, [liveDocUploads.active, liveDocMenuVisible, liveDocUploadFailureCount, t]);
 
   const showInviteToast = (msg: string) => {
     setToastMsg(msg);
@@ -1950,6 +1973,7 @@ export function KloudMeetToolbar({
         onClose={closeLiveDocAiMenu}
         onClearError={liveDocAiBridge.clearError}
         onAction={liveDocAiBridge.sendAction}
+        uploads={liveDocUploads}
         onOpenDocument={handleLiveDocDocumentOpen}
         livekitToken={livekitToken}
         requestedTab={liveDocRequestedTab}

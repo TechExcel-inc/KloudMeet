@@ -10,6 +10,7 @@ import {
   type LiveDocAiState,
   type LiveDocAiSubscribeMessage,
   type LiveDocAiUnsubscribeMessage,
+  type LiveDocAiUploadResultMessage,
 } from './liveDocAiProtocol';
 
 const SUBSCRIBE_RETRY_MS = 500;
@@ -21,7 +22,7 @@ interface PendingAction {
   timer: number;
 }
 
-function createId(prefix: string): string {
+export function createId(prefix: string): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
     return `${prefix}-${crypto.randomUUID()}`;
   }
@@ -43,6 +44,8 @@ export interface LiveDocAiBridge {
   pendingActions: ReadonlySet<string>;
   clearError: () => void;
   sendAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+  /** Hear how uploads sent with an uploadId ended; returns the unsubscribe */
+  onUploadResult: (listener: (result: LiveDocAiUploadResultMessage) => void) => () => void;
 }
 
 export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
@@ -53,6 +56,7 @@ export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
   const sessionIdRef = React.useRef('');
   const lastRevisionRef = React.useRef(-1);
   const pendingRef = React.useRef(new Map<string, PendingAction>());
+  const uploadListenersRef = React.useRef(new Set<(result: LiveDocAiUploadResultMessage) => void>());
 
   React.useEffect(() => {
     if (!enabled) {
@@ -102,6 +106,12 @@ export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
           window.clearInterval(retryTimer);
           retryTimer = null;
         }
+        return;
+      }
+
+      if (event.data.type === 'Kloud-LiveDocAiUploadResult') {
+        const result = event.data;
+        uploadListenersRef.current.forEach((listener) => listener(result));
         return;
       }
 
@@ -184,6 +194,17 @@ export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
     [enabled],
   );
 
+  const onUploadResult = React.useCallback(
+    (listener: (result: LiveDocAiUploadResultMessage) => void) => {
+      const listeners = uploadListenersRef.current;
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    [],
+  );
+
   return {
     state,
     connected,
@@ -191,5 +212,6 @@ export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
     pendingActions,
     clearError: React.useCallback(() => setError(''), []),
     sendAction,
+    onUploadResult,
   };
 }

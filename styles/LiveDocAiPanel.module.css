@@ -159,7 +159,9 @@
 .pickerHeaderActions button:focus-visible,
 .pagination button:focus-visible,
 .pickerSelectTrigger:focus-visible,
-.pickerSelectOption:focus-visible {
+.pickerSelectOption:focus-visible,
+.uploadIssuesDismiss:focus-visible,
+.uploadIssueRetry:focus-visible {
   outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
   outline-offset: 2px;
 }
@@ -697,6 +699,112 @@
   background: #a5a3ff;
   border-radius: 2px;
   transition: width 0.3s ease;
+}
+
+/* Several files: "2 of 5 · name" */
+.uploadProgressText span.uploadCount {
+  color: var(--km-stage-muted, #9aa0a6);
+}
+
+.uploadProgressText span.uploadCount::after {
+  content: '·';
+  margin: 0 6px;
+}
+
+/* Files from this computer that LiveDoc did not add */
+.uploadIssues {
+  margin: 2px 0 8px;
+  padding: 6px 4px 4px 12px;
+  color: var(--km-stage-text, #e8eaed);
+  background: rgba(242, 139, 130, 0.08);
+  border: 1px solid rgba(242, 139, 130, 0.16);
+  border-radius: 10px;
+}
+
+.uploadIssuesHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #f6aea9;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.uploadIssuesHeader > span {
+  flex: 1;
+}
+
+.uploadIssuesDismiss {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  color: var(--km-stage-muted, #9aa0a6);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.uploadIssuesDismiss:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.uploadIssueList {
+  max-height: 128px;
+  margin: 2px 0 0;
+  padding: 0 4px 0 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.uploadIssue {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0 3px 24px;
+}
+
+.uploadIssueText {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.35;
+}
+
+.uploadIssueName {
+  overflow: hidden;
+  font-size: 12.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uploadIssueReason {
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 11.5px;
+}
+
+.uploadIssueRetry {
+  min-height: 28px;
+  padding: 0 10px;
+  flex-shrink: 0;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.uploadIssueRetry:hover {
+  background: rgba(124, 121, 255, 0.14);
 }
 
 .footerActions {

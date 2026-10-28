@@ -61,6 +61,8 @@ export interface LiveDocAiState {
       active: boolean;
       percent: number;
       fileName: string;
+      /** document.uploadLocal with an uploadId gets a Kloud-LiveDocAiUploadResult (LiveDoc from 10-28 on) */
+      reportsResults?: boolean;
     };
     annotation: {
       enabled: boolean;
@@ -135,7 +137,32 @@ export interface LiveDocAiActionResultMessage extends LiveDocAiEnvelope {
   error?: string;
 }
 
-export type LiveDocAiInboundMessage = LiveDocAiSnapshotMessage | LiveDocAiActionResultMessage;
+/** Why LiveDoc did not add a file; busy = another upload held the pipeline, so try again later */
+export type LiveDocAiUploadFailReason =
+  | 'busy'
+  | 'tooLarge'
+  | 'unsupported'
+  | 'convert'
+  | 'network'
+  | 'cancelled'
+  | 'notSaved'
+  | 'unknown';
+
+/** How one `document.uploadLocal` with an uploadId ended */
+export interface LiveDocAiUploadResultMessage extends LiveDocAiEnvelope {
+  type: 'Kloud-LiveDocAiUploadResult';
+  uploadId: string;
+  fileName: string;
+  /** duplicate: the same file is already in the meeting */
+  status: 'added' | 'duplicate' | 'failed';
+  itemId: number;
+  reason: LiveDocAiUploadFailReason | '';
+}
+
+export type LiveDocAiInboundMessage =
+  | LiveDocAiSnapshotMessage
+  | LiveDocAiActionResultMessage
+  | LiveDocAiUploadResultMessage;
 
 export type LiveDocAiOutboundMessage =
   | LiveDocAiSubscribeMessage
@@ -149,6 +176,8 @@ export function isLiveDocAiInboundMessage(value: unknown): value is LiveDocAiInb
     message.channel === LIVE_DOC_AI_CHANNEL &&
     message.version === LIVE_DOC_AI_VERSION &&
     typeof message.sessionId === 'string' &&
-    (message.type === 'Kloud-LiveDocAiSnapshot' || message.type === 'Kloud-LiveDocAiActionResult')
+    (message.type === 'Kloud-LiveDocAiSnapshot' ||
+      message.type === 'Kloud-LiveDocAiActionResult' ||
+      message.type === 'Kloud-LiveDocAiUploadResult')
   );
 }

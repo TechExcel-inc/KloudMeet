@@ -13,6 +13,7 @@ import type {
 } from './liveDocAiProtocol';
 import { authFetch } from './kloudSession';
 import { roomAuthHeaders } from './roomAuth';
+import type { LiveDocUploadQueue } from './useLiveDocUploadQueue';
 import styles from '../styles/LiveDocAiPanel.module.css';
 
 /** The design link shown on the meeting stage (Design mode); listed above the LiveDocs. */
@@ -47,6 +48,8 @@ interface LiveDocAiPanelProps {
   onClose: () => void;
   onClearError: () => void;
   onAction: (action: string, payload?: Record<string, unknown>) => Promise<void>;
+  /** Files from this computer (picked or pasted): uploaded one by one, with the ones not added listed */
+  uploads: LiveDocUploadQueue;
   onOpenDocument: (itemId: number) => void;
   /** LiveKit participant JWT，用于拉取本场聊天 */
   livekitToken?: string;
@@ -523,6 +526,7 @@ export function LiveDocAiPanel({
   onClose,
   onClearError,
   onAction,
+  uploads,
   onOpenDocument,
   livekitToken = '',
   canManage = true,
@@ -567,19 +571,14 @@ export function LiveDocAiPanel({
     [onAction],
   );
 
+  const { enqueue: enqueueUploads } = uploads;
   const uploadPasteImageBlob = React.useCallback(
-    async (blob: Blob, originalName?: string) => {
+    (blob: Blob, originalName?: string) => {
       if (!blob.size) return;
       const fileName = formatKloudPasteImageName(blob.type || 'image/png', originalName);
-      const fileBuffer = await blob.arrayBuffer();
-      await onAction('document.uploadLocal', {
-        fileName,
-        fileType: blob.type || '',
-        fileSize: blob.size,
-        fileBuffer,
-      });
+      enqueueUploads([new File([blob], fileName, { type: blob.type || '' })]);
     },
-    [onAction],
+    [enqueueUploads],
   );
 
   React.useEffect(() => {
@@ -612,7 +611,7 @@ export function LiveDocAiPanel({
         if (!blob || blob.size === 0) continue;
         event.preventDefault();
         uploadedImage = true;
-        void uploadPasteImageBlob(blob, blob.name).catch(() => undefined);
+        uploadPasteImageBlob(blob, blob.name);
         break;
       }
 
@@ -673,6 +672,11 @@ export function LiveDocAiPanel({
   if (!open || typeof document === 'undefined') return null;
 
   const documents = state?.documents.items || [];
+  // The bar follows LiveDoc's own upload (ours, or a chat file) and this panel's queue between files
+  const liveUpload = state?.documents.upload;
+  const uploadShowing = !!liveUpload?.active || uploads.active;
+  const uploadName = liveUpload?.active ? liveUpload.fileName : uploads.currentName;
+  const uploadPercent = liveUpload?.active ? liveUpload.percent : 0;
   const normalizedDocumentSearch = documentSearch.trim().toLowerCase();
   const filteredDocuments = normalizedDocumentSearch
     ? documents.filter((item) =>
@@ -714,17 +718,10 @@ export function LiveDocAiPanel({
       : []),
   ];
 
-  const handleLocalFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const handleLocalFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
     event.target.value = '';
-    if (!file) return;
-    const fileBuffer = await file.arrayBuffer();
-    runAction('document.uploadLocal', {
-      fileName: file.name,
-      fileType: file.type || '',
-      fileSize: file.size,
-      fileBuffer,
-    });
+    enqueueUploads(files);
   };
 
   const copySummary = () => {
@@ -1025,6 +1022,14 @@ export function LiveDocAiPanel({
                   </>
                 )}
                 <div className={styles.documentList}>
+                  {/* First in the list: what went wrong is seen first and scrolls with the rest */}
+                  {uploads.failures.length > 0 && (
+                    <UploadFailures
+                      failures={uploads.failures}
+                      onRetry={uploads.retry}
+                      onDismiss={uploads.dismissFailures}
+                    />
+                  )}
                   {!documents.length && canManage && (
                     <div className={styles.emptyStart}>
                       <span className={styles.emptyIcon}>
@@ -1123,18 +1128,28 @@ export function LiveDocAiPanel({
                   ))}
                 </div>
 
-                {(canManage || onAddDesignLink || state.documents.upload.active) && (
+                {(canManage || onAddDesignLink || uploadShowing) && (
                 <footer className={styles.documentFooter}>
-                  {state.documents.upload.active && (
+                  {uploadShowing && (
                     <div className={styles.uploadProgress} role="status">
                       <div className={styles.uploadProgressText}>
-                        <span>{state.documents.upload.fileName || t('liveDocAi.uploading')}</span>
-                        <span>{state.documents.upload.percent}%</span>
+                        <span>
+                          {uploads.active && uploads.total > 1 && (
+                            <span className={styles.uploadCount}>
+                              {t('liveDocAi.uploadCount', {
+                                position: uploads.position,
+                                total: uploads.total,
+                              })}
+                            </span>
+                          )}
+                          {uploadName || t('liveDocAi.uploading')}
+                        </span>
+                        {liveUpload?.active && <span>{uploadPercent}%</span>}
                       </div>
                       <div className={styles.uploadProgressTrack}>
                         <div
                           className={styles.uploadProgressFill}
-                          style={{ width: `${state.documents.upload.percent}%` }}
+                          style={{ width: `${uploadPercent}%` }}
                         />
                       </div>
                     </div>
@@ -1163,6 +1178,7 @@ export function LiveDocAiPanel({
                       className={styles.hiddenInput}
                       type="file"
                       accept={FILE_ACCEPT}
+                      multiple
                       onChange={handleLocalFile}
                     />
                     {/* With no documents yet the sources sit in the list as cards; then they move here */}
@@ -1854,6 +1870,63 @@ function DesignLinkButton({ onClick, disabled }: { onClick: () => void; disabled
       <Glyph name="link" size={16} />
       {t('liveDocAi.addLink')}
     </button>
+  );
+}
+
+/** Files from this computer that LiveDoc did not add, each with why; Retry where trying again can help */
+function UploadFailures({
+  failures,
+  onRetry,
+  onDismiss,
+}: {
+  failures: LiveDocUploadQueue['failures'];
+  onRetry: (id: string) => void;
+  onDismiss: () => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <div className={styles.uploadIssues} role="alert">
+      <div className={styles.uploadIssuesHeader}>
+        <Glyph name="alert" size={16} />
+        <span>
+          {failures.length === 1
+            ? t('liveDocAi.uploadFailedOne')
+            : t('liveDocAi.uploadFailedMany', { count: failures.length })}
+        </span>
+        <button
+          type="button"
+          className={styles.uploadIssuesDismiss}
+          aria-label={t('common.close')}
+          title={t('common.close')}
+          onClick={onDismiss}
+        >
+          <Glyph name="close" size={16} />
+        </button>
+      </div>
+      <ul className={styles.uploadIssueList}>
+        {failures.map((failure) => (
+          <li key={failure.id} className={styles.uploadIssue}>
+            <span className={styles.uploadIssueText}>
+              <span className={styles.uploadIssueName} title={failure.name}>
+                {failure.name}
+              </span>
+              <span className={styles.uploadIssueReason}>
+                {t(`liveDocAi.uploadFail.${failure.reason}`)}
+              </span>
+            </span>
+            {failure.retryable && (
+              <button
+                type="button"
+                className={styles.uploadIssueRetry}
+                onClick={() => onRetry(failure.id)}
+              >
+                {t('liveDocAi.retry')}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
