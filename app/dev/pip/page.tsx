@@ -59,6 +59,12 @@ const labels = {
   settings: 'Controls',
   backToMain: 'Back to meeting',
   close: 'Close',
+  people: '{n} people',
+  person: '1 person',
+  recording: 'REC',
+  aloneTitle: 'Only you here',
+  aloneBody: 'Share the link so others can join.',
+  copyInvite: 'Copy invite link',
 };
 
 type Case = {
@@ -68,6 +74,9 @@ type Case = {
   share: 'none' | 'local' | 'remote';
   minimized?: boolean;
 };
+
+/** The header clock in every case: a meeting that started 23 minutes ago */
+const DEV_STARTED_AT = Date.now() - 23 * 60_000 - 14_000;
 
 const CASES: Case[] = [
   { id: 'p1', title: '1 person', people: 1, share: 'none' },
@@ -207,6 +216,10 @@ function PipCase({ c, expandedH }: { c: Case; expandedH: number }) {
           onEndForAll={() => {}}
           initialMinimized={Boolean(c.minimized)}
           onMinimizedChange={setMinimized}
+          // Header: instant meetings have no name; a recording case shows REC
+          meetingTitle={c.people > 2 ? 'Weekly product review' : undefined}
+          startedAtMs={DEV_STARTED_AT}
+          isRecording={c.share === 'remote'}
         />
       </div>
     </figure>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RoomContext } from '@livekit/components-react';
-import { RoomEvent, Track, type Room } from 'livekit-client';
+import { RoomEvent, type Room } from 'livekit-client';
 import {
   copyDocumentStyles,
   getDesktopMiniWindow,
@@ -54,6 +54,29 @@ function pipMiniKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:mini`;
 }
 
+function pipDismissKey(roomName: string): string {
+  return `skymeet:doc-pip:${roomName}:dismissed`;
+}
+
+/** Closing an automatically opened SmartCam twice in a meeting stops it popping up there. */
+const AUTO_OPEN_DISMISS_LIMIT = 2;
+
+function readDismissCount(roomName: string): number {
+  try {
+    return Number(sessionStorage.getItem(pipDismissKey(roomName))) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function bumpDismissCount(roomName: string): void {
+  try {
+    sessionStorage.setItem(pipDismissKey(roomName), String(readDismissCount(roomName) + 1));
+  } catch {
+    // 无存储权限时跳过
+  }
+}
+
 export interface UseMeetingDocumentPipOptions {
   /** 入会且允许时开启监听（网页端由调用方排除手机/Electron） */
   enabled: boolean;
@@ -74,32 +97,16 @@ export interface UseMeetingDocumentPipOptions {
   onEndForAll?: () => void;
   onMuteParticipant: (identity: string, disable: boolean) => void;
   onDisableParticipantVideo: (identity: string, disable: boolean) => void;
+  /** Header: meeting name (instant meetings have none), start time, recording */
+  meetingTitle?: string;
+  startedAtMs?: number | null;
+  isRecording?: boolean;
 }
 
 export interface MeetingDocumentPipApi {
-  open: (opts?: { sticky?: boolean; minimized?: boolean }) => Promise<boolean>;
+  open: (opts?: { sticky?: boolean; minimized?: boolean; auto?: boolean }) => Promise<boolean>;
   close: () => void;
   isOpen: boolean;
-}
-
-let keepaliveStream: MediaStream | null = null;
-let keepaliveGen = 0;
-
-/** 开麦/摄像头前立刻放开占麦，避免和 LiveKit 抢同一设备 */
-export function releaseDocumentPipKeepalive(): void {
-  keepaliveGen += 1;
-  if (!keepaliveStream) return;
-  keepaliveStream.getTracks().forEach((track) => track.stop());
-  keepaliveStream = null;
-}
-
-function hasLiveCapture(room: Room): boolean {
-  const local = room.localParticipant;
-  const sources = [Track.Source.Microphone, Track.Source.Camera, Track.Source.ScreenShare];
-  return sources.some((source) => {
-    const track = local.getTrackPublication(source)?.track;
-    return track?.mediaStreamTrack.readyState === 'live';
-  });
 }
 
 function bindPipTileClicks(
@@ -207,6 +214,9 @@ export function useMeetingDocumentPip({
   onEndForAll,
   onMuteParticipant,
   onDisableParticipantVideo,
+  meetingTitle,
+  startedAtMs,
+  isRecording = false,
 }: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
   const i18n = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -237,7 +247,15 @@ export function useMeetingDocumentPip({
   const roomRef = useRef(room);
   const minimizedRef = useRef(false);
   const openedInMeetingRef = useRef(false);
+  /** Opened by Chrome's automatic picture-in-picture (switching tabs), not by a click */
+  const autoOpenedRef = useRef(false);
   const i18nRef = useRef(i18n);
+  const meetingTitleRef = useRef(meetingTitle);
+  const startedAtRef = useRef(startedAtMs);
+  const recordingRef = useRef(isRecording);
+  meetingTitleRef.current = meetingTitle;
+  startedAtRef.current = startedAtMs;
+  recordingRef.current = isRecording;
 
   micRef.current = micEnabled;
   camRef.current = camEnabled;
@@ -338,19 +356,16 @@ export function useMeetingDocumentPip({
               labels={labelsRef.current}
               localName={localNameRef.current}
               mediaRestrictions={restrictionsRef.current}
+              meetingTitle={meetingTitleRef.current}
+              startedAtMs={startedAtRef.current ?? null}
+              isRecording={recordingRef.current}
               initialMinimized={minimizedRef.current}
               onMinimizedChange={(next) => {
                 minimizedRef.current = next;
                 writeSessionFlag(pipMiniKey(roomRef.current.name), next);
               }}
-              onToggleMic={() => {
-                releaseDocumentPipKeepalive();
-                onToggleMicRef.current();
-              }}
-              onToggleCam={() => {
-                releaseDocumentPipKeepalive();
-                onToggleCamRef.current();
-              }}
+              onToggleMic={() => onToggleMicRef.current()}
+              onToggleCam={() => onToggleCamRef.current()}
               onToggleShare={() => {
                 if (!shareActiveRef.current) {
                   stickyRef.current = true;
@@ -392,10 +407,12 @@ export function useMeetingDocumentPip({
   const openPip = useRef(async (opts?: {
     sticky?: boolean;
     minimized?: boolean;
+    auto?: boolean;
   }): Promise<boolean> => {
     if (!isMiniWindowEligible()) return false;
     if (opts?.sticky) stickyRef.current = true;
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
+      if (!opts?.auto) autoOpenedRef.current = false;
       setIsOpen(true);
       return true;
     }
@@ -406,26 +423,25 @@ export function useMeetingDocumentPip({
     if (!desktop && !api) return false;
 
     const roomName = roomRef.current.name;
+    // First time in a meeting it opens with people showing; after that it keeps the
+    // shape the person last left it in (full or the slim pill).
     if (opts?.minimized !== undefined) {
       minimizedRef.current = opts.minimized;
-    } else if (sessionFlag(pipOpenedKey(roomName)) !== true) {
-      minimizedRef.current = true;
     } else {
-      const storedMini = sessionFlag(pipMiniKey(roomName));
-      if (storedMini !== null) minimizedRef.current = storedMini;
+      minimizedRef.current = sessionFlag(pipMiniKey(roomName)) === true;
     }
     const firstOpen = sessionFlag(pipOpenedKey(roomName)) !== true && !openedInMeetingRef.current;
 
     openingRef.current = true;
     try {
       // Chrome 用 requestWindow 的宽高当位置缓存键，变了就丢；moveTo 禁用，打开后 resizeTo 也常无效。
-      // 本场第一次：按缩小固定高度 59.2 打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
+      // 本场第一次：按展开（或上次缩小）的尺寸打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
       const pipWindow = desktop
         ? ensureDesktopWindow()
         : firstOpen
           ? await api!.requestWindow({
               width: PIP_EXPANDED_W,
-              height: PIP_MINIMIZED_H,
+              height: minimizedRef.current ? PIP_MINIMIZED_H : PIP_EXPANDED_H,
               preferInitialWindowPlacement: true,
               disallowReturnToOpener: true,
             })
@@ -440,6 +456,7 @@ export function useMeetingDocumentPip({
 
       pipWindowRef.current = pipWindow;
       openedInMeetingRef.current = true;
+      autoOpenedRef.current = Boolean(opts?.auto);
       writeSessionFlag(pipOpenedKey(roomName), true);
       writeSessionFlag(pipMiniKey(roomName), minimizedRef.current);
       copyDocumentStyles(document, pipWindow.document);
@@ -469,14 +486,8 @@ export function useMeetingDocumentPip({
         () => restrictionsRef.current.isHost || restrictionsRef.current.isCohost,
         (identity, disable) => onMuteRef.current(identity, disable),
         (identity, disable) => onDisableVideoRef.current(identity, disable),
-        () => {
-          releaseDocumentPipKeepalive();
-          onToggleMicRef.current();
-        },
-        () => {
-          releaseDocumentPipKeepalive();
-          onToggleCamRef.current();
-        },
+        () => onToggleMicRef.current(),
+        () => onToggleCamRef.current(),
       );
 
       if (desktop) {
@@ -501,7 +512,10 @@ export function useMeetingDocumentPip({
         }
         if (!fromApi) {
           stickyRef.current = false;
+          // The person closed a window that popped up on its own: count it
+          if (autoOpenedRef.current) bumpDismissCount(roomRef.current.name);
         }
+        autoOpenedRef.current = false;
         setIsOpen(false);
         closingFromApiRef.current = false;
       });
@@ -519,7 +533,7 @@ export function useMeetingDocumentPip({
     if (pipWindowRef.current && !pipWindowRef.current.closed) {
       renderPanel();
     }
-  }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, renderPanel]);
+  }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, meetingTitle, startedAtMs, isRecording, renderPanel]);
 
   useEffect(() => {
     if (!enabled || !isMiniWindowEligible()) {
@@ -534,8 +548,13 @@ export function useMeetingDocumentPip({
     if (desktop) ensureDesktopWindow();
 
     if (web) {
+      // Chrome's automatic picture-in-picture (switching tabs): only when there is someone
+      // to keep an eye on, or you're presenting, and not after being closed twice here.
       setMediaSessionActionHandler('enterpictureinpicture', () => {
-        void openPip();
+        const r = roomRef.current;
+        if (r.remoteParticipants.size === 0 && !shareActiveRef.current) return;
+        if (readDismissCount(r.name) >= AUTO_OPEN_DISMISS_LIMIT) return;
+        void openPip({ auto: true });
       });
       setMediaSessionActionHandler('togglemicrophone', null);
       setMediaSessionActionHandler('hangup', () => {
@@ -601,49 +620,6 @@ export function useMeetingDocumentPip({
       }
     };
   }, [enabled, room, renderPanel]);
-
-  useEffect(() => {
-    if (!enabled || !isWebDocumentPipEligible()) return;
-    if (micEnabled || camEnabled || hasLiveCapture(room)) {
-      releaseDocumentPipKeepalive();
-      return;
-    }
-
-    let cancelled = false;
-
-    const start = async () => {
-      const gen = keepaliveGen;
-      try {
-        const next = await navigator.mediaDevices.getUserMedia({
-          audio: true,
-          video: false,
-        });
-        if (cancelled || gen !== keepaliveGen) {
-          next.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        keepaliveStream?.getTracks().forEach((track) => track.stop());
-        keepaliveStream = next;
-      } catch {
-        // 无麦克风权限时 Chrome 不会走自动 PiP
-      }
-    };
-
-    void start();
-
-    const onLocalTrack = () => {
-      if (!hasLiveCapture(room)) return;
-      releaseDocumentPipKeepalive();
-    };
-
-    room.on(RoomEvent.LocalTrackPublished, onLocalTrack);
-
-    return () => {
-      cancelled = true;
-      room.off(RoomEvent.LocalTrackPublished, onLocalTrack);
-      releaseDocumentPipKeepalive();
-    };
-  }, [enabled, room, micEnabled, camEnabled]);
 
   return { open: openPip, close: closePip, isOpen };
 }

@@ -38,6 +38,12 @@ const labels = {
   settings: 'Controls',
   backToMain: 'Back to meeting',
   close: 'Close',
+  people: '{n} people',
+  person: '1 person',
+  recording: 'REC',
+  aloneTitle: 'Only you here',
+  aloneBody: 'Share the link so others can join.',
+  copyInvite: 'Copy invite link',
 };
 
 function makeRoom(): Room {

@@ -1474,6 +1474,12 @@ export function VideoConferenceComponent(props: {
       settings: t('meeting.documentPipSettings'),
       backToMain: t('meeting.documentPipBack'),
       close: t('common.close'),
+      people: t('meeting.documentPipPeople'),
+      person: t('meeting.documentPipPerson'),
+      recording: t('meeting.documentPipRec'),
+      aloneTitle: t('meeting.documentPipAloneTitle'),
+      aloneBody: t('meeting.documentPipAloneBody'),
+      copyInvite: t('meeting.documentPipCopyInvite'),
     }),
     [t],
   );
@@ -3153,6 +3159,17 @@ export function VideoConferenceComponent(props: {
 
   // Desktop builds with their own mini window (kept out of screen shares) get one too
   const desktopMiniWindow = React.useMemo(() => getDesktopMiniWindow() !== null, []);
+  /** SmartCam header clock: when this meeting started (set by the join page) */
+  const meetingStartedAtMs = React.useMemo(() => {
+    if (!livekitConnected) return null;
+    try {
+      const raw = localStorage.getItem('activeMeetingStartedAt');
+      const ms = raw ? Date.parse(raw) : NaN;
+      return Number.isFinite(ms) ? ms : null;
+    } catch {
+      return null;
+    }
+  }, [livekitConnected]);
   const documentPip = useMeetingDocumentPip({
     enabled:
       livekitConnected &&
@@ -3176,6 +3193,9 @@ export function VideoConferenceComponent(props: {
     onEndForAll: handleEndForAll,
     onMuteParticipant: handleMuteParticipant,
     onDisableParticipantVideo: handleDisableParticipantVideo,
+    meetingTitle: props.meetingTitle,
+    startedAtMs: meetingStartedAtMs,
+    isRecording,
   });
   documentPipOpenRef.current = documentPip.open;
 

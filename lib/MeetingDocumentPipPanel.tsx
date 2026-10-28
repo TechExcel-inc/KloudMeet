@@ -32,6 +32,14 @@ export interface MeetingDocumentPipLabels {
   backToMain: string;
   /** Desktop app's close button */
   close: string;
+  /** Header: "{n} people" / "1 person" */
+  people: string;
+  person: string;
+  recording: string;
+  /** Shown under your own tile while nobody else is here */
+  aloneTitle: string;
+  aloneBody: string;
+  copyInvite: string;
 }
 
 export interface MeetingDocumentPipPanelProps {
@@ -53,6 +61,10 @@ export interface MeetingDocumentPipPanelProps {
   onMinimizedChange?: (minimized: boolean) => void;
   /** Desktop app only: its frameless window needs its own close button */
   onClose?: () => void;
+  /** Header: meeting name (instant meetings have none), start time, recording */
+  meetingTitle?: string;
+  startedAtMs?: number | null;
+  isRecording?: boolean;
 }
 
 export const PIP_EXPANDED_W = 240;
@@ -64,6 +76,8 @@ const HERO_MIN = 64;
 const TILE_RATIO = 9 / 16;
 /** Your own share is a slim "Presenting" strip above the people, not a picture */
 const PRESENTING_STRIP_H = 30;
+/** Height the "Only you here" invite card takes under your own tile */
+const ALONE_CARD_H = 96;
 const PREVIEW_TILE = 108;
 const COMPACT_GAP = 6;
 const COMPACT_MIN = 48;
@@ -361,8 +375,18 @@ export function MeetingDocumentPipPanel({
   onClose,
   initialMinimized = false,
   onMinimizedChange,
+  meetingTitle,
+  startedAtMs = null,
+  isRecording = false,
 }: MeetingDocumentPipPanelProps) {
   const [minimized, setMinimized] = React.useState(initialMinimized);
+  // Header clock: time since the meeting started
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    if (minimized || !startedAtMs) return;
+    const id = pipWindow.setInterval(() => setNow(Date.now()), 1000);
+    return () => pipWindow.clearInterval(id);
+  }, [minimized, startedAtMs, pipWindow]);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
   const [miniControls, setMiniControls] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
@@ -512,11 +536,32 @@ export function MeetingDocumentPipPanel({
   }, [room, localName, labels.you, rosterTick]);
 
   const share = React.useMemo(() => findShare(room), [room, rosterTick]);
+  const alone = sortedEntries.length === 1 && !share;
+
+  const elapsedText = (() => {
+    if (!startedAtMs) return '';
+    const total = Math.max(0, Math.floor((now - startedAtMs) / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const sec = total % 60;
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+  })();
+  const peopleText =
+    sortedEntries.length === 1 ? labels.person : labels.people.replace('{n}', String(sortedEntries.length));
+  const headerTitle = meetingTitle?.trim() || labels.meeting;
 
   // The share sits above everyone at full width: someone else's as a 16:9 picture, yours as a slim strip
   const shareLeadH = share ? (share.local ? PRESENTING_STRIP_H : stageW * TILE_RATIO) + HERO_GAP : 0;
+  const aloneCardH = alone ? ALONE_CARD_H + HERO_GAP : 0;
   const maxHeroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
-  const fitAll = galleryCols(sortedEntries.length, stageW, stageH - shareLeadH, HERO_GAP, maxHeroCols);
+  const fitAll = galleryCols(
+    sortedEntries.length,
+    stageW,
+    stageH - shareLeadH - aloneCardH,
+    HERO_GAP,
+    maxHeroCols,
+  );
   const heroCols = fitAll ?? maxHeroCols;
   const compactCols = Math.max(
     COMPACT_COLS_MIN,
@@ -984,7 +1029,21 @@ export function MeetingDocumentPipPanel({
       ) : (
         <>
           <header className={styles.header}>
-            <span className={styles.title}>{labels.meeting}</span>
+            <div className={styles.headText}>
+              <span className={styles.title} title={headerTitle}>
+                {headerTitle}
+              </span>
+              <span className={styles.headMeta}>
+                {elapsedText ? <span>{elapsedText}</span> : null}
+                <span>{peopleText}</span>
+                {isRecording ? (
+                  <span className={styles.rec}>
+                    <i className={styles.recDot} aria-hidden="true" />
+                    {labels.recording}
+                  </span>
+                ) : null}
+              </span>
+            </div>
             <div className={styles.headerActions}>
               <button
                 type="button"
@@ -1039,6 +1098,19 @@ export function MeetingDocumentPipPanel({
                 </div>
               ))}
             </div>
+
+            {alone ? (
+              <div className={styles.aloneCard}>
+                <b>{labels.aloneTitle}</b>
+                <span>{labels.aloneBody}</span>
+                <button type="button" className={styles.aloneCta} onClick={flashCopied}>
+                  <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                  {labels.copyInvite}
+                </button>
+              </div>
+            ) : null}
 
             {rest.length > 0 && (
               <div className={styles.compactGrid}>
