@@ -44,7 +44,7 @@ import {
   RECONNECT_MAX_DELAY_MS,
   RECONNECT_SERIOUS_LOG_EVERY,
   RECONNECT_WATCHDOG_MS,
-  SCREEN_SHARE_CAPTURE,
+  screenShareCaptureOptions,
   TOKEN_REFRESH_RETRY_MS,
 } from './roomConstants';
 import { publishMic } from './roomMedia';
@@ -299,7 +299,7 @@ export function useMeetingConnection({
       return;
     }
     try {
-      await room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE);
+      await room.localParticipant.setScreenShareEnabled(true, screenShareCaptureOptions());
       setScreenShareActive(true);
       beginLocalScreenShareView();
       console.warn('[KloudMeet] Screen share restored after reconnect');

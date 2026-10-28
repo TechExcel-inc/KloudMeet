@@ -17,10 +17,11 @@ export default async function Page({
 }) {
   const _params = await params;
   const _searchParams = await searchParams;
+  // 未写 ?codec= 时用 h264。这是真正传进房间的默认值。
   const codec =
     typeof _searchParams.codec === 'string' && isVideoCodec(_searchParams.codec)
       ? _searchParams.codec
-      : 'vp9';
+      : 'h264';
   const hq = _searchParams.hq === 'true' ? true : false;
 
   return (

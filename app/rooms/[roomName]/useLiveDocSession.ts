@@ -196,11 +196,6 @@ export function useLiveDocSession({
         } catch (bindError) {
           console.warn('[LiveDoc] bind-livedoc failed', bindError);
         }
-        try {
-          await syncLivedocLessonMember({ userToken, livedocInstanceId: id });
-        } catch (syncError) {
-          console.warn('[LiveDoc] sync-member failed', syncError);
-        }
       } catch (e) {
         if (!aliveRef.current) return;
         boot.setLivedocInitError((e as Error).message ?? String(e));
@@ -210,6 +205,7 @@ export function useLiveDocSession({
     })();
   }, [shouldMountLiveDoc, livekitConnected, isHost]);
 
+  // 实例 id 就绪后，主持人和参会者都在这里注册一次 LessonMember。
   React.useEffect(() => {
     if (!livekitConnected || meetingEndedByHost || !livedocInstanceId) return;
     if (livedocMemberSyncedRef.current === livedocInstanceId) return;
@@ -223,7 +219,7 @@ export function useLiveDocSession({
           livedocMemberSyncedRef.current = livedocInstanceId;
         }
       } catch (error) {
-        console.warn('[LiveDoc] attendee sync-member failed:', error);
+        console.warn('[LiveDoc] sync-member failed:', error);
       }
     })();
     return () => {

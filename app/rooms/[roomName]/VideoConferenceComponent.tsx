@@ -133,7 +133,8 @@ import {
   HOST_MIC_LOCK_MS,
   LIVEKIT_RECONNECT_DELAYS_MS,
   MAX_LOCK_TIMEOUT_MS,
-  SCREEN_SHARE_CAPTURE,
+  SCREEN_SHARE_ENCODING,
+  screenShareCaptureOptions,
 } from './roomConstants';
 import { MeetingReadyModal, RecordConsentModal } from './roomModals';
 import {
@@ -419,12 +420,9 @@ export function VideoConferenceComponent(props: {
   const roomOptions = React.useMemo((): RoomOptions => {
     // 同步 UA：Room 在首屏创建，不能等 useToolbarIsMobile 的 effect
     const isMobileClient = isToolbarMobileUserAgent();
-    // 手机默认 h264（Safari/微信更稳）；桌面仍默认 vp9。URL ?codec= 优先。
-    let videoCodec: VideoCodec | undefined = props.options.codec
-      ? props.options.codec
-      : isMobileClient
-        ? 'h264'
-        : 'vp9';
+    // 默认 h264（硬件编码）。入口页同样默认 h264；URL ?codec= 优先。
+    // vp9/av1 在端到端加密下不可用，交给 SDK 回退。
+    let videoCodec: VideoCodec | undefined = props.options.codec || 'h264';
     if (e2eeEnabled && (videoCodec === 'av1' || videoCodec === 'vp9')) {
       videoCodec = undefined;
     }
@@ -451,6 +449,7 @@ export function VideoConferenceComponent(props: {
           : [VideoPresets.h540, VideoPresets.h216],
       red: !e2eeEnabled,
       videoCodec,
+      screenShareEncoding: SCREEN_SHARE_ENCODING,
     };
     return {
       videoCaptureDefaults: videoCaptureDefaults,
@@ -945,7 +944,7 @@ export function VideoConferenceComponent(props: {
     }
 
     room.localParticipant
-      .setScreenShareEnabled(next, next ? SCREEN_SHARE_CAPTURE : undefined)
+      .setScreenShareEnabled(next, next ? screenShareCaptureOptions() : undefined)
       .catch((e: unknown) => {
       setScreenShareActive(false);
       screenShareRestorePendingRef.current = false;
@@ -1923,7 +1922,7 @@ export function VideoConferenceComponent(props: {
       takeoverTimerRef.current = null;
       setScreenShareActive(true);
       beginLocalScreenShareView();
-      room.localParticipant.setScreenShareEnabled(true, SCREEN_SHARE_CAPTURE).catch((e: unknown) => {
+      room.localParticipant.setScreenShareEnabled(true, screenShareCaptureOptions()).catch((e: unknown) => {
         setScreenShareActive(false);
         void window.electronAPI?.clearShareTarget?.();
         const restored = endLocalScreenShareView();

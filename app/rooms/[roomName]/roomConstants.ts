@@ -1,14 +1,52 @@
-import type { ScreenShareCaptureOptions } from 'livekit-client';
+import {
+  getBrowser,
+  ScreenSharePresets,
+  type ScreenShareCaptureOptions,
+  type VideoEncoding,
+} from 'livekit-client';
 
 /** 入会 / 重连换票接口；未配环境变量时走同域 API */
 export const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 
-/** 请求屏幕共享时的系统/标签页音频，浏览器才会在选取器中显示对应勾选项（支持情况因浏览器而异）。 */
+/**
+ * 屏幕共享编码上限。SDK 默认是 1080p15、2.5 Mbps，采集却按 1080p30。
+ * 这里把帧率和码率收到 15 帧、1.5 Mbps，给麦克风留上行。
+ * 不改 screenShareSimulcastLayers：SDK 仍会带一路半分辨率，弱网观众可以降到那一层。
+ */
+export const SCREEN_SHARE_ENCODING: VideoEncoding = {
+  maxBitrate: 1_500_000,
+  maxFramerate: 15,
+};
+
+/**
+ * 屏幕共享采集。系统声音勾选仍在；分辨率用 SDK 的 1080p15（ideal，不是硬封顶）。
+ * contentHint 用 detail，幻灯片和文字更清晰，也更省码率。
+ */
 export const SCREEN_SHARE_CAPTURE: ScreenShareCaptureOptions = {
   audio: true,
   systemAudio: 'include',
+  contentHint: 'detail',
+  resolution: ScreenSharePresets.h1080fps15.resolution,
 };
+
+/**
+ * screenShareCaptureOptions — 本次共享实际交给 getDisplayMedia 的参数
+ *
+ * Safari 17 一旦写了 resolution，采集会掉到很低的分辨率（WebKit 263015）。
+ * 那种浏览器不传分辨率，其余字段照旧。
+ */
+export function screenShareCaptureOptions(): ScreenShareCaptureOptions {
+  const browser = getBrowser();
+  if (browser?.name === 'Safari' && browser.version.startsWith('17.')) {
+    return {
+      audio: SCREEN_SHARE_CAPTURE.audio,
+      systemAudio: SCREEN_SHARE_CAPTURE.systemAudio,
+      contentHint: SCREEN_SHARE_CAPTURE.contentHint,
+    };
+  }
+  return SCREEN_SHARE_CAPTURE;
+}
 
 /**
  * 主持人静音 / 禁用摄像头持久生效：到期时间推到远未来，只能由主持人显式取消来解除。
