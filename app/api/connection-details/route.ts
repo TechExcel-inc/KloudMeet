@@ -44,7 +44,6 @@ export async function GET(request: NextRequest) {
     // Parse query parameters
     const roomName = request.nextUrl.searchParams.get('roomName');
     const participantName = request.nextUrl.searchParams.get('participantName');
-    const metadata = request.nextUrl.searchParams.get('metadata') ?? '';
     const deviceIdParam = request.nextUrl.searchParams.get('deviceId');
     const region = request.nextUrl.searchParams.get('region');
     if (!LIVEKIT_URL) {
@@ -167,7 +166,8 @@ export async function GET(request: NextRequest) {
     }
 
     let identity: string;
-    let tokenMetadata = metadata;
+    // Metadata is server-authored only: member id for logged-in users, empty for guests.
+    let tokenMetadata = '';
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
     if (member) {
@@ -185,9 +185,11 @@ export async function GET(request: NextRequest) {
       if (!randomParticipantPostfix) {
         randomParticipantPostfix = randomString(4);
       }
+      // `guest_` prefix: guest identities can never parse as `km_{memberId}`.
+      const guestName = participantName.slice(0, 64);
       identity = guestDeviceId
-        ? `${participantName}__${randomParticipantPostfix}_${guestDeviceId}`
-        : `${participantName}__${randomParticipantPostfix}`;
+        ? `guest_${guestName}__${randomParticipantPostfix}_${guestDeviceId}`
+        : `guest_${guestName}__${randomParticipantPostfix}`;
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
     }
 
@@ -230,6 +232,9 @@ export async function GET(request: NextRequest) {
       ttl: '2h',
     });
 
+    // 参会记录本应由 LiveKit participant_joined webhook 写入（拿到票但没真正入会不算参会），
+    // 但生产环境收不到 LiveKit webhook（见 a7ada47），所以拿票时先记一笔兜底；
+    // webhook 通了以后由它负责在场时间窗（joinedAt / leftAt）。
     try {
       if (member) {
         await recordMeetingJoin({

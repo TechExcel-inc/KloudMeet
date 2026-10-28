@@ -49,6 +49,7 @@ import {
 } from './roomConstants';
 import { publishMic } from './roomMedia';
 import { appendJoinCredentials } from '@/lib/meetingAccessClient';
+import { setRoomAuthToken } from '@/lib/roomAuth';
 
 export interface MeetingConnectionOptions {
   room: Room;
@@ -146,7 +147,10 @@ export function useMeetingConnection({
   const connectionDetailsRef = React.useRef(connectionDetails);
   React.useEffect(() => {
     connectionDetailsRef.current = connectionDetails;
+    // In-room API calls (captions, transcripts, summary) prove room membership with this JWT
+    setRoomAuthToken(connectionDetails?.participantToken);
   }, [connectionDetails]);
+  React.useEffect(() => () => setRoomAuthToken(null), []);
   const connectOptionsRef = React.useRef(connectOptions);
   React.useEffect(() => {
     connectOptionsRef.current = connectOptions;
@@ -223,6 +227,7 @@ export function useMeetingConnection({
 
       const fresh = (await response.json()) as ConnectionDetails;
       connectionDetailsRef.current = fresh;
+      setRoomAuthToken(fresh.participantToken);
       return fresh;
     })();
 

@@ -80,6 +80,20 @@ export async function GET(
   return NextResponse.json({ state: stateOf(meeting, await findActiveRecording(meeting.id)) });
 }
 
+/** Hosts the recorder may load: this request's own host plus the configured public app host. */
+function allowedPageHosts(request: NextRequest): Set<string> {
+  const hosts = new Set<string>(['meet.kloud.cn']);
+  for (const h of [request.headers.get('x-forwarded-host'), request.headers.get('host')]) {
+    if (h) hosts.add(h.split(',')[0].trim());
+  }
+  try {
+    if (process.env.NEXT_PUBLIC_APP_URL) hosts.add(new URL(process.env.NEXT_PUBLIC_APP_URL).host);
+  } catch {
+    /* ignore malformed env */
+  }
+  return hosts;
+}
+
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
@@ -104,7 +118,6 @@ export async function POST(
     if (!meeting) {
       return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
     }
-
     const roles = parseMeetingRoles(meeting.meetingRoles);
 
     // The current host's client keeps the server's view of who is host / co-host / presenter.
@@ -267,8 +280,21 @@ export async function POST(
       return NextResponse.json({ error: 'pageUrl is required for Web Egress' }, { status: 400 });
     }
 
-    // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
-    // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(pageUrl);
+    } catch {
+      return NextResponse.json({ error: 'Invalid pageUrl' }, { status: 400 });
+    }
+    // The egress browser must only load this app's own meeting page, never an arbitrary URL.
+    if (
+      !/^https?:$/.test(parsedUrl.protocol) ||
+      !allowedPageHosts(request).has(parsedUrl.host) ||
+      !parsedUrl.pathname.startsWith('/rooms/')
+    ) {
+      return NextResponse.json({ error: 'pageUrl must be this meeting page' }, { status: 400 });
+    }
+
     // LiveDoc Full Recording: Kloud saves the LiveDoc actions; the media is the meeting's voice,
     // recorded with the audio-only web egress, and each screen share as its own section.
     const livedocFull = livedocFullFor(meeting) && !!livedocToken;
@@ -287,8 +313,9 @@ export async function POST(
     const mode = livedocFull
       ? 'audio'
       : isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
+    // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
+    // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
     const activityToken = newShareKey();
-    const parsedUrl = new URL(pageUrl);
     parsedUrl.searchParams.set('isBot', 'true');
     parsedUrl.searchParams.set(SPEAK_TOKEN_PARAM, activityToken);
     const targetUrl = parsedUrl.toString();

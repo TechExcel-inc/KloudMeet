@@ -5,9 +5,10 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
   try {
@@ -17,14 +18,8 @@ export async function GET(
       return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
     }
 
-    const meeting = await prisma.meeting.findUnique({
-      where: { id: localMeetingId },
-      select: { id: true },
-    });
-
-    if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
-    }
+    const access = await requireMeetingAccess(req, localMeetingId);
+    if (access instanceof NextResponse) return access;
 
     const captions = await prisma.meetingTranscript.findMany({
       where: { meetingId: localMeetingId },

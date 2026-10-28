@@ -1,9 +1,10 @@
 /**
- * GET  /api/meeting-summary/[meetingId]  — 获取摘要（本地 DB → Java Server fallback）
- * POST /api/meeting-summary/[meetingId]  — 保存摘要章节到本地 DB
+ * GET  /api/meeting-summary/[meetingId]  — 获取摘要（本地 DB → Java Server fallback），本场主持人/参会者或房间票
+ * POST /api/meeting-summary/[meetingId]  — 保存摘要章节到本地 DB，仅主持人
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { requireMeetingAccess, requireMeetingHost } from '@/lib/meetingAccessGuards';
 
 const KLOUD_API = process.env.NEXT_PUBLIC_REMOTE_API || 'https://meet.kloud.cn';
 
@@ -17,6 +18,9 @@ export async function GET(
     if (isNaN(localMeetingId)) {
       return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
     }
+
+    const access = await requireMeetingAccess(req, localMeetingId);
+    if (access instanceof NextResponse) return access;
 
     // 1. 查本地 summaryItems
     const localItems = await prisma.meetingSummaryItem.findMany({
@@ -106,6 +110,9 @@ export async function POST(
     if (isNaN(localMeetingId)) {
       return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
     }
+
+    const host = await requireMeetingHost(req, localMeetingId);
+    if (host instanceof NextResponse) return host;
 
     const body = await req.json();
     const { items }: { items: { title: string; content: string; timeOffset: string }[] } = body;

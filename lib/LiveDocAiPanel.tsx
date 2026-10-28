@@ -12,6 +12,7 @@ import type {
   LiveDocAiTranscriptItem,
 } from './liveDocAiProtocol';
 import { authFetch } from './kloudSession';
+import { roomAuthHeaders } from './roomAuth';
 import styles from '../styles/LiveDocAiPanel.module.css';
 
 /** The design link shown on the meeting stage (Design mode); listed above the LiveDocs. */
@@ -393,6 +394,7 @@ async function fetchSummaryCaptions(): Promise<LiveDocAiTranscriptItem[]> {
   if (!meetingId) return [];
   try {
     const res = await authFetch(`/api/transcripts/${meetingId}`, {
+      headers: roomAuthHeaders(),
       signal: AbortSignal.timeout(SUMMARY_SOURCE_TIMEOUT_MS),
     });
     if (!res.ok) return [];
@@ -475,7 +477,7 @@ function useMeetingCaptions(enabled: boolean): { items: MeetingCaption[]; loadin
       const requestId = ++seq;
       if (first) setLoading(true);
       try {
-        const res = await authFetch(`/api/transcripts/${meetingId}`);
+        const res = await authFetch(`/api/transcripts/${meetingId}`, { headers: roomAuthHeaders() });
         if (!res.ok) {
           if (!cancelled && first && requestId === seq) setItems([]);
           return;
