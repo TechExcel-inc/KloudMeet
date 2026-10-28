@@ -2,9 +2,8 @@
 
 import React from 'react';
 import { createPortal } from 'react-dom';
-import Image from 'next/image';
 import { useI18n } from './i18n';
-import { resolveLiveDocFileImg, resolveLiveDocFileImgByName } from './liveDocFileTypeIcon';
+import { liveDocFileBadge } from './liveDocFileBadge';
 import type {
   LiveDocAiPickerKind,
   LiveDocAiState,
@@ -1080,19 +1079,7 @@ export function LiveDocAiPanel({
                         }
                       }}
                     >
-                      <span className={styles.thumbnail}>
-                        <Image
-                          src={
-                            item.fileImg
-                              ? resolveLiveDocFileImg(item.fileImg)
-                              : resolveLiveDocFileImgByName(item.fileName || item.title)
-                          }
-                          alt=""
-                          width={30}
-                          height={30}
-                          unoptimized
-                        />
-                      </span>
+                      <FileTypeBadge names={[item.fileName, item.title]} icon={item.fileImg} />
                       <span className={styles.documentName}>{item.title}</span>
                       {(item.isCurrent || canManage) && (
                         <span className={item.isCurrent ? styles.viewing : styles.viewAction}>
@@ -1754,19 +1741,7 @@ function PickerDialog({
                 checked={item.selected}
                 onChange={() => onAction('picker.toggleItem', { itemId: item.id })}
               />
-              <span className={styles.pickerItemIcon} aria-hidden>
-                <Image
-                  src={
-                    item.fileType
-                      ? resolveLiveDocFileImg(item.fileType)
-                      : resolveLiveDocFileImgByName(item.fileName || item.title)
-                  }
-                  alt=""
-                  width={20}
-                  height={20}
-                  unoptimized
-                />
-              </span>
+              <FileTypeBadge names={[item.fileName, item.title]} icon={item.fileType} />
               <span className={styles.pickerItemTitle}>{item.title}</span>
               <span className={styles.pickerItemDate}>{item.date}</span>
             </label>
@@ -1927,6 +1902,22 @@ function UploadFailures({
         ))}
       </ul>
     </div>
+  );
+}
+
+/** "PPT", "PDF", "DOC"… in the type's colour, as in the Kloud V3 documents table */
+function FileTypeBadge({
+  names,
+  icon,
+}: {
+  names: Array<string | null | undefined>;
+  icon?: string | null;
+}) {
+  const badge = liveDocFileBadge(names, icon);
+  return (
+    <span className={`${styles.typeBadge} ${styles[`type_${badge.group}`]}`} aria-hidden>
+      {badge.label}
+    </span>
   );
 }
 

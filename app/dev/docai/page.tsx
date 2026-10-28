@@ -40,6 +40,8 @@ type Case = {
   failures?: boolean;
   /** The real upload queue against a fake LiveDoc */
   live?: boolean;
+  /** "From Space" picker open */
+  picker?: boolean;
   summary?: 'items' | 'empty' | 'loading';
   connecting?: boolean;
 };
@@ -47,6 +49,7 @@ type Case = {
 const CASES: Case[] = [
   { id: 'empty', title: 'Documents · none yet', tab: 'file', docs: 0 },
   { id: 'docs', title: 'Documents · list', tab: 'file', docs: 6 },
+  { id: 'picker', title: 'Documents · pick from Space', tab: 'file', docs: 2, picker: true },
   { id: 'design', title: 'Documents · with a design link', tab: 'file', docs: 2, design: true },
   { id: 'uploading', title: 'Documents · uploading', tab: 'file', docs: 3, uploading: true },
   {
@@ -93,6 +96,16 @@ const DOC_NAMES = [
   ['Launch budget.xlsx', 'Launch budget'],
   ['Onboarding flow.png', 'Onboarding flow'],
   ['Whiteboard', 'Whiteboard 1'],
+];
+
+/** [fileName, title, LiveDoc's older icon path] — the last two have no extension in their names */
+const PICKER_FILES = [
+  ['交通管理业务介绍 1.pdf', '交通管理业务介绍 1.pdf', ''],
+  ['平台功能架构.docx', '平台功能架构.docx', ''],
+  ['Factory tour.mp4', 'Factory tour.mp4', ''],
+  ['Sales pipeline.xlsx', 'Sales pipeline.xlsx', ''],
+  ['', 'Brand guide', '../../../static/assets/images/ppt.svg'],
+  ['', 'Contract scan', '../../../static/assets/images/no.svg'],
 ];
 
 const CAPTIONS = [
@@ -156,17 +169,26 @@ function makeState(c: Case): LiveDocAiState {
     },
     transcript: { items: [], selfUserName: 'Ying', loading: false, error: '' },
     picker: {
-      kind: null,
-      open: false,
+      kind: c.picker ? 'space' : null,
+      open: Boolean(c.picker),
       loading: false,
       search: '',
       page: 1,
-      total: 0,
-      items: [],
-      teams: [],
-      spaces: [],
-      selectedTeamId: 0,
-      selectedSpaceId: 0,
+      total: c.picker ? PICKER_FILES.length : 0,
+      items: c.picker
+        ? PICKER_FILES.map(([fileName, title, fileType], i) => ({
+            id: 200 + i,
+            title,
+            fileName,
+            date: '2026-10-2' + (i % 9),
+            fileType,
+            selected: i === 1,
+          }))
+        : [],
+      teams: c.picker ? [{ id: 1, name: 'Marketing Team Cn' }] : [],
+      spaces: c.picker ? [{ id: 11, name: '2025 数字人-studio' }] : [],
+      selectedTeamId: c.picker ? 1 : 0,
+      selectedSpaceId: c.picker ? 11 : 0,
     },
   };
 }

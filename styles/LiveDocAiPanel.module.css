@@ -467,23 +467,51 @@
   background: rgba(124, 121, 255, 0.14);
 }
 
-/* The file-type icons are drawn for a light ground */
-.thumbnail {
-  width: 34px;
-  height: 34px;
+/* File type: the Kloud V3 documents table's badges, in its dark palette */
+.typeBadge {
+  width: 30px;
+  height: 26px;
   flex-shrink: 0;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  background: #f1f3f4;
-  border-radius: 8px;
+  border-radius: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  line-height: 1;
 }
 
-.thumbnail img {
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
+.type_ppt {
+  color: #fdb022;
+  background: #2a1f0b;
+}
+
+.type_pdf {
+  color: #f97066;
+  background: #2a1215;
+}
+
+.type_doc {
+  color: #84adff;
+  background: #102a56;
+}
+
+.type_xls {
+  color: #34d399;
+  background: #0f2a22;
+}
+
+.type_video,
+.type_audio {
+  color: #a5a3f5;
+  background: #1f2147;
+}
+
+.type_image,
+.type_other {
+  color: #c3cad9;
+  background: #1b2740;
 }
 
 .documentName {
@@ -1612,24 +1640,6 @@
 .pickerItem input[type='checkbox']:checked {
   background: var(--km-primary, #5e5ce6);
   border-color: var(--km-primary, #5e5ce6);
-}
-
-.pickerItemIcon {
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.92);
-  border-radius: 8px;
-}
-
-.pickerItemIcon img {
-  width: 20px;
-  height: 20px;
-  object-fit: contain;
 }
 
 .pickerItemTitle {
