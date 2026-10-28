@@ -240,18 +240,19 @@ export function useLiveDocSession({
     const keepAlive = async () => {
       if (cancelled || inFlight) return;
       inFlight = true;
+      const boot = bootRef.current;
       try {
-        const userToken = await createOrUpdateInstantAccount(username);
+        const userToken = await createOrUpdateInstantAccount(boot.username);
         const id = await keepLivedocInstanceActive({
           userToken,
-          jitsiInstanceId,
-          livedocInstanceId,
+          jitsiInstanceId: boot.jitsiInstanceId,
+          livedocInstanceId: boot.livedocInstanceId,
         });
-        if (!cancelled && id && id !== livedocInstanceId) {
-          setLivedocInstanceId(id);
+        if (!cancelled && id && id !== boot.livedocInstanceId) {
+          boot.setLivedocInstanceId(id);
           if (isHost) {
-            setAuthLivedocInstanceId(id);
-            sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
+            boot.setAuthLivedocInstanceId(id);
+            boot.sendMeetingMsg({ type: 'LIVEDOC_INSTANCE', livedocInstanceId: id });
           }
         }
       } catch (error) {
@@ -276,15 +277,6 @@ export function useLiveDocSession({
       window.removeEventListener('online', keepAlive);
       document.removeEventListener('visibilitychange', keepAliveOnResume);
     };
-  }, [
-    livekitConnected,
-    meetingEndedByHost,
-    livedocInstanceId,
-    jitsiInstanceId,
-    username,
-    isHost,
-    sendMeetingMsg,
-    setLivedocInstanceId,
-    setAuthLivedocInstanceId,
-  ]);
+    // 回调每次渲染都是新函数，不能放进依赖，否则会拆掉 15s 定时器并立刻再请求。
+  }, [livekitConnected, meetingEndedByHost, livedocInstanceId, jitsiInstanceId, isHost]);
 }
