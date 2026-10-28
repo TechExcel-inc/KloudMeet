@@ -1890,6 +1890,14 @@
   font-weight: 500;
 }
 
+/* More → Captions row: green dot while captions run */
+.captionsStateDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--km-speaking, #22c55e);
+}
+
 /* More → Record row: live "Recording" status */
 .recStatus {
   margin-left: auto;

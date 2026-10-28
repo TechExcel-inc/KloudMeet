@@ -38,6 +38,7 @@ import {
   CAPTION_SETTINGS_EVENT,
   captionLanguageFor,
   isCaptionLanguage,
+  loadCaptionSettings,
   pickCaptionText,
   readCaptionLanguage,
   saveReadCaptionLanguage,
@@ -349,14 +350,7 @@ export function useCaptions({
       try {
         const data: CaptionPayload = JSON.parse(decoder.decode(payloadBytes));
         
-        // Read in the interface language unless the user picked another one in caption settings.
-        let settings: { subtitleVisible: boolean } = { subtitleVisible: true };
-        try {
-          const raw = localStorage.getItem('kloud-stt-settings');
-          if (raw) Object.assign(settings, JSON.parse(raw));
-        } catch(e) {}
-
-        if (!settings.subtitleVisible) return;
+        if (!loadCaptionSettings(uiLanguage).subtitleVisible) return;
 
         const myReadLanguage = readLanguageRef.current;
         const choice = pickCaptionText(data, myReadLanguage);
@@ -500,10 +494,17 @@ export function useCaptions({
           hideTimerRef.current = null;
         }
       }
+      // A new spoken language takes effect at once: recognition restarts in it.
+      const engine = rtasrRef.current;
+      const speakLanguage = loadCaptionSettings(uiLanguage).speakLanguage;
+      if (engine && engine.languageCode !== speakLanguage) {
+        engine.languageCode = speakLanguage;
+        supervisorRef.current?.retry(); // no-op unless recognition is running
+      }
     };
-    window.addEventListener('kloud-stt-settings-changed', handleSettingsChange);
-    return () => window.removeEventListener('kloud-stt-settings-changed', handleSettingsChange);
-  }, []);
+    window.addEventListener(CAPTION_SETTINGS_EVENT, handleSettingsChange);
+    return () => window.removeEventListener(CAPTION_SETTINGS_EVENT, handleSettingsChange);
+  }, [uiLanguage]);
 
   // ── 开启/关闭字幕 ──────────────────────────────────────────────────────
 
@@ -517,7 +518,7 @@ export function useCaptions({
           supervisorRef.current?.dispose();
           const token = () => getTokenRef.current();
           const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
-          helper.languageCode = uiLanguage;
+          helper.languageCode = loadCaptionSettings(uiLanguage).speakLanguage;
           helper.roomName = room.name;
           micSourceRef.current = meetingMicSource(room);
           helper.micSource = micSourceRef.current;
@@ -530,18 +531,10 @@ export function useCaptions({
             const offsetSeconds = getMeetingOffsetSeconds();
 
             // Speak and read in the interface language unless caption settings say otherwise.
-            let settings = {
-              subtitleVisible: true,
-              readLanguage: uiLanguage,
-              speakLanguage: uiLanguage,
-            };
-            try {
-              const raw = localStorage.getItem('kloud-stt-settings');
-              if (raw) Object.assign(settings, JSON.parse(raw));
-            } catch(e) {}
-            
+            const settings = loadCaptionSettings(uiLanguage);
+
             // STT 识别出的实际语种优先于用户设置（OpenAI 返回 ISO-639-1；若未返回则取设置值）
-            const speakLanguage = d.detectedLanguage || settings.speakLanguage || uiLanguage;
+            const speakLanguage = d.detectedLanguage || settings.speakLanguage;
             const myReadLanguage = readLanguageRef.current;
             // Every reading language in the room (mine included) except the spoken one.
             const targets = speakLanguage === 'auto'
@@ -622,21 +615,9 @@ export function useCaptions({
           providerRef.current = provider;
           setEngineEpoch((n) => n + 1);
         } else {
-          // 如果已存在实例，更新语言
-          rtasrRef.current.languageCode = uiLanguage;
+          // 已有实例：用最新选择的说话语言
+          rtasrRef.current.languageCode = loadCaptionSettings(uiLanguage).speakLanguage;
         }
-
-        // 获取最新的用户选择语言并应用到识别引擎
-        try {
-          const raw = localStorage.getItem('kloud-stt-settings');
-          if (raw) {
-            const settings = JSON.parse(raw);
-            const speakLanguage = settings.speakLanguage || uiLanguage;
-            if (rtasrRef.current) {
-              rtasrRef.current.languageCode = speakLanguage;
-            }
-          }
-        } catch(e) {}
 
         if (seq !== openSeqRef.current) return;
         setCaptionsRunning(true);

@@ -1,0 +1,453 @@
+/* Captions settings dialog (meeting room, always on the dark stage). */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  overflow-y: auto;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.5);
+  font-family: var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+}
+
+.dialog {
+  position: relative;
+  width: 100%;
+  max-width: 520px;
+  margin: auto; /* centred, and still reachable by scrolling when taller than the window */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--km-panel, #202126);
+  border: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  border-radius: var(--km-radius-lg, 16px);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+  color: var(--km-stage-text, #e8eaed);
+  outline: none;
+}
+
+.handle {
+  display: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 12px 4px 24px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #f1f3f4;
+}
+
+.iconButton {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 22px;
+  color: #bdc1c6;
+  cursor: pointer;
+}
+
+.iconButton:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 24px 0;
+}
+
+.section + .section {
+  padding-top: 22px;
+}
+
+.sectionLabel {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #bdc1c6;
+}
+
+.personalList .sectionLabel {
+  margin-bottom: 4px;
+}
+
+/* Host card: the meeting-wide switch */
+.meetingCard {
+  display: flex;
+  flex-direction: column;
+  background: var(--km-menu, #2b2c32);
+  border-radius: var(--km-radius-md, 12px);
+}
+
+.meetingRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 10px 14px 16px;
+}
+
+.meetingIcon {
+  flex-shrink: 0;
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.meetingStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 16px;
+  padding: 10px 0 12px 36px;
+  border-top: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  font-size: 13px;
+  line-height: 1.45;
+  color: #bdc1c6;
+}
+
+.liveDot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--km-speaking, #22c55e);
+}
+
+.statusStrong {
+  font-weight: 600;
+  color: var(--km-stage-text, #e8eaed);
+}
+
+/* Attendee: one line saying captions are on */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  background: var(--km-menu, #2b2c32);
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #bdc1c6;
+}
+
+/* Rows */
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 0;
+}
+
+.row + .row {
+  border-top: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+}
+
+.rowText {
+  flex: 1;
+  min-width: 0;
+}
+
+.rowTitle {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--km-stage-text, #e8eaed);
+}
+
+.meetingRow .rowTitle {
+  font-weight: 600;
+}
+
+.rowHint {
+  display: block;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--km-stage-muted, #9aa0a6);
+}
+
+/* Switch */
+.switch {
+  flex-shrink: 0;
+  width: 52px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-radius: 22px;
+  cursor: pointer;
+}
+
+.switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.track {
+  position: relative;
+  display: block;
+  width: 40px;
+  height: 24px;
+  border-radius: 12px;
+  background: #80868b;
+  transition: background 0.18s ease;
+}
+
+.thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #e8eaed;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.switch[aria-checked='true'] .track {
+  background: #7c79ff;
+}
+
+.switch[aria-checked='true'] .thumb {
+  transform: translateX(16px);
+  background: #ffffff;
+}
+
+/* Language select */
+.select {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.selectButton {
+  width: 168px;
+  height: 44px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px 0 14px;
+  background: var(--km-control, #2e3036);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--km-radius-sm, 8px);
+  color: var(--km-stage-text, #e8eaed);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.selectButton:hover {
+  background: var(--km-control-hover, #3a3c43);
+}
+
+.selectButton[aria-expanded='true'] {
+  border-color: rgba(124, 121, 255, 0.8);
+}
+
+.chevron {
+  flex-shrink: 0;
+  color: #bdc1c6;
+  transition: transform 0.15s ease;
+}
+
+.selectButton[aria-expanded='true'] .chevron {
+  transform: rotate(180deg);
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 2;
+  width: 240px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--km-menu, #2b2c32);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--km-radius-md, 12px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+
+.menuUp {
+  top: auto;
+  bottom: calc(100% + 8px);
+}
+
+.option {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 0 12px;
+  background: none;
+  border: 0;
+  border-radius: var(--km-radius-sm, 8px);
+  color: var(--km-stage-text, #e8eaed);
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.option:hover,
+.option:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+
+.option[aria-selected='true'] {
+  background: rgba(124, 121, 255, 0.18);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.check {
+  flex-shrink: 0;
+  width: 18px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.menuNote {
+  margin: 4px 6px 0;
+  padding: 10px 6px 6px;
+  border-top: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--km-stage-muted, #9aa0a6);
+}
+
+/* Footer */
+.footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 24px 20px;
+}
+
+.done {
+  height: 44px;
+  padding: 0 22px;
+  background: #5e5ce6;
+  border: 0;
+  border-radius: var(--km-radius-sm, 8px);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.done:hover {
+  background: #4f4dd8;
+}
+
+.iconButton:focus-visible,
+.switch:focus-visible,
+.selectButton:focus-visible,
+.done:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(124, 121, 255, 0.55);
+}
+
+/* Phone: a bottom sheet, languages under their labels */
+@media (max-width: 600px) {
+  .overlay {
+    padding: 0;
+  }
+
+  .dialog {
+    max-width: none;
+    margin: auto 0 0;
+    border-radius: 20px 20px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .handle {
+    display: flex;
+    justify-content: center;
+    padding-top: 8px;
+  }
+
+  .handle::before {
+    content: '';
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.24);
+  }
+
+  .header {
+    padding: 2px 8px 0 20px;
+  }
+
+  .title {
+    font-size: 17px;
+  }
+
+  .section {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .stackOnPhone {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .stackOnPhone .select,
+  .stackOnPhone .selectButton {
+    width: 100%;
+  }
+
+  .stackOnPhone .menu {
+    left: 0;
+    width: auto;
+  }
+
+  .footer {
+    padding: 14px 20px 20px;
+  }
+
+  .done {
+    width: 100%;
+    height: 48px;
+    font-size: 15px;
+    border-radius: 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track,
+  .thumb,
+  .chevron {
+    transition: none;
+  }
+}
