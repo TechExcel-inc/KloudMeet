@@ -474,6 +474,8 @@
   "design.checkingShort": "確認中…",
   "design.blockedWarnTitle": "{host} は埋め込み表示を許可していません",
   "design.blockedWarnBody": "このサイトはステージに表示できません。代わりに全員に「新しいタブで開く」カードが表示されます。",
+  "design.makeWarnTitle": "Figma Make ファイルは埋め込み表示できません",
+  "design.makeWarnBody": "Figma Make の右上にある Publish で公開し、figma.site のリンクをここに貼り付けるとステージに表示できます。このまま共有すると、全員に「新しいタブで開く」カードが表示されます。",
   "design.shareAnyway": "それでもリンクを共有",
   "design.blockedTitle": "このサイトは埋め込み表示を許可していません",
   "design.blockedBody": "{host} は他のページ内での表示をブロックしています。新しいタブで開いてご覧ください。",

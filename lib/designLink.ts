@@ -165,6 +165,20 @@ export function parseDesignLink(
   return { ok: true, link: { url, embedUrl: url, kind: 'web', label: host, host } };
 }
 
+/**
+ * A Figma Make file (figma.com/make/…). Figma has no embed for these and figma.com refuses to be
+ * framed, but the site Make publishes (*.figma.site) can be shown.
+ */
+export function isFigmaMakeLink(link: Pick<DesignLink, 'kind' | 'url'>): boolean {
+  if (link.kind !== 'web') return false;
+  try {
+    const parsed = new URL(link.url);
+    return FIGMA_HOSTS.has(parsed.hostname.toLowerCase()) && parsed.pathname.split('/')[1]?.toLowerCase() === 'make';
+  } catch {
+    return false;
+  }
+}
+
 /** Read a StoredDesignLink from untrusted JSON (room metadata, data-channel message). */
 export function parseStoredDesignLink(value: unknown): StoredDesignLink | null {
   if (!value || typeof value !== 'object') return null;

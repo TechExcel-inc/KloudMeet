@@ -482,6 +482,8 @@
   "design.checkingShort": "Checking…",
   "design.blockedWarnTitle": "{host} doesn’t allow embedding",
   "design.blockedWarnBody": "The site can’t appear on the stage. Everyone will see a card with “Open in new tab” instead.",
+  "design.makeWarnTitle": "Figma Make files can’t be embedded",
+  "design.makeWarnBody": "Click Publish at the top right of Figma Make, then paste the figma.site link here to show it on the stage. Shared as is, everyone will see a card with “Open in new tab”.",
   "design.shareAnyway": "Share link anyway",
   "design.blockedTitle": "This site doesn’t allow embedding",
   "design.blockedBody": "{host} blocks being shown inside other pages. Open it in a new tab to follow along.",

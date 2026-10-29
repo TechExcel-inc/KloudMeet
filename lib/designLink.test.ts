@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   clampDesignZoom,
   designFrameLayout,
+  isFigmaMakeLink,
   parseDesignLink,
   parseDesignViewport,
   parseStoredDesignLink,
@@ -51,6 +52,18 @@ describe('parseDesignLink', () => {
     const web = parseDesignLink('https://docs.google.com/presentation/d/e/2PACX/embed', app);
     expect(web.ok && web.link).toMatchObject({ kind: 'web', host: 'docs.google.com', label: 'docs.google.com' });
     expect(web.ok && web.link.embedUrl).toBe('https://docs.google.com/presentation/d/e/2PACX/embed');
+  });
+
+  it('recognizes Figma Make files, which can only be shown once published', () => {
+    const make = parseDesignLink('https://www.figma.com/make/AbC123xyz789/Kloud-Copy?t=XyZ-1&preview-route=%2Faccount', app);
+    expect(make.ok && make.link.kind).toBe('web');
+    expect(make.ok && isFigmaMakeLink(make.link)).toBe(true);
+    const site = parseDesignLink('https://carol-axis-12078068.figma.site/', app);
+    expect(site.ok && isFigmaMakeLink(site.link)).toBe(false);
+    const design = parseDesignLink('https://www.figma.com/design/AbC123xyz789/Kloud', app);
+    expect(design.ok && isFigmaMakeLink(design.link)).toBe(false);
+    const elsewhere = parseDesignLink('https://example.com/make/AbC123xyz789', app);
+    expect(elsewhere.ok && isFigmaMakeLink(elsewhere.link)).toBe(false);
   });
 
   it('adds https when the scheme is missing', () => {

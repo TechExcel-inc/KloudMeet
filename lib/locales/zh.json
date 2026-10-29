@@ -474,6 +474,8 @@
   "design.checkingShort": "检查中…",
   "design.blockedWarnTitle": "{host} 不允许被嵌入显示",
   "design.blockedWarnBody": "该网站无法显示在舞台上，所有人会看到一张带“在新标签页打开”的卡片。",
+  "design.makeWarnTitle": "Figma Make 文件不能嵌入显示",
+  "design.makeWarnBody": "在 Figma Make 右上角点 Publish 发布，再把得到的 figma.site 链接粘贴到这里，就能显示在舞台上。直接分享的话，所有人会看到一张带“在新标签页打开”的卡片。",
   "design.shareAnyway": "仍然分享链接",
   "design.blockedTitle": "此网站不允许嵌入显示",
   "design.blockedBody": "{host} 禁止在其他页面中显示。请在新标签页中打开，一起跟随讲解。",

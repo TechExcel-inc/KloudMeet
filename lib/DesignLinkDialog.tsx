@@ -2,7 +2,13 @@
 
 import React from 'react';
 import { useI18n } from '@/lib/i18n';
-import { DESIGN_ALLOW_LOCAL_HTTP, parseDesignLink, type DesignLink, type DesignLinkError } from '@/lib/designLink';
+import {
+  DESIGN_ALLOW_LOCAL_HTTP,
+  isFigmaMakeLink,
+  parseDesignLink,
+  type DesignLink,
+  type DesignLinkError,
+} from '@/lib/designLink';
 import type { DesignEmbedCheck } from '@/lib/designEmbed';
 import {
   forgetDesignLink,
@@ -75,14 +81,17 @@ export function DesignLinkDialog({ currentUrl, appOrigin, onSubmit, onClose, che
     },
     [checkEmbed],
   );
-  const checkUrl = parsed.ok && parsed.link.kind === 'web' && checkEmbed ? parsed.link.url : null;
+  /** Figma Make files are known not to embed: warn at once, without asking the server */
+  const makeUrl = parsed.ok && isFigmaMakeLink(parsed.link) ? parsed.link.url : null;
+  const checkUrl = parsed.ok && parsed.link.kind === 'web' && !makeUrl && checkEmbed ? parsed.link.url : null;
   React.useEffect(() => {
     if (!checkUrl || inflight.current.has(checkUrl)) return;
     const timer = window.setTimeout(() => void runCheck(checkUrl), CHECK_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
   }, [checkUrl, runCheck]);
   const check = checkUrl ? checks[checkUrl] : undefined;
-  const blockedShown = check !== undefined && check !== 'checking' && check.embed === 'blocked' ? checkUrl : null;
+  const blockedShown =
+    makeUrl ?? (check !== undefined && check !== 'checking' && check.embed === 'blocked' ? checkUrl : null);
   /** Sharing a blocked site takes a second click, after the warning has been seen */
   const blockedShownRef = React.useRef<string | null>(null);
   blockedShownRef.current = blockedShown;
@@ -109,12 +118,17 @@ export function DesignLinkDialog({ currentUrl, appOrigin, onSubmit, onClose, che
     if (!result.ok || busy) return;
     setSubmitError('');
     let found: DesignEmbedCheck | undefined;
-    if (result.link.kind === 'web' && checkEmbed) {
-      setBusy('checking');
-      found = await Promise.race([
-        runCheck(result.link.url),
-        new Promise<DesignEmbedCheck>((resolve) => window.setTimeout(() => resolve({ embed: 'unknown' }), CHECK_WAIT_MS)),
-      ]);
+    const isMake = isFigmaMakeLink(result.link);
+    if (result.link.kind === 'web' && (checkEmbed || isMake)) {
+      if (isMake) {
+        found = { embed: 'blocked', reason: 'xfo' };
+      } else {
+        setBusy('checking');
+        found = await Promise.race([
+          runCheck(result.link.url),
+          new Promise<DesignEmbedCheck>((resolve) => window.setTimeout(() => resolve({ embed: 'unknown' }), CHECK_WAIT_MS)),
+        ]);
+      }
       if (found.embed === 'blocked' && blockedShownRef.current !== result.link.url) {
         // Show the warning first (a recent link may not be in the box yet)
         setValue(input);
@@ -146,15 +160,27 @@ export function DesignLinkDialog({ currentUrl, appOrigin, onSubmit, onClose, che
     blockedShown ? (
       <div className={styles.warn} role="alert">
         <BlockedGlyph size={18} />
-        <span className={styles.warnText}>
-          <strong>{tf('design.blockedWarnTitle', '{host} doesn’t allow embedding', { host: parsed.link.host })}</strong>
-          <span>
-            {tf(
-              'design.blockedWarnBody',
-              'The site can’t appear on the stage. Everyone will see a card with “Open in new tab” instead.',
-            )}
+        {makeUrl ? (
+          <span className={styles.warnText}>
+            <strong>{tf('design.makeWarnTitle', 'Figma Make files can’t be embedded')}</strong>
+            <span>
+              {tf(
+                'design.makeWarnBody',
+                'Click Publish at the top right of Figma Make, then paste the figma.site link here to show it on the stage. Shared as is, everyone will see a card with “Open in new tab”.',
+              )}
+            </span>
           </span>
-        </span>
+        ) : (
+          <span className={styles.warnText}>
+            <strong>{tf('design.blockedWarnTitle', '{host} doesn’t allow embedding', { host: parsed.link.host })}</strong>
+            <span>
+              {tf(
+                'design.blockedWarnBody',
+                'The site can’t appear on the stage. Everyone will see a card with “Open in new tab” instead.',
+              )}
+            </span>
+          </span>
+        )}
       </div>
     ) : (
       <p className={`${styles.status} ${styles.statusOk}`}>
