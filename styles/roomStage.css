@@ -1589,27 +1589,6 @@
   }
 
 
-  /* Force-muted badge (shown when host has muted all) */
-  .kloud-force-muted-badge {
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: rgba(242, 139, 130, 0.14);
-    border: none;
-    color: #f28b82;
-    flex-shrink: 0;
-    animation: kloud-mic-muted-pulse 2.4s ease-in-out infinite;
-  }
-
-  @keyframes kloud-mic-muted-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(242, 139, 130, 0.3); }
-    50% { box-shadow: 0 0 0 4px rgba(242, 139, 130, 0); }
-  }
-
   /* Per-participant mic toggle button */
   .kloud-participant-mic-btn {
 
@@ -2333,8 +2312,7 @@
     .kloud-chat-entry,
 .kloud-more-dropdown,
 .kloud-confirm-dialog,
-.kloud-host-picker,
-.kloud-force-muted-badge {
+.kloud-host-picker {
 
       animation: none !important;
     }

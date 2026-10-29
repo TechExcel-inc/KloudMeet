@@ -1,25 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { decodeChatContent } from '@/lib/chatProtocol';
+import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
 
 const DEFAULT_PAGE_SIZE = 200;
 const MAX_PAGE_SIZE = 500;
 
-/** GET — 登录用户按会议 ID 分页读取会后聊天记录。 */
+/** GET — 主持人、参会者或本场房间票，按会议 ID 分页读取聊天记录。 */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> },
 ): Promise<NextResponse> {
   try {
-    const member = await requireSession(request);
-    if (isAuthError(member)) return member;
-
     const { meetingId } = await params;
     const parsedMeetingId = Number.parseInt(meetingId, 10);
     if (!Number.isInteger(parsedMeetingId) || parsedMeetingId <= 0) {
       return NextResponse.json({ error: 'Invalid meeting ID' }, { status: 400 });
     }
+
+    const access = await requireMeetingAccess(request, parsedMeetingId);
+    if (access instanceof NextResponse) return access;
 
     const pageParam = Number.parseInt(request.nextUrl.searchParams.get('page') ?? '1', 10);
     const pageSizeParam = Number.parseInt(

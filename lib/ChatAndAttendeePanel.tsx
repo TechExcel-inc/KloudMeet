@@ -496,14 +496,6 @@ export function AttendeePanel({
           const name = p.name || p.identity || '??';
           const initials = getInitials(name);
           const isLocalParticipant = p.identity === localIdentity;
-          const isThisHost = p.identity === hostIdentity;
-          const isThisCohost = cohostIdentities.includes(p.identity);
-          const isThisAutoPresenter = p.identity === autoPresenterIdentity;
-          // Force-muted: muteAll is active AND this participant is NOT someone who can initiate mute-all
-          // (host, co-host, and auto-presenter are all exempt — they are the operators, not the subjects)
-          const isOperator = isThisHost || isThisCohost || isThisAutoPresenter;
-          // Also: the LOCAL user who has canMuteAll never shows the red badge for themselves
-          const isForceMuted = !!(muteAllActive && !isOperator && !(isLocalParticipant && canMuteAll));
           const handOrder = raisedHands.indexOf(p.identity);
 
           return (
@@ -608,16 +600,6 @@ export function AttendeePanel({
                 );
               })()}
               </div>
-
-              {/* Force-muted badge: shown when muteAll is active for non-host/co-host participants */}
-              {isForceMuted && (
-                <div className="kloud-force-muted-badge" title="Muted by host">
-                  <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
-                    <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/>
-                    <line x1="4" y1="4" x2="20" y2="20" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round"/>
-                  </svg>
-                </div>
-              )}
 
               <ParticipantAttendeeRowMoreMenu
                 identity={p.identity}
@@ -1178,25 +1160,6 @@ export const chatAndAttendeeStyles = `
     color: #1f1d6b;
     font-size: 11px;
     font-weight: 700;
-  }
-
-  /* Force-muted badge (shown when host has muted all) */
-  .kloud-force-muted-badge {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: rgba(242, 139, 130, 0.14);
-    border: none;
-    color: #f28b82;
-    flex-shrink: 0;
-    animation: kloud-mic-muted-pulse 2.4s ease-in-out infinite;
-  }
-  @keyframes kloud-mic-muted-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(242, 139, 130, 0.3); }
-    50% { box-shadow: 0 0 0 4px rgba(242, 139, 130, 0); }
   }
 
   /* Per-participant mic toggle button */
@@ -1762,8 +1725,7 @@ export const chatAndAttendeeStyles = `
     .kloud-chat-entry,
     .kloud-more-dropdown,
     .kloud-confirm-dialog,
-    .kloud-host-picker,
-    .kloud-force-muted-badge {
+    .kloud-host-picker {
       animation: none !important;
     }
     .kloud-chat-send:hover:not(:disabled) {
