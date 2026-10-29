@@ -3,6 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
+import { SlowLoadHint } from '@/lib/SlowLoadHint';
 import styles from '../styles/PreJoin.module.css';
 
 /**
@@ -37,6 +38,7 @@ export function RoomEntryLoading(props: {
           <div className={styles.stateCard} role="status">
             <div className={styles.spinner} aria-hidden="true" />
             <p className={styles.stateText}>{t('prejoin.loadingMeeting')}</p>
+            <SlowLoadHint />
           </div>
         ) : (
           <div className={styles.stateCard} role="alert">

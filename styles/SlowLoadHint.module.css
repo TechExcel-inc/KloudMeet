@@ -1,0 +1,81 @@
+/* "Still loading" line under a spinner: hidden for the first 8 s, then fades in. */
+.hint {
+  max-width: 320px;
+  margin-top: 16px;
+  padding: 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--km-text-muted, #6b7280);
+  opacity: 0;
+  animation: km-slow-hint-in 0.3s ease 8s forwards;
+}
+
+.hint p {
+  margin: 0 0 6px;
+}
+
+@keyframes km-slow-hint-in {
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hint {
+    animation-duration: 0s;
+  }
+}
+
+/* The page shown when a page fails to load or crashes (app/error.tsx), instead of a white screen. */
+.errorPage {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px 16px;
+  text-align: center;
+  background: var(--km-bg, #f5f6f8);
+  color: var(--km-text, #1f2329);
+  font-family: var(--km-font, system-ui, sans-serif);
+}
+
+.errorTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.errorText {
+  margin: 0;
+  max-width: 360px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--km-text-muted, #6b7280);
+}
+
+.errorDetail {
+  margin: 0;
+  max-width: 360px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--km-text-muted, #6b7280);
+  word-break: break-word;
+}
+
+.reload {
+  min-height: 40px;
+  margin-top: 4px;
+  padding: 0 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--km-primary, #5552d9);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

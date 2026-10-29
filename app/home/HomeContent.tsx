@@ -7,6 +7,7 @@ import { useDesktopAppLaunch } from '@/lib/useDesktopAppLaunch';
 import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { consumeMeetingClosedNotice } from '@/lib/meetingClosedNotice';
 import { safeReplayNext } from '@/lib/recordingReplayPath';
+import { SlowLoadHint } from '@/lib/SlowLoadHint';
 import styles from '../../styles/Home.module.css';
 import type { AuthUser, PageView } from './types';
 import { useToast } from './components/useToast';
@@ -15,6 +16,9 @@ import { LoginView } from './views/LoginView';
 import { SignupView } from './views/SignupView';
 import { DashboardView } from './views/DashboardView';
 import { ForgotPasswordView } from './views/ForgotPasswordView';
+
+/** The Kloud sign-in check must not hold the page: on a slow or blocked link the home page shows after this. */
+const SSO_CHECK_TIMEOUT_MS = 8000;
 
 export function HomeContent() {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
@@ -169,9 +173,11 @@ export function HomeContent() {
     if (localStorage.getItem('kloudUser')) return;
     if (searchParams.get('sso_token')) return;
 
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), SSO_CHECK_TIMEOUT_MS);
     (async () => {
       try {
-        const res = await fetch('/api/auth/sso');
+        const res = await fetch('/api/auth/sso', { signal: controller.signal });
         if (cancelled || !res.ok) return;
 
         const data = await res.json();
@@ -191,14 +197,17 @@ export function HomeContent() {
           setView('dashboard');
         }
       } catch {
-        /* No SSO cookie available — fall through to anonymous view */
+        /* No SSO cookie available, or the check timed out — fall through to anonymous view */
       } finally {
+        window.clearTimeout(timeout);
         if (!cancelled) setAuthInitialized(true);
       }
     })();
 
     return () => {
       cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
   }, [searchParams]);
 
@@ -247,6 +256,7 @@ export function HomeContent() {
       {!authInitialized && (
         <div className={styles.authInitializing} aria-label="Loading">
           <div className={styles.meetingLoadingSpinner} />
+          <SlowLoadHint />
         </div>
       )}
       {authInitialized && view === 'anonymous' && (
