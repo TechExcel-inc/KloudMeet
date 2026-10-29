@@ -41,11 +41,21 @@ const nextConfig = {
       },
       {
         // HTML 页面不缓存，每次部署后浏览器立即拿到新版本
-        source: '/:path((?!_next/|api/).*)',
+        source: '/:path((?!_next/|api/|mediapipe/|backgrounds/).*)',
         headers: [
           {
             key: 'Cache-Control',
             value: 'no-cache, no-store, must-revalidate',
+          },
+        ],
+      },
+      {
+        // 摄像头背景的模型和图片（约 3 MB）：浏览器留一份，每次按 ETag 校验，没变就不再下载
+        source: '/:dir(mediapipe|backgrounds)/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, no-cache',
           },
         ],
       },
