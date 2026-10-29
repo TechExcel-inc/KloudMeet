@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizeEmail } from '@/lib/authPolicy';
 
 // Helper: extract session token from Authorization header
 async function getSessionMember(request: NextRequest) {
@@ -77,13 +78,12 @@ export async function PUT(request: NextRequest) {
     const fullName = (fName.trim() + ' ' + lName.trim()).trim();
     if (fullName) updateData.fullName = fullName;
 
-    // If email is being changed, check uniqueness
-    if (email !== undefined && email !== member.email) {
-      const existing = await prisma.teamMember.findFirst({ where: { email: email.trim() } });
-      if (existing && existing.id !== member.id) {
-        return NextResponse.json({ error: 'Email already registered' }, { status: 400 });
-      }
-      updateData.email = email.trim();
+    // The email only changes through /api/account/email (a code sent to the new address).
+    if (email !== undefined && email !== null && email !== '' && normalizeEmail(email) !== (member.email ?? '').toLowerCase()) {
+      return NextResponse.json(
+        { error: 'Confirm the new email with a code first.', code: 'EMAIL_NEEDS_CODE' },
+        { status: 400 },
+      );
     }
 
     // If phone is being changed, check uniqueness

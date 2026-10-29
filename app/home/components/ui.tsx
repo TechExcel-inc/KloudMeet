@@ -47,6 +47,19 @@ export function GoogleIcon() {
   );
 }
 
+/** Kloud (kloud.cn) mark for "Continue with Kloud". */
+export function KloudIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="2" y="2" width="20" height="20" rx="6" fill="#5552D9" />
+      <path
+        fill="#fff"
+        d="M8.2 16.5a3 3 0 01-.4-6 4.3 4.3 0 018.3-.9 2.9 2.9 0 01.7 5.7 3.4 3.4 0 01-.8.1H8.2z"
+      />
+    </svg>
+  );
+}
+
 /** Inline error under a form (replaces the old ⚠ banner). */
 export function FormError({ message }: { message: string }) {
   if (!message) return null;

@@ -11,6 +11,7 @@ import {
   usernameBaseFromEmail,
 } from '@/lib/googleOAuth';
 import { createDesktopHandoff } from '@/lib/desktopAuth';
+import { redeemLinkIntent } from '@/lib/accountLinking';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { id: googleId, name, given_name, family_name, picture } = profileData;
-    const email = typeof profileData.email === 'string' ? profileData.email.trim() : '';
+    const email = typeof profileData.email === 'string' ? profileData.email.trim().toLowerCase() : '';
 
     if (!googleId || !email) {
       return fail('Your Google account must have an email address');
@@ -91,27 +92,69 @@ export async function GET(request: NextRequest) {
       return fail('Please verify your Google email address first');
     }
 
-    // 3. Find or create TeamMember (Google ID first, then the verified email)
-    let member =
-      (await prisma.teamMember.findUnique({ where: { googleId: String(googleId) } })) ??
-      (await prisma.teamMember.findUnique({ where: { email } }));
+    const googleSub = String(googleId);
 
-    if (member) {
-      if (!member.googleId) {
-        member = await prisma.teamMember.update({
-          where: { id: member.id },
+    // "Connect Google" from My Profile: bind to the account that asked, whatever its email.
+    if (saved.link) {
+      const ownerId = await redeemLinkIntent(saved.link, 'google');
+      if (!ownerId) {
+        return fail('This link has expired. Open My Profile and choose Connect again.');
+      }
+      const holder = await prisma.teamMember.findUnique({ where: { googleId: googleSub } });
+      if (holder && holder.id !== ownerId) {
+        return fail('This Google account is already connected to another Kloud Meet account.');
+      }
+      const owner = await prisma.teamMember.findUnique({ where: { id: ownerId } });
+      if (!owner || owner.status !== 'ACTIVE') {
+        return fail('Account is suspended');
+      }
+      if (owner.googleId && owner.googleId !== googleSub) {
+        return fail('Your account is already connected to a different Google account. Disconnect it first.');
+      }
+      if (!owner.googleId) {
+        // Google has verified this address, so the owner's matching email counts as verified too.
+        const sameEmail = owner.email?.toLowerCase() === email;
+        await prisma.teamMember.update({
+          where: { id: owner.id },
           data: {
-            googleId: String(googleId),
-            emailVerified: true,
-            emailVerifiedAt: member.emailVerifiedAt ?? new Date(),
-            avatarUrl: member.avatarUrl || picture || null,
+            googleId: googleSub,
+            avatarUrl: owner.avatarUrl || picture || null,
+            ...(sameEmail && !owner.emailVerified ? { emailVerified: true, emailVerifiedAt: new Date() } : {}),
+            modifiedAt: new Date(),
+            modifiedBy: 'connect-google',
           },
         });
-      } else if (member.googleId !== String(googleId)) {
-        console.warn('[google callback] email already linked to another Google account', member.id);
+      }
+      return finish('/?linked=google');
+    }
+
+    // 3. Find or create TeamMember: the connected Google ID first, then an account whose email is
+    //    verified on both sides. An unverified account with this email is not taken over.
+    let member = await prisma.teamMember.findUnique({ where: { googleId: googleSub } });
+
+    if (!member) {
+      const sameEmail = await prisma.teamMember.findUnique({ where: { email } });
+      if (sameEmail?.googleId) {
+        console.warn('[google callback] email already linked to another Google account', sameEmail.id);
         return fail('This email is already linked to a different Google account');
       }
-    } else {
+      if (sameEmail && !sameEmail.emailVerified) {
+        return fail(
+          'An account with this email already exists. Sign in with your password, then connect Google in My Profile.',
+        );
+      }
+      if (sameEmail) {
+        member = await prisma.teamMember.update({
+          where: { id: sameEmail.id },
+          data: {
+            googleId: googleSub,
+            avatarUrl: sameEmail.avatarUrl || picture || null,
+          },
+        });
+      }
+    }
+
+    if (!member) {
       // Create new user with a distinct username derived from the email
       const baseUsername = usernameBaseFromEmail(email);
       let username = baseUsername;
@@ -123,7 +166,7 @@ export async function GET(request: NextRequest) {
 
       member = await prisma.teamMember.create({
         data: {
-          googleId: String(googleId),
+          googleId: googleSub,
           email,
           username,
           fullName: name || username,

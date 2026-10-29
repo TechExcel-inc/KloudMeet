@@ -10,6 +10,7 @@ const db = vi.hoisted(() => ({
     },
     session: { create: vi.fn() },
     desktopAuthHandoff: { create: vi.fn(), deleteMany: vi.fn() },
+    accountLinkIntent: { findUnique: vi.fn(), updateMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/db', () => db);
@@ -19,7 +20,7 @@ import { GET as callback } from '../callback/route';
 import { GOOGLE_STATE_COOKIE, encodeGoogleState } from '@/lib/googleOAuth';
 
 const ORIGIN = 'http://localhost:3201';
-const { teamMember, session, desktopAuthHandoff } = db.prisma;
+const { teamMember, session, desktopAuthHandoff, accountLinkIntent } = db.prisma;
 
 function callbackRequest(query: string, cookie?: string) {
   return new NextRequest(`${ORIGIN}/api/auth/google/callback?${query}`, {
@@ -167,10 +168,10 @@ describe('GET /api/auth/google/callback', () => {
     expect(teamMember.create.mock.calls[0][0].data.username).toBe('ana1');
   });
 
-  it('links Google to an existing account with the same email', async () => {
+  it('links Google to an existing account whose email is verified', async () => {
     mockGoogle(PROFILE);
     teamMember.findUnique.mockImplementation(async ({ where }: { where: Record<string, string> }) =>
-      where.email ? { id: 3, googleId: null, status: 'ACTIVE', avatarUrl: null, emailVerifiedAt: null } : null,
+      where.email ? { id: 3, googleId: null, status: 'ACTIVE', avatarUrl: null, emailVerified: true } : null,
     );
     teamMember.update.mockResolvedValue({ id: 3, googleId: 'g-123', status: 'ACTIVE' });
     const res = await callback(callbackRequest('code=c&state=s1', cookie));
@@ -180,6 +181,75 @@ describe('GET /api/auth/google/callback', () => {
     );
     expect(teamMember.create).not.toHaveBeenCalled();
     expect(new URL(res.headers.get('location')!).searchParams.get('sso_token')).toBeTruthy();
+  });
+
+  it('does not take over an account whose email is not verified', async () => {
+    mockGoogle(PROFILE);
+    teamMember.findUnique.mockImplementation(async ({ where }: { where: Record<string, string> }) =>
+      where.email ? { id: 3, googleId: null, status: 'ACTIVE', emailVerified: false } : null,
+    );
+    const res = await callback(callbackRequest('code=c&state=s1', cookie));
+    expect(errorOf(res)).toMatch(/connect Google in My Profile/);
+    expect(teamMember.update).not.toHaveBeenCalled();
+    expect(teamMember.create).not.toHaveBeenCalled();
+    expect(session.create).not.toHaveBeenCalled();
+  });
+
+  it('matches the email case-insensitively', async () => {
+    mockGoogle({ ...PROFILE, email: 'Ana@Example.com' });
+    teamMember.create.mockResolvedValue({ id: 7, status: 'ACTIVE' });
+    await callback(callbackRequest('code=c&state=s1', cookie));
+    expect(teamMember.findUnique).toHaveBeenCalledWith({ where: { email: 'ana@example.com' } });
+    expect(teamMember.create.mock.calls[0][0].data.email).toBe('ana@example.com');
+  });
+
+  describe('Connect Google from My Profile', () => {
+    const link = 'L'.repeat(43);
+    const linkCookie = () => encodeGoogleState({ state: 's1', next: null, link });
+
+    it('binds Google to the account that asked, even with a different email', async () => {
+      mockGoogle(PROFILE);
+      accountLinkIntent.findUnique.mockResolvedValue({
+        id: 1, provider: 'google', teamMemberId: 9, usedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      });
+      accountLinkIntent.updateMany.mockResolvedValue({ count: 1 });
+      teamMember.findUnique.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where.id === 9 ? { id: 9, googleId: null, status: 'ACTIVE', email: 'someone@else.com', emailVerified: false } : null,
+      );
+      const res = await callback(callbackRequest('code=c&state=s1', linkCookie()));
+
+      expect(new URL(res.headers.get('location')!).searchParams.get('linked')).toBe('google');
+      const update = teamMember.update.mock.calls[0][0];
+      expect(update.where).toEqual({ id: 9 });
+      expect(update.data.googleId).toBe('g-123');
+      // A different address is not marked verified.
+      expect(update.data.emailVerified).toBeUndefined();
+      expect(session.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a Google account already connected elsewhere', async () => {
+      mockGoogle(PROFILE);
+      accountLinkIntent.findUnique.mockResolvedValue({
+        id: 1, provider: 'google', teamMemberId: 9, usedAt: null, expiresAt: new Date(Date.now() + 60_000),
+      });
+      accountLinkIntent.updateMany.mockResolvedValue({ count: 1 });
+      teamMember.findUnique.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+        where.googleId ? { id: 4, googleId: 'g-123', status: 'ACTIVE' } : null,
+      );
+      const res = await callback(callbackRequest('code=c&state=s1', linkCookie()));
+      expect(errorOf(res)).toMatch(/already connected to another/);
+      expect(teamMember.update).not.toHaveBeenCalled();
+    });
+
+    it('refuses a used or expired intent', async () => {
+      mockGoogle(PROFILE);
+      accountLinkIntent.findUnique.mockResolvedValue({
+        id: 1, provider: 'google', teamMemberId: 9, usedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
+      });
+      const res = await callback(callbackRequest('code=c&state=s1', linkCookie()));
+      expect(errorOf(res)).toMatch(/expired/);
+      expect(teamMember.update).not.toHaveBeenCalled();
+    });
   });
 
   it('refuses an email already linked to a different Google account', async () => {

@@ -4,9 +4,9 @@ import React, { useState } from 'react';
 import { useI18n } from '@/lib/i18n';
 import styles from '../../../styles/Home.module.css';
 import type { AuthUser } from '../types';
-import { AuthField, AuthShell, FormError, GoogleIcon, Spinner, useTx } from '../components/ui';
+import { AuthField, AuthShell, FormError, GoogleIcon, KloudIcon, Spinner, useTx } from '../components/ui';
 import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
-import { googleSignInHref, googleSignInOpensBrowser } from '@/lib/googleSignInHref';
+import { KLOUD_SIGN_IN_ENABLED, googleSignInHref, googleSignInOpensBrowser, kloudSignInHref } from '@/lib/googleSignInHref';
 
 export function LoginView({
   onBack,
@@ -110,6 +110,20 @@ export function LoginView({
     </div>
   );
 
+  const googleButton = (
+    <button
+      type="button"
+      className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
+      onClick={() => {
+        if (googleSignInOpensBrowser()) setGoogleInBrowser(true);
+        window.location.href = googleSignInHref();
+      }}
+    >
+      <GoogleIcon />
+      Google
+    </button>
+  );
+
   return (
     <AuthShell
       onBack={onBack}
@@ -152,17 +166,23 @@ export function LoginView({
       </div>
 
       <div className={styles.ssoDivider}>{t('login.orContinueWith')}</div>
-      <button
-        type="button"
-        className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
-        onClick={() => {
-          if (googleSignInOpensBrowser()) setGoogleInBrowser(true);
-          window.location.href = googleSignInHref();
-        }}
-      >
-        <GoogleIcon />
-        Google
-      </button>
+      {KLOUD_SIGN_IN_ENABLED ? (
+        <div className={styles.ssoRow}>
+          {googleButton}
+          <button
+            type="button"
+            className={`${styles.btn} ${styles.btnOutline} ${styles.googleBtn}`}
+            onClick={() => {
+              window.location.href = kloudSignInHref();
+            }}
+          >
+            <KloudIcon />
+            Kloud
+          </button>
+        </div>
+      ) : (
+        googleButton
+      )}
       {googleInBrowser && <p className={styles.authSub} role="status">{t('login.googleInBrowser')}</p>}
 
       <div className={styles.authActions}>

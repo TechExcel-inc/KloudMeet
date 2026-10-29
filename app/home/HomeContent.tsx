@@ -36,11 +36,17 @@ export function HomeContent() {
   useEffect(() => {
     const ssoToken = searchParams.get('sso_token');
     const errorMsg = searchParams.get('error');
+    const linked = searchParams.get('linked');
 
     if (errorMsg) {
       toast.show(errorMsg);
       window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (linked === 'google' || linked === 'kloud') {
+      // Back from "Connect" in My Profile.
+      toast.show(linked === 'google' ? 'Google account connected' : 'Kloud account connected');
+      window.history.replaceState({}, document.title, window.location.pathname);
     } else if (ssoToken) {
+      const via = searchParams.get('via') === 'kloud' ? 'Kloud' : 'Google';
       fetch('/api/auth/profile', {
         headers: { Authorization: `Bearer ${ssoToken}` }
       })
@@ -72,14 +78,14 @@ export function HomeContent() {
           };
           localStorage.setItem('kloudUser', JSON.stringify(u));
           handleAuthSuccess(u);
-          toast.show('Signed in with Google');
+          toast.show(`Signed in with ${via}`);
         } else {
           toast.show(data.error || 'Failed to get profile');
         }
       })
       .catch(err => {
         console.error('SSO profile error', err);
-        toast.show('Network error logging in with Google');
+        toast.show(`Network error logging in with ${via}`);
       })
       .finally(() => {
         setAuthInitialized(true);

@@ -4,6 +4,8 @@ import styles from '../styles/MyProfileModal.module.css';
 import { useI18n } from './i18n';
 import { ACCESS_LEVELS, parseAccessLevel, type MeetingAccessLevel } from './meetingAccess';
 import { fetchCompanyPeople } from './meetingAccessClient';
+import { EmailField } from './profile/EmailField';
+import { SignInMethods, type SignInMethodsState } from './profile/SignInMethods';
 
 /** API PUT /api/account/profile 校验错误码 → i18n key */
 const PROFILE_PUT_ERROR_I18N: Record<string, string> = {
@@ -69,6 +71,7 @@ export function MyProfileModal({
   const [defaultAccess, setDefaultAccess] = useState<MeetingAccessLevel>('PUBLIC');
   const [defaultAccessTouched, setDefaultAccessTouched] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
+  const [signInMethods, setSignInMethods] = useState<SignInMethodsState | null>(null);
   
   // Password change state
   const [showPasswordForm, setShowPasswordForm] = useState(false);
@@ -86,9 +89,6 @@ export function MyProfileModal({
   // Avatar upload ref
   const avatarInputRef = useRef<HTMLInputElement>(null);
   
-  // Track focused state for styling the email group
-  const [emailFocused, setEmailFocused] = useState(false);
-
   // Animate in
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -116,6 +116,7 @@ export function MyProfileModal({
           setEmailVerified(data.emailVerified || false);
           setPhoneVerified(data.phoneVerified || false);
           setDefaultAccess(parseAccessLevel(data.defaultMeetingAccess) ?? 'PUBLIC');
+          if (data.signInMethods) setSignInMethods(data.signInMethods);
         }
       })
       .catch((err) => {
@@ -147,6 +148,22 @@ export function MyProfileModal({
     return t('prejoin.accessLevelPrivateDesc', { company: companyName ?? '' });
   };
 
+  const handleEmailConfirmed = (confirmed: string) => {
+    setEmail(confirmed);
+    setEmailVerified(true);
+    // A verified email changes which sign-in methods can be removed.
+    fetch('/api/account/sign-in-methods', { headers: { Authorization: `Bearer ${user.token}` } })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setSignInMethods(data as SignInMethodsState);
+      })
+      .catch(() => undefined);
+    try {
+      const stored = localStorage.getItem('kloudUser');
+      if (stored) localStorage.setItem('kloudUser', JSON.stringify({ ...JSON.parse(stored), email: confirmed }));
+    } catch {}
+  };
+
   const handleSave = async () => {
     setSaving(true);
     setError('');
@@ -171,7 +188,6 @@ export function MyProfileModal({
           biography,
           personalRoomId: personalRoomEnabled ? personalRoomId : null,
           phone,
-          email,
           ...(defaultAccessTouched ? { defaultMeetingAccess: defaultAccess } : {}),
         }),
       });
@@ -604,29 +620,13 @@ export function MyProfileModal({
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
                   {t('profile.email')}
                 </div>
-                <div className={styles.formField}>
-                  <div className={`${styles.inputGroup} ${emailFocused ? styles.focused : ''}`}>
-                    <input 
-                      className={styles.inputBox} 
-                      placeholder={t('profile.emailPlaceholder')} 
-                      value={email} 
-                      onChange={e => setEmail(e.target.value)}
-                      onFocus={() => setEmailFocused(true)}
-                      onBlur={() => setEmailFocused(false)}
-                      style={{ background: 'transparent' }}
-                    />
-                    {email && (
-                      emailVerified ? (
-                        <span className={styles.verifiedBadge}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>
-                          {t('profile.verified')}
-                        </span>
-                      ) : (
-                        <span className={styles.notVerifiedText}>{t('profile.notVerified')}</span>
-                      )
-                    )}
-                  </div>
-                </div>
+                <EmailField
+                  token={user.token}
+                  email={email}
+                  emailVerified={emailVerified}
+                  toast={toast}
+                  onConfirmed={handleEmailConfirmed}
+                />
               </div>
 
               <div className={styles.formRow}>
@@ -857,6 +857,10 @@ export function MyProfileModal({
                 )}
               </div>
             </div>
+
+            {signInMethods && (
+              <SignInMethods token={user.token} methods={signInMethods} onChange={setSignInMethods} toast={toast} />
+            )}
           </div>
 
         </div>

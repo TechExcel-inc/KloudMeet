@@ -1,14 +1,16 @@
 import { prisma } from '@/lib/db';
-import { buildPeerTimeUrl, ensureHostBypassesProxy } from '@/lib/peertimeUpstream';
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { usernameBaseFromEmail } from '@/lib/googleOAuth';
+import { fetchKloudUser, recordKloudCompanies } from '@/lib/kloudAuth';
 
 /**
  * GET /api/auth/sso
  *
- * Reads the `kloud_sso_token` cookie (set by kloud.cn on the parent domain),
- * validates it against the PeerTime API, and creates/finds a matching
- * KloudMeet user + session.
+ * Reads the `kloud_sso_token` cookie (set by kloud.cn on the parent domain), reads the Kloud user
+ * behind it, and signs in the Kloud Meet account bound to that Kloud user (or creates one).
+ * Same rules as "Continue with Kloud": accounts are matched by Kloud user ID, and an existing
+ * account with the same email is not taken over.
  *
  * Returns the same shape as /api/auth/login: { token, user }.
  */
@@ -19,94 +21,43 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'No SSO token' }, { status: 401 });
     }
 
-    // ── 1. Validate the PeerTime token and fetch user profile ──
-    const decodedToken = decodeURIComponent(ssoToken);
-    const { url: profileUrl, headers: loopbackHeaders } = buildPeerTimeUrl(
-      '/peertime/V1/User/UserProfile',
-    );
-    ensureHostBypassesProxy(profileUrl);
-    const profileRes = await fetch(profileUrl, {
-      headers: { UserToken: decodedToken, ...loopbackHeaders },
-    });
-
-    if (!profileRes.ok) {
-      return NextResponse.json(
-        { error: 'SSO token invalid or expired' },
-        { status: 401 },
-      );
+    // ── 1. Validate the PeerTime token and fetch the Kloud user ──
+    const kloud = await fetchKloudUser(decodeURIComponent(ssoToken));
+    if (!kloud) {
+      return NextResponse.json({ error: 'SSO token invalid or expired' }, { status: 401 });
     }
 
-    const profileData = await profileRes.json();
-    // PeerTime returns { RetCode: 0, RetData: { ... } } on success
-    if (profileData.RetCode !== 0 || !profileData.RetData) {
-      return NextResponse.json(
-        { error: 'SSO token rejected by PeerTime' },
-        { status: 401 },
-      );
-    }
-
-    const ptUser = profileData.RetData;
-    const email = (ptUser.Email || ptUser.email || '').toString().trim().toLowerCase();
-    const fullName =
-      ptUser.Name || ptUser.name || ptUser.UserName || ptUser.username || '';
-    const username =
-      ptUser.UserName ||
-      ptUser.username ||
-      email.split('@')[0] ||
-      `kloud_${ptUser.UserID || Date.now()}`;
-    const phone = ptUser.Mobile || ptUser.mobile || ptUser.phone || null;
-    const avatarUrl = ptUser.AvatarUrl || ptUser.avatarUrl || ptUser.Avatar || null;
-    const peerTimeUserId = String(ptUser.UserID || ptUser.userid || '');
-
-    // ── 2. Find-or-create matching TeamMember in KloudMeet ──
-    let member = null;
-
-    // Try by email first
-    if (email) {
-      member = await prisma.teamMember.findFirst({ where: { email } });
-    }
-    // Fallback: match by peerTimeUserId if we stored it
-    if (!member && peerTimeUserId) {
-      member = await prisma.teamMember.findFirst({
-        where: { username: `kloud_${peerTimeUserId}` },
-      });
-    }
+    // ── 2. Find-or-create the bound TeamMember in KloudMeet ──
+    const now = new Date();
+    let member = await prisma.teamMember.findUnique({ where: { kloudUserId: kloud.id } });
 
     if (!member) {
-      // Auto-provision a new KloudMeet account
-      const safeUsername =
-        email ? email.split('@')[0] : `kloud_${peerTimeUserId || Date.now()}`;
-
-      // Ensure username uniqueness
-      let finalUsername = safeUsername;
-      const existing = await prisma.teamMember.findFirst({
-        where: { username: finalUsername },
-      });
-      if (existing) {
-        finalUsername = `${safeUsername}_${peerTimeUserId || Date.now()}`;
+      if (kloud.email && (await prisma.teamMember.findUnique({ where: { email: kloud.email }, select: { id: true } }))) {
+        return NextResponse.json(
+          { error: 'Sign in to your existing Kloud Meet account to connect Kloud.', code: 'CONNECT_REQUIRED' },
+          { status: 409 },
+        );
       }
-
+      const baseUsername = kloud.email ? usernameBaseFromEmail(kloud.email) : `kloud${kloud.id}`;
+      let username = baseUsername;
+      let counter = 1;
+      while (await prisma.teamMember.findUnique({ where: { username }, select: { id: true } })) {
+        username = `${baseUsername}${counter}`;
+        counter++;
+      }
       member = await prisma.teamMember.create({
         data: {
-          email: email || null,
-          username: finalUsername,
-          fullName,
-          phone,
-          avatarUrl,
+          kloudUserId: kloud.id,
+          kloudLinkedAt: now,
+          email: kloud.email,
+          username,
+          fullName: kloud.name || username,
+          phone: kloud.phone,
+          avatarUrl: kloud.avatarUrl,
+          emailVerified: false,
           passwordHash: crypto.randomBytes(32).toString('hex'), // random — login via SSO only
-          emailVerified: true,
-          emailVerifiedAt: new Date(),
           status: 'ACTIVE',
-        },
-      });
-    } else {
-      // Update profile info from PeerTime in case it changed
-      member = await prisma.teamMember.update({
-        where: { id: member.id },
-        data: {
-          fullName: fullName || member.fullName,
-          avatarUrl: avatarUrl || member.avatarUrl,
-          phone: phone || member.phone,
+          createdBy: 'kloud',
         },
       });
     }
@@ -117,6 +68,7 @@ export async function GET(request: NextRequest) {
         { status: 401 },
       );
     }
+    await recordKloudCompanies(member.id, kloud.companies, now);
 
     // ── 3. Create a KloudMeet session ──
     const token = crypto.randomBytes(32).toString('hex');

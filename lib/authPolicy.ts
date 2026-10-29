@@ -31,8 +31,8 @@ export function isValidPassword(raw: unknown): raw is string {
   );
 }
 
-/** Email codes are only sent for these flows; SMS is not available yet. */
-export type CodePurpose = 'signup' | 'reset';
+/** Email codes are only sent for these flows; SMS is not available yet. `email` confirms a new address in My Profile. */
+export type CodePurpose = 'signup' | 'reset' | 'email';
 
 export function codePurpose(intent: unknown): CodePurpose {
   return intent === 'reset' ? 'reset' : 'signup';

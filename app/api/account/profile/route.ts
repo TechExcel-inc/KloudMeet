@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db';
 import { resolvePersonalRoomIdForSave } from '@/lib/personalRoom';
 import { parseAccessLevel } from '@/lib/meetingAccess';
 import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
+import { normalizeEmail } from '@/lib/authPolicy';
+import { signInMethodsOf } from '@/lib/accountLinking';
 
 async function getAuthMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -21,8 +23,8 @@ export async function GET(request: NextRequest) {
     const member = await getAuthMember(request);
     if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     
-    const { passwordHash, calendarFeedToken, ...safeMember } = member;
-    return NextResponse.json(safeMember);
+    const { passwordHash, calendarFeedToken, googleId, kloudUserId, ...safeMember } = member;
+    return NextResponse.json({ ...safeMember, signInMethods: signInMethodsOf(member) });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -80,20 +82,19 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Validate email if provided
-    if (email !== undefined && email !== '') {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    // The email only changes through /api/account/email (a code sent to the new address); here an
+    // unchanged value is accepted and anything else is refused.
+    if (email !== undefined && email !== null && email !== '') {
+      const normalized = normalizeEmail(email);
+      if (!normalized) {
         return NextResponse.json(
           { error: 'Invalid email format', code: 'EMAIL_INVALID' },
           { status: 400 },
         );
       }
-      const existingEmail = await prisma.teamMember.findFirst({
-        where: { email, id: { not: member.id } }
-      });
-      if (existingEmail) {
+      if (normalized !== (member.email ?? '').toLowerCase()) {
         return NextResponse.json(
-          { error: 'This email is already in use.', code: 'EMAIL_IN_USE' },
+          { error: 'Confirm the new email with a code first.', code: 'EMAIL_NEEDS_CODE' },
           { status: 400 },
         );
       }
@@ -113,9 +114,6 @@ export async function PUT(request: NextRequest) {
     const pieces = [firstName, middleName, lastName].filter(Boolean);
     const fullName = pieces.length > 0 ? pieces.join(' ') : member.fullName;
 
-    // Detect email change → reset verification
-    const emailChanged = email !== undefined && email !== member.email;
-
     const updated = await prisma.teamMember.update({
       where: { id: member.id },
       data: {
@@ -126,16 +124,14 @@ export async function PUT(request: NextRequest) {
         biography: biography !== undefined ? biography : undefined,
         personalRoomId: personalRoomIdToSave,
         phone: phone !== undefined ? (phone || null) : undefined,
-        email: email !== undefined ? (email || null) : undefined,
         avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
         defaultMeetingAccess: defaultMeetingAccessToSave,
-        ...(emailChanged ? { emailVerified: false, emailVerifiedAt: null } : {}),
         modifiedAt: new Date()
       }
     });
 
-    const { passwordHash, calendarFeedToken, ...safeMember } = updated;
-    return NextResponse.json(safeMember);
+    const { passwordHash, calendarFeedToken, googleId, kloudUserId, ...safeMember } = updated;
+    return NextResponse.json({ ...safeMember, signInMethods: signInMethodsOf(updated) });
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

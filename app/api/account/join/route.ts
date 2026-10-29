@@ -75,9 +75,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Account not found' }, { status: 400 });
       }
 
-      // Verify email domain match
+      // Verify email domain match (only a verified address proves the domain)
       if (!member.email || !member.email.includes('@')) {
         return NextResponse.json({ error: 'Email required for domain-based join' }, { status: 400 });
+      }
+      if (!member.emailVerified) {
+        return NextResponse.json(
+          { error: 'Verify your email address in My Profile first.', code: 'EMAIL_NOT_VERIFIED' },
+          { status: 400 },
+        );
       }
       const domain = member.email.split('@')[1].toLowerCase();
       const allowedDomains = (account.emailDomains || '').split(',').map((d) => d.trim().toLowerCase());
@@ -156,7 +162,7 @@ export async function GET(request: NextRequest) {
       isExisting: boolean;
     }> = [];
 
-    if (member.email && member.email.includes('@')) {
+    if (member.email && member.email.includes('@') && member.emailVerified) {
       const domain = member.email.split('@')[1].toLowerCase();
       const allAccounts = await prisma.kloudMeetAccount.findMany({
         where: { enableAutoJoinViaEmail: true, status: 1 },
