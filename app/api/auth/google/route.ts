@@ -19,7 +19,8 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   // `desktop`: PKCE challenge from the desktop app, which opened this page in the system browser.
-  const payload = newGoogleState(searchParams.get('next'), searchParams.get('desktop'));
+  // `link`: "Connect Google" from My Profile (a one-time intent for the signed-in account).
+  const payload = newGoogleState(searchParams.get('next'), searchParams.get('desktop'), searchParams.get('link'));
   const response = NextResponse.redirect(
     buildGoogleAuthUrl(clientId, googleRedirectUri(origin), payload.state),
   );

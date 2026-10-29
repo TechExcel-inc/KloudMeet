@@ -1,4 +1,4 @@
-export type VerificationEmailPurpose = 'signup' | 'reset';
+export type VerificationEmailPurpose = 'signup' | 'reset' | 'email';
 
 const COPY: Record<VerificationEmailPurpose, { subject: string; heading: string; intro: string; ignore: string }> = {
   signup: {
@@ -12,6 +12,12 @@ const COPY: Record<VerificationEmailPurpose, { subject: string; heading: string;
     heading: 'Reset your password',
     intro: 'Use this code to choose a new Kloud Meet password:',
     ignore: "If you didn't ask to reset your password, you can ignore this email — your password stays the same.",
+  },
+  email: {
+    subject: 'Confirm your Kloud Meet email',
+    heading: 'Confirm your email',
+    intro: 'Use this code to confirm this email address for your Kloud Meet account:',
+    ignore: "If you didn't ask for this, you can ignore this email — nothing changes.",
   },
 };
 

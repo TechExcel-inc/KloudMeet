@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import type { NextRequest } from 'next/server';
 import { safeReplayNext } from '@/lib/recordingReplayPath';
+import { validLinkToken } from '@/lib/accountLinking';
 
 /**
  * Google sign-in / sign-up (OAuth 2.0 authorization code flow).
@@ -28,8 +29,11 @@ export function googleRedirectUri(origin: string): string {
   return `${origin}/api/auth/google/callback`;
 }
 
-/** `desktop` is the desktop app's PKCE challenge when sign-in started from the app. */
-export type GoogleStatePayload = { state: string; next: string | null; desktop?: string | null };
+/**
+ * `desktop` is the desktop app's PKCE challenge when sign-in started from the app.
+ * `link` is a one-time "Connect Google" intent from My Profile (see lib/accountLinking.ts).
+ */
+export type GoogleStatePayload = { state: string; next: string | null; desktop?: string | null; link?: string | null };
 
 const PKCE_CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/;
 
@@ -38,11 +42,16 @@ export function validDesktopChallenge(raw: unknown): string | null {
   return typeof raw === 'string' && PKCE_CHALLENGE_RE.test(raw) ? raw : null;
 }
 
-export function newGoogleState(rawNext: string | null, rawDesktop: string | null = null): GoogleStatePayload {
+export function newGoogleState(
+  rawNext: string | null,
+  rawDesktop: string | null = null,
+  rawLink: string | null = null,
+): GoogleStatePayload {
   return {
     state: crypto.randomBytes(24).toString('hex'),
     next: safeReplayNext(rawNext),
     desktop: validDesktopChallenge(rawDesktop),
+    link: validLinkToken(rawLink),
   };
 }
 
@@ -59,6 +68,7 @@ export function decodeGoogleState(raw: string | undefined | null): GoogleStatePa
       state: parsed.state,
       next: safeReplayNext(typeof parsed.next === 'string' ? parsed.next : null),
       desktop: validDesktopChallenge(parsed.desktop),
+      link: validLinkToken(parsed.link),
     };
   } catch {
     return null;

@@ -962,3 +962,102 @@
     margin-left: 0;
   }
 }
+
+/* ── Email: changes only after a code sent to the new address ── */
+.emailValue {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 8px;
+}
+.emailText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1e293b;
+  font-size: 0.9rem;
+}
+.codeInput {
+  max-width: 180px;
+  letter-spacing: 6px;
+  font-variant-numeric: tabular-nums;
+}
+.codeInput::placeholder {
+  letter-spacing: normal;
+}
+.formNote {
+  color: #64748b;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.inlineError {
+  flex-basis: 100%;
+  color: #dc2626;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+.btnLink {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0 4px;
+  color: #4f46e5;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+.btnLink:disabled {
+  color: #94a3b8;
+  cursor: default;
+}
+
+/* ── Sign-in methods ── */
+.methodMuted {
+  color: #94a3b8;
+}
+.confirmBox {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  max-width: 420px;
+  animation: slideDown 0.2s ease;
+}
+.btnChange:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btnChange:disabled:hover {
+  background: #f8fafc;
+  color: #475569;
+  border-color: #e2e8f0;
+}
+.btnDanger {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btnDanger:hover {
+  background: #b91c1c;
+}
+.btnDanger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.companySelect {
+  max-width: 260px;
+  cursor: pointer;
+}

@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db';
 import type { CodePurpose } from '@/lib/authPolicy';
 
 /**
- * Email verification codes (sign-up and password reset).
+ * Email verification codes (sign-up, password reset and confirming an address in My Profile).
  * - 6 random digits from a CSPRNG, valid 10 minutes.
  * - Issuing a new code retires the earlier unused ones, so only the latest code works.
  * - Max 5 wrong guesses per code, then it is burned; 60 s between sends, 5 sends per hour.
@@ -17,6 +17,7 @@ export const MAX_CODES_PER_HOUR = 5;
 const TYPE_BY_PURPOSE: Record<CodePurpose, string> = {
   signup: 'SIGNUP_EMAIL',
   reset: 'RESET_EMAIL',
+  email: 'CHANGE_EMAIL',
 };
 
 export function codeType(purpose: CodePurpose): string {

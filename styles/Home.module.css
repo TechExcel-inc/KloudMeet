@@ -1716,6 +1716,13 @@ a.dropdownItem:focus-visible {
   height: 44px;
 }
 
+/* Google and Kloud side by side */
+.ssoRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
 .authActions {
   display: flex;
   align-items: center;

@@ -61,6 +61,11 @@ model KloudMeetAccount {
   contactEmail           String?
   contactPhone           String?
   description            String?
+  /// Kloud company (kloud.cn SchoolID) this account mirrors; members flow one way, Kloud → Kloud Meet (prisma/add_account_linking.sql)
+  kloudCompanyId         String?                @unique(map: "KloudMeetAccount_kloudCompanyId_key") @db.VarChar(32)
+  kloudCompanyName       String?
+  kloudLinkedAt          DateTime?
+  kloudLinkedBy          Int?
   status                 Int                    @default(1)
   createdAt              DateTime               @default(now())
   createdBy              String?
@@ -443,6 +448,12 @@ model TeamMember {
   /// Access level for this person's new meetings (My Profile → Meeting settings); null = Public (prisma/add_member_default_meeting_access.sql)
   defaultMeetingAccess String?               @db.VarChar(16)
   avatarUrl           String?
+  /// Kloud (kloud.cn) user ID connected as a sign-in method; null = not connected (prisma/add_account_linking.sql)
+  kloudUserId         String?                @unique(map: "TeamMember_kloudUserId_key") @db.VarChar(32)
+  kloudLinkedAt       DateTime?
+  /// Kloud companies and roles seen at the last Kloud sign-in: [{ id, name, role }]
+  kloudCompanies      Json?
+  kloudCompaniesAt    DateTime?
   emailVerified       Boolean                @default(false)
   emailVerifiedAt     DateTime?
   phoneVerified       Boolean                @default(false)
@@ -569,6 +580,21 @@ model DesktopAuthHandoff {
 
   @@index([expiresAt], map: "DesktopAuthHandoff_expiresAt_idx")
   @@map("DesktopAuthHandoff")
+}
+
+/// One-time intents to connect a sign-in method (Google / Kloud) to the signed-in account.
+/// Tokens are stored as SHA-256 hashes, live 10 minutes and work once (prisma/add_account_linking.sql).
+model AccountLinkIntent {
+  id           Int       @id @default(autoincrement())
+  tokenHash    String    @unique(map: "AccountLinkIntent_tokenHash_key") @db.VarChar(64)
+  teamMemberId Int
+  provider     String    @db.VarChar(16)
+  expiresAt    DateTime
+  usedAt       DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([expiresAt], map: "AccountLinkIntent_expiresAt_idx")
+  @@map("AccountLinkIntent")
 }
 
 /// People invited by email from the schedule dialog
