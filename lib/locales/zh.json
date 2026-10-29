@@ -1443,5 +1443,12 @@
   "background.hintPrejoin": "入会后其他人会看到。选择会保存在这台设备上。",
   "background.done": "完成",
   "background.menuItem": "背景",
-  "background.button": "更换背景"
+  "background.button": "更换背景",
+  "background.add": "添加图片",
+  "background.custom": "我的图片",
+  "background.remove": "删除图片",
+  "background.addFull": "最多保存 6 张图片，删除一张后再添加。",
+  "background.addTooBig": "这张图片超过 25 MB，请换一张小一些的。",
+  "background.addFailed": "这张图片无法使用，请换一张 JPG 或 PNG。",
+  "background.mirrorNote": "你看到的是镜像画面，别人看到的图片是正的。"
 }

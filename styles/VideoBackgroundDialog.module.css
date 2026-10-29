@@ -393,6 +393,82 @@
   background: rgba(0, 0, 0, 0.45);
 }
 
+/* "Add image" and the person's own images */
+.addChoice {
+  border: 1.5px dashed var(--vb-border);
+}
+
+.addChoice .spinner {
+  width: 18px;
+  height: 18px;
+}
+
+.customTile {
+  position: relative;
+  min-width: 0;
+}
+
+.customTile > .choice {
+  width: 100%;
+}
+
+.removeButton {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: rgba(20, 21, 24, 0.72);
+  border: 0;
+  border-radius: 11px;
+  color: #ffffff;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background-color 0.15s ease;
+}
+
+.customTile:hover .removeButton,
+.customTile:focus-within .removeButton {
+  opacity: 1;
+}
+
+.removeButton:hover {
+  background: rgba(20, 21, 24, 0.92);
+}
+
+.removeButton:focus-visible {
+  outline: none;
+  opacity: 1;
+  box-shadow: 0 0 0 3px var(--vb-ring);
+}
+
+.removeButton:disabled {
+  display: none;
+}
+
+/* Touch screens have no hover: keep remove visible */
+@media (hover: none) {
+  .removeButton {
+    opacity: 1;
+  }
+}
+
+.addNote,
+.addProblem {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--vb-muted);
+}
+
+.addProblem {
+  color: var(--vb-alert-text);
+}
+
 /* Footer */
 .footer {
   display: flex;
@@ -499,7 +575,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .choice,
-  .thumb {
+  .thumb,
+  .removeButton {
     transition: none;
   }
 

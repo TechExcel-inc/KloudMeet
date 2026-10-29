@@ -10,6 +10,7 @@
 import { supportsBackgroundProcessors } from '@livekit/track-processors';
 import type { ProcessorOptions, Track, TrackProcessor } from 'livekit-client';
 import { createBackgroundPipeline, type BackgroundLook, type BackgroundPipeline } from './backgroundCutout';
+import { customBackgroundUrl, isCustomBackgroundId, type CustomBackgroundId } from './customBackgrounds';
 import { isToolbarMobileUserAgent } from './useToolbarIsMobile';
 
 export const BACKGROUND_SCENES = [
@@ -24,7 +25,8 @@ export const BACKGROUND_SCENES = [
 ] as const;
 
 export type BackgroundScene = (typeof BACKGROUND_SCENES)[number];
-export type VideoBackground = 'none' | 'blur-light' | 'blur' | BackgroundScene;
+/** A built-in scene, or `custom:<id>` for an image the person added (lib/customBackgrounds.ts). */
+export type VideoBackground = 'none' | 'blur-light' | 'blur' | BackgroundScene | CustomBackgroundId;
 export type VideoBackgroundStatus = 'idle' | 'starting' | 'running' | 'failed';
 
 export const VIDEO_BACKGROUND_EFFECTS = ['none', 'blur-light', 'blur'] as const;
@@ -45,7 +47,11 @@ export function isBackgroundScene(value: unknown): value is BackgroundScene {
 
 function isVideoBackground(value: unknown): value is VideoBackground {
   return (
-    value === 'none' || value === 'blur-light' || value === 'blur' || isBackgroundScene(value)
+    value === 'none' ||
+    value === 'blur-light' ||
+    value === 'blur' ||
+    isBackgroundScene(value) ||
+    isCustomBackgroundId(value)
   );
 }
 
@@ -90,9 +96,14 @@ export function videoBackgroundsSupported(): boolean {
   }
 }
 
-function lookFor(background: Exclude<VideoBackground, 'none'>): BackgroundLook {
+/** What the pipeline draws; undefined when a custom image is gone (removed, or storage cleared). */
+async function lookFor(background: Exclude<VideoBackground, 'none'>): Promise<BackgroundLook | undefined> {
   if (background === 'blur-light' || background === 'blur') {
     return { kind: 'blur', radius: BLUR_RADIUS[background] };
+  }
+  if (isCustomBackgroundId(background)) {
+    const url = await customBackgroundUrl(background);
+    return url ? { kind: 'image', url } : undefined;
   }
   return { kind: 'image', url: sceneImageUrl(background) };
 }
@@ -160,7 +171,7 @@ export class KloudBackgroundProcessor
     this.background = background;
     if (!this.inner) return;
     try {
-      await this.inner.switchTo(lookFor(background));
+      await this.inner.switchTo(await this.lookForCurrent());
       this.emit('running');
     } catch (error) {
       this.emit('failed', error);
@@ -171,23 +182,37 @@ export class KloudBackgroundProcessor
     // Camera turned off: LiveKit restarts us with the new track when it comes back on.
     if (opts.track.readyState === 'ended') return;
     const generation = ++this.generation;
-    const startedWith = this.background;
+    let startedWith = this.background;
     this.emit('starting');
     let inner: BackgroundPipeline | undefined;
     try {
-      inner = createBackgroundPipeline(lookFor(startedWith), ASSETS);
+      const look = await this.lookForCurrent();
+      startedWith = this.background; // blur, if the chosen image was gone
+      inner = createBackgroundPipeline(look, ASSETS);
       await inner.init(opts);
       if (generation !== this.generation) {
         await inner.destroy().catch(() => undefined);
         return;
       }
-      if (this.background !== startedWith) await inner.switchTo(lookFor(this.background));
+      if (this.background !== startedWith) await inner.switchTo(await this.lookForCurrent());
       this.inner = inner;
       this.emit('running');
     } catch (error) {
       await inner?.destroy().catch(() => undefined);
       if (generation === this.generation) this.emit('failed', error);
     }
+  }
+
+  /**
+   * The look for the current choice. A custom image that is gone becomes blur, which keeps the
+   * room hidden; the saved choice follows so the picker shows what is really on.
+   */
+  private async lookForCurrent(): Promise<BackgroundLook> {
+    const look = await lookFor(this.background);
+    if (look) return look;
+    this.background = 'blur';
+    saveVideoBackground('blur');
+    return { kind: 'blur', radius: BLUR_RADIUS.blur };
   }
 
   private async stopInner() {

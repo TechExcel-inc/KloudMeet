@@ -1457,5 +1457,12 @@
   "background.hintPrejoin": "Others see it when you join. Saved on this device.",
   "background.done": "Done",
   "background.menuItem": "Background",
-  "background.button": "Change background"
+  "background.button": "Change background",
+  "background.add": "Add image",
+  "background.custom": "Your image",
+  "background.remove": "Remove image",
+  "background.addFull": "You can keep up to 6 images. Remove one to add another.",
+  "background.addTooBig": "That image is over 25 MB. Choose a smaller one.",
+  "background.addFailed": "That image couldn't be used. Try a JPG or PNG.",
+  "background.mirrorNote": "You see yourself mirrored. Others see your image the right way round."
 }

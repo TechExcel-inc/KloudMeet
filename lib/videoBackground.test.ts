@@ -44,6 +44,10 @@ vi.mock('./backgroundCutout', () => ({
 }));
 vi.mock('@livekit/track-processors', () => ({ supportsBackgroundProcessors: () => true }));
 vi.mock('./useToolbarIsMobile', () => ({ isToolbarMobileUserAgent: () => false }));
+vi.mock('./customBackgrounds', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./customBackgrounds')>()),
+  customBackgroundUrl: async (id: string) => (id === 'custom:kept-image' ? 'blob:kept' : undefined),
+}));
 
 const live = () => ({ kind: 'video', track: { readyState: 'live' } }) as never;
 const ended = () => ({ kind: 'video', track: { readyState: 'ended' } }) as never;
@@ -122,6 +126,33 @@ describe('KloudBackgroundProcessor', () => {
     expect(FakeInner.made[0].destroyed).toBe(true);
     expect(p.processedTrack).toBeUndefined();
     expect(statuses[statuses.length - 1]).toBe('idle');
+  });
+
+  it('uses an image the person added', async () => {
+    const p = new KloudBackgroundProcessor('custom:kept-image');
+    const init = p.init(live());
+    await tick();
+    FakeInner.made[0].finishInit();
+    await init;
+    expect(FakeInner.made[0].modes).toEqual(['image:blob:kept']);
+  });
+
+  it('falls back to blur when an added image is gone, and saves that', async () => {
+    const saved: string[] = [];
+    vi.stubGlobal('localStorage', { getItem: () => null, setItem: (_key: string, value: string) => saved.push(value) });
+    vi.stubGlobal('window', new EventTarget());
+    try {
+      const p = new KloudBackgroundProcessor('custom:gone-image');
+      const init = p.init(live());
+      await tick();
+      FakeInner.made[0].finishInit();
+      await init;
+      expect(FakeInner.made[0].modes).toEqual(['blur:14']);
+      expect(p.currentBackground).toBe('blur');
+      expect(saved).toEqual(['blur']);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('builds a fresh pipeline for each track it is put on', async () => {

@@ -274,17 +274,33 @@ class CutoutRenderer {
     gl.uniform1i(temporal.uniforms.u_first, this.hasMask ? 0 : 1);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     this.current = 1 - this.current;
+    this.end();
+    this.hasMask = true;
+    this.refine();
+  }
 
+  /** True once a frame has been cut out: frames after it may reuse the cut-out. */
+  get hasCutout(): boolean {
+    return this.hasMask;
+  }
+
+  /**
+   * Fits the latest cut-out to the frame just uploaded. Runs after every model pass, and alone on
+   * frames the model skips (a busy computer), so the edge still follows the new picture.
+   */
+  refine() {
+    const { gl } = this;
+    if (!this.refined || !this.hasMask) return;
+    this.begin();
     const edge = edgeTuning();
     const refine = this.use('refine', this.refined);
-    this.bind(refine, 'u_mask', 0, next.texture);
+    this.bind(refine, 'u_mask', 0, this.masks[this.current].texture);
     this.bind(refine, 'u_frame', 1, this.frame);
     // Four taps each way, spaced so the outermost lands `reach` camera pixels out.
     gl.uniform2f(refine.uniforms.u_step, edge.reach / 4 / this.width, edge.reach / 4 / this.height);
     gl.uniform1f(refine.uniforms.u_colour, 1 / (2 * edge.colour * edge.colour));
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     this.end();
-    this.hasMask = true;
   }
 
   /** Draws the frame onto the canvas. False until there is a mask: no frame goes out uncut. */
@@ -477,8 +493,23 @@ async function loadImage(url: string): Promise<ImageBitmap> {
   return createImageBitmap(await response.blob());
 }
 
+/**
+ * A busy computer runs the model on every 2nd or 3rd frame instead of letting the video stutter.
+ * The background never switches off on its own: that would show the room.
+ */
+const MODEL_BUDGET_MS = 22; // per frame at 30 fps, leaving room for drawing and encoding
+const MODEL_WARM_UP = 10; // the first runs compile shaders and are much slower
+// Runs to wait after a change: quick to ease off when busy, slow to speed back up (no see-saw).
+const MODEL_SETTLE_UP = 30;
+const MODEL_SETTLE_DOWN = 150;
+
 class CutoutTransformer extends VideoTransformer<BackgroundLook> {
   private segmenter?: ImageSegmenter;
+  private modelEvery = 1;
+  private modelRuns = 0;
+  private modelMs = 0;
+  private modelChangedAt = 0;
+  private frameCount = 0;
   private renderer?: CutoutRenderer;
   private look: BackgroundLook;
   private scene?: { url: string; image: ImageBitmap };
@@ -550,11 +581,17 @@ class CutoutTransformer extends VideoTransformer<BackgroundLook> {
       // Dropped, never passed through: the raw room must not reach the meeting.
       if (this.isDisabled || !segmenter || !renderer || !canvas || frame.codedWidth === 0) return;
       renderer.uploadFrame(frame);
-      segmenter.segmentForVideo(frame, performance.now(), (result) => {
-        const confidence = result.confidenceMasks?.[0];
-        if (confidence) renderer.updateMask(confidence.getAsWebGLTexture());
-        result.close();
-      });
+      if (!renderer.hasCutout || this.frameCount++ % this.modelEvery === 0) {
+        const started = performance.now();
+        segmenter.segmentForVideo(frame, started, (result) => {
+          const confidence = result.confidenceMasks?.[0];
+          if (confidence) renderer.updateMask(confidence.getAsWebGLTexture());
+          result.close();
+        });
+        this.noteModelTime(performance.now() - started);
+      } else {
+        renderer.refine();
+      }
       if (renderer.draw()) {
         controller.enqueue(new VideoFrame(canvas, { timestamp: frame.timestamp }));
       }
@@ -562,6 +599,25 @@ class CutoutTransformer extends VideoTransformer<BackgroundLook> {
       console.warn('[KloudMeet] Camera background frame failed', error);
     } finally {
       frame.close();
+    }
+  }
+
+  private noteModelTime(ms: number) {
+    this.modelRuns++;
+    if (this.modelRuns <= MODEL_WARM_UP) return;
+    this.modelMs = this.modelMs === 0 ? ms : this.modelMs * 0.92 + ms * 0.08;
+    const before = this.modelEvery;
+    const settled = this.modelRuns - this.modelChangedAt;
+    if (this.modelMs > MODEL_BUDGET_MS * this.modelEvery && this.modelEvery < 3) {
+      if (settled > MODEL_SETTLE_UP) this.modelEvery++;
+    } else if (this.modelEvery > 1 && this.modelMs < MODEL_BUDGET_MS * 0.7 * (this.modelEvery - 1)) {
+      if (settled > MODEL_SETTLE_DOWN) this.modelEvery--;
+    }
+    if (this.modelEvery !== before) {
+      this.modelChangedAt = this.modelRuns;
+      console.info(
+        `[KloudMeet] Camera background: model takes ${Math.round(this.modelMs)} ms, now on every ${this.modelEvery === 1 ? '' : `${this.modelEvery}${this.modelEvery === 2 ? 'nd' : 'rd'} `}frame`,
+      );
     }
   }
 }

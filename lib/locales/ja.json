@@ -1458,5 +1458,12 @@
   "background.hintPrejoin": "参加するとほかの参加者に表示されます。この端末に保存されます。",
   "background.done": "完了",
   "background.menuItem": "背景",
-  "background.button": "背景を変更"
+  "background.button": "背景を変更",
+  "background.add": "画像を追加",
+  "background.custom": "自分の画像",
+  "background.remove": "画像を削除",
+  "background.addFull": "保存できる画像は 6 枚までです。1 枚削除してから追加してください。",
+  "background.addTooBig": "25 MB を超える画像は使えません。小さい画像を選んでください。",
+  "background.addFailed": "この画像は使えません。JPG か PNG をお試しください。",
+  "background.mirrorNote": "自分には左右反転して見えますが、相手には正しい向きで表示されます。"
 }

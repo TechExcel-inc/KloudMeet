@@ -6,6 +6,7 @@ import type { LocalTrackPublication, LocalVideoTrack, Room } from 'livekit-clien
 import {
   KLOUD_BACKGROUND_PROCESSOR,
   KloudBackgroundProcessor,
+  VIDEO_BACKGROUND_EVENT,
   loadVideoBackground,
   saveVideoBackground,
   videoBackgroundsOffered,
@@ -49,7 +50,12 @@ async function applyToTrack(
 function useSavedBackground(supported: boolean) {
   const [background, setBackground] = React.useState<VideoBackground>('none');
   React.useEffect(() => {
-    if (supported) setBackground(loadVideoBackground());
+    if (!supported) return;
+    setBackground(loadVideoBackground());
+    // Changed elsewhere: the other picker, or the processor falling back when an image is gone.
+    const sync = () => setBackground(loadVideoBackground());
+    window.addEventListener(VIDEO_BACKGROUND_EVENT, sync);
+    return () => window.removeEventListener(VIDEO_BACKGROUND_EVENT, sync);
   }, [supported]);
   return [background, setBackground] as const;
 }

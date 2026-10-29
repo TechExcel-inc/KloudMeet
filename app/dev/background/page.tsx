@@ -28,7 +28,7 @@ import {
   KloudBackgroundProcessor,
   isBackgroundScene,
   sceneImageUrl,
-  type VideoBackground,
+  type BackgroundScene,
 } from '@/lib/videoBackground';
 import { useI18n } from '@/lib/i18n';
 import { IDLE_RECORDING_STATE } from '@/lib/recordingControls';
@@ -200,7 +200,7 @@ const VideoOf = ({ track, label }: { track?: LocalVideoTrack; label: string }) =
 };
 
 /** Before and after on the same fake camera: the library's renderer, then ours. */
-function CompareCase({ look }: { look: Exclude<VideoBackground, 'none'> }) {
+function CompareCase({ look }: { look: 'blur' | 'blur-light' | BackgroundScene }) {
   const before = useFakeCameraTrack(new URLSearchParams(window.location.search).get('only') !== 'after');
   const [after, setAfter] = React.useState<LocalVideoTrack>();
   const onlyAfter = new URLSearchParams(window.location.search).get('only') === 'after';

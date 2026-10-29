@@ -2,8 +2,9 @@
 
 /**
  * Camera background picker: your live preview, then the effects (none, slight blur, blur) and the
- * scenes. A pick applies at once — the preview shows what everyone sees — and Done just closes.
- * Used in the meeting (dark stage) and on the pre-join page (follows the page theme).
+ * scenes, led by "Add image" and the person's own images. A pick applies at once — the preview
+ * shows what everyone sees — and Done just closes. Used in the meeting (dark stage) and on the
+ * pre-join page (follows the page theme).
  */
 
 import React from 'react';
@@ -13,10 +14,21 @@ import { useI18n } from './i18n';
 import {
   BACKGROUND_SCENES,
   VIDEO_BACKGROUND_EFFECTS,
+  isBackgroundScene,
   sceneThumbUrl,
   type VideoBackground,
   type VideoBackgroundStatus,
 } from './videoBackground';
+import {
+  AddBackgroundError,
+  MAX_CUSTOM_BACKGROUNDS,
+  addCustomBackground,
+  isCustomBackgroundId,
+  removeCustomBackground,
+  useCustomBackgrounds,
+  type AddBackgroundProblem,
+  type CustomBackgroundId,
+} from './customBackgrounds';
 
 interface VideoBackgroundDialogProps {
   isOpen: boolean;
@@ -38,14 +50,21 @@ interface VideoBackgroundDialogProps {
   hint: string;
 }
 
-const ALL_CHOICES: readonly VideoBackground[] = [...VIDEO_BACKGROUND_EFFECTS, ...BACKGROUND_SCENES];
-
 export function backgroundLabel(t: (key: string) => string, background: VideoBackground): string {
   if (background === 'none') return t('background.none');
   if (background === 'blur-light') return t('background.blurLight');
   if (background === 'blur') return t('background.blur');
+  if (isCustomBackgroundId(background)) return t('background.custom');
   return t(`background.scene.${background}`);
 }
+
+const ADD_PROBLEM_KEY: Record<AddBackgroundProblem, string> = {
+  full: 'background.addFull',
+  size: 'background.addTooBig',
+  type: 'background.addFailed',
+  unreadable: 'background.addFailed',
+  storage: 'background.addFailed',
+};
 
 export function VideoBackgroundDialog({
   isOpen,
@@ -64,13 +83,28 @@ export function VideoBackgroundDialog({
   const { t } = useI18n();
   const dialogRef = React.useRef<HTMLDivElement | null>(null);
   const videoRef = React.useRef<HTMLVideoElement | null>(null);
+  const fileRef = React.useRef<HTMLInputElement | null>(null);
+  const addRef = React.useRef<HTMLButtonElement | null>(null);
   const choiceRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
+  const customImages = useCustomBackgrounds(isOpen && supported);
+  const [adding, setAdding] = React.useState(false);
+  const [addProblem, setAddProblem] = React.useState<AddBackgroundProblem | null>(null);
+  const full = customImages.length >= MAX_CUSTOM_BACKGROUNDS;
+  const allChoices: readonly VideoBackground[] = [
+    ...VIDEO_BACKGROUND_EFFECTS,
+    ...customImages.map((image) => image.id),
+    ...BACKGROUND_SCENES,
+  ];
+
+  React.useEffect(() => {
+    if (!isOpen) setAddProblem(null);
+  }, [isOpen]);
 
   // Focus moves into the dialog and back to where it was; the page behind doesn't scroll.
   React.useEffect(() => {
     if (!isOpen) return;
     const previous = document.activeElement as HTMLElement | null;
-    const selected = choiceRefs.current[ALL_CHOICES.indexOf(background)];
+    const selected = choiceRefs.current[allChoices.indexOf(background)];
     (selected && !selected.disabled ? selected : dialogRef.current)?.focus();
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -99,9 +133,34 @@ export function VideoBackgroundDialog({
     onChange(next);
   };
 
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setAdding(true);
+    setAddProblem(null);
+    try {
+      const id = await addCustomBackground(file);
+      onChange(id);
+    } catch (error) {
+      setAddProblem(error instanceof AddBackgroundError ? error.problem : 'unreadable');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  // Removing the image you're using switches to blur, so the room stays hidden. Focus goes to
+  // "Add image", which stays put while the tile it was on disappears.
+  const removeImage = async (id: CustomBackgroundId) => {
+    if (id === background) onChange('blur');
+    addRef.current?.focus();
+    await removeCustomBackground(id).catch(() => undefined);
+    setAddProblem(null);
+  };
+
   // Arrow keys move through every choice, like one radio group.
   const onChoiceKey = (e: React.KeyboardEvent, index: number) => {
-    const last = ALL_CHOICES.length - 1;
+    const last = allChoices.length - 1;
     let to = -1;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') to = index === last ? 0 : index + 1;
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') to = index === 0 ? last : index - 1;
@@ -110,15 +169,19 @@ export function VideoBackgroundDialog({
     if (to < 0) return;
     e.preventDefault();
     choiceRefs.current[to]?.focus();
-    pick(ALL_CHOICES[to]);
+    pick(allChoices[to]);
   };
 
   const renderChoice = (choice: VideoBackground) => {
-    const index = ALL_CHOICES.indexOf(choice);
+    const index = allChoices.indexOf(choice);
     const checked = choice === background;
-    const label = backgroundLabel(t, choice);
+    const custom = isCustomBackgroundId(choice) ? customImages.find((image) => image.id === choice) : undefined;
+    const label = custom
+      ? `${t('background.custom')} ${customImages.indexOf(custom) + 1}`
+      : backgroundLabel(t, choice);
     const isScene = choice !== 'none' && choice !== 'blur-light' && choice !== 'blur';
-    return (
+    const thumb = custom ? custom.thumbUrl : isBackgroundScene(choice) ? sceneThumbUrl(choice) : '';
+    const radio = (
       <button
         key={choice}
         ref={(el) => {
@@ -136,7 +199,7 @@ export function VideoBackgroundDialog({
         onKeyDown={(e) => onChoiceKey(e, index)}
       >
         {isScene ? (
-          <img className={styles.thumb} src={sceneThumbUrl(choice)} alt="" draggable={false} />
+          <img className={styles.thumb} src={thumb} alt="" draggable={false} />
         ) : (
           <>
             <EffectIcon effect={choice} />
@@ -157,7 +220,47 @@ export function VideoBackgroundDialog({
         )}
       </button>
     );
+    if (!custom) return radio;
+    return (
+      <div key={choice} className={styles.customTile}>
+        {radio}
+        <button
+          type="button"
+          className={styles.removeButton}
+          aria-label={`${t('background.remove')}: ${label}`}
+          title={t('background.remove')}
+          disabled={!supported}
+          onClick={() => void removeImage(custom.id)}
+        >
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+            <path d="M7 7l10 10M17 7L7 17" />
+          </svg>
+        </button>
+      </div>
+    );
   };
+
+  const addTile = (
+    <button
+      key="add"
+      ref={addRef}
+      type="button"
+      className={`${styles.choice} ${styles.effectChoice} ${styles.addChoice}`}
+      disabled={!supported || adding || full}
+      title={full ? t('background.addFull') : undefined}
+      onClick={() => fileRef.current?.click()}
+    >
+      {adding ? (
+        <span className={styles.spinner} aria-hidden="true" />
+      ) : (
+        <svg className={styles.effectIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3.5" y="5" width="17" height="14" rx="2.5" />
+          <path d="M12 9v6M9 12h6" />
+        </svg>
+      )}
+      <span className={styles.effectLabel}>{t('background.add')}</span>
+    </button>
+  );
 
   return (
     <div
@@ -239,7 +342,9 @@ export function VideoBackgroundDialog({
                 </button>
               </div>
             ) : (
-              <p className={styles.hint}>{hint}</p>
+              <p className={styles.hint}>
+                {track && isCustomBackgroundId(background) ? t('background.mirrorNote') : hint}
+              </p>
             )}
           </div>
 
@@ -254,7 +359,23 @@ export function VideoBackgroundDialog({
               <h3 id="video-background-scenes" className={styles.groupLabel}>
                 {t('background.scenes')}
               </h3>
-              <div className={styles.grid}>{BACKGROUND_SCENES.map(renderChoice)}</div>
+              <div className={styles.grid}>
+                {addTile}
+                {customImages.map((image) => renderChoice(image.id))}
+                {BACKGROUND_SCENES.map(renderChoice)}
+              </div>
+              {(addProblem || full) && (
+                <p className={addProblem ? styles.addProblem : styles.addNote} role={addProblem ? 'alert' : undefined}>
+                  {t(ADD_PROBLEM_KEY[addProblem ?? 'full'])}
+                </p>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={(e) => void onFile(e)}
+              />
             </div>
           </div>
         </div>
