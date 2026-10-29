@@ -3201,6 +3201,33 @@ export function VideoConferenceComponent(props: {
   });
   documentPipOpenRef.current = documentPip.open;
 
+  // The mini window floats above every page, so the leave menu can't be raised over it:
+  // it steps aside while the menu is open and comes back if the person stays.
+  const pipAsideForExitRef = React.useRef(false);
+  const handleExitMenuOpenChange = React.useCallback(
+    (open: boolean) => {
+      if (open) {
+        if (!documentPip.isOpen) return;
+        pipAsideForExitRef.current = true;
+        documentPip.close();
+        return;
+      }
+      if (!pipAsideForExitRef.current) return;
+      pipAsideForExitRef.current = false;
+      // Closing the menu was a click, which lets the browser open the window again
+      void documentPip.open({ sticky: true });
+    },
+    [documentPip],
+  );
+  const handleExitFromToolbar = React.useCallback(() => {
+    pipAsideForExitRef.current = false;
+    handleLeaveWithSave();
+  }, [handleLeaveWithSave]);
+  const handleEndForAllFromToolbar = React.useCallback(() => {
+    pipAsideForExitRef.current = false;
+    void handleEndForAll();
+  }, [handleEndForAll]);
+
   // Recording: pick up the meeting's recording state when joining (late joiners, the recorder bot)
   React.useEffect(() => {
     if (!livekitConnected) return;
@@ -3971,8 +3998,9 @@ export function VideoConferenceComponent(props: {
           meetingTitle={props.meetingTitle}
           activeView={activeView}
           onViewChange={handleViewChange}
-          onExit={handleLeaveWithSave}
-          onEndForAll={handleEndForAll}
+          onExit={handleExitFromToolbar}
+          onEndForAll={handleEndForAllFromToolbar}
+          onExitMenuOpenChange={handleExitMenuOpenChange}
           micEnabled={micEnabled}
           camEnabled={camEnabled}
           onToggleMic={handleToggleMic}

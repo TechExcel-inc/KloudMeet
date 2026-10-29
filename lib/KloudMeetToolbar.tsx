@@ -127,6 +127,8 @@ interface KloudMeetToolbarProps {
   attendeeOpen: boolean;
   onToggleAttendee: () => void;
   onOpenSheet?: () => void;
+  /** The leave menu opened or closed (the mini window steps aside so it doesn't cover it) */
+  onExitMenuOpenChange?: (open: boolean) => void;
   /** 桌面端：Chat 气泡内容（移动端不传，沿用父级浮层） */
   chatPanelSlot?: React.ReactNode;
   /** 桌面端：Attendees 气泡内容 */
@@ -298,6 +300,7 @@ export function KloudMeetToolbar({
   attendeeOpen,
   onToggleAttendee,
   onOpenSheet,
+  onExitMenuOpenChange,
   chatPanelSlot,
   attendeePanelSlot,
   canEndForAll,
@@ -740,6 +743,13 @@ export function KloudMeetToolbar({
   useEffect(() => {
     if (!visible) closeViewModeMenu();
   }, [visible]);
+
+  const exitMenuOpen = activeSheet === 'exit';
+  const onExitMenuOpenChangeRef = useRef(onExitMenuOpenChange);
+  onExitMenuOpenChangeRef.current = onExitMenuOpenChange;
+  useEffect(() => {
+    onExitMenuOpenChangeRef.current?.(exitMenuOpen);
+  }, [exitMenuOpen]);
 
   useEffect(() => {
     if (!inviteMenuOpen) return;
