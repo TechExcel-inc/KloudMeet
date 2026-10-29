@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  SUMMARY_COMBINE_SYSTEM_PROMPT,
+  SUMMARY_PART_SYSTEM_PROMPT,
+  SUMMARY_SYSTEM_PROMPT,
   aiFailureReason,
   buildSummaryPrompt,
+  draftSummary,
   normalizeSummary,
   sectionContent,
   snapToTranscript,
   speakersByTalk,
+  splitTranscript,
   stripEmoji,
+  type SummaryCall,
   type SummaryTranscriptLine,
 } from './meetingSummary';
 
@@ -138,5 +144,89 @@ describe('aiFailureReason', () => {
     expect(aiFailureReason(Object.assign(new Error('x'), { status: 503 }))).toBe('HTTP 503');
     expect(aiFailureReason(new Error('socket hang up'))).toBe('error');
     expect(aiFailureReason(null)).toBe('error');
+  });
+});
+
+describe('long meetings', () => {
+  // About 3 hours: one line every 6 seconds, each about 60 characters of prompt
+  const long: SummaryTranscriptLine[] = Array.from({ length: 1800 }, (_, i) => ({
+    offsetSeconds: i * 6,
+    speakerName: i % 2 ? 'Alex Chen' : 'ying huang',
+    content: `第 ${i} 句：我们继续讨论伙伴计划和下季度目标的安排。`,
+  }));
+
+  it('keeps a transcript that fits in one part, and splits a long one into even, ordered parts', () => {
+    expect(splitTranscript(lines)).toEqual([lines]);
+    expect(splitTranscript([])).toEqual([]);
+
+    const parts = splitTranscript(long, 24000);
+    expect(parts.length).toBeGreaterThan(1);
+    expect(parts.flat()).toEqual(long);
+    const sizes = parts.map((part) => buildSummaryPrompt('m', part).length);
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThan(200);
+    // Near the limit: give or take one line
+    for (const part of parts) expect(part.map((l) => `[${l.offsetSeconds}] ${l.speakerName}: ${l.content}`).join('\n').length).toBeLessThanOrEqual(24000 + 100);
+  });
+
+  it('drafts a short meeting in one call', async () => {
+    const calls: Array<{ system: string; maxTokens: number }> = [];
+    const call: SummaryCall = async (system, _prompt, maxTokens) => {
+      calls.push({ system, maxTokens });
+      return { raw: { topic: 't' }, model: 'deepseek-chat', fallbackReason: null };
+    };
+    const draft = await draftSummary('Weekly', lines, call);
+    expect(calls).toEqual([{ system: SUMMARY_SYSTEM_PROMPT, maxTokens: 6000 }]);
+    expect(draft).toEqual({ raw: { topic: 't' }, model: 'deepseek-chat', fallbackReason: null });
+    expect(SUMMARY_SYSTEM_PROMPT).toContain('Split into 3-8 sections');
+    expect(SUMMARY_PART_SYSTEM_PROMPT).toContain('one part of a longer meeting');
+  });
+
+  it('drafts a long meeting in parts, then writes one topic and merges the to-dos', async () => {
+    const parts = splitTranscript(long);
+    const prompts: string[] = [];
+    const call: SummaryCall = async (system, prompt) => {
+      prompts.push(prompt);
+      if (system === SUMMARY_COMBINE_SYSTEM_PROMPT) {
+        expect(prompt).toContain('Part 1 title');
+        return {
+          raw: { topic: 'Partner plan', overview: 'All of it.', todos: [{ task: 'Send the table', sec: 60 }] },
+          model: 'deepseek-chat',
+          fallbackReason: null,
+        };
+      }
+      expect(system).toBe(SUMMARY_PART_SYSTEM_PROMPT);
+      const n = Number(prompt.match(/Part (\d+) of/)?.[1]);
+      // The second part's DeepSeek call failed, so only that part went to the other provider
+      return {
+        raw: {
+          topic: `part ${n}`,
+          sections: [{ title: `Part ${n} title`, startSec: 0, points: [] }],
+          todos: [{ task: 'Send the table', sec: n * 60 }],
+        },
+        model: n === 2 ? 'gpt-4o-mini' : 'deepseek-chat',
+        fallbackReason: n === 2 ? 'timeout' : null,
+      };
+    };
+    const draft = await draftSummary('Weekly', long, call);
+    expect(prompts).toHaveLength(parts.length + 1);
+    const raw = draft.raw as Record<string, any>;
+    expect(raw.topic).toBe('Partner plan');
+    expect(raw.sections.map((s: any) => s.title)).toEqual(parts.map((_, i) => `Part ${i + 1} title`));
+    expect(raw.todos).toEqual([{ task: 'Send the table', sec: 60 }]);
+    expect(draft.model).toBe('deepseek-chat+gpt-4o-mini');
+    expect(draft.fallbackReason).toBe('timeout');
+  });
+
+  it('keeps the parts when the last step fails', async () => {
+    const call: SummaryCall = async (system, prompt) => {
+      if (system === SUMMARY_COMBINE_SYSTEM_PROMPT) throw new Error('down');
+      const n = Number(prompt.match(/Part (\d+) of/)?.[1]);
+      return { raw: { sections: [{ title: `S${n}` }], todos: [{ task: `T${n}`, sec: n }] }, model: 'deepseek-chat', fallbackReason: null };
+    };
+    const draft = await draftSummary('Weekly', long, call);
+    const raw = draft.raw as Record<string, any>;
+    expect(raw.topic).toBeUndefined();
+    expect(raw.sections.length).toBe(splitTranscript(long).length);
+    expect(raw.todos.map((t: any) => t.task)).toEqual(raw.sections.map((s: any) => s.title.replace('S', 'T')));
   });
 });

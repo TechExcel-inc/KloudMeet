@@ -53,7 +53,24 @@ const TODO_ECHO_SEC = 5;
 /** Names that stand for "we don't know who" in transcripts. */
 const ANONYMOUS_SPEAKERS = new Set(['', 'unknown', 'speaker 1']);
 
-export const SUMMARY_SYSTEM_PROMPT = `You are a professional meeting note-taker. Read the transcript and write the meeting summary.
+/**
+ * A transcript longer than this (characters of prompt lines) is summarized in parts. Each part is
+ * a smaller, faster call, so long meetings don't run into the provider timeout as one big request.
+ */
+export const SUMMARY_PART_CHARS = 24000;
+
+/** Parts drafted at the same time. */
+const SUMMARY_PART_CONCURRENCY = 3;
+
+const WHOLE_SECTIONS_RULE = '- Split into 3-8 sections by topic, in time order. Each section has 1-5 points.';
+const PART_SECTIONS_RULE =
+  '- This transcript is one part of a longer meeting. Split this part into 1-4 sections by topic, in time order. Each section has 1-5 points. "topic" and "overview" describe this part only.';
+
+function summarySystemPrompt(sectionsRule: string): string {
+  return SUMMARY_SYSTEM_PROMPT_TEMPLATE.replace('{sectionsRule}', sectionsRule);
+}
+
+const SUMMARY_SYSTEM_PROMPT_TEMPLATE = `You are a professional meeting note-taker. Read the transcript and write the meeting summary.
 Each transcript line starts with [seconds] and the speaker's name.
 
 Return ONLY a JSON object:
@@ -69,7 +86,7 @@ Return ONLY a JSON object:
 
 Rules:
 - Write in the same language as the transcript. No emoji anywhere.
-- Split into 3-8 sections by topic, in time order. Each section has 1-5 points.
+{sectionsRule}
 - Sections are about what was discussed and decided. Do not repeat to-dos or assignments as points, and do not add a section that only lists who does what; those go in "todos".
 - Each point is one sentence of at most 60 characters (Chinese) or 25 words, stating a fact, decision or number that was said.
 - "sec" and "startSec" must be the [seconds] of the transcript line the point comes from. Never invent a time.
@@ -77,13 +94,159 @@ Rules:
 - One to-do per task: if the same task comes up more than once (offered, then confirmed, or asked again), merge it into one item with the earliest "sec" where it was taken on, the owner, and the clearest deadline that was said.
 - If there are no to-dos, return an empty array.`;
 
+export const SUMMARY_SYSTEM_PROMPT = summarySystemPrompt(WHOLE_SECTIONS_RULE);
+export const SUMMARY_PART_SYSTEM_PROMPT = summarySystemPrompt(PART_SECTIONS_RULE);
+
+/** The last step for a meeting summarized in parts: one topic and overview, one to-do list. */
+export const SUMMARY_COMBINE_SYSTEM_PROMPT = `You are a professional meeting note-taker. A long meeting was summarized in parts.
+You get the sections and to-dos of every part. Write the topic and overview of the whole meeting, and clean up the to-do list.
+
+Return ONLY a JSON object:
+{
+  "topic": "one line: what the meeting was about",
+  "overview": "2-4 sentences: the purpose, the key conclusions and decisions",
+  "todos": [ { "task": "what will be done", "owner": "who agreed to do it or null", "due": "deadline as said or null", "sec": 0 } ]
+}
+
+Rules:
+- Write in the same language as the notes. No emoji anywhere.
+- Use only what the notes say. Never add facts, to-dos or times.
+- To-dos: keep every task once. If the same task appears more than once, keep one item with the earliest "sec", its owner and the clearest deadline. Copy "sec" exactly from the notes.
+- If there are no to-dos, return an empty array.`;
+
+/** "[1000] Alex Chen: text", one transcript line of the prompt. */
+function promptLine(line: SummaryTranscriptLine): string {
+  return `[${Math.round(line.offsetSeconds ?? 0)}] ${line.speakerName || 'Unknown'}: ${line.content}`;
+}
+
 /** "[1000] Alex Chen: text" lines for the prompt. */
 export function buildSummaryPrompt(meetingName: string, lines: SummaryTranscriptLine[]): string {
   const totalSec = lines.reduce((max, line) => Math.max(max, line.offsetSeconds ?? 0), 0);
-  const body = lines
-    .map((line) => `[${Math.round(line.offsetSeconds ?? 0)}] ${line.speakerName || 'Unknown'}: ${line.content}`)
-    .join('\n');
+  const body = lines.map(promptLine).join('\n');
   return `Meeting: ${meetingName}\nDuration: ~${Math.round(totalSec / 60)} min\nTranscript:\n\n${body}\n\nWrite the summary.`;
+}
+
+/**
+ * Consecutive runs of lines of about the same size: as few runs as keep each near `maxChars` of
+ * prompt text (give or take one line). One run when the whole transcript fits.
+ */
+export function splitTranscript<T extends SummaryTranscriptLine>(lines: T[], maxChars = SUMMARY_PART_CHARS): T[][] {
+  const sizes = lines.map((line) => promptLine(line).length + 1);
+  const total = sizes.reduce((sum, size) => sum + size, 0);
+  if (total <= maxChars) return lines.length ? [lines] : [];
+  const count = Math.ceil(total / maxChars);
+  const parts: T[][] = Array.from({ length: count }, () => []);
+  let before = 0;
+  lines.forEach((line, idx) => {
+    // A line belongs to the part its middle falls in
+    const part = Math.min(count - 1, Math.floor(((before + sizes[idx] / 2) * count) / total));
+    parts[part].push(line);
+    before += sizes[idx];
+  });
+  return parts.filter((part) => part.length > 0);
+}
+
+/** The prompt for one part of a long meeting. */
+export function buildPartPrompt(
+  meetingName: string,
+  part: SummaryTranscriptLine[],
+  index: number,
+  count: number,
+): string {
+  const minute = (line: SummaryTranscriptLine | undefined) => Math.round((line?.offsetSeconds ?? 0) / 60);
+  const body = part.map(promptLine).join('\n');
+  return `Meeting: ${meetingName}\nPart ${index + 1} of ${count} (minutes ${minute(part[0])}-${minute(part[part.length - 1])})\nTranscript:\n\n${body}\n\nWrite the summary of this part.`;
+}
+
+/** Sections and to-dos of every part's draft, in order. */
+export function mergeSummaryParts(drafts: unknown[]): { sections: unknown[]; todos: unknown[] } {
+  const sections: unknown[] = [];
+  const todos: unknown[] = [];
+  for (const draft of drafts) {
+    if (!draft || typeof draft !== 'object') continue;
+    const data = draft as Record<string, unknown>;
+    if (Array.isArray(data.sections)) sections.push(...data.sections);
+    if (Array.isArray(data.todos)) todos.push(...data.todos);
+  }
+  return { sections, todos };
+}
+
+/** The notes the combine step reads: each section with its points, then the to-dos. */
+export function buildCombinePrompt(
+  meetingName: string,
+  lines: SummaryTranscriptLine[],
+  merged: { sections: unknown[]; todos: unknown[] },
+): string {
+  const totalSec = lines.reduce((max, line) => Math.max(max, line.offsetSeconds ?? 0), 0);
+  const sectionText = merged.sections
+    .map((item) => {
+      const section = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+      const points = (Array.isArray(section.points) ? section.points : [])
+        .map((p) => (p && typeof p === 'object' ? text((p as Record<string, unknown>).text) : ''))
+        .filter(Boolean);
+      return `[${Number(section.startSec) || 0}] ${text(section.title)}\n${points.map((p) => `- ${p}`).join('\n')}`;
+    })
+    .join('\n\n');
+  return `Meeting: ${meetingName}\nDuration: ~${Math.round(totalSec / 60)} min\n\nSections:\n\n${sectionText}\n\nTo-dos:\n${JSON.stringify(merged.todos)}\n\nWrite the topic, the overview and the cleaned to-do list.`;
+}
+
+/** One model call: the parsed JSON, which model wrote it, and why the first choice was skipped. */
+export interface SummaryDraft {
+  raw: unknown;
+  model: string;
+  fallbackReason: string | null;
+}
+
+export type SummaryCall = (system: string, prompt: string, maxTokens: number) => Promise<SummaryDraft>;
+
+/**
+ * The model's draft for a whole meeting. A short transcript is one call. A long one is drafted in
+ * parts (a few at a time), then one small call writes the topic and overview and merges to-dos
+ * that came up in more than one part. A provider failure only repeats that one call elsewhere.
+ */
+export async function draftSummary(
+  meetingName: string,
+  lines: SummaryTranscriptLine[],
+  call: SummaryCall,
+): Promise<SummaryDraft> {
+  const parts = splitTranscript(lines);
+  if (parts.length <= 1) return call(SUMMARY_SYSTEM_PROMPT, buildSummaryPrompt(meetingName, lines), 6000);
+
+  const drafts: SummaryDraft[] = new Array(parts.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < parts.length) {
+      const idx = next++;
+      drafts[idx] = await call(
+        SUMMARY_PART_SYSTEM_PROMPT,
+        buildPartPrompt(meetingName, parts[idx], idx, parts.length),
+        3000,
+      );
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SUMMARY_PART_CONCURRENCY, parts.length) }, worker));
+
+  const merged = mergeSummaryParts(drafts.map((draft) => draft.raw));
+  const used = [...drafts];
+  let head: Record<string, unknown> = {};
+  try {
+    const combined = await call(SUMMARY_COMBINE_SYSTEM_PROMPT, buildCombinePrompt(meetingName, lines, merged), 2000);
+    used.push(combined);
+    if (combined.raw && typeof combined.raw === 'object') head = combined.raw as Record<string, unknown>;
+  } catch (e) {
+    // The sections still stand; the page shows them without a topic and overview
+    console.warn('[summary] combine step failed; keeping the parts as they are:', e);
+  }
+  return {
+    raw: {
+      topic: head.topic,
+      overview: head.overview,
+      sections: merged.sections,
+      todos: Array.isArray(head.todos) ? head.todos : merged.todos,
+    },
+    model: [...new Set(used.map((draft) => draft.model))].join('+'),
+    fallbackReason: used.find((draft) => draft.fallbackReason)?.fallbackReason ?? null,
+  };
 }
 
 /** Strips emoji and pictographs a model may still prefix titles with. */

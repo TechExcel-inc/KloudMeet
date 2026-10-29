@@ -3,7 +3,8 @@
  *
  * 从字幕生成结构化会议摘要：
  *   1. 读取该会议所有 MeetingTranscript（按时间排序）
- *   2. 调用 DeepSeek（OpenAI 备用）按 lib/meetingSummary 的规则起草：主题、概览、分节要点、待办
+ *   2. 调用 DeepSeek（OpenAI 备用）按 lib/meetingSummary 的规则起草：主题、概览、分节要点、待办；
+ *      长会议分段起草（每段一次调用），最后一次调用写主题 / 概览并合并重复的待办
  *   3. normalizeSummary 把每个时间对到真实字幕，对不上的要点 / 待办丢掉
  *   4. 每节写一行 MeetingSummaryItem（章节卡片也用它），主题 / 概览 / 待办写 MeetingSummary
  */
@@ -13,11 +14,11 @@ import { prisma } from '@/lib/db';
 import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { meterAiSummary, meterSafely } from '@/lib/billing/usage';
 import {
-  SUMMARY_SYSTEM_PROMPT,
   aiFailureReason,
-  buildSummaryPrompt,
+  draftSummary,
   normalizeSummary,
   sectionContent,
+  type SummaryDraft,
 } from '@/lib/meetingSummary';
 import { isInternalMember } from '@/lib/internalStaff.server';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
@@ -42,18 +43,25 @@ function secsToHMS(secs: number): string {
 }
 
 // ── Call AI (DeepSeek first, OpenAI fallback); returns the parsed JSON object ──
-async function chat(url: string, key: string, model: string, prompt: string): Promise<unknown> {
+async function chat(
+  url: string,
+  key: string,
+  model: string,
+  system: string,
+  prompt: string,
+  maxTokens: number,
+): Promise<unknown> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: SUMMARY_SYSTEM_PROMPT },
+        { role: 'system', content: system },
         { role: 'user', content: prompt },
       ],
       temperature: 0.2,
-      max_tokens: 6000,
+      max_tokens: maxTokens,
       response_format: { type: 'json_object' },
     }),
     signal: AbortSignal.timeout(90000),
@@ -65,19 +73,20 @@ async function chat(url: string, key: string, model: string, prompt: string): Pr
   return JSON.parse(data.choices?.[0]?.message?.content || '{}');
 }
 
-/** The draft, which model wrote it, and why DeepSeek was skipped (null when it wasn't). */
-interface AIResult {
-  raw: unknown;
-  model: string;
-  fallbackReason: string | null;
-}
-
-async function callAI(prompt: string): Promise<AIResult> {
+/** One call: DeepSeek, or OpenAI when DeepSeek is missing or fails (for this call only). */
+async function callAI(system: string, prompt: string, maxTokens: number): Promise<SummaryDraft> {
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
   let fallbackReason = 'no-key';
   if (deepseekKey) {
     try {
-      const raw = await chat('https://api.deepseek.com/v1/chat/completions', deepseekKey, 'deepseek-chat', prompt);
+      const raw = await chat(
+        'https://api.deepseek.com/v1/chat/completions',
+        deepseekKey,
+        'deepseek-chat',
+        system,
+        prompt,
+        maxTokens,
+      );
       return { raw, model: 'deepseek-chat', fallbackReason: null };
     } catch (e) {
       fallbackReason = aiFailureReason(e);
@@ -86,7 +95,7 @@ async function callAI(prompt: string): Promise<AIResult> {
   }
   const openaiKey = process.env.OPENAI_API_KEY;
   if (!openaiKey) throw new Error('No AI API key configured');
-  const raw = await chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', prompt);
+  const raw = await chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', system, prompt, maxTokens);
   return { raw, model: 'gpt-4o-mini', fallbackReason };
 }
 
@@ -136,11 +145,11 @@ export async function POST(
     if (quotaError) return quotaError;
 
     const meetingName = meeting.title || meeting.roomName || `Meeting #${localMeetingId}`;
-    const prompt = buildSummaryPrompt(meetingName, transcripts);
 
-    let ai: AIResult;
+    // Long meetings are drafted in parts (lib/meetingSummary draftSummary)
+    let ai: SummaryDraft;
     try {
-      ai = await callAI(prompt);
+      ai = await draftSummary(meetingName, transcripts, callAI);
     } catch (e: any) {
       console.error('[generate] AI call failed:', e);
       return NextResponse.json({ error: 'The AI service failed. Please try again.' }, { status: 502 });
