@@ -1013,6 +1013,8 @@
   "livedoc.loading": "正在初始化 LiveDoc 视图…，请稍候。",
   "livedoc.loadTimeout": "文档加载超时，请检查网络后重试。",
   "livedoc.retry": "重新加载",
+  "livedoc.stillLoading": "LiveDoc 仍在加载…",
+  "livedoc.stillLoadingDetail": "网络较慢时会久一些，可以继续等，也可以重新加载。",
 
   "prejoin.cameraIsOff": "摄像头已关闭",
 

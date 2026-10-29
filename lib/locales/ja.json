@@ -1028,6 +1028,8 @@
   "livedoc.loading": "ドキュメントを読み込んでいます…",
   "livedoc.loadTimeout": "ドキュメントの読み込みがタイムアウトしました。ネットワークを確認して再試行してください。",
   "livedoc.retry": "再読み込み",
+  "livedoc.stillLoading": "LiveDoc をまだ読み込んでいます…",
+  "livedoc.stillLoadingDetail": "ネットワークが遅いと時間がかかることがあります。このまま待つか、再読み込みしてください。",
 
   "prejoin.cameraIsOff": "カメラはオフです",
 

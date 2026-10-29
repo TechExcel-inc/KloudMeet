@@ -1027,6 +1027,8 @@
   "livedoc.loading": "Initializing LiveDoc View…, please wait.",
   "livedoc.loadTimeout": "Document loading timed out. Check your network and try again.",
   "livedoc.retry": "Reload",
+  "livedoc.stillLoading": "Still loading LiveDoc…",
+  "livedoc.stillLoadingDetail": "This can take longer on a slow network. Keep waiting, or reload.",
 
   "prejoin.cameraIsOff": "Camera is off",
 

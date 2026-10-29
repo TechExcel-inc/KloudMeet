@@ -1028,6 +1028,8 @@
   "livedoc.loading": "문서를 불러오는 중…",
   "livedoc.loadTimeout": "문서 로딩이 시간 초과되었습니다. 네트워크를 확인한 후 다시 시도하세요.",
   "livedoc.retry": "다시 로드",
+  "livedoc.stillLoading": "LiveDoc를 아직 불러오는 중…",
+  "livedoc.stillLoadingDetail": "네트워크가 느리면 더 오래 걸릴 수 있습니다. 계속 기다리거나 다시 로드하세요.",
 
   "prejoin.cameraIsOff": "카메라가 꺼져 있습니다",
 

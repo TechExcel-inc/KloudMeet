@@ -16,7 +16,8 @@ import {
 } from '@/lib/useToolbarIsMobile';
 import styles from '@/styles/LiveDocView.module.css';
 
-const IFRAME_LOAD_TIMEOUT_MS = 60_000;
+/** After this long without onkloudloaded, the loading screen says so and offers a reload. */
+const IFRAME_SLOW_LOAD_MS = 60_000;
 
 /* In-meeting surfaces are always dark (2026-10 redesign); the document itself stays white. */
 const darkStageStyle: React.CSSProperties = {
@@ -45,8 +46,6 @@ const loadingDotStyle: React.CSSProperties = {
 };
 const spinnerKeyframes = `@keyframes km-livedoc-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .km-livedoc-spinner { animation-duration: 2.4s !important; } }`;
-/** 首次加载失败后最多自动重载次数 */
-const MAX_IFRAME_RELOADS = 3;
 
 interface LiveDocViewProps {
   meetingRoomName: string;
@@ -76,11 +75,10 @@ export function LiveDocView({
   const [runtimeSettings, setRuntimeSettings] = React.useState<LiveDocRuntimeSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = React.useState(true);
   const [iframeReloadKey, setIframeReloadKey] = React.useState(0);
-  const [loadTimedOut, setLoadTimedOut] = React.useState(false);
+  const [loadSlow, setLoadSlow] = React.useState(false);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
   const livedocRoleRef = React.useRef(livedocRole);
   livedocRoleRef.current = livedocRole;
-  const iframeReloadCountRef = React.useRef(0);
   /** iframe 首次加载用的 languageid；之后切语言只走 postMessage，避免重载 */
   const srcLanguageIdRef = React.useRef<0 | 1 | null>(null);
 
@@ -146,9 +144,8 @@ export function LiveDocView({
   React.useEffect(() => {
     setPluginLoaded(false);
     srcLanguageIdRef.current = null;
-    iframeReloadCountRef.current = 0;
     setIframeReloadKey(0);
-    setLoadTimedOut(false);
+    setLoadSlow(false);
   }, [livedocInstanceId, runtimeSettings?.debugEnabled, runtimeSettings?.debugUrl]);
 
   React.useLayoutEffect(() => {
@@ -158,7 +155,7 @@ export function LiveDocView({
       const cw = iframeRef.current?.contentWindow;
       if (!cw || e.source !== cw) return;
       setPluginLoaded(true);
-      setLoadTimedOut(false);
+      setLoadSlow(false);
       // 移动端与 Dev MainStage created() 一致：默认关闭右侧栏，勿用 Show:1 顶开
       const showPanel = isToolbarMobileUserAgent() ? 0 : 1;
       cw.postMessage({ type: 'Kloud-ShowFilePanel', Show: showPanel }, '*');
@@ -170,39 +167,15 @@ export function LiveDocView({
     return () => window.removeEventListener('message', handler);
   }, []);
 
-  // 挂上 iframe 后 60s 仍无 onkloudloaded → 自动重载，最多重试 3 次
+  // 挂上 iframe 后 60s 仍无 onkloudloaded → 提示"仍在加载"并给出重新加载按钮。
+  // 不自动重载：网络慢时自动重载会让加载从头再来，反而更慢。
   React.useEffect(() => {
-    if (
-      !livedocInstanceId ||
-      !userToken ||
-      tokenLoading ||
-      settingsLoading ||
-      pluginLoaded ||
-      loadTimedOut
-    ) {
+    if (!livedocInstanceId || !userToken || tokenLoading || settingsLoading || pluginLoaded || loadSlow) {
       return;
     }
-
-    const timer = window.setTimeout(() => {
-      if (iframeReloadCountRef.current < MAX_IFRAME_RELOADS) {
-        iframeReloadCountRef.current += 1;
-        setPluginLoaded(false);
-        setIframeReloadKey((key) => key + 1);
-      } else {
-        setLoadTimedOut(true);
-      }
-    }, IFRAME_LOAD_TIMEOUT_MS);
-
+    const timer = window.setTimeout(() => setLoadSlow(true), IFRAME_SLOW_LOAD_MS);
     return () => window.clearTimeout(timer);
-  }, [
-    livedocInstanceId,
-    userToken,
-    tokenLoading,
-    settingsLoading,
-    pluginLoaded,
-    iframeReloadKey,
-    loadTimedOut,
-  ]);
+  }, [livedocInstanceId, userToken, tokenLoading, settingsLoading, pluginLoaded, iframeReloadKey, loadSlow]);
 
   // 会议中身份变更时实时推送到插件
   React.useEffect(() => {
@@ -224,8 +197,7 @@ export function LiveDocView({
   }, [locale, pluginLoaded]);
 
   const handleManualReload = React.useCallback(() => {
-    iframeReloadCountRef.current = 0;
-    setLoadTimedOut(false);
+    setLoadSlow(false);
     setPluginLoaded(false);
     setIframeReloadKey((key) => key + 1);
   }, []);
@@ -287,25 +259,6 @@ export function LiveDocView({
     );
   }
 
-  if (loadTimedOut) {
-    return (
-      <div className={styles.container} style={darkStageStyle}>
-        <div className={styles.message} role="alert">
-          <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.loadFailed')}</p>
-          <p className={styles.messageDetail} style={darkDetailStyle}>{t('livedoc.loadTimeout')}</p>
-          <button
-            type="button"
-            className={styles.retryButton}
-            style={retryButtonStyle}
-            onClick={handleManualReload}
-          >
-            {t('livedoc.retry')}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   const languageId = locale === 'zh' ? 0 : 1;
   // src 的 languageid / role 都固定在首次加载：后续只走 postMessage，避免 iframe 重载
   if (srcLanguageIdRef.current === null) {
@@ -336,7 +289,22 @@ export function LiveDocView({
           <div className={styles.message} role="status">
             <style>{spinnerKeyframes}</style>
             <div className="km-livedoc-spinner" style={loadingDotStyle} aria-hidden />
-            <p className={styles.messageTitle} style={darkTitleStyle}>{t('livedoc.loading')}</p>
+            <p className={styles.messageTitle} style={darkTitleStyle}>
+              {loadSlow ? t('livedoc.stillLoading') : t('livedoc.loading')}
+            </p>
+            {loadSlow && (
+              <>
+                <p className={styles.messageDetail} style={darkDetailStyle}>{t('livedoc.stillLoadingDetail')}</p>
+                <button
+                  type="button"
+                  className={styles.retryButton}
+                  style={retryButtonStyle}
+                  onClick={handleManualReload}
+                >
+                  {t('livedoc.retry')}
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
