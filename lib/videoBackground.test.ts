@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { KloudBackgroundProcessor } from './videoBackground';
 
-/** Stands in for the library's processor: init resolves when the test says so. */
+type Look = { kind: 'blur'; radius: number } | { kind: 'image'; url: string };
+const label = (look: Look) => (look.kind === 'blur' ? `blur:${look.radius}` : `image:${look.url}`);
+
+/** Stands in for the cut-out pipeline: init resolves when the test says so. */
 class FakeInner {
   static made: FakeInner[] = [];
   static failNext = false;
@@ -14,9 +17,9 @@ class FakeInner {
     this.release = resolve;
     this.fail = reject;
   });
-  constructor(public options: { mode: string; blurRadius?: number; imagePath?: string }) {
+  constructor(look: Look) {
     FakeInner.made.push(this);
-    this.modes.push(options.mode === 'background-blur' ? `blur:${options.blurRadius}` : `image:${options.imagePath}`);
+    this.modes.push(label(look));
     if (FakeInner.failNext) {
       FakeInner.failNext = false;
       queueMicrotask(() => this.fail(new Error('model fetch failed')));
@@ -28,18 +31,18 @@ class FakeInner {
   finishInit() {
     this.release();
   }
-  async switchTo(o: { mode: string; blurRadius?: number; imagePath?: string }) {
-    this.modes.push(o.mode === 'background-blur' ? `blur:${o.blurRadius}` : `image:${o.imagePath}`);
+  async switchTo(look: Look) {
+    this.modes.push(label(look));
   }
   async destroy() {
     this.destroyed = true;
   }
 }
 
-vi.mock('@livekit/track-processors', () => ({
-  BackgroundProcessor: (options: ConstructorParameters<typeof FakeInner>[0]) => new FakeInner(options),
-  supportsBackgroundProcessors: () => true,
+vi.mock('./backgroundCutout', () => ({
+  createBackgroundPipeline: (look: Look) => new FakeInner(look),
 }));
+vi.mock('@livekit/track-processors', () => ({ supportsBackgroundProcessors: () => true }));
 vi.mock('./useToolbarIsMobile', () => ({ isToolbarMobileUserAgent: () => false }));
 
 const live = () => ({ kind: 'video', track: { readyState: 'live' } }) as never;

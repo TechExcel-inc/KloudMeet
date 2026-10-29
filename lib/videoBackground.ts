@@ -1,15 +1,15 @@
 /**
  * Camera backgrounds: blur, or a scene behind the person. The person is cut out in this browser
- * (MediaPipe selfie segmentation through @livekit/track-processors), so everyone in the meeting —
- * and the recording — sees the processed picture.
+ * (MediaPipe selfie segmentation, edges cleaned up in lib/backgroundCutout.ts), so everyone in
+ * the meeting — and the recording — sees the processed picture.
  *
  * The model and its wasm are served from this site (public/mediapipe), not the library's default
  * Google / jsDelivr URLs, which mainland visitors can't reach.
  */
 
-import { BackgroundProcessor, supportsBackgroundProcessors } from '@livekit/track-processors';
-import type { BackgroundProcessorWrapper } from '@livekit/track-processors';
+import { supportsBackgroundProcessors } from '@livekit/track-processors';
 import type { ProcessorOptions, Track, TrackProcessor } from 'livekit-client';
+import { createBackgroundPipeline, type BackgroundLook, type BackgroundPipeline } from './backgroundCutout';
 import { isToolbarMobileUserAgent } from './useToolbarIsMobile';
 
 export const BACKGROUND_SCENES = [
@@ -37,10 +37,7 @@ export const KLOUD_BACKGROUND_PROCESSOR = 'kloud-background';
 
 const BLUR_RADIUS: Record<'blur-light' | 'blur', number> = { 'blur-light': 5, blur: 14 };
 
-const ASSET_PATHS = {
-  tasksVisionFileSet: '/mediapipe/wasm',
-  modelAssetPath: '/mediapipe/selfie_segmenter.tflite',
-};
+const ASSETS = { wasm: '/mediapipe/wasm', model: '/mediapipe/selfie_segmenter.tflite' };
 
 export function isBackgroundScene(value: unknown): value is BackgroundScene {
   return typeof value === 'string' && (BACKGROUND_SCENES as readonly string[]).includes(value);
@@ -93,11 +90,11 @@ export function videoBackgroundsSupported(): boolean {
   }
 }
 
-function modeFor(background: Exclude<VideoBackground, 'none'>) {
+function lookFor(background: Exclude<VideoBackground, 'none'>): BackgroundLook {
   if (background === 'blur-light' || background === 'blur') {
-    return { mode: 'background-blur' as const, blurRadius: BLUR_RADIUS[background] };
+    return { kind: 'blur', radius: BLUR_RADIUS[background] };
   }
-  return { mode: 'virtual-background' as const, imagePath: sceneImageUrl(background) };
+  return { kind: 'image', url: sceneImageUrl(background) };
 }
 
 type VideoOptions = ProcessorOptions<Track.Kind.Video>;
@@ -114,7 +111,7 @@ export class KloudBackgroundProcessor
 {
   readonly name = KLOUD_BACKGROUND_PROCESSOR;
 
-  private inner?: BackgroundProcessorWrapper;
+  private inner?: BackgroundPipeline;
   private background: Exclude<VideoBackground, 'none'>;
   private listener?: StatusListener;
   private status: VideoBackgroundStatus = 'idle';
@@ -163,7 +160,7 @@ export class KloudBackgroundProcessor
     this.background = background;
     if (!this.inner) return;
     try {
-      await this.inner.switchTo(modeFor(background));
+      await this.inner.switchTo(lookFor(background));
       this.emit('running');
     } catch (error) {
       this.emit('failed', error);
@@ -176,15 +173,15 @@ export class KloudBackgroundProcessor
     const generation = ++this.generation;
     const startedWith = this.background;
     this.emit('starting');
-    let inner: BackgroundProcessorWrapper | undefined;
+    let inner: BackgroundPipeline | undefined;
     try {
-      inner = BackgroundProcessor({ ...modeFor(startedWith), assetPaths: ASSET_PATHS });
+      inner = createBackgroundPipeline(lookFor(startedWith), ASSETS);
       await inner.init(opts);
       if (generation !== this.generation) {
         await inner.destroy().catch(() => undefined);
         return;
       }
-      if (this.background !== startedWith) await inner.switchTo(modeFor(this.background));
+      if (this.background !== startedWith) await inner.switchTo(lookFor(this.background));
       this.inner = inner;
       this.emit('running');
     } catch (error) {

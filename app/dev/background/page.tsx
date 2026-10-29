@@ -10,15 +10,26 @@
  *   ?case=broken       as meeting, but the model can't be fetched: the camera must keep going
  *   ?case=toolbar      the bar, whose camera menu ends with the Background row
  *   ?case=off | unsupported | failed   the dialog's other states, without processing
+ *   ?case=compare      the library's own renderer (left) next to ours (right) on the same camera;
+ *                      &bg=blur|seaside|… picks the look, &mask=1 shows our cut-out in black and white
+ *
+ *   &photo=/path.jpg   draws that photo as the camera instead of the default one
  */
 
 import React from 'react';
 import { notFound } from 'next/navigation';
 import { createLocalVideoTrack, type LocalVideoTrack } from 'livekit-client';
+import { BackgroundProcessor } from '@livekit/track-processors';
 import { KloudPreJoin } from '@/lib/KloudPreJoin';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { VideoBackgroundDialog } from '@/lib/VideoBackgroundDialog';
 import { usePreviewVideoBackground } from '@/lib/useVideoBackground';
+import {
+  KloudBackgroundProcessor,
+  isBackgroundScene,
+  sceneImageUrl,
+  type VideoBackground,
+} from '@/lib/videoBackground';
 import { useI18n } from '@/lib/i18n';
 import { IDLE_RECORDING_STATE } from '@/lib/recordingControls';
 import prejoinStyles from '@/styles/PreJoin.module.css';
@@ -26,12 +37,12 @@ import prejoinStyles from '@/styles/PreJoin.module.css';
 const noop = () => {};
 
 /** Replaces the browser's camera with a canvas, once per page. */
-function installFakeCamera() {
+function installFakeCamera(photo: string) {
   const w = window as unknown as { __kmFakeCamera?: boolean };
   if (w.__kmFakeCamera) return;
   w.__kmFakeCamera = true;
   const img = new Image();
-  img.src = '/images/people/sarah-tile.jpg';
+  img.src = photo;
   const canvas = document.createElement('canvas');
   canvas.width = 1280;
   canvas.height = 720;
@@ -168,6 +179,65 @@ function StaticDialogCase({ kind }: { kind: 'off' | 'unsupported' | 'failed' }) 
   );
 }
 
+const VideoOf = ({ track, label }: { track?: LocalVideoTrack; label: string }) => {
+  const ref = React.useRef<HTMLVideoElement | null>(null);
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!track || !el) return;
+    track.attach(el);
+    return () => {
+      track.detach(el);
+    };
+  }, [track]);
+  return (
+    <figure style={{ margin: 0, flex: 1, position: 'relative', background: '#2e3036' }}>
+      <video ref={ref} autoPlay muted playsInline style={{ width: '100%', display: 'block' }} />
+      <figcaption style={{ position: 'absolute', top: 8, left: 10, font: '600 13px system-ui', color: '#fff' }}>
+        {label}
+      </figcaption>
+    </figure>
+  );
+};
+
+/** Before and after on the same fake camera: the library's renderer, then ours. */
+function CompareCase({ look }: { look: Exclude<VideoBackground, 'none'> }) {
+  const before = useFakeCameraTrack(new URLSearchParams(window.location.search).get('only') !== 'after');
+  const [after, setAfter] = React.useState<LocalVideoTrack>();
+  const onlyAfter = new URLSearchParams(window.location.search).get('only') === 'after';
+  React.useEffect(() => {
+    if (!before || onlyAfter) return;
+    const blur = look === 'blur' || look === 'blur-light';
+    void before.setProcessor(
+      BackgroundProcessor({
+        ...(blur
+          ? { mode: 'background-blur' as const, blurRadius: look === 'blur' ? 14 : 5 }
+          : { mode: 'virtual-background' as const, imagePath: sceneImageUrl(look) }),
+        assetPaths: { tasksVisionFileSet: '/mediapipe/wasm', modelAssetPath: '/mediapipe/selfie_segmenter.tflite' },
+      }),
+    );
+  }, [before, look, onlyAfter]);
+  React.useEffect(() => {
+    let made: LocalVideoTrack | undefined;
+    let cancelled = false;
+    createLocalVideoTrack().then(async (t) => {
+      if (cancelled) return t.stop();
+      made = t;
+      await t.setProcessor(new KloudBackgroundProcessor(look));
+      setAfter(t);
+    });
+    return () => {
+      cancelled = true;
+      made?.stop();
+    };
+  }, [look]);
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: '#17181c', display: 'flex', gap: 8, padding: 8 }}>
+      {before && <VideoOf track={before} label="Before (library)" />}
+      <VideoOf track={after} label="After" />
+    </div>
+  );
+}
+
 function ToolbarCase() {
   const [view, setView] = React.useState<ViewMode>('webcam');
   return (
@@ -215,8 +285,12 @@ export default function DevBackgroundPage() {
   if (process.env.NODE_ENV === 'production') notFound();
   const [kind, setKind] = React.useState<string | null>(null);
   React.useEffect(() => {
-    const value = new URLSearchParams(window.location.search).get('case') ?? 'meeting';
-    installFakeCamera();
+    const params = new URLSearchParams(window.location.search);
+    const value = params.get('case') ?? 'meeting';
+    installFakeCamera(params.get('photo') ?? '/images/people/sarah-tile.jpg');
+    if (params.get('mask') === '1') {
+      (window as unknown as { __kmBackgroundShowMask?: boolean }).__kmBackgroundShowMask = true;
+    }
     if (value === 'broken') breakModelDownload();
     setKind(value);
   }, []);
@@ -239,6 +313,11 @@ export default function DevBackgroundPage() {
     );
   }
   if (kind === 'toolbar') return <ToolbarCase />;
+  if (kind === 'compare') {
+    const bg = new URLSearchParams(window.location.search).get('bg') ?? 'seaside';
+    const look = bg === 'blur' || bg === 'blur-light' || isBackgroundScene(bg) ? bg : 'seaside';
+    return <CompareCase look={look} />;
+  }
   if (kind === 'off' || kind === 'unsupported' || kind === 'failed') return <StaticDialogCase kind={kind} />;
   return <MeetingCase />;
 }
