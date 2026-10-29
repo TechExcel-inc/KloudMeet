@@ -83,9 +83,10 @@ export async function GET(
                   updatedAt: true,
                 },
               },
+              // Every line, so long meetings keep their whole transcript; only what the page shows
               transcripts: {
                 orderBy: { captionTime: 'asc' },
-                take: 500,
+                select: { id: true, speakerName: true, content: true, captionTime: true, offsetSeconds: true },
               },
             },
           },
