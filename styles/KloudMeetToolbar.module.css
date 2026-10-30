@@ -281,14 +281,6 @@
   color: #fdd663;
 }
 
-.actRec {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 21px;
-  height: 21px;
-}
-
 .actIcon .countBadge {
   top: -7px;
   right: -12px;
@@ -540,19 +532,6 @@
 .splitChevron svg {
   width: 12px;
   height: 12px;
-}
-
-/* Recording-in-progress button (host / co-host) */
-.recBtn {
-  color: #f28b82;
-}
-
-.recDot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #f28b82;
-  animation: recBlink 1.6s infinite;
 }
 
 .recStatus {
@@ -2433,7 +2412,6 @@
     transition: none;
   }
 
-  .recDot,
   .recStatusDot,
   .segConflictDot,
   .roundBtnByHost,

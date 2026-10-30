@@ -315,6 +315,7 @@
   "meeting.documentPipPeople": "{n}명",
   "meeting.documentPipPerson": "1명",
   "meeting.documentPipRec": "녹화 중",
+  "meeting.weakConnection": "네트워크 연결이 약합니다",
   "meeting.documentPipAloneTitle": "지금은 나만 있어요",
   "meeting.documentPipAloneBody": "링크를 공유해 다른 사람을 초대하세요.",
   "meeting.documentPipCopyInvite": "초대 링크 복사",

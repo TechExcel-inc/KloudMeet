@@ -8,6 +8,9 @@
 
 import React from 'react';
 import { notFound } from 'next/navigation';
+import { RoomContext } from '@livekit/components-react';
+import { Room } from 'livekit-client';
+import { ConnectionQuality as ProtoConnectionQuality } from '@livekit/protocol';
 import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
@@ -166,6 +169,21 @@ export default function DevTilesPage() {
   // The toolbar probes media devices, so (as in a real room) it only renders in the browser.
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+  // A room that never connects, so the corner's weak-connection hint can be previewed:
+  // ?weak=1 starts on a poor connection, kmWeak(true|false) in the console switches it; ?rec=0
+  // previews the corner without a recording.
+  const [devRoom, setDevRoom] = React.useState<Room | null>(null);
+  const [recording, setRecording] = React.useState(true);
+  React.useEffect(() => {
+    const room = new Room();
+    const setWeak = (weak: boolean) =>
+      room.localParticipant.setConnectionQuality(weak ? ProtoConnectionQuality.POOR : ProtoConnectionQuality.EXCELLENT);
+    (window as unknown as { kmWeak?: (weak: boolean) => void }).kmWeak = setWeak;
+    const query = new URLSearchParams(window.location.search);
+    if (query.get('weak') === '1') setWeak(true);
+    if (query.get('rec') === '0') setRecording(false);
+    setDevRoom(room);
+  }, []);
   // Design mode preview: ?design=<link> opens straight on the stage, ?dialog=1 opens "Show a
   // link", ?as=attendee views as an attendee following the host window (open both side by side).
   const [designLink, setDesignLink] = React.useState<DesignLink | null>(null);
@@ -308,7 +326,8 @@ export default function DevTilesPage() {
           onClose={() => setDesignDialog(false)}
         />
       )}
-      {mounted && (
+      {mounted && devRoom && (
+      <RoomContext.Provider value={devRoom}>
       <KloudMeetToolbar
         activeView={view}
         onViewChange={setView}
@@ -348,7 +367,7 @@ export default function DevTilesPage() {
         attendeeOpen={false}
         onToggleAttendee={noop}
         canRecord={host}
-        isRecording
+        isRecording={recording}
         recordingState={rec}
         canChangeRecordingPolicy={host}
         onRecordingAction={(action) => setRec((r) => ({ ...r, paused: action === 'pause' }))}
@@ -369,6 +388,7 @@ export default function DevTilesPage() {
         captionRoomLanguages={['zh', 'en', 'ja']}
         meetingTitle="Weekly product review"
       />
+      </RoomContext.Provider>
       )}
     </div>
   );

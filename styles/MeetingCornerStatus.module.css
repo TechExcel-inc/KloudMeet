@@ -1,0 +1,122 @@
+/* Top-left corner of the meeting (lib/MeetingCornerStatus.tsx): recording, weak connection. */
+.corner {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100vw - 24px);
+  pointer-events: none;
+  font-family: var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+}
+
+/* LiveDoc's annotation tools run down the left edge */
+.cornerBesideRail {
+  left: 56px;
+  max-width: calc(100vw - 68px);
+}
+
+.rec,
+.weak {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  border-radius: 999px;
+  background: rgba(23, 24, 28, 0.86);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: auto;
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+
+.recDot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f28b82;
+  box-shadow: 0 0 0 3px rgba(242, 139, 130, 0.22);
+  animation: km-corner-rec-blink 1.6s infinite;
+}
+
+.recPaused .recDot {
+  background: var(--km-stage-muted, #9aa0a6);
+  box-shadow: none;
+  animation: none;
+}
+
+.recButton {
+  padding-right: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.recButton:hover,
+.recButtonOpen {
+  background: rgba(43, 44, 50, 0.96);
+}
+
+.recButton:focus-visible {
+  outline: 2px solid var(--km-on-dark-accent, #c9c8ff);
+  outline-offset: 2px;
+}
+
+.chevron {
+  width: 14px;
+  height: 14px;
+  color: var(--km-stage-muted, #9aa0a6);
+  transition: transform 0.15s ease;
+}
+
+.recButtonOpen .chevron {
+  transform: rotate(180deg);
+}
+
+.weak {
+  color: #fdd663;
+}
+
+.signal {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.signalOff {
+  fill: currentColor;
+  opacity: 0.3;
+}
+
+@keyframes km-corner-rec-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recDot {
+    animation: none;
+  }
+
+  .recButton,
+  .chevron {
+    transition: none;
+  }
+}

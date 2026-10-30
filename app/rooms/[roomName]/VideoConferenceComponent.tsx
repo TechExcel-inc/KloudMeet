@@ -4100,6 +4100,7 @@ export function VideoConferenceComponent(props: {
             if (canRecordHere) handleToggleRecording('stop');
           }}
           recordingState={recordingState}
+          showCornerStatus={!isRecorderBot}
           canChangeRecordingPolicy={isHost}
           onRecordingAction={(action) => void recordingRequest({ action })}
           onRecordingSettings={(patch) => void recordingRequest({ action: 'settings', ...patch })}

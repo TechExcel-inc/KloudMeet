@@ -18,6 +18,7 @@ import { saveCaptionSettings, type CaptionLanguage } from './RtasrHelper/caption
 import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 import { useLiveDocUploadQueue } from './useLiveDocUploadQueue';
+import { MeetingCornerStatus } from './MeetingCornerStatus';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen' | 'design';
 export type WebcamLayoutMode = 'tile' | 'spotlight';
@@ -144,6 +145,8 @@ interface KloudMeetToolbarProps {
   onStopRecording?: () => void;
   /** Shared recording state (paused, layout, host-only, sync transcript) */
   recordingState?: RecordingState;
+  /** Desktop: recording status and the weak-connection hint in the meeting's top-left corner */
+  showCornerStatus?: boolean;
   /** The host may change who can record and sync transcript */
   canChangeRecordingPolicy?: boolean;
   onRecordingAction?: (action: 'pause' | 'resume') => void;
@@ -309,6 +312,7 @@ export function KloudMeetToolbar({
   onOpenRecordPopup,
   onStopRecording,
   recordingState,
+  showCornerStatus = true,
   canChangeRecordingPolicy = false,
   onRecordingAction,
   onRecordingSettings,
@@ -347,7 +351,8 @@ export function KloudMeetToolbar({
   );
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const videoBackground = useRoomVideoBackground(useMaybeRoomContext());
+  const maybeRoom = useMaybeRoomContext();
+  const videoBackground = useRoomVideoBackground(maybeRoom);
   const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
   const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
@@ -1118,7 +1123,9 @@ export function KloudMeetToolbar({
     let pass = 0;
     const layout = () => {
       const r = anchorEl.getBoundingClientRect();
-      const availableHeight = Math.max(240, r.top - 24);
+      // Anchors in the top half (the recording chip in the top-left corner) open downwards
+      const below = r.top < window.innerHeight / 2;
+      const availableHeight = Math.max(240, below ? window.innerHeight - r.bottom - 24 : r.top - 24);
       // more/exit/recording：用满按钮上方可用高度，内容够则不出现滚动条
       const preferredMaxHeight =
         desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
@@ -1134,7 +1141,7 @@ export function KloudMeetToolbar({
       const h = el?.getBoundingClientRect().height || (isPanel ? 400 : 268);
       // Panel：使用固定高度，永远向上生长（底部贴着按钮）
       // Non-panel：根据真实内容高度向上定位，并受 maxHeight 限制
-      let top = r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
+      let top = below ? r.bottom + 8 : r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
       if (top < 10) top = 10;
       setDesktopBubblePos({ top, left, width, arrowLeft, maxHeight, height });
       pass++;
@@ -1163,7 +1170,9 @@ export function KloudMeetToolbar({
     const onResize = () => {
       if (!anchorEl) return;
       const r = anchorEl.getBoundingClientRect();
-      const availableHeight = Math.max(240, r.top - 24);
+      // Anchors in the top half (the recording chip in the top-left corner) open downwards
+      const below = r.top < window.innerHeight / 2;
+      const availableHeight = Math.max(240, below ? window.innerHeight - r.bottom - 24 : r.top - 24);
       const preferredMaxHeight =
         desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
           ? 500
@@ -1176,7 +1185,7 @@ export function KloudMeetToolbar({
       const arrowLeft = Math.round(Math.min(width - 18, Math.max(18, cx - left)));
       const el = desktopBubbleRef.current;
       const h = el?.getBoundingClientRect().height || (isPanel ? 400 : 268);
-      let top = r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
+      let top = below ? r.bottom + 8 : r.top - (isPanel ? maxHeight : Math.min(h, maxHeight)) - 12;
       if (top < 10) top = 10;
       setDesktopBubblePos({ top, left, width, arrowLeft, maxHeight, height });
     };
@@ -2281,13 +2290,6 @@ export function KloudMeetToolbar({
                 </div>
               );
             })()}
-            {/* Everyone can see the meeting is recorded; hosts have the Recording button on the right instead */}
-            {isRecording && !canRecord && (
-              <span className={styles.recStatus} role="status">
-                <span className={styles.recStatusDot} aria-hidden="true" />
-                {recordingState?.paused ? t('toolbar.recordingPaused') : t('toolbar.recording')}
-              </span>
-            )}
             </div>
 
             {/* Centre zone: what everyone sees (modes) | what you can do (actions) */}
@@ -2412,21 +2414,6 @@ export function KloudMeetToolbar({
                   )}
                 </div>
 
-                {/* Recording in progress (host / co-host): opens Stop Recording menu */}
-                {canRecord && isRecording && (
-                  <button
-                    ref={recordMenuBtnRef}
-                    type="button"
-                    className={`${styles.actBtn} ${activeSheet === 'recording' ? styles.actBtnActive : ''}`}
-                    onClick={() => openSheet('recording')}
-                    aria-haspopup="menu"
-                    aria-expanded={activeSheet === 'recording'}
-                    aria-label={t('toolbar.recordingControls')}
-                  >
-                    <span className={styles.actRec} aria-hidden="true"><span className={styles.recDot} /></span>
-                    <span className={styles.actLabel}>{t('toolbar.recording')}</span>
-                  </button>
-                )}
                 {/* More (also holds SmartCam / picture-in-picture) */}
                 <button
                   ref={moreMenuBtnRef}
@@ -2559,6 +2546,19 @@ export function KloudMeetToolbar({
             />
           </div>
         </div>
+      )}
+
+      {!isMobile && showCornerStatus && (
+        <MeetingCornerStatus
+          room={maybeRoom}
+          isRecording={!!isRecording}
+          paused={!!recordingState?.paused}
+          canControlRecording={canRecord}
+          controlsOpen={activeSheet === 'recording'}
+          onOpenRecordingControls={() => openSheet('recording')}
+          recordingButtonRef={recordMenuBtnRef}
+          besideLeftRail={activeView === 'liveDoc'}
+        />
       )}
 
       {desktopAnchorBubbleKind &&
