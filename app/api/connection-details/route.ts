@@ -18,6 +18,7 @@ import {
 import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
 import { followOwnerLiveRoom, otherLiveMeetingOfHost } from '@/lib/oneMeetingPerHost';
 import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoomView';
+import { meetingDesignLinksEnabled } from '@/lib/designLinksSetting.server';
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { joinBlockCode, parseAccessLevel } from '@/lib/meetingAccess';
@@ -292,6 +293,7 @@ export async function GET(request: NextRequest) {
       isPersonalRoom,
       ...(currentView ? { currentView } : {}),
       ...(roomFlags.designLink ? { designLink: roomFlags.designLink } : {}),
+      designLinksEnabled: await meetingDesignLinksEnabled({ id: meeting.id }),
       participantLiveDocAi,
       livedocInstanceId,
       accessLevel: parseAccessLevel(accessMeeting.accessLevel),

@@ -1281,6 +1281,8 @@ export function VideoConferenceComponent(props: {
     !isLocalControlOperator && hostDisabledVideoIdentities.includes(localIdentity);
   // Only host / co-host / presenter may switch views; they sync the room for everyone else
   const canSwitchViews = isHost || isCohost || isCopresenter || isAutoPresenter;
+  /** Design links (Figma): only when the host turned them on in My Profile; a link already on stage stays */
+  const canAddDesignLink = canSwitchViews && props.connectionDetails.designLinksEnabled === true;
   const canBroadcastViewChange = canSwitchViews;
   canBroadcastViewChangeRef.current = canBroadcastViewChange;
 
@@ -2091,8 +2093,8 @@ export function VideoConferenceComponent(props: {
     if (canSwitchViews && designLink) handleViewChange('design');
   }, [canSwitchViews, designLink, handleViewChange]);
   const openDesignDialog = React.useCallback(() => {
-    if (canSwitchViews) setDesignDialogOpen(true);
-  }, [canSwitchViews]);
+    if (canAddDesignLink) setDesignDialogOpen(true);
+  }, [canAddDesignLink]);
 
   const submitDesignLink = React.useCallback(
     (link: DesignLink, check?: DesignEmbedCheck) => {
@@ -3645,7 +3647,7 @@ export function VideoConferenceComponent(props: {
                 canControl={canSwitchViews}
                 sync={designSync}
                 embedBlocked={designStored?.embed === 'blocked'}
-                onChangeLink={() => setDesignDialogOpen(true)}
+                onChangeLink={canAddDesignLink ? openDesignDialog : undefined}
                 onStop={stopDesign}
               />
             </div>
@@ -4081,7 +4083,7 @@ export function VideoConferenceComponent(props: {
           canSwitchViews={canSwitchViews}
           designItem={designItem}
           onShowDesign={canSwitchViews ? showDesign : undefined}
-          onAddDesignLink={canSwitchViews ? openDesignDialog : undefined}
+          onAddDesignLink={canAddDesignLink ? openDesignDialog : undefined}
           webcamLayoutMode={webcamLayoutMode}
           onWebcamLayoutChange={setWebcamLayoutMode}
           galleryPrefs={galleryPrefs}
@@ -4225,7 +4227,7 @@ export function VideoConferenceComponent(props: {
         )}
         {desktopLaunchModal}
         <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-        {designDialogOpen && canSwitchViews && (
+        {designDialogOpen && canAddDesignLink && (
           <DesignLinkDialog
             currentUrl={designLink?.url}
             appOrigin={typeof window !== 'undefined' ? window.location.origin : ''}

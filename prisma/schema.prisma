@@ -447,6 +447,8 @@ model TeamMember {
   calendarFeedToken   String?                @unique(map: "TeamMember_calendarFeedToken_key") @db.VarChar(64)
   /// Access level for this person's new meetings (My Profile → Meeting settings); null = Public (prisma/add_member_default_meeting_access.sql)
   defaultMeetingAccess String?               @db.VarChar(16)
+  /// Design links (Figma) in this person's meetings (My Profile → Meeting settings); off by default (prisma/add_member_design_links.sql)
+  designLinksEnabled  Boolean                @default(false)
   avatarUrl           String?
   /// Kloud (kloud.cn) user ID connected as a sign-in method; null = not connected (prisma/add_account_linking.sql)
   kloudUserId         String?                @unique(map: "TeamMember_kloudUserId_key") @db.VarChar(32)

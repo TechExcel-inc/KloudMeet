@@ -709,6 +709,8 @@
   "profile.meetingSettings": "会议设置",
   "profile.defaultAccess": "默认访问权限",
   "profile.defaultAccessNote": "用于新建会议、预约会议，以及个人会议号的每一场新会议；开会前仍可在准备页修改。",
+  "profile.designLinks": "设计链接",
+  "profile.designLinksHint": "打开后，在你主持的会议里，你、联席主持人和演示者可以把 Figma 等设计链接展示在会议舞台上。",
   "profile.primaryPhone": "主要电话：",
   "profile.phoneComingSoon": "电话更改即将推出",
   "profile.password": "密码：",

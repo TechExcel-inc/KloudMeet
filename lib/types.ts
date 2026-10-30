@@ -37,6 +37,8 @@ export type ConnectionDetails = {
   currentView?: 'liveDoc' | 'webcam' | 'shareScreen' | 'design';
   /** Design mode: the link everyone views (from room metadata), for late joiners. */
   designLink?: StoredDesignLink | null;
+  /** Design links (Figma): the host turned them on in My Profile; off when absent. */
+  designLinksEnabled?: boolean;
   /**
    * 普通参会者是否显示文档 AI。缺省或 true 为显示；false 时普通参会者入会不显示。
    * 主持人、联席主持人和演示者不受影响。

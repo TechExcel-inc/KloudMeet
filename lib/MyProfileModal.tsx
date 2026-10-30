@@ -70,6 +70,9 @@ export function MyProfileModal({
   // Meeting settings: default access for new meetings (Public when never set)
   const [defaultAccess, setDefaultAccess] = useState<MeetingAccessLevel>('PUBLIC');
   const [defaultAccessTouched, setDefaultAccessTouched] = useState(false);
+  // Meeting settings: design links (Figma) in the meetings you host (off when never set)
+  const [designLinks, setDesignLinks] = useState(false);
+  const [designLinksTouched, setDesignLinksTouched] = useState(false);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [signInMethods, setSignInMethods] = useState<SignInMethodsState | null>(null);
   
@@ -116,6 +119,7 @@ export function MyProfileModal({
           setEmailVerified(data.emailVerified || false);
           setPhoneVerified(data.phoneVerified || false);
           setDefaultAccess(parseAccessLevel(data.defaultMeetingAccess) ?? 'PUBLIC');
+          setDesignLinks(data.designLinksEnabled === true);
           if (data.signInMethods) setSignInMethods(data.signInMethods);
         }
       })
@@ -189,6 +193,7 @@ export function MyProfileModal({
           personalRoomId: personalRoomEnabled ? personalRoomId : null,
           phone,
           ...(defaultAccessTouched ? { defaultMeetingAccess: defaultAccess } : {}),
+          ...(designLinksTouched ? { designLinksEnabled: designLinks } : {}),
         }),
       });
       const data = await res.json();
@@ -698,6 +703,29 @@ export function MyProfileModal({
                 </div>
                 <p className={styles.accessHint}>{accessDescription(defaultAccess)}</p>
                 <p className={styles.accessNote}>{t('profile.defaultAccessNote')}</p>
+              </div>
+            </div>
+            <div className={styles.formRow}>
+              <div className={styles.formLabel} id="profile-design-links-label">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                {t('profile.designLinks')}
+              </div>
+              <div className={styles.accessField}>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={designLinks}
+                  aria-labelledby="profile-design-links-label"
+                  className={designLinks ? styles.switchOn : styles.switch}
+                  disabled={loading}
+                  onClick={() => {
+                    setDesignLinks((on) => !on);
+                    setDesignLinksTouched(true);
+                  }}
+                >
+                  <span className={styles.switchKnob} />
+                </button>
+                <p className={styles.accessHint}>{t('profile.designLinksHint')}</p>
               </div>
             </div>
           </div>

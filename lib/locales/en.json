@@ -722,6 +722,8 @@
   "profile.meetingSettings": "Meeting Settings",
   "profile.defaultAccess": "Default access",
   "profile.defaultAccessNote": "Used for new meetings, scheduled meetings and each new session of your personal room. You can still change it before a meeting starts.",
+  "profile.designLinks": "Design links",
+  "profile.designLinksHint": "When on, you, co-hosts and presenters can show Figma and other design links on the stage in meetings you host.",
   "profile.primaryPhone": "Primary Phone:",
   "profile.phoneComingSoon": "Phone change coming soon",
   "profile.password": "Password:",

@@ -713,6 +713,8 @@
   "profile.meetingSettings": "会議設定",
   "profile.defaultAccess": "既定のアクセス",
   "profile.defaultAccessNote": "新しい会議、予定した会議、個人ルームの新しいセッションに使われます。会議の開始前に変更することもできます。",
+  "profile.designLinks": "デザインリンク",
+  "profile.designLinksHint": "オンにすると、あなたが主催する会議で、あなた、共同ホスト、発表者が Figma などのデザインリンクをステージに表示できます。",
   "profile.primaryPhone": "電話番号：",
   "profile.phoneComingSoon": "電話番号変更は近日公開",
   "profile.password": "パスワード：",

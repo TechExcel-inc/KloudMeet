@@ -681,6 +681,61 @@
   font-size: 0.8rem;
   line-height: 1.5;
 }
+/* On/off switch (Design links), lined up with the row label */
+.switch,
+.switchOn {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin-top: 7px;
+  padding: 0;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 999px;
+  background: #cbd5e1;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.switchOn {
+  background: #6366f1;
+}
+.switch:hover:not(:disabled) {
+  background: #94a3b8;
+}
+.switchOn:hover:not(:disabled) {
+  background: #4f46e5;
+}
+.switch:disabled,
+.switchOn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.switch:focus-visible,
+.switchOn:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+.switchKnob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.2);
+  transition: transform 0.15s ease;
+}
+.switchOn .switchKnob {
+  transform: translateX(16px);
+}
+@media (prefers-reduced-motion: reduce) {
+  .switch,
+  .switchOn,
+  .switchKnob {
+    transition: none;
+  }
+}
 
 /* ── Security Section ── */
 .securitySection {

@@ -58,7 +58,13 @@ export async function PUT(request: NextRequest) {
         defaultMeetingAccessToSave = level;
       }
     }
-    
+
+    // Meeting settings → design links (Figma) in the meetings this person hosts
+    if (body.designLinksEnabled !== undefined && typeof body.designLinksEnabled !== 'boolean') {
+      return NextResponse.json({ error: 'Invalid design links setting', code: 'DESIGN_LINKS_INVALID' }, { status: 400 });
+    }
+    const designLinksEnabledToSave: boolean | undefined = body.designLinksEnabled;
+
     // Validate personalRoomId
     let personalRoomIdToSave: string | null | undefined = undefined;
     if (personalRoomId !== undefined) {
@@ -126,6 +132,7 @@ export async function PUT(request: NextRequest) {
         phone: phone !== undefined ? (phone || null) : undefined,
         avatarUrl: avatarUrl !== undefined ? (avatarUrl || null) : undefined,
         defaultMeetingAccess: defaultMeetingAccessToSave,
+        designLinksEnabled: designLinksEnabledToSave,
         modifiedAt: new Date()
       }
     });
