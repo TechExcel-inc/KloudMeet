@@ -26,6 +26,7 @@ import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 import { isRecorderParticipant } from '@/lib/recorderParticipant';
+import { TILE_GLYPH_PATHS } from '@/lib/tileGlyphs';
 
 export type KloudTileMediaRestrictionProps = {
   hostMutedIdentities: string[];
@@ -132,15 +133,8 @@ function KloudFloatingMicIndicator({
             : undefined
       }
     >
-      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
-        {isMuted ? (
-          <>
-            <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
-            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </>
-        ) : (
-          <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
-        )}
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor" aria-hidden="true">
+        <path d={isMuted ? TILE_GLYPH_PATHS.micOff : TILE_GLYPH_PATHS.mic} />
       </svg>
     </div>
   );
@@ -191,15 +185,8 @@ function KloudFloatingCamIndicator({
             : undefined
       }
     >
-      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
-        {isVideoDisabled ? (
-          <>
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-            <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-          </>
-        ) : (
-          <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-        )}
+      <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor" aria-hidden="true">
+        <path d={isVideoDisabled ? TILE_GLYPH_PATHS.camOff : TILE_GLYPH_PATHS.cam} />
       </svg>
     </div>
   );

@@ -436,17 +436,8 @@ h2 a {
   animation: km-voice-side 0.9s ease-in-out infinite;
 }
 
-/* Quiet by default: a mic that is on but silent shows nothing (no muted icon and no voice bars
-   already says "on, no sound"). It comes back on hover so the host can still mute from the tile
-   and you can still toggle your own. Muted, host-muted and speaking always show. */
-@media (hover: hover) {
-  .lk-room-container .lk-participant-tile:not([data-lk-speaking="true"]):not(:hover):not(:focus-within) .kloud-custom-mic-indicator[data-kloud-muted="false"] {
-    opacity: 0 !important;
-    pointer-events: none !important;
-    transition: opacity 0.15s ease;
-  }
-}
-/* Touch screens have no hover, so there the chip always shows: tile mute stays reachable */
+/* Every tile always says whether that person can be heard: green mic = on, white mic with a
+   slash = muted, moving bars = speaking, red = muted by the host. */
 
 /* Muted is information, not an alarm: white icon, no colour */
 .lk-room-container .lk-participant-tile .kloud-custom-mic-indicator[data-kloud-muted="true"]:not([data-kloud-host-restricted="true"]):not([data-kloud-force-muted="true"]) {

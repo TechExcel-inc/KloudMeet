@@ -855,9 +855,9 @@
   pointer-events: auto !important;
 }
 
-.heroCell :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
+/* Camera off shows in the tile itself, so its chip waits for hover; the mic chip always shows
+   (muted / on / speaking) so everyone can see who can be heard. */
 .heroCell :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]),
-.compactCell :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
 .compactCell :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]) {
   opacity: 0 !important;
   width: 0 !important;
@@ -871,9 +871,7 @@
   pointer-events: none !important;
 }
 
-.heroCell:hover :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
 .heroCell:hover :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]),
-.compactCell:hover :global(.kloud-custom-mic-indicator[data-kloud-muted="true"]),
 .compactCell:hover :global(.kloud-custom-cam-indicator[data-kloud-video-disabled="true"]) {
   opacity: 1 !important;
   width: 20px !important;

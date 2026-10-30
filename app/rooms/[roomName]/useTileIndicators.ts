@@ -7,6 +7,7 @@ import {
   shouldShowRoleMenu,
 } from '@/lib/ParticipantRoleMenu';
 import { applyTileHue } from '@/lib/tileLayout';
+import { TILE_CAM_OFF_SVG, TILE_CAM_SVG, TILE_MIC_OFF_SVG, TILE_MIC_SVG } from '@/lib/tileGlyphs';
 
 const TILE_REFRESH_EVENTS = [
   RoomEvent.TrackMuted,
@@ -105,12 +106,8 @@ export function useTileIndicators({
   React.useEffect(() => {
     if (!room) return;
 
-    // SVG templates for the mic icon
-    const micSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/></svg>`;
-    const micOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
+    // Raised-hand badge glyph (mic / camera glyphs: lib/tileGlyphs.ts)
     const handSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.05 4.575a1.575 1.575 0 10-3.15 0v3m3.15-3v-1.5a1.575 1.575 0 013.15 0v1.5m-3.15 0l.075 5.925m3.075.75V4.575m0 0a1.575 1.575 0 013.15 0V15M6.9 7.575a1.575 1.575 0 10-3.15 0v8.175a6.75 6.75 0 006.75 6.75h2.018a5.25 5.25 0 003.712-1.538l1.732-1.732a5.25 5.25 0 001.538-3.712l.003-2.024a.668.668 0 01.198-.471 1.575 1.575 0 10-2.228-2.228 3.818 3.818 0 00-1.12 2.687M6.9 7.575V12"/></svg>`;
-    const camSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>`;
-    const camOffSvg = `<svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/><line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>`;
 
     const applyKloudIndicatorColor = (el: HTMLElement, color: string) => {
       el.style.setProperty('color', color, 'important');
@@ -250,7 +247,7 @@ export function useTileIndicators({
         customMicEl.setAttribute('data-kloud-host-restricted', isHostMicRestricted ? 'true' : 'false');
         customMicEl.setAttribute('data-kloud-force-muted', isForceMuted ? 'true' : 'false');
         customMicEl.classList.toggle('kloud-custom-mic--force-muted', isHostMicRestricted || isForceMuted);
-        customMicEl.innerHTML = isMuted ? micOffSvg : micSvg;
+        customMicEl.innerHTML = isMuted ? TILE_MIC_OFF_SVG : TILE_MIC_SVG;
         if (isHostMicRestricted || isForceMuted) {
           applyKloudIndicatorColor(customMicEl, '#ff2020');
         } else if (isMuted) {
@@ -293,7 +290,7 @@ export function useTileIndicators({
         customCamEl.setAttribute('data-kloud-video-disabled', isVideoDisabled ? 'true' : 'false');
         customCamEl.setAttribute('data-kloud-host-restricted', isHostVideoRestricted ? 'true' : 'false');
         customCamEl.classList.toggle('kloud-custom-cam--force-disabled', isHostVideoRestricted);
-        customCamEl.innerHTML = isVideoDisabled ? camOffSvg : camSvg;
+        customCamEl.innerHTML = isVideoDisabled ? TILE_CAM_OFF_SVG : TILE_CAM_SVG;
         if (isHostVideoRestricted) {
           applyKloudIndicatorColor(customCamEl, '#ff2020');
         } else if (isVideoDisabled) {

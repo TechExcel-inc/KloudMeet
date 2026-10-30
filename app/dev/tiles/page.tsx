@@ -13,6 +13,7 @@ import { Room } from 'livekit-client';
 import { ConnectionQuality as ProtoConnectionQuality } from '@livekit/protocol';
 import { applyBalancedGrid, applyTileHue } from '@/lib/tileLayout';
 import { getInitials } from '@/lib/getInitials';
+import { TILE_GLYPH_PATHS } from '@/lib/tileGlyphs';
 import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from '@/lib/galleryPrefs';
 import { IDLE_RECORDING_STATE, type RecordingState } from '@/lib/recordingControls';
@@ -77,11 +78,6 @@ const PAGE_SIZE = 25;
    "Custom Microphone Indicator DOM Injection"), with the same classes, attributes and glyphs.
    Sample states: speaking (tile 1), mic off, muted by the host (tile 3), mic on but silent,
    camera disabled by the host (tile 5). */
-const MIC_PATH =
-  'M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z';
-const CAM_PATH =
-  'M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z';
-const Slash = () => <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />;
 
 function TileChips({ index, host }: { index: number; host: boolean }) {
   const hostMuted = index === 2;
@@ -98,8 +94,7 @@ function TileChips({ index, host }: { index: number; host: boolean }) {
         title={host ? (hostMuted ? 'Cancel disable (does not turn on mic)' : 'Disable microphone') : undefined}
       >
         <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
-          <path d={MIC_PATH} />
-          {muted && <Slash />}
+          <path d={muted ? TILE_GLYPH_PATHS.micOff : TILE_GLYPH_PATHS.mic} />
         </svg>
       </div>
       <div
@@ -109,8 +104,7 @@ function TileChips({ index, host }: { index: number; host: boolean }) {
         title={host ? (camDisabledByHost ? 'Cancel disable (does not turn on camera)' : 'Disable camera') : undefined}
       >
         <svg viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor">
-          <path d={CAM_PATH} />
-          <Slash />
+          <path d={TILE_GLYPH_PATHS.camOff} />
         </svg>
       </div>
     </>
