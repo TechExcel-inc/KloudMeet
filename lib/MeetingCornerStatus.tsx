@@ -55,6 +55,8 @@ export interface MeetingCornerStatusProps {
   recordingButtonRef: React.Ref<HTMLButtonElement>;
   /** LiveDoc keeps its annotation tools along the left edge: start to the right of them. */
   besideLeftRail?: boolean;
+  /** Phone: in line with the round buttons at the top right, with a shorter weak-connection hint. */
+  phone?: boolean;
 }
 
 /**
@@ -70,6 +72,7 @@ export function MeetingCornerStatus({
   onOpenRecordingControls,
   recordingButtonRef,
   besideLeftRail = false,
+  phone = false,
 }: MeetingCornerStatusProps) {
   const { t } = useI18n();
   const weak = useWeakConnection(room);
@@ -80,7 +83,10 @@ export function MeetingCornerStatus({
   const recClass = `${styles.rec} ${paused ? styles.recPaused : ''}`;
 
   return createPortal(
-    <div className={`${styles.corner} ${besideLeftRail ? styles.cornerBesideRail : ''}`}>
+    <div
+      className={`${styles.corner} ${phone ? styles.cornerPhone : ''} ${besideLeftRail ? styles.cornerBesideRail : ''}`}
+      data-meeting-corner=""
+    >
       {isRecording &&
         (canControlRecording ? (
           <button
@@ -105,13 +111,13 @@ export function MeetingCornerStatus({
           </span>
         ))}
       {weak && (
-        <span className={styles.weak} role="status">
+        <span className={styles.weak} role="status" title={phone ? t('meeting.weakConnection') : undefined}>
           <svg className={styles.signal} viewBox="0 0 16 16" aria-hidden="true">
             <rect x="1" y="10" width="3" height="5" rx="1" fill="currentColor" />
             <rect x="6.5" y="6" width="3" height="9" rx="1" className={styles.signalOff} />
             <rect x="12" y="2" width="3" height="13" rx="1" className={styles.signalOff} />
           </svg>
-          {t('meeting.weakConnection')}
+          {phone ? t('meeting.weakConnectionShort') : t('meeting.weakConnection')}
         </span>
       )}
     </div>,

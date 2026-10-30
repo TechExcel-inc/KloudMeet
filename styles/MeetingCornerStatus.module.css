@@ -18,6 +18,34 @@
   max-width: calc(100vw - 68px);
 }
 
+/* Phone: centred on the row of 44px round buttons at the top right, and kept clear of them
+   (three buttons while recording); the weak-connection hint wraps under "Recording" when
+   both don't fit. */
+.cornerPhone {
+  top: calc(max(12px, env(safe-area-inset-top, 0px)) + 6px);
+  left: max(12px, env(safe-area-inset-left, 0px));
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: calc(100vw - 188px);
+}
+
+.cornerPhone.cornerBesideRail {
+  left: calc(max(12px, env(safe-area-inset-left, 0px)) + 44px);
+  max-width: calc(100vw - 232px);
+}
+
+.cornerPhone .rec,
+.cornerPhone .weak {
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.cornerPhone .recButton {
+  padding-right: 6px;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
 .rec,
 .weak {
   display: inline-flex;

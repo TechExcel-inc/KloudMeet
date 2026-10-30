@@ -844,6 +844,7 @@ export function KloudMeetToolbar({
     const isChromeTarget = (target: Element) => !!(
       toolbarRef.current?.contains(target) ||
       target.closest?.('#mobileTopRightBtn') ||
+      target.closest?.('[data-meeting-corner]') ||
       target.closest?.('.lk-device-menu') ||
       target.closest?.('.lk-menu') ||
       target.closest?.('.chat-overlay-panel') ||
@@ -2548,8 +2549,9 @@ export function KloudMeetToolbar({
         </div>
       )}
 
-      {!isMobile && showCornerStatus && (
+      {showCornerStatus && (
         <MeetingCornerStatus
+          phone={isMobile}
           room={maybeRoom}
           isRecording={!!isRecording}
           paused={!!recordingState?.paused}
@@ -2779,33 +2781,22 @@ export function KloudMeetToolbar({
             {!chatOpen && renderCountBadge(chatBadgeCount)}
           </button>
 
-          {/* Recording button — host/co-host only */}
-          {canRecord && (
+          {/* Record — host/co-host only. While recording, "Recording" sits in the top-left corner instead */}
+          {canRecord && !isRecording && (
             <button
               type="button"
-              className={`${styles.mobileTopBtn} ${isRecording ? styles.mobileTopBtnRecording : ''}`}
+              className={styles.mobileTopBtn}
               onClick={(e) => {
                 e.stopPropagation();
-                if (isRecording) {
-                  openSheet('recording');
-                } else {
-                  onOpenRecordPopup?.();
-                }
+                onOpenRecordPopup?.();
               }}
-              aria-label={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
-              title={isRecording ? (t('toolbar.recording') || 'Recording') : (t('toolbar.record') || 'Record')}
+              aria-label={t('toolbar.record') || 'Record'}
+              title={t('toolbar.record') || 'Record'}
             >
-              {isRecording ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <circle cx="12" cy="12" r="5" fill="#fff" stroke="none" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-                  <circle cx="12" cy="12" r="5" />
-                  <circle cx="12" cy="12" r="9" />
-                </svg>
-              )}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                <circle cx="12" cy="12" r="5" />
+                <circle cx="12" cy="12" r="9" />
+              </svg>
             </button>
           )}
 

@@ -324,6 +324,7 @@
   "meeting.documentPipPerson": "1 person",
   "meeting.documentPipRec": "REC",
   "meeting.weakConnection": "Your connection is weak",
+  "meeting.weakConnectionShort": "Weak network",
   "meeting.documentPipAloneTitle": "Only you here",
   "meeting.documentPipAloneBody": "Share the link so others can join.",
   "meeting.documentPipCopyInvite": "Copy invite link",

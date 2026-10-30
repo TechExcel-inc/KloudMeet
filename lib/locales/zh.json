@@ -316,6 +316,7 @@
   "meeting.documentPipPerson": "1 人",
   "meeting.documentPipRec": "录制中",
   "meeting.weakConnection": "你的网络信号弱",
+  "meeting.weakConnectionShort": "网络弱",
   "meeting.documentPipAloneTitle": "目前只有你",
   "meeting.documentPipAloneBody": "分享链接，邀请其他人加入。",
   "meeting.documentPipCopyInvite": "复制邀请链接",

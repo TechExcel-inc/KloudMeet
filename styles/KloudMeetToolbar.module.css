@@ -1754,11 +1754,6 @@
   background: rgba(94, 92, 230, 0.9);
 }
 
-.mobileTopBtnRecording {
-  background: rgba(220, 54, 46, 0.9);
-  animation: mobileRecordPulse 1.8s ease-in-out infinite;
-}
-
 .mobileTopBtnExit {
   background: var(--km-danger, #dc362e);
 }
@@ -2322,13 +2317,6 @@
   }
 }
 
-/* Mobile recording button pulse animation */
-@keyframes mobileRecordPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(220, 54, 46, 0.55); }
-  60%  { box-shadow: 0 0 0 10px rgba(220, 54, 46, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(220, 54, 46, 0); }
-}
-
 /* ============================================
    Invite menu (desktop right zone + mobile top-right)
    ============================================ */
@@ -2415,8 +2403,7 @@
   .recStatusDot,
   .segConflictDot,
   .roundBtnByHost,
-  .controlBtnMutedByHost,
-  .mobileTopBtnRecording {
+  .controlBtnMutedByHost {
     animation: none;
   }
 }

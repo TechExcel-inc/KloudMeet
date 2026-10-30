@@ -316,6 +316,7 @@
   "meeting.documentPipPerson": "1 人",
   "meeting.documentPipRec": "録画中",
   "meeting.weakConnection": "通信状態が不安定です",
+  "meeting.weakConnectionShort": "通信不安定",
   "meeting.documentPipAloneTitle": "参加者はあなただけです",
   "meeting.documentPipAloneBody": "リンクを共有して他の人を招待しましょう。",
   "meeting.documentPipCopyInvite": "招待リンクをコピー",
