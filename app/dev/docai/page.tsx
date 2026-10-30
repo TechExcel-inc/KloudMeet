@@ -89,13 +89,14 @@ const CASES: Case[] = [
   { id: 'connecting', title: 'Connecting', tab: 'file', connecting: true },
 ];
 
+/** [fileName, title, icon]: the whiteboard as kloud.cn sends it */
 const DOC_NAMES = [
-  ['Q4 product roadmap.pptx', 'Q4 product roadmap'],
-  ['Pricing proposal v3.pdf', 'Pricing proposal v3'],
-  ['Customer interviews.docx', 'Customer interviews'],
-  ['Launch budget.xlsx', 'Launch budget'],
-  ['Onboarding flow.png', 'Onboarding flow'],
-  ['Whiteboard', 'Whiteboard 1'],
+  ['Q4 product roadmap.pptx', 'Q4 product roadmap', ''],
+  ['Pricing proposal v3.pdf', 'Pricing proposal v3', ''],
+  ['Customer interviews.docx', 'Customer interviews', ''],
+  ['Launch budget.xlsx', 'Launch budget', ''],
+  ['Onboarding flow.png', 'Onboarding flow', ''],
+  ['kloud-whiteboard.html', 'Whiteboard', 'https://kloud.cn/static/images/meeting-whiteboard-icon.svg'],
 ];
 
 /** [fileName, title, LiveDoc's older icon path] — the last two have no extension in their names */
@@ -122,12 +123,12 @@ function makeState(c: Case): LiveDocAiState {
     ready: true,
     activeTab: c.tab,
     documents: {
-      items: DOC_NAMES.slice(0, count).map(([fileName, title], i) => ({
+      items: DOC_NAMES.slice(0, count).map(([fileName, title, fileImg], i) => ({
         itemId: i + 1,
         attachmentId: 100 + i,
         title,
         fileName,
-        fileImg: '',
+        fileImg,
         fileType: 0,
         isCurrent: i === 0,
       })),

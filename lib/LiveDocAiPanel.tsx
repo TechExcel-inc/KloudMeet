@@ -1905,7 +1905,7 @@ function UploadFailures({
   );
 }
 
-/** "PPT", "PDF", "DOC"… in the type's colour, as in the Kloud V3 documents table */
+/** "PPT", "PDF", "DOC"… in the type's colour, as in the Kloud V3 documents table; a whiteboard is a pen stroke */
 function FileTypeBadge({
   names,
   icon,
@@ -1916,7 +1916,22 @@ function FileTypeBadge({
   const badge = liveDocFileBadge(names, icon);
   return (
     <span className={`${styles.typeBadge} ${styles[`type_${badge.group}`]}`} aria-hidden>
-      {badge.label}
+      {badge.group === 'board' ? (
+        // A pen stroke instead of letters, as kloud.cn draws it (meeting-whiteboard-badge.svg)
+        <svg width="16" height="16" viewBox="0 0 16 16">
+          <path
+            d="M2.5 11c1.3-2.9 2.6-4.3 3.7-4.3 1.6 0 .7 3.8 2.3 3.8 1.1 0 1.9-1.8 2.7-3.6"
+            fill="none"
+            stroke="#e6e8ee"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path d="M2.5 13.5h11" stroke="#8b8fa3" strokeWidth="1.2" strokeLinecap="round" />
+        </svg>
+      ) : (
+        badge.label
+      )}
     </span>
   );
 }

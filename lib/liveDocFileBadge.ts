@@ -3,7 +3,16 @@
  * the Kloud V3 documents table (Kloud-Web kloudsync/FileList.vue, v3TypeBadge), same groups and labels.
  */
 
-export type LiveDocFileGroup = 'ppt' | 'pdf' | 'doc' | 'xls' | 'video' | 'audio' | 'image' | 'other';
+export type LiveDocFileGroup =
+  | 'ppt'
+  | 'pdf'
+  | 'doc'
+  | 'xls'
+  | 'video'
+  | 'audio'
+  | 'image'
+  | 'board'
+  | 'other';
 
 export interface LiveDocFileBadge {
   group: LiveDocFileGroup;
@@ -37,6 +46,17 @@ const ICON_BADGES: Record<string, LiveDocFileBadge> = {
   'img.svg': { group: 'image', label: 'IMG' },
 };
 
+/**
+ * The meeting whiteboard (a blank LiveDoc page). kloud.cn files it as an HTML item under this name and
+ * gives it this icon (Kloud-Web googlemeet/MainStage.vue, MEETING_WB_FILENAME / MEETING_WB_ICON_PATH).
+ */
+const WHITEBOARD_FILE_NAME = 'kloud-whiteboard.html';
+const WHITEBOARD_ICON = 'meeting-whiteboard-icon.svg';
+
+function iconFileName(icon: string | null | undefined): string {
+  return (icon || '').split(/[?#]/)[0].split('/').pop() || '';
+}
+
 function extensionOf(name: string | null | undefined): string {
   const match = /\.([a-z0-9]+)$/i.exec((name || '').trim());
   return match ? match[1].toLowerCase() : '';
@@ -50,15 +70,21 @@ function badgeForExtension(ext: string): LiveDocFileBadge {
   return { group, label: ext.slice(0, 4).toUpperCase() };
 }
 
-/** The first name with an extension decides; else the icon LiveDoc chose; else FILE */
+/** A whiteboard is BOARD; else the first name with an extension decides; else the icon LiveDoc chose; else FILE */
 export function liveDocFileBadge(
   names: Array<string | null | undefined>,
   icon?: string | null,
 ): LiveDocFileBadge {
+  const iconName = iconFileName(icon);
+  if (
+    iconName === WHITEBOARD_ICON ||
+    names.some((name) => (name || '').trim().toLowerCase() === WHITEBOARD_FILE_NAME)
+  ) {
+    return { group: 'board', label: 'BOARD' };
+  }
   for (const name of names) {
     const ext = extensionOf(name);
     if (ext) return badgeForExtension(ext);
   }
-  const iconName = (icon || '').split(/[?#]/)[0].split('/').pop() || '';
   return ICON_BADGES[iconName] ?? { group: 'other', label: 'FILE' };
 }

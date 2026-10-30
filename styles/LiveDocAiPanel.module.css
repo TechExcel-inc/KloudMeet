@@ -514,6 +514,10 @@
   background: #1b2740;
 }
 
+.type_board {
+  background: #2a2d36;
+}
+
 .documentName {
   min-width: 0;
   flex: 1;
