@@ -48,7 +48,9 @@ function livedocFullFor(meeting: MeetingRow): boolean {
 }
 
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
-  const mode = active?.mode ?? meeting.recordingMode;
+  // A LiveDoc Full recording's file is always audio only; its `mode` is not a layout anyone chose
+  // (older rows stored 'audio' there), so the meeting's layout setting is what the UI shows.
+  const mode = active && active.kind !== 'livedoc_full' ? active.mode : meeting.recordingMode;
   return {
     active: !!active,
     paused: !!active?.pausedAt,
@@ -151,7 +153,7 @@ export async function POST(
         if (!isRecordingMode(body.mode)) return NextResponse.json({ error: 'Unknown recording mode' }, { status: 400 });
         if (!mayRecord) return NextResponse.json({ error: 'You cannot change the recording' }, { status: 403 });
         // Audio-only is a different kind of file: switching to or from it needs a new recording.
-        if (active && (active.mode === 'audio') !== (body.mode === 'audio')) {
+        if (active && active.kind !== 'livedoc_full' && (active.mode === 'audio') !== (body.mode === 'audio')) {
           return NextResponse.json({ error: 'Stop the recording to switch to or from audio only', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
         }
         data.recordingMode = body.mode;
@@ -310,9 +312,9 @@ export async function POST(
       livedocStartedAt = new Date();
     }
 
-    const mode = livedocFull
-      ? 'audio'
-      : isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
+    // The layout the person chose; LiveDoc Full records audio only whatever the layout.
+    const mode = isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
+    const audioOnly = livedocFull || mode === 'audio';
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
     const activityToken = newShareKey();
@@ -326,7 +328,7 @@ export async function POST(
         targetUrl,
         fileOutput, // The new standard requires passing the output definition object natively here
         {
-          audioOnly: mode === 'audio',
+          audioOnly,
           videoOnly: false,
         }
       );
@@ -363,7 +365,7 @@ export async function POST(
         console.error('[meetings record] screen sections failed to start', e),
       );
     }
-    if (!livedocFull && meeting.recordingMode !== mode) {
+    if (meeting.recordingMode !== mode) {
       await prisma.meeting.update({ where: { id: meeting.id }, data: { recordingMode: mode } });
     }
 
