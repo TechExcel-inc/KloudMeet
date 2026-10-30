@@ -172,6 +172,8 @@ interface KloudMeetToolbarProps {
   canToggleCaptions?: boolean;
   /** Whether captions are currently active */
   captionsEnabled?: boolean;
+  /** This participant's own captions while they are on: a dot on the CC button when not ok */
+  captionsHealth?: 'ok' | 'reconnecting' | 'failed';
   onToggleCaptions?: () => void;
   /** Reading languages in the meeting, shown in the captions dialog */
   captionRoomLanguages?: CaptionLanguage[];
@@ -242,6 +244,9 @@ const IconLeave = () => (
 );
 const IconDocAi = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h5M14 3v6h6v2" /><path d="M17 14l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1z" /></svg>
+);
+const IconCaptions = () => (
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M10 10.5a2 2 0 100 3M16 10.5a2 2 0 100 3" /></svg>
 );
 const IconPeople = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6.5 6.5 0 013.5 6" /></svg>
@@ -323,6 +328,7 @@ export function KloudMeetToolbar({
   isCamDisabledByHost,
   canToggleCaptions,
   captionsEnabled,
+  captionsHealth = 'ok',
   onToggleCaptions,
   captionRoomLanguages,
   canDocumentPip = false,
@@ -1867,6 +1873,14 @@ export function KloudMeetToolbar({
     );
   };
 
+  const captionsTitle = !captionsEnabled
+    ? t('toolbar.captionsOff')
+    : captionsHealth === 'failed'
+      ? t('toolbar.captionsUnavailable')
+      : captionsHealth === 'reconnecting'
+        ? t('toolbar.captionsReconnecting')
+        : t('toolbar.captionsOn');
+
   const renderCountBadge = (count: number) =>
     count > 0 ? (
       <span className={styles.countBadge} aria-hidden="true">
@@ -2287,6 +2301,32 @@ export function KloudMeetToolbar({
 
               <div className={styles.actionGroup}>
                 {renderDesktopLiveDocAiButton()}
+                {/* Captions: host / co-host set them up; others can open their caption settings once they run */}
+                {(canToggleCaptions || captionsEnabled) && (
+                  <button
+                    type="button"
+                    className={`${styles.actBtn} ${captionsEnabled ? styles.actBtnActive : ''}`}
+                    onClick={() => {
+                      closeInviteMenu();
+                      setActiveSheet(null);
+                      setShowSTTSettings(true);
+                    }}
+                    aria-pressed={!!captionsEnabled}
+                    aria-label={captionsTitle}
+                    title={captionsTitle}
+                  >
+                    <span className={styles.actIcon}>
+                      <IconCaptions />
+                      {captionsEnabled && captionsHealth !== 'ok' && (
+                        <span
+                          className={`${styles.captionsHealthDot} ${captionsHealth === 'failed' ? styles.captionsHealthFailed : ''}`}
+                          aria-hidden="true"
+                        />
+                      )}
+                    </span>
+                    <span className={styles.actLabel}>{t('toolbar.captionsShort')}</span>
+                  </button>
+                )}
                 {/* Raise hand: everyone */}
                 <button
                   type="button"

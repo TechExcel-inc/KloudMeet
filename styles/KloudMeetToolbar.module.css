@@ -286,6 +286,23 @@
   right: -12px;
 }
 
+/* Own captions reconnecting (amber) / unavailable (red), on the CC icon */
+.actIcon .captionsHealthDot {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff9f43;
+  box-shadow: 0 0 0 2px var(--km-stage, #17181c);
+  pointer-events: none;
+}
+
+.actIcon .captionsHealthFailed {
+  background: #ff6b6b;
+}
+
 .actIcon .annotationToggle {
   top: -6px;
   right: -9px;

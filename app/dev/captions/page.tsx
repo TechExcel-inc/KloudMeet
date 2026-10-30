@@ -13,7 +13,7 @@ import { KloudMeetToolbar, type ViewMode } from '@/lib/KloudMeetToolbar';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
 import { CaptionSupervisor, IDLE_CAPTION_STATUS, type CaptionStatus } from '@/lib/RtasrHelper/captionSupervisor';
 import { CaptionEngineError, type CaptionFailure } from '@/lib/RtasrHelper/captionErrors';
-import { type PeerCaptionIssue } from '@/lib/RtasrHelper/captionPeers';
+import { peerStateOf, type PeerCaptionIssue } from '@/lib/RtasrHelper/captionPeers';
 import type { CaptionEngine } from '@/lib/RtasrHelper/RtasrHelper';
 import type { CaptionsInfo } from '@/lib/RtasrHelper/useCaptions';
 import { IDLE_RECORDING_STATE } from '@/lib/recordingControls';
@@ -173,6 +173,7 @@ export default function DevCaptionsPage() {
         onToggleHand={noop}
         canToggleCaptions
         captionsEnabled
+        captionsHealth={peerStateOf(status)}
         meetingTitle="Weekly product review"
       />
     </div>
