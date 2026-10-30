@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
-import { useIsAccountAdmin } from '@/lib/useIsAccountAdmin';
+import { useIsInternalStaff } from '@/lib/useIsAccountAdmin';
 import { CalendarSubscribeModal } from '@/lib/CalendarSubscribeModal';
 import { useBillingEnabled } from '@/lib/billing/useBillingSummary';
 import styles from '../styles/Home.module.css';
@@ -33,7 +33,7 @@ export function UserAvatarMenu({
   onSignOut,
 }: UserAvatarMenuProps) {
   const { t } = useI18n();
-  const isAccountAdmin = useIsAccountAdmin();
+  const isInternalStaff = useIsInternalStaff();
   const billingEnabled = useBillingEnabled();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCalendarSubscribe, setShowCalendarSubscribe] = useState(false);
@@ -142,8 +142,8 @@ export function UserAvatarMenu({
                 {t('nav.planBilling')}
               </Link>
             )}
-            {/* System settings hold infrastructure keys: account admins only. */}
-            {isAccountAdmin && onOpenSettings && (
+            {/* System settings hold the site's infrastructure keys: Kloud Meet staff only. */}
+            {isInternalStaff && onOpenSettings && (
               <button
                 className={styles.orgDropdownItem}
                 onClick={() => {

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db';
 import { NextRequest, NextResponse } from 'next/server';
 import { normalizeEmail } from '@/lib/authPolicy';
+import { isInternalEmail } from '@/lib/internalStaff';
 
 // Helper: extract session token from Authorization header
 async function getSessionMember(request: NextRequest) {
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       id: member.id,
       isAccountAdmin: Boolean(admin),
+      isInternalStaff: isInternalEmail(member.email),
       email: member.email,
       username: member.username,
       phone: member.phone,

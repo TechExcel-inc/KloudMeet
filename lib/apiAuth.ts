@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import type { TeamMember } from '@prisma/client';
 import { attendanceOverlapsRecording, type RecordingTimeFields } from '@/lib/recordingAttendance';
+import { isInternalEmail } from '@/lib/internalStaff';
 
 export function unauthorized(message = 'Unauthorized') {
   return NextResponse.json({ error: message }, { status: 401 });
@@ -36,6 +37,14 @@ export async function requireAccountAdmin(
     where: { teamMemberId: member.id, status: 'ACTIVE' },
   });
   if (!admin) return forbidden('Admin access required');
+  return member;
+}
+
+/** Requires a Kloud Meet staff member (INTERNAL_STAFF_EMAILS), for settings that apply to the whole site. */
+export async function requireInternalStaff(request: NextRequest): Promise<TeamMember | NextResponse> {
+  const member = await requireSession(request);
+  if (isAuthError(member)) return member;
+  if (!isInternalEmail(member.email)) return forbidden('Kloud Meet staff only');
   return member;
 }
 

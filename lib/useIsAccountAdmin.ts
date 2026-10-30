@@ -3,21 +3,44 @@
 import { useEffect, useState } from 'react';
 import { authFetch, getKloudSessionBearer } from '@/lib/kloudSession';
 
-/** One profile lookup per session token, shared by every menu instance. */
-const adminByToken = new Map<string, Promise<boolean>>();
+type ProfileFlags = { isAccountAdmin: boolean; isInternalStaff: boolean };
 
-function fetchIsAccountAdmin(token: string): Promise<boolean> {
-  let pending = adminByToken.get(token);
+const NO_FLAGS: ProfileFlags = { isAccountAdmin: false, isInternalStaff: false };
+
+/** One profile lookup per session token, shared by every menu instance. */
+const flagsByToken = new Map<string, Promise<ProfileFlags>>();
+
+function fetchProfileFlags(token: string): Promise<ProfileFlags> {
+  let pending = flagsByToken.get(token);
   if (!pending) {
     pending = authFetch('/api/auth/profile')
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: unknown) =>
-        Boolean(data && typeof data === 'object' && (data as { isAccountAdmin?: unknown }).isAccountAdmin === true),
-      )
-      .catch(() => false);
-    adminByToken.set(token, pending);
+      .then((data: unknown) => {
+        const d = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+        return { isAccountAdmin: d.isAccountAdmin === true, isInternalStaff: d.isInternalStaff === true };
+      })
+      .catch(() => NO_FLAGS);
+    flagsByToken.set(token, pending);
   }
   return pending;
+}
+
+function useProfileFlag(flag: keyof ProfileFlags): boolean {
+  const [value, setValue] = useState(false);
+
+  useEffect(() => {
+    const token = getKloudSessionBearer();
+    if (!token) return;
+    let cancelled = false;
+    void fetchProfileFlags(token).then((flags) => {
+      if (!cancelled) setValue(flags[flag]);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [flag]);
+
+  return value;
 }
 
 /**
@@ -25,19 +48,13 @@ function fetchIsAccountAdmin(token: string): Promise<boolean> {
  * UI-only gate for admin entry points; the server enforces access itself.
  */
 export function useIsAccountAdmin(): boolean {
-  const [isAdmin, setIsAdmin] = useState(false);
+  return useProfileFlag('isAccountAdmin');
+}
 
-  useEffect(() => {
-    const token = getKloudSessionBearer();
-    if (!token) return;
-    let cancelled = false;
-    void fetchIsAccountAdmin(token).then((value) => {
-      if (!cancelled) setIsAdmin(value);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  return isAdmin;
+/**
+ * Whether the logged-in member is Kloud Meet staff (INTERNAL_STAFF_EMAILS on the server).
+ * UI-only gate for System Settings; the server enforces access itself.
+ */
+export function useIsInternalStaff(): boolean {
+  return useProfileFlag('isInternalStaff');
 }
