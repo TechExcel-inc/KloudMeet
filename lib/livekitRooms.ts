@@ -1,6 +1,7 @@
 import { RoomServiceClient } from 'livekit-server-sdk';
 import { DataPacket_Kind } from '@livekit/protocol';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
+import { isRecorderParticipant } from '@/lib/recorderParticipant';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -176,6 +177,7 @@ export async function countOtherRoomParticipants(
       'LiveKit listParticipants',
     );
     return participants.filter((p) => {
+      if (isRecorderParticipant(p)) return false;
       if (exclude.identity && p.identity === exclude.identity) return false;
       const memberId = parseKloudMemberIdFromIdentity(p.identity);
       return !(exclude.memberId != null && memberId === exclude.memberId);

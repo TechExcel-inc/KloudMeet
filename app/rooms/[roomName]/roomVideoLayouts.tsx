@@ -25,6 +25,7 @@ import { useI18n } from '@/lib/i18n';
 import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
+import { isRecorderParticipant } from '@/lib/recorderParticipant';
 
 export type KloudTileMediaRestrictionProps = {
   hostMutedIdentities: string[];
@@ -349,12 +350,16 @@ export function KloudMobileRoomAudioRenderer() {
 export function MobileVideoLayout() {
   const { t } = useI18n();
   const room = useRoomContext();
-  const tracks = useTracks(
+  const allTracks = useTracks(
     [
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
     { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+  );
+  const tracks = React.useMemo(
+    () => allTracks.filter((track) => !isRecorderParticipant(track.participant)),
+    [allTracks],
   );
 
   const [expanded, setExpanded] = React.useState(false);

@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useLayoutEffe
 import { useParticipants } from '@livekit/components-react';
 import { getInitials } from '@/lib/getInitials';
 import { useI18n } from '@/lib/i18n';
+import { isRecorderParticipant } from '@/lib/recorderParticipant';
 
 export interface ParticipantRoleActionsConfig {
   hostIdentity: string | null;
@@ -124,7 +125,11 @@ export function ParticipantRoleMenuProvider({
   const [showHostPicker, setShowHostPicker] = useState(false);
   const [pickerSearch, setPickerSearch] = useState('');
   const [confirmHostId, setConfirmHostId] = useState<string | null>(null);
-  const participants = useParticipants();
+  const allParticipants = useParticipants();
+  const participants = useMemo(
+    () => allParticipants.filter((p) => !isRecorderParticipant(p)),
+    [allParticipants],
+  );
   const { t } = useI18n();
 
   const closeMenu = useCallback(() => {

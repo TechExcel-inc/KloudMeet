@@ -27,6 +27,7 @@ import { KloudConnectionStateToast } from './KloudConnectionStateToast';
 import { applyBalancedGrid } from './tileLayout';
 import { KloudGridLayout } from './KloudGridLayout';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from './galleryPrefs';
+import { isRecorderParticipant } from './recorderParticipant';
 
 export type WebcamLayoutMode = 'tile' | 'spotlight';
 
@@ -85,7 +86,12 @@ export function KloudVideoConference({
     { onlySubscribed: false },
   );
   const tracks = React.useMemo(
-    () => (ignoreScreenShare ? allTracks.filter((track) => track.source !== Track.Source.ScreenShare) : allTracks),
+    () =>
+      allTracks.filter(
+        (track) =>
+          !isRecorderParticipant(track.participant) &&
+          !(ignoreScreenShare && track.source === Track.Source.ScreenShare),
+      ),
     [allTracks, ignoreScreenShare],
   );
 

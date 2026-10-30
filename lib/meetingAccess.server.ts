@@ -12,6 +12,7 @@ import { followOwnerLiveRoom } from './oneMeetingPerHost';
 import { isWithinIdleGrace } from './meetingRejoin';
 import { getRoomServiceClient } from './livekitRooms';
 import { parseKloudMemberIdFromIdentity } from './meetingOwner';
+import { isRecorderParticipant } from './recorderParticipant';
 import {
   JOIN_REQUESTS_TOPIC,
   decideJoin,
@@ -120,13 +121,14 @@ export async function gatherJoinFacts(opts: {
     joinedBefore: false,
     request: null,
   };
-  // Public and legacy meetings need no lookups.
-  if (!level || level === 'PUBLIC' || base.isHost) return base;
-
+  // Checked at every level: the recorder's token is marked so meetings don't show it as a person.
   if (!member && opts.recorderToken) {
     base.isRecorder = await isRecorderToken(meeting.id, opts.recorderToken);
     if (base.isRecorder) return base;
   }
+
+  // Public and legacy meetings need no lookups.
+  if (!level || level === 'PUBLIC' || base.isHost) return base;
 
   const email = member?.email?.trim().toLowerCase() || null;
   const [invite, byEmail, company, joined, request] = await Promise.all([
@@ -282,7 +284,9 @@ export async function hostIsPresent(meeting: Pick<AccessTarget, 'roomName' | 'cr
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('listParticipants timed out')), 4_000)),
     ]);
     const hostIds = new Set([meeting.createdByMemberId, ...hostLikeMemberIds(meeting.meetingRoles)]);
-    const people = participants.filter((p) => !p.identity.startsWith('EG_') && !/recorder/i.test(p.name ?? ''));
+    const people = participants.filter(
+      (p) => !isRecorderParticipant(p) && !p.identity.startsWith('EG_') && !/recorder/i.test(p.name ?? ''),
+    );
     return {
       hostPresent: people.some((p) => {
         const id = parseKloudMemberIdFromIdentity(p.identity);

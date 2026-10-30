@@ -155,6 +155,7 @@ import { useTileIndicators, useTileNameSync } from './useTileIndicators';
 import { useMeetingConnection } from './useMeetingConnection';
 import { useLiveDocSession } from './useLiveDocSession';
 import { useMeetingChat } from './useMeetingChat';
+import { isRecorderParticipant, visibleRemoteParticipants } from '@/lib/recorderParticipant';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
 
@@ -1087,6 +1088,7 @@ export function VideoConferenceComponent(props: {
           return;
         }
         for (const [, p] of room.remoteParticipants) {
+          if (isRecorderParticipant(p)) continue;
           if (parseKloudMemberIdFromMetadata(p.metadata) === ownerKey) {
             setHostIdentityFromJoin(p.identity);
             return;
@@ -1099,15 +1101,16 @@ export function VideoConferenceComponent(props: {
         return;
       }
 
-      // Only one person in the meeting? They're the host, period.
-      if (room.remoteParticipants.size === 0) {
+      // Only one person in the meeting? They're the host, period. (The recording bot isn't a person.)
+      const people = visibleRemoteParticipants(room.remoteParticipants.values());
+      if (people.length === 0) {
         setHostIdentityFromJoin(room.localParticipant.identity);
         return;
       }
       // Multiple participants, no in-room DB owner match: earliest joiner is host (guest / legacy).
       let earliest = room.localParticipant.joinedAt?.getTime() || Infinity;
       let hId = room.localParticipant.identity;
-      for (const [, p] of room.remoteParticipants) {
+      for (const p of people) {
         const t = p.joinedAt?.getTime() || Infinity;
         if (t < earliest) {
           earliest = t;
@@ -3546,7 +3549,7 @@ export function VideoConferenceComponent(props: {
               {showWebcamSidebar && (() => {
                 const allP = [
                   { id: 'local' as string, name: props.userChoices.username || 'You', participant: room.localParticipant },
-                  ...Array.from(room.remoteParticipants.values()).map((p) => ({
+                  ...visibleRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
                     id: p.identity,
                     name: p.name || p.identity || '??',
                     participant: p as any,
@@ -4178,7 +4181,7 @@ export function VideoConferenceComponent(props: {
         {/* --- MODALS --- */}
         <MeetingPipSuggestPrompt
           visible={showPipSuggest}
-          attendeeCount={1 + room.remoteParticipants.size}
+          attendeeCount={1 + visibleRemoteParticipants(room.remoteParticipants.values()).length}
           onEnable={() => {
             void documentPip.open({ sticky: true });
           }}

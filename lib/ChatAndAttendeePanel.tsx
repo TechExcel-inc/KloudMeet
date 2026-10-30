@@ -1,10 +1,11 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useRoomContext, useParticipants } from '@livekit/components-react';
 import { RoomEvent, Track } from 'livekit-client';
 import { useI18n } from './i18n';
 import { getInitials } from './getInitials';
 import { ParticipantAttendeeRowMoreMenu } from './ParticipantRoleMenu';
 import type { ChatMsg, ChatUploadState } from './chatProtocol';
+import { isRecorderParticipant } from './recorderParticipant';
 
 export type { ChatMsg } from './chatProtocol';
 
@@ -342,7 +343,11 @@ export function AttendeePanel({
 }: AttendeePanelProps) {
   const { t } = useI18n();
   const room = useRoomContext();
-  const participants = useParticipants();
+  const allParticipants = useParticipants();
+  const participants = useMemo(
+    () => allParticipants.filter((p) => !isRecorderParticipant(p)),
+    [allParticipants],
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
   const [, setMediaRevision] = useState(0);

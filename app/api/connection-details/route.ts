@@ -24,6 +24,7 @@ import { joinBlockCode, parseAccessLevel } from '@/lib/meetingAccess';
 import { INVITE_PARAM, evaluateJoin, meetingAccessSelect, meetingHasStarted } from '@/lib/meetingAccess.server';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { recordGuestJoin, recordMeetingJoin } from '@/lib/recordMeetingJoin';
+import { RECORDER_PARTICIPANT_METADATA } from '@/lib/recorderParticipant';
 import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlements';
 import {
   endMeetingForTimeLimit,
@@ -135,12 +136,14 @@ export async function GET(request: NextRequest) {
         select: meetingAccessSelect,
       });
     }
-    const { decision } = await evaluateJoin({
+    const { decision, facts } = await evaluateJoin({
       meeting: accessMeeting,
       member,
       inviteToken: request.nextUrl.searchParams.get(INVITE_PARAM),
       recorderToken: request.nextUrl.searchParams.get(SPEAK_TOKEN_PARAM),
     });
+    // The recording bot: marked in its token so the meeting doesn't show it as a person.
+    const isRecorder = facts.isRecorder;
     const blocked = joinBlockCode(decision);
     if (blocked) {
       // 403, not 401: the client treats 401 as an expired session and signs the person out.
@@ -166,7 +169,8 @@ export async function GET(request: NextRequest) {
     }
 
     let identity: string;
-    // Metadata is server-authored only: member id for logged-in users, empty for guests.
+    // Metadata is server-authored only: member id for logged-in users, the recorder mark for the
+    // recording bot, empty for other guests.
     let tokenMetadata = '';
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
@@ -191,10 +195,12 @@ export async function GET(request: NextRequest) {
         ? `guest_${guestName}__${randomParticipantPostfix}_${guestDeviceId}`
         : `guest_${guestName}__${randomParticipantPostfix}`;
       headers['Set-Cookie'] = `${COOKIE_KEY}=${randomParticipantPostfix}; Path=/; HttpOnly; SameSite=Strict; Secure; Expires=${getCookieExpirationTime()}`;
+      if (isRecorder) tokenMetadata = RECORDER_PARTICIPANT_METADATA;
     }
 
     if (
       hostEntitlements &&
+      !isRecorder &&
       (await participantCapReached({
         hostEntitlements,
         roomName: livekitRoomName,
@@ -243,7 +249,7 @@ export async function GET(request: NextRequest) {
           displayName: participantName.trim() || member.fullName || member.username,
           host: member.id === meeting.createdByMemberId,
         });
-      } else {
+      } else if (!isRecorder) {
         await recordGuestJoin({
           meetingId: meeting.id,
           displayName: participantName,
