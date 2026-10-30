@@ -114,9 +114,11 @@ function newId(): CustomBackgroundId {
   return `custom:${random.toLowerCase()}`;
 }
 
-/** Adds a picture the person chose; it comes back newest first in the list. */
-export async function addCustomBackground(file: File): Promise<CustomBackgroundId> {
-  if ((await readAll()).length >= MAX_CUSTOM_BACKGROUNDS) throw new AddBackgroundError('full');
+/**
+ * A chosen picture as a background: cropped to 16:9, as a 1280×720 JPEG and a 320×180 thumbnail.
+ * Also used for company backgrounds, which are uploaded rather than kept on the device.
+ */
+export async function prepareBackgroundImage(file: File): Promise<{ image: Blob; thumb: Blob }> {
   if (!/^image\/(jpeg|png|webp|gif|bmp|avif)$/.test(file.type)) throw new AddBackgroundError('type');
   if (file.size > MAX_FILE_BYTES) throw new AddBackgroundError('size');
   let bitmap: ImageBitmap;
@@ -126,18 +128,24 @@ export async function addCustomBackground(file: File): Promise<CustomBackgroundI
     throw new AddBackgroundError('unreadable');
   }
   try {
-    const [image, thumb] = [await encode(bitmap, FULL), await encode(bitmap, THUMB)];
-    const item: StoredBackground = { id: newId(), added: Date.now(), image, thumb };
-    try {
-      await request((await store('readwrite')).put(item));
-    } catch {
-      throw new AddBackgroundError('storage');
-    }
-    announce();
-    return item.id;
+    return { image: await encode(bitmap, FULL), thumb: await encode(bitmap, THUMB) };
   } finally {
     bitmap.close();
   }
+}
+
+/** Adds a picture the person chose; it comes back newest first in the list. */
+export async function addCustomBackground(file: File): Promise<CustomBackgroundId> {
+  if ((await readAll()).length >= MAX_CUSTOM_BACKGROUNDS) throw new AddBackgroundError('full');
+  const { image, thumb } = await prepareBackgroundImage(file);
+  const item: StoredBackground = { id: newId(), added: Date.now(), image, thumb };
+  try {
+    await request((await store('readwrite')).put(item));
+  } catch {
+    throw new AddBackgroundError('storage');
+  }
+  announce();
+  return item.id;
 }
 
 const imageUrls = new Map<CustomBackgroundId, string>();

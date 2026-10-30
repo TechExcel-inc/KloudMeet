@@ -66,6 +66,9 @@ model KloudMeetAccount {
   kloudCompanyName       String?
   kloudLinkedAt          DateTime?
   kloudLinkedBy          Int?
+  /// Company settings → Camera backgrounds: what members start with, and whether only company images may be used (prisma/add_company_backgrounds.sql)
+  defaultBackgroundId    Int?
+  backgroundsCompanyOnly Boolean                @default(false)
   status                 Int                    @default(1)
   createdAt              DateTime               @default(now())
   createdBy              String?
@@ -79,8 +82,27 @@ model KloudMeetAccount {
   billingSubscription    BillingSubscription?
   billingSeats           BillingSeat[]
   billingCredits         BillingCredit[]
+  backgrounds            AccountBackground[]
 
   @@map("KloudMeetAccount")
+}
+
+/// A camera background a company's owners and admins add for everyone in it: 1280×720 and 320×180 JPEGs.
+model AccountBackground {
+  id                Int              @id @default(autoincrement())
+  accountId         Int
+  name              String           @db.VarChar(80)
+  image             Bytes            @db.MediumBlob
+  thumb             Bytes            @db.MediumBlob
+  /// Changes with the picture; part of its URL, so browsers may keep it forever
+  version           String           @db.VarChar(16)
+  createdAt         DateTime         @default(now())
+  createdByMemberId Int?
+  modifiedAt        DateTime?
+  account           KloudMeetAccount @relation(fields: [accountId], references: [id], onDelete: Cascade, map: "AccountBackground_accountId_fkey")
+
+  @@index([accountId], map: "AccountBackground_accountId_idx")
+  @@map("AccountBackground")
 }
 
 model Meeting {

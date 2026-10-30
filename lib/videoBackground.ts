@@ -11,6 +11,13 @@ import { supportsBackgroundProcessors } from '@livekit/track-processors';
 import type { ProcessorOptions, Track, TrackProcessor } from 'livekit-client';
 import { createBackgroundPipeline, type BackgroundLook, type BackgroundPipeline } from './backgroundCutout';
 import { customBackgroundUrl, isCustomBackgroundId, type CustomBackgroundId } from './customBackgrounds';
+import {
+  companyBackgroundRules,
+  findCompanyBackground,
+  isCompanyBackgroundId,
+  refreshCompanyBackgrounds,
+  type CompanyBackgroundId,
+} from './companyBackgrounds';
 import { isToolbarMobileUserAgent } from './useToolbarIsMobile';
 
 export const BACKGROUND_SCENES = [
@@ -25,8 +32,17 @@ export const BACKGROUND_SCENES = [
 ] as const;
 
 export type BackgroundScene = (typeof BACKGROUND_SCENES)[number];
-/** A built-in scene, or `custom:<id>` for an image the person added (lib/customBackgrounds.ts). */
-export type VideoBackground = 'none' | 'blur-light' | 'blur' | BackgroundScene | CustomBackgroundId;
+/**
+ * A built-in scene, `custom:<id>` for an image the person added (lib/customBackgrounds.ts), or
+ * `company:<id>` for one their company's admins added (lib/companyBackgrounds.ts).
+ */
+export type VideoBackground =
+  | 'none'
+  | 'blur-light'
+  | 'blur'
+  | BackgroundScene
+  | CustomBackgroundId
+  | CompanyBackgroundId;
 export type VideoBackgroundStatus = 'idle' | 'starting' | 'running' | 'failed';
 
 export const VIDEO_BACKGROUND_EFFECTS = ['none', 'blur-light', 'blur'] as const;
@@ -51,7 +67,8 @@ function isVideoBackground(value: unknown): value is VideoBackground {
     value === 'blur-light' ||
     value === 'blur' ||
     isBackgroundScene(value) ||
-    isCustomBackgroundId(value)
+    isCustomBackgroundId(value) ||
+    isCompanyBackgroundId(value)
   );
 }
 
@@ -63,13 +80,25 @@ export function sceneThumbUrl(scene: BackgroundScene): string {
   return `/backgrounds/thumbs/${scene}.jpg`;
 }
 
+/**
+ * The background to use: the person's own choice, or their company's default if they have never
+ * chosen. When the company allows only its own images, a built-in scene or a personal image gives
+ * way to the company's default (or blur, which still hides the room).
+ */
 export function loadVideoBackground(): VideoBackground {
+  let saved: string | null = null;
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return isVideoBackground(saved) ? saved : 'none';
+    saved = localStorage.getItem(STORAGE_KEY);
   } catch {
-    return 'none';
+    // Storage blocked: behave as if nothing was chosen.
   }
+  const rules = companyBackgroundRules();
+  if (saved === null) return rules.defaultChoice ?? 'none';
+  const choice: VideoBackground = isVideoBackground(saved) ? saved : 'none';
+  if (rules.companyOnly && (isBackgroundScene(choice) || isCustomBackgroundId(choice))) {
+    return rules.defaultChoice ?? 'blur';
+  }
+  return choice;
 }
 
 export function saveVideoBackground(background: VideoBackground): void {
@@ -104,6 +133,10 @@ async function lookFor(background: Exclude<VideoBackground, 'none'>): Promise<Ba
   if (isCustomBackgroundId(background)) {
     const url = await customBackgroundUrl(background);
     return url ? { kind: 'image', url } : undefined;
+  }
+  if (isCompanyBackgroundId(background)) {
+    const found = findCompanyBackground(background) ?? findCompanyBackground(background, await refreshCompanyBackgrounds());
+    return found ? { kind: 'image', url: found.imageUrl } : undefined;
   }
   return { kind: 'image', url: sceneImageUrl(background) };
 }

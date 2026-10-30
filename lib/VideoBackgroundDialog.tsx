@@ -29,6 +29,13 @@ import {
   type AddBackgroundProblem,
   type CustomBackgroundId,
 } from './customBackgrounds';
+import {
+  companyBackgroundChoice,
+  companyBackgroundRules,
+  findCompanyBackground,
+  isCompanyBackgroundId,
+  useCompanyBackgrounds,
+} from './companyBackgrounds';
 
 interface VideoBackgroundDialogProps {
   isOpen: boolean;
@@ -55,6 +62,7 @@ export function backgroundLabel(t: (key: string) => string, background: VideoBac
   if (background === 'blur-light') return t('background.blurLight');
   if (background === 'blur') return t('background.blur');
   if (isCustomBackgroundId(background)) return t('background.custom');
+  if (isCompanyBackgroundId(background)) return findCompanyBackground(background)?.name ?? t('background.company');
   return t(`background.scene.${background}`);
 }
 
@@ -87,13 +95,17 @@ export function VideoBackgroundDialog({
   const addRef = React.useRef<HTMLButtonElement | null>(null);
   const choiceRefs = React.useRef<(HTMLButtonElement | null)[]>([]);
   const customImages = useCustomBackgrounds(isOpen && supported);
+  const companies = useCompanyBackgrounds(isOpen && supported);
+  const companyOnly = companyBackgroundRules(companies).companyOnly;
   const [adding, setAdding] = React.useState(false);
   const [addProblem, setAddProblem] = React.useState<AddBackgroundProblem | null>(null);
   const full = customImages.length >= MAX_CUSTOM_BACKGROUNDS;
+  const companyChoices = companies.flatMap((c) => c.backgrounds.map((b) => companyBackgroundChoice(b.id)));
+  // Company only: the person's own images and the built-in scenes are not offered.
   const allChoices: readonly VideoBackground[] = [
     ...VIDEO_BACKGROUND_EFFECTS,
-    ...customImages.map((image) => image.id),
-    ...BACKGROUND_SCENES,
+    ...companyChoices,
+    ...(companyOnly ? [] : [...customImages.map((image) => image.id), ...BACKGROUND_SCENES]),
   ];
 
   React.useEffect(() => {
@@ -176,11 +188,12 @@ export function VideoBackgroundDialog({
     const index = allChoices.indexOf(choice);
     const checked = choice === background;
     const custom = isCustomBackgroundId(choice) ? customImages.find((image) => image.id === choice) : undefined;
+    const company = isCompanyBackgroundId(choice) ? findCompanyBackground(choice, companies) : undefined;
     const label = custom
       ? `${t('background.custom')} ${customImages.indexOf(custom) + 1}`
-      : backgroundLabel(t, choice);
+      : (company?.name ?? backgroundLabel(t, choice));
     const isScene = choice !== 'none' && choice !== 'blur-light' && choice !== 'blur';
-    const thumb = custom ? custom.thumbUrl : isBackgroundScene(choice) ? sceneThumbUrl(choice) : '';
+    const thumb = custom?.thumbUrl ?? company?.thumbUrl ?? (isBackgroundScene(choice) ? sceneThumbUrl(choice) : '');
     const radio = (
       <button
         key={choice}
@@ -355,28 +368,40 @@ export function VideoBackgroundDialog({
               </h3>
               <div className={styles.grid}>{VIDEO_BACKGROUND_EFFECTS.map(renderChoice)}</div>
             </div>
-            <div role="group" aria-labelledby="video-background-scenes">
-              <h3 id="video-background-scenes" className={styles.groupLabel}>
-                {t('background.scenes')}
-              </h3>
-              <div className={styles.grid}>
-                {addTile}
-                {customImages.map((image) => renderChoice(image.id))}
-                {BACKGROUND_SCENES.map(renderChoice)}
+            {companies.map((c) => (
+              <div key={c.id} role="group" aria-labelledby={`video-background-company-${c.id}`}>
+                <h3 id={`video-background-company-${c.id}`} className={styles.groupLabel}>
+                  {c.name}
+                </h3>
+                <div className={styles.grid}>{c.backgrounds.map((b) => renderChoice(companyBackgroundChoice(b.id)))}</div>
               </div>
-              {(addProblem || full) && (
-                <p className={addProblem ? styles.addProblem : styles.addNote} role={addProblem ? 'alert' : undefined}>
-                  {t(ADD_PROBLEM_KEY[addProblem ?? 'full'])}
-                </p>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                hidden
-                onChange={(e) => void onFile(e)}
-              />
-            </div>
+            ))}
+            {companyOnly ? (
+              <p className={styles.addNote}>{t('background.companyOnlyNote')}</p>
+            ) : (
+              <div role="group" aria-labelledby="video-background-scenes">
+                <h3 id="video-background-scenes" className={styles.groupLabel}>
+                  {t('background.scenes')}
+                </h3>
+                <div className={styles.grid}>
+                  {addTile}
+                  {customImages.map((image) => renderChoice(image.id))}
+                  {BACKGROUND_SCENES.map(renderChoice)}
+                </div>
+                {(addProblem || full) && (
+                  <p className={addProblem ? styles.addProblem : styles.addNote} role={addProblem ? 'alert' : undefined}>
+                    {t(ADD_PROBLEM_KEY[addProblem ?? 'full'])}
+                  </p>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  onChange={(e) => void onFile(e)}
+                />
+              </div>
+            )}
           </div>
         </div>
 

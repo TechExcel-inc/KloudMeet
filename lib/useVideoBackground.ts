@@ -14,6 +14,7 @@ import {
   type VideoBackground,
   type VideoBackgroundStatus,
 } from './videoBackground';
+import { COMPANY_BACKGROUNDS_EVENT, refreshCompanyBackgrounds } from './companyBackgrounds';
 
 export interface VideoBackgroundControls {
   /** Show the entry at all (not on phones). */
@@ -52,10 +53,16 @@ function useSavedBackground(supported: boolean) {
   React.useEffect(() => {
     if (!supported) return;
     setBackground(loadVideoBackground());
-    // Changed elsewhere: the other picker, or the processor falling back when an image is gone.
+    // Changed elsewhere: the other picker, the processor falling back when an image is gone, or the
+    // company's backgrounds arriving (their default or "company only" rule can change the choice).
     const sync = () => setBackground(loadVideoBackground());
     window.addEventListener(VIDEO_BACKGROUND_EVENT, sync);
-    return () => window.removeEventListener(VIDEO_BACKGROUND_EVENT, sync);
+    window.addEventListener(COMPANY_BACKGROUNDS_EVENT, sync);
+    void refreshCompanyBackgrounds();
+    return () => {
+      window.removeEventListener(VIDEO_BACKGROUND_EVENT, sync);
+      window.removeEventListener(COMPANY_BACKGROUNDS_EVENT, sync);
+    };
   }, [supported]);
   return [background, setBackground] as const;
 }
@@ -105,9 +112,13 @@ export function useRoomVideoBackground(room: Room | undefined): VideoBackgroundC
     return () => processorRef.current?.setListener(undefined);
   }, [room]);
 
+  /** What the camera was last set to, so company changes only re-apply when they change it. */
+  const appliedRef = React.useRef<VideoBackground | null>(null);
+
   const run = React.useCallback(
     (next: VideoBackground) => {
       if (!room || !supported) return;
+      appliedRef.current = next;
       // One change at a time, in order: quick clicks never race two pipelines onto the track.
       queueRef.current = queueRef.current
         .then(async () => {
@@ -159,6 +170,20 @@ export function useRoomVideoBackground(room: Room | undefined): VideoBackgroundC
       .catch(() => undefined);
     run(current);
   }, [room, run]);
+
+  // The company's backgrounds arrived or changed: their default or "company only" rule may now
+  // pick a different background than the one the camera started with.
+  React.useEffect(() => {
+    if (!room || !supported) return;
+    const started = room.options.videoCaptureDefaults?.processor;
+    appliedRef.current ??= started instanceof KloudBackgroundProcessor ? started.currentBackground : 'none';
+    const onCompany = () => {
+      const next = loadVideoBackground();
+      if (next !== appliedRef.current) run(next);
+    };
+    window.addEventListener(COMPANY_BACKGROUNDS_EVENT, onCompany);
+    return () => window.removeEventListener(COMPANY_BACKGROUNDS_EVENT, onCompany);
+  }, [room, supported, run]);
 
   // A camera published without it (rebuilt after a device loss, say): put the background back.
   React.useEffect(() => {
