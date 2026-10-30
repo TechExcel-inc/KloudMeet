@@ -51,6 +51,9 @@ function pipOpenedKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:opened`;
 }
 
+/** Alternates the pill's requested height so Chrome can't restore a cached (expanded) size */
+const PIP_PILL_FLIP_KEY = 'skymeet:doc-pip:pill-flip';
+
 function pipMiniKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:mini`;
 }
@@ -102,10 +105,18 @@ export interface UseMeetingDocumentPipOptions {
   meetingTitle?: string;
   startedAtMs?: number | null;
   isRecording?: boolean;
+  /** Webcam view: the room already shows everyone, so an open SmartCam folds into the slim pill */
+  keepMinimized?: boolean;
 }
 
 export interface MeetingDocumentPipApi {
-  open: (opts?: { sticky?: boolean; minimized?: boolean; auto?: boolean }) => Promise<boolean>;
+  open: (opts?: {
+    sticky?: boolean;
+    minimized?: boolean;
+    auto?: boolean;
+    /** Web: open at the default spot and requested size, not where Chrome last left it */
+    resetPlacement?: boolean;
+  }) => Promise<boolean>;
   close: () => void;
   isOpen: boolean;
 }
@@ -218,6 +229,7 @@ export function useMeetingDocumentPip({
   meetingTitle,
   startedAtMs,
   isRecording = false,
+  keepMinimized = false,
 }: UseMeetingDocumentPipOptions): MeetingDocumentPipApi {
   const i18n = useI18n();
   const [isOpen, setIsOpen] = useState(false);
@@ -247,6 +259,7 @@ export function useMeetingDocumentPip({
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
   const roomRef = useRef(room);
   const minimizedRef = useRef(false);
+  const collapseSignalRef = useRef(0);
   const openedInMeetingRef = useRef(false);
   /** Opened by Chrome's automatic picture-in-picture (switching tabs), not by a click */
   const autoOpenedRef = useRef(false);
@@ -365,6 +378,7 @@ export function useMeetingDocumentPip({
                 minimizedRef.current = next;
                 writeSessionFlag(pipMiniKey(roomRef.current.name), next);
               }}
+              collapseSignal={collapseSignalRef.current}
               onToggleMic={() => onToggleMicRef.current()}
               onToggleCam={() => onToggleCamRef.current()}
               onToggleShare={() => {
@@ -409,6 +423,7 @@ export function useMeetingDocumentPip({
     sticky?: boolean;
     minimized?: boolean;
     auto?: boolean;
+    resetPlacement?: boolean;
   }): Promise<boolean> => {
     if (!isMiniWindowEligible()) return false;
     if (opts?.sticky) stickyRef.current = true;
@@ -437,12 +452,20 @@ export function useMeetingDocumentPip({
     try {
       // Chrome 用 requestWindow 的宽高当位置缓存键，变了就丢；moveTo 禁用，打开后 resizeTo 也常无效。
       // 本场第一次：按展开（或上次缩小）的尺寸打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
+      // 切到摄像头视图时（resetPlacement）按细条尺寸、默认位置重开。Chrome 130 前不认
+      // preferInitialWindowPlacement，同一宽高会还原缓存的大小，所以细条高度每次差 1px，让缓存键对不上。
+      let pillH = Math.round(PIP_MINIMIZED_H);
+      if (opts?.resetPlacement && !firstOpen) {
+        const flip = sessionFlag(PIP_PILL_FLIP_KEY) !== true;
+        writeSessionFlag(PIP_PILL_FLIP_KEY, flip);
+        if (flip) pillH += 1;
+      }
       const pipWindow = desktop
         ? ensureDesktopWindow()
-        : firstOpen
+        : firstOpen || opts?.resetPlacement
           ? await api!.requestWindow({
               width: PIP_EXPANDED_W,
-              height: minimizedRef.current ? PIP_MINIMIZED_H : PIP_EXPANDED_H,
+              height: minimizedRef.current ? pillH : PIP_EXPANDED_H,
               preferInitialWindowPlacement: true,
               disallowReturnToOpener: true,
             })
@@ -535,6 +558,31 @@ export function useMeetingDocumentPip({
       renderPanel();
     }
   }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, meetingTitle, startedAtMs, isRecording, renderPanel]);
+
+  // Switching to the webcam view folds an open SmartCam; the person can still expand it.
+  // Reopening it later brings back whatever shape and place it was last left in.
+  useEffect(() => {
+    if (!keepMinimized) return;
+    const win = pipWindowRef.current;
+    if (!win || win.closed) return;
+    minimizedRef.current = true;
+    writeSessionFlag(pipMiniKey(roomRef.current.name), true);
+    // Chrome only resizes its PiP window on a click inside it, so folding in place leaves a
+    // tall empty window when the switch was clicked in the meeting. That click does let us
+    // open the window again at the pill's size; try it before anything uses the click up.
+    if (
+      !getDesktopMiniWindow() &&
+      win.innerHeight > PIP_MINIMIZED_H + 8 &&
+      navigator.userActivation?.isActive
+    ) {
+      const sticky = stickyRef.current;
+      closePip();
+      void openPip({ sticky, minimized: true, resetPlacement: true });
+      return;
+    }
+    collapseSignalRef.current += 1;
+    renderPanel();
+  }, [keepMinimized, renderPanel, closePip, openPip]);
 
   useEffect(() => {
     if (!enabled || !isMiniWindowEligible()) {

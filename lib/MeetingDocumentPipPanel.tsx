@@ -60,6 +60,8 @@ export interface MeetingDocumentPipPanelProps {
   onEndForAll?: () => void;
   initialMinimized?: boolean;
   onMinimizedChange?: (minimized: boolean) => void;
+  /** Each change folds an expanded panel into the pill (the room switched to the webcam view) */
+  collapseSignal?: number;
   /** Desktop app only: its frameless window needs its own close button */
   onClose?: () => void;
   /** Header: meeting name (instant meetings have none), start time, recording */
@@ -376,6 +378,7 @@ export function MeetingDocumentPipPanel({
   onClose,
   initialMinimized = false,
   onMinimizedChange,
+  collapseSignal = 0,
   meetingTitle,
   startedAtMs = null,
   isRecording = false,
@@ -595,6 +598,17 @@ export function MeetingDocumentPipPanel({
     setMinimized(true);
     onMinimizedChange?.(true);
   };
+
+  const lastCollapseSignalRef = React.useRef(collapseSignal);
+  React.useEffect(() => {
+    if (collapseSignal === lastCollapseSignalRef.current) return;
+    lastCollapseSignalRef.current = collapseSignal;
+    if (minimized) return;
+    setPreviewId(null);
+    resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
+    setMinimized(true);
+    onMinimizedChange?.(true);
+  }, [collapseSignal, minimized, pipWindow, onMinimizedChange]);
 
   const hidePreview = () => {
     if (!previewId) return;

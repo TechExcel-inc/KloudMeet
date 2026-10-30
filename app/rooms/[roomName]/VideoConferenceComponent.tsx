@@ -3203,6 +3203,7 @@ export function VideoConferenceComponent(props: {
     meetingTitle: props.meetingTitle,
     startedAtMs: meetingStartedAtMs,
     isRecording,
+    keepMinimized: activeView === 'webcam',
   });
   documentPipOpenRef.current = documentPip.open;
 
