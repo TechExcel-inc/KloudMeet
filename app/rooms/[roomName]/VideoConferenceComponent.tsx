@@ -25,7 +25,6 @@ import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
-import { peerStateOf } from '@/lib/RtasrHelper/captionPeers';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
@@ -4120,7 +4119,6 @@ export function VideoConferenceComponent(props: {
           isCamDisabledByHost={isLocalCamRestricted}
           canToggleCaptions={isHost || isCohost}
           captionsEnabled={captionsRunning}
-          captionsHealth={peerStateOf(captionStatus)}
           onToggleCaptions={handleToggleCaptions}
           captionRoomLanguages={captionRoomLanguages}
           canDocumentPip={
