@@ -9,6 +9,8 @@ export type CreateLiveKitParticipantTokenInput = {
   roomName: string;
   /** Default 2h — join tickets are short-lived; refresh mints a new one. */
   ttl?: string | number;
+  /** Narrower rights, e.g. data-only for the TV remote's pairing room. */
+  grant?: Partial<VideoGrant>;
 };
 
 /**
@@ -35,6 +37,7 @@ export async function createLiveKitParticipantToken(
     canPublish: true,
     canPublishData: true,
     canSubscribe: true,
+    ...input.grant,
   };
   at.addGrant(grant);
   return at.toJwt();

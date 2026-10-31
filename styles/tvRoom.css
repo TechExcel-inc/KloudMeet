@@ -1,0 +1,41 @@
+/* Kloud Meet TV: the shared meeting component (VideoConferenceComponent) read from a sofa.
+   Only applies under .km-tv-room, which the meeting adds when the TV app drives it. */
+
+.km-tv-room,
+.km-tv-room * {
+  cursor: none !important;
+}
+
+/* Names on tiles: readable at 3 m */
+.km-tv-room .lk-participant-name {
+  font-size: max(16px, 1.9vh) !important;
+  font-weight: 600 !important;
+}
+
+/* Captions: larger, wider, and above the TV control bar while it is up */
+.km-tv-room .kloud-caption-bar {
+  bottom: 6vh !important;
+  max-width: min(1500px, 80vw) !important;
+  transition: bottom 260ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+html.km-tv-bar .km-tv-room .kloud-caption-bar {
+  bottom: 21vh !important;
+}
+
+.km-tv-room .kloud-caption-bubble {
+  padding: 1.1vh 2.2vh 1.3vh 2.6vh !important;
+  border-radius: 1.6vh !important;
+}
+
+.km-tv-room .kloud-caption-text {
+  font-size: max(18px, 2.7vh) !important;
+}
+
+.km-tv-room .kloud-caption-name {
+  font-size: max(16px, 2.2vh) !important;
+}
+
+.km-tv-room .kloud-caption-original {
+  font-size: max(15px, 2vh) !important;
+}

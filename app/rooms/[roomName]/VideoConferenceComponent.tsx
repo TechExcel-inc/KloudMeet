@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { useTvRoomBridge } from '@/lib/tv/useTvRoomBridge';
+import type { TvRoomHooks } from '@/lib/tv/tvRoomBridge';
 import toast from 'react-hot-toast';
 import { decodePassphrase } from '@/lib/client-utils';
 import { DebugMode } from '@/lib/Debug';
@@ -171,12 +173,17 @@ export function VideoConferenceComponent(props: {
     hq: boolean;
     codec: VideoCodec;
   };
+  /** Kloud Meet TV (/tv/rooms/…): the TV drives the meeting and hides the mouse toolbar. */
+  tv?: TvRoomHooks;
 }) {
   const { openDesktopEntry, desktopLaunchModal } = useDesktopAppLaunch();
   const { t } = useI18n();
   const tRef = React.useRef(t);
   tRef.current = t;
   const router = useRouter();
+  /** Where leaving goes: the web home page, or the TV home screen */
+  const exitPathRef = React.useRef(props.tv?.exitPath ?? '/');
+  exitPathRef.current = props.tv?.exitPath ?? '/';
   const searchParams = useSearchParams();
   const keyProvider = React.useMemo(() => new ExternalE2EEKeyProvider(), []);
   const { worker, e2eePassphrase } = useSetupE2EE();
@@ -725,6 +732,7 @@ export function VideoConferenceComponent(props: {
     setMicEnabled,
     setCanPlaybackAudio,
     setShowMeetingReadyModal,
+    exitPathRef,
   });
   const takeoverTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const lowPowerMode = useLowCPUOptimizer(room);
@@ -997,7 +1005,7 @@ export function VideoConferenceComponent(props: {
     markIntentionalDisconnect();
     clearActiveKloudRoom();
     room.disconnect();
-    router.push('/');
+    router.push(exitPathRef.current);
   }, [markIntentionalDisconnect, clearActiveKloudRoom, room, router]);
 
   // ── Recording-aware exit phase ──
@@ -1053,7 +1061,7 @@ export function VideoConferenceComponent(props: {
       markIntentionalDisconnect();
       clearActiveKloudRoom();
       room.disconnect();
-      router.push('/');
+      router.push(exitPathRef.current);
     });
   }, [stopRecordingAndThen, markIntentionalDisconnect, clearActiveKloudRoom, room, router]);
 
@@ -1994,7 +2002,7 @@ export function VideoConferenceComponent(props: {
 
       await new Promise((r) => setTimeout(r, 300));
       room.disconnect();
-      router.push('/');
+      router.push(exitPathRef.current);
     });
   }, [
     markIntentionalDisconnect,
@@ -3390,8 +3398,39 @@ export function VideoConferenceComponent(props: {
     chatOpen,
   });
 
+  useTvRoomBridge(props.tv, {
+    room,
+    connected: livekitConnected,
+    micEnabled,
+    camEnabled,
+    captionsOn: captionsRunning,
+    handRaised,
+    view: activeView,
+    layout: webcamLayoutMode,
+    hasScreenShare,
+    canShowDesign: canSwitchViews && Boolean(designLink),
+    isHost,
+    canEndForAll: isHost || isCohost,
+    recording: isRecording,
+    hostIdentity,
+    raisedHands,
+    toggleMic: handleToggleMic,
+    toggleCam: handleToggleCam,
+    toggleCaptions: handleToggleCaptions,
+    toggleHand: handleToggleHand,
+    setLayout: setWebcamLayoutMode,
+    changeView: handleViewChange,
+    leave: handleExitFromToolbar,
+    endForAll: handleEndForAllFromToolbar,
+  });
+  const tvMode = Boolean(props.tv);
+  const wrapForTv = (node: React.ReactNode) => (tvMode ? <div hidden>{node}</div> : node);
+
   return (
-    <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
+    <div
+      className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}${tvMode ? ' km-tv-room' : ''}`}
+      style={{ position: 'relative', height: '100%' }}
+    >
       <RoomContext.Provider value={room}>
         <ParticipantRoleMenuProvider {...participantRoleActions}>
         {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
@@ -3412,7 +3451,7 @@ export function VideoConferenceComponent(props: {
                 clearTimeout(hostEndedRedirectTimerRef.current);
                 hostEndedRedirectTimerRef.current = null;
               }
-              router.push('/');
+              router.push(exitPathRef.current);
             }}
           />
         )}
@@ -3420,13 +3459,13 @@ export function VideoConferenceComponent(props: {
         {/* ── Duplicate session eviction (same user joined elsewhere) ── */}
         {evictedByDuplicateSession && (
           <DuplicateSessionOverlay
-            onReturnHome={() => router.push('/')}
+            onReturnHome={() => router.push(exitPathRef.current)}
             onRejoin={rejoinAfterDuplicateSession}
           />
         )}
 
         {/* ── Removed from meeting by host / co-host ── */}
-        {removedFromMeeting && <RemovedFromMeetingOverlay onReturnHome={() => router.push('/')} />}
+        {removedFromMeeting && <RemovedFromMeetingOverlay onReturnHome={() => router.push(exitPathRef.current)} />}
 
         {/* ── Connection Error / Retry Overlay ── */}
         {connectError !== null && !meetingEndedByHost && (
@@ -3438,7 +3477,7 @@ export function VideoConferenceComponent(props: {
               clearActiveKloudRoom();
               setConnectError(null);
               room.disconnect().catch(console.error);
-              router.push('/');
+              router.push(exitPathRef.current);
             }}
             onRejoin={rejoinManually}
           />
@@ -3999,7 +4038,8 @@ export function VideoConferenceComponent(props: {
           peerIssues={isHost || isCohost ? peerCaptionIssues : undefined}
         />
 
-        {/* Custom toolbar overlay */}
+        {/* Custom toolbar overlay (on a TV it stays mounted but hidden: the TV has its own bar) */}
+        {wrapForTv(
         <KloudMeetToolbar
           meetingTitle={props.meetingTitle}
           activeView={activeView}
@@ -4180,11 +4220,12 @@ export function VideoConferenceComponent(props: {
               />
             )
           }
-        />
+        />,
+        )}
 
         {/* --- MODALS --- */}
         <MeetingPipSuggestPrompt
-          visible={showPipSuggest}
+          visible={showPipSuggest && !tvMode}
           attendeeCount={1 + visibleRemoteParticipants(room.remoteParticipants.values()).length}
           onEnable={() => {
             void documentPip.open({ sticky: true });
