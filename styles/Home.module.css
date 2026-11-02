@@ -896,8 +896,11 @@ a.dropdownItem:focus-visible {
   margin-left: 4px;
 }
 
-/* ICP filing number at the foot of the home page (kloud.cn hosts only) */
+/* ICP filing number at the foot of the home page (kloud.cn hosts only).
+   Clears the dark bar the global `footer` rule in globals.css draws. */
 .anonIcp {
+  background: none;
+  border-top: 0;
   padding: 0 16px 20px;
   text-align: center;
   font-size: 12px;
