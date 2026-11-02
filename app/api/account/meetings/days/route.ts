@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 
 /** Enough for a month of very busy days; the calendar only needs to know which days have meetings. */
 const MAX_MEETINGS = 3000;
@@ -13,23 +14,10 @@ const MAX_MEETINGS = 3000;
  */
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const member = await getSessionTeamMember(request);
+    if (!member) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const token = authHeader.split(' ')[1];
-
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { teamMember: true },
-    });
-
-    if (!session || !session.teamMember) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-    }
-
-    const member = session.teamMember;
 
     const { searchParams } = new URL(request.url);
     const from = new Date(searchParams.get('from') || '');
