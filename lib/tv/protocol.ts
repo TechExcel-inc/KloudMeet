@@ -8,6 +8,9 @@
  * - remote → TV: `hello` (who is asking), then `cmd`
  * - TV → remote: `welcome` (approved / pending / denied), `state` (what the TV shows),
  *   `feedback` (result of a voice command)
+ *
+ * The TV side is the Kloud Meet TV Android app (its own repository), which mirrors these
+ * messages: change both together.
  */
 
 export const TV_TOPIC = 'kmtv';

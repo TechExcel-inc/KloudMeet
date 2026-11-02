@@ -217,14 +217,12 @@ function PairForm({
   onForget: () => void;
 }) {
   const { t } = useI18n();
-  const [host, setHost] = React.useState('meet.kloud.cn');
-  React.useEffect(() => setHost(window.location.host), []);
   const digits = code.replace(/\D/g, '').slice(0, 6);
   return (
     <main className={styles.pair}>
       <h1 className={styles.pairTitle}>{t('tv.remote.pairTitle')}</h1>
       <p className={styles.pairBody}>
-        {t('tv.remote.pairBody', { host })}
+        {t('tv.remote.pairBody')}
       </p>
       <form
         className={styles.pairForm}

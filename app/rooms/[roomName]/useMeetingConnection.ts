@@ -73,8 +73,6 @@ export interface MeetingConnectionOptions {
   setMicEnabled: React.Dispatch<React.SetStateAction<boolean>>;
   setCanPlaybackAudio: React.Dispatch<React.SetStateAction<boolean>>;
   setShowMeetingReadyModal: React.Dispatch<React.SetStateAction<boolean>>;
-  /** Where ended / removed meetings go: '/' on the web, '/tv' on Kloud Meet TV */
-  exitPathRef?: React.MutableRefObject<string>;
 }
 
 export interface MeetingConnectionApi {
@@ -129,7 +127,6 @@ export function useMeetingConnection({
   setMicEnabled,
   setCanPlaybackAudio,
   setShowMeetingReadyModal,
-  exitPathRef,
 }: MeetingConnectionOptions): MeetingConnectionApi {
   const { t } = useI18n();
   const tRef = React.useRef(t);
@@ -418,10 +415,9 @@ export function useMeetingConnection({
       clearTimeout(hostEndedRedirectTimerRef.current);
     }
     hostEndedRedirectTimerRef.current = setTimeout(() => {
-      router.push(exitPathRef?.current ?? '/');
+      router.push('/');
     }, 2200);
   }, [
-    exitPathRef,
     room,
     router,
     t,
@@ -452,9 +448,9 @@ export function useMeetingConnection({
     }
 
     setTimeout(() => {
-      router.push(exitPathRef?.current ?? '/');
+      router.push('/');
     }, 2500);
-  }, [exitPathRef, room, router, clearActiveKloudRoom, clearReconnectTimer]);
+  }, [room, router, clearActiveKloudRoom, clearReconnectTimer]);
 
   /** 下一轮退避：1s 起步翻倍、封顶 10s，叠加 ±20% 抖动，避免多人同时断网后同一时刻挤进服务端 */
   const computeBackoffMs = React.useCallback((attempt: number): number => {
@@ -743,7 +739,7 @@ export function useMeetingConnection({
         }
         if (removedFromMeetingHandledRef.current) {
           setRemovedFromMeeting(true);
-          setTimeout(() => router.push(exitPathRef?.current ?? '/'), 2500);
+          setTimeout(() => router.push('/'), 2500);
           return;
         }
         duplicateSessionHandledRef.current = true;
@@ -761,7 +757,7 @@ export function useMeetingConnection({
       room.off(RoomEvent.EncryptionError, handleEncryptionError);
       room.off(RoomEvent.MediaDevicesError, handleError);
     };
-  }, [exitPathRef, room, router, handleError, handleEncryptionError, clearActiveKloudRoom, clearReconnectTimer, handleClosedByHostExit]);
+  }, [room, router, handleError, handleEncryptionError, clearActiveKloudRoom, clearReconnectTimer, handleClosedByHostExit]);
 
   const rejoinAfterDuplicateSession = React.useCallback(() => {
     void (async () => {
