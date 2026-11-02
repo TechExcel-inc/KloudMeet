@@ -896,6 +896,25 @@ a.dropdownItem:focus-visible {
   margin-left: 4px;
 }
 
+/* ICP filing number at the foot of the home page (kloud.cn hosts only) */
+.anonIcp {
+  padding: 0 16px 20px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.anonIcp a {
+  color: var(--km-text-muted);
+  text-decoration: none;
+}
+
+.anonIcp a:hover,
+.anonIcp a:focus-visible {
+  color: var(--km-text);
+  text-decoration: underline;
+}
+
 /* Download desktop links (anonymous + sign-in footers) */
 .downloadRow {
   display: flex;
