@@ -93,7 +93,6 @@ const COLLAPSED_MAX_WITH_SHARE = 4;
 const PRESENTING_CHIP_WORD_MAX = 3;
 /** Avatar tones in the pill (.tone0–5), the same calm set as the replay page */
 const AVATAR_TONES = 6;
-const SHARE_PREVIEW_ID = '__share__';
 const AVATAR_SIZE = 30;
 const AVATAR_STEP = 22;
 const PILL_PAD_X = 8;
@@ -632,8 +631,7 @@ export function MeetingDocumentPipPanel({
       ? room.localParticipant
       : room.remoteParticipants.get(previewRow.id)
     : undefined;
-  const sharePreviewOpen = previewId === SHARE_PREVIEW_ID && Boolean(share);
-  const previewOpen = Boolean(previewRow && previewParticipant) || sharePreviewOpen;
+  const previewOpen = Boolean(previewRow && previewParticipant);
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
   const pillMax = share ? COLLAPSED_MAX_WITH_SHARE : COLLAPSED_MAX;
   const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null, pillMax);
@@ -946,17 +944,15 @@ export function MeetingDocumentPipPanel({
               <div
                 className={`${styles.pillShareTile}${
                   share.local ? ` ${styles.pillShareTileSelf}${presentingWord ? '' : ` ${styles.pillShareTileIcon}`}` : ''
-                }${
-                  previewId === SHARE_PREVIEW_ID ? ` ${styles.pillShareTileSelected}` : ''
                 }`}
-                title={share.local ? labels.presentingSelf : labels.shareBadge}
+                title={share.local ? labels.backToMain : labels.shareBadge}
                 role="button"
                 tabIndex={0}
-                onClick={() => togglePreview(SHARE_PREVIEW_ID)}
+                onClick={backToTab}
                 onKeyDown={(e) => {
                   if (e.key !== 'Enter' && e.key !== ' ') return;
                   e.preventDefault();
-                  togglePreview(SHARE_PREVIEW_ID);
+                  backToTab(e);
                 }}
               >
                 {share.local ? (
@@ -1020,14 +1016,7 @@ export function MeetingDocumentPipPanel({
               </button>
             </div>
           </div>
-          {sharePreviewOpen && share ? (
-            <div
-              className={`${styles.previewWrap} ${styles.previewWrapShare}`}
-              style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
-            >
-              {shareVideo}
-            </div>
-          ) : previewOpen && previewParticipant && previewRow ? (
+          {previewOpen && previewParticipant && previewRow ? (
             <div
               className={styles.previewWrap}
               style={{ ['--pip-preview-tile' as string]: `${PREVIEW_TILE}px` } as React.CSSProperties}
