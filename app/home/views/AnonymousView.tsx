@@ -12,6 +12,11 @@ import { MAC_APP_AVAILABLE } from '@/lib/desktopRelease';
 const SLIDE_COUNT = 3;
 const SLIDE_INTERVAL_MS = 5000;
 
+/* Mainland China requires the ICP filing number at the foot of the home page. kloud.cn is filed as
+   沪ICP备2025147909号-3; other hosts (kloudmeet.com, localhost) don't show it. */
+const ICP_FILING = '沪ICP备2025147909号-3';
+const ICP_HOST = /(^|\.)kloud\.cn$/i;
+
 /* Decorative product scenes for the carousel. People are generated portraits (same as the marketing site);
    the caption sample shows English → Japanese on purpose (overseas demos never translate into Chinese). */
 const FACE = (name: string) => `/images/people/${name}-face.jpg`;
@@ -162,6 +167,12 @@ export function AnonymousView({
     const id = setInterval(() => setSlide((s) => (s + 1) % SLIDE_COUNT), SLIDE_INTERVAL_MS);
     return () => clearInterval(id);
   }, [autoPlay]);
+
+  /* Set after mount: the server render doesn't know the host. */
+  const [showIcp, setShowIcp] = useState(false);
+  useEffect(() => {
+    setShowIcp(ICP_HOST.test(window.location.hostname));
+  }, []);
 
   const goToSlide = (i: number) => {
     setAutoPlay(false);
@@ -651,6 +662,14 @@ export function AnonymousView({
           </div>
         </section>
       </div>
+
+      {showIcp && (
+        <footer className={styles.anonIcp}>
+          <a href="https://beian.miit.gov.cn" target="_blank" rel="noopener noreferrer">
+            {ICP_FILING}
+          </a>
+        </footer>
+      )}
     </div>
   );
 }
