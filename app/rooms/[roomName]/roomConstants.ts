@@ -1,6 +1,6 @@
 import {
   getBrowser,
-  ScreenSharePresets,
+  VideoPreset,
   type ScreenShareCaptureOptions,
   type VideoEncoding,
 } from 'livekit-client';
@@ -10,24 +10,36 @@ export const CONN_DETAILS_ENDPOINT =
   process.env.NEXT_PUBLIC_CONN_DETAILS_ENDPOINT ?? '/api/connection-details';
 
 /**
- * 屏幕共享编码上限。SDK 默认是 1080p15、2.5 Mbps，采集却按 1080p30。
- * 这里把帧率和码率收到 15 帧、1.5 Mbps，给麦克风留上行。
- * 不改 screenShareSimulcastLayers：SDK 仍会带一路半分辨率，弱网观众可以降到那一层。
+ * 屏幕共享编码上限：15 帧、4 Mbps。1.5 Mbps 时文字边缘被压糊，翻页、滚动后要一两秒才清楚；
+ * 麦克风只要几十 kbps，用不着为它留出一大截上行。画面不动时编码器实际用不到这么多。
  */
 export const SCREEN_SHARE_ENCODING: VideoEncoding = {
-  maxBitrate: 1_500_000,
+  maxBitrate: 4_000_000,
   maxFramerate: 15,
 };
 
 /**
- * 屏幕共享采集。系统声音勾选仍在；分辨率用 SDK 的 1080p15（ideal，不是硬封顶）。
+ * 屏幕共享的弱网层：清晰优先，网不好时宁可画面更新慢，也不糊。
+ * SDK 默认的第二层是半分辨率（1440p 采集时是 720p），网差的观众收到的字是糊的。
+ * 这里换成原分辨率、3 帧、600 kbps：宽高写得比任何屏幕都大，SDK 算出来就不缩小
+ * （scaleResolutionDownBy 最小是 1）。两层一样大时，LiveKit 服务器给网好的人发 15 帧那层，
+ * 网差时才换到这层；共享方上行不够时，浏览器也先停掉 15 帧那层，只发这层。
+ * priority 'high'：Chrome 按第一层的 priority 给整路共享分带宽，和摄像头抢上行时共享先拿。
+ */
+export const SCREEN_SHARE_SIMULCAST_LAYERS: VideoPreset[] = [
+  new VideoPreset(7680, 4320, 600_000, 3, 'high'),
+];
+
+/**
+ * 屏幕共享采集。系统声音勾选仍在；分辨率按 1440p15（ideal，不是硬封顶），
+ * 2K、4K、Retina 屏只缩到 1440p，不再缩到 1080p 把字缩糊；小于它的屏幕按原样采集。
  * contentHint 用 detail，幻灯片和文字更清晰，也更省码率。
  */
 export const SCREEN_SHARE_CAPTURE: ScreenShareCaptureOptions = {
   audio: true,
   systemAudio: 'include',
   contentHint: 'detail',
-  resolution: ScreenSharePresets.h1080fps15.resolution,
+  resolution: { width: 2560, height: 1440, frameRate: 15 },
 };
 
 /**

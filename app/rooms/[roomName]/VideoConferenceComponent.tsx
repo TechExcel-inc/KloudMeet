@@ -135,6 +135,7 @@ import {
   LIVEKIT_RECONNECT_DELAYS_MS,
   MAX_LOCK_TIMEOUT_MS,
   SCREEN_SHARE_ENCODING,
+  SCREEN_SHARE_SIMULCAST_LAYERS,
   screenShareCaptureOptions,
 } from './roomConstants';
 import { MeetingReadyModal, RecordConsentModal } from './roomModals';
@@ -455,6 +456,7 @@ export function VideoConferenceComponent(props: {
       red: !e2eeEnabled,
       videoCodec,
       screenShareEncoding: SCREEN_SHARE_ENCODING,
+      screenShareSimulcastLayers: SCREEN_SHARE_SIMULCAST_LAYERS,
     };
     return {
       videoCaptureDefaults: videoCaptureDefaults,
@@ -463,7 +465,9 @@ export function VideoConferenceComponent(props: {
         deviceId: normalizeCaptureDeviceId(props.userChoices.audioDeviceId),
       },
       audioOutput: { deviceId: loadAudioOutputDeviceId() },
-      adaptiveStream: true,
+      // 电脑上按屏幕实际像素选层：Retina / 缩放屏上，共享画面不会因为按 1 倍像素算而降到半分辨率那一层。
+      // 摄像头也一样，高分屏上更常拿 720p 那层。手机仍用 SDK 默认（最多 2 倍），免得 3 倍屏多耗流量。
+      adaptiveStream: isMobileClient ? true : { pixelDensity: 'screen' },
       dynacast: true,
       // 手机切后台常见 pagehide/freeze；不断连，靠现有 visibility 恢复音频
       disconnectOnPageLeave: !isMobileClient,
