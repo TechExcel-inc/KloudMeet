@@ -55,8 +55,8 @@ export interface MeetingCornerStatusProps {
   recordingButtonRef: React.Ref<HTMLButtonElement>;
   /** LiveDoc keeps its annotation tools along the left edge: start to the right of them. */
   besideLeftRail?: boolean;
-  /** Phone: in line with the round buttons at the top right; "Recording" is just its red dot and
-   *  the weak-connection hint is shorter. */
+  /** Phone: in line with the round buttons at the top right, and icons only: "Recording" is its
+   *  red dot, the weak connection its signal bars. */
   phone?: boolean;
 }
 
@@ -113,13 +113,18 @@ export function MeetingCornerStatus({
           </span>
         ))}
       {weak && (
-        <span className={styles.weak} role="status" title={phone ? t('meeting.weakConnection') : undefined}>
+        <span
+          className={styles.weak}
+          role="status"
+          aria-label={phone ? t('meeting.weakConnection') : undefined}
+          title={phone ? t('meeting.weakConnection') : undefined}
+        >
           <svg className={styles.signal} viewBox="0 0 16 16" aria-hidden="true">
             <rect x="1" y="10" width="3" height="5" rx="1" fill="currentColor" />
             <rect x="6.5" y="6" width="3" height="9" rx="1" className={styles.signalOff} />
             <rect x="12" y="2" width="3" height="13" rx="1" className={styles.signalOff} />
           </svg>
-          {phone ? t('meeting.weakConnectionShort') : t('meeting.weakConnection')}
+          {!phone && t('meeting.weakConnection')}
         </span>
       )}
     </div>,

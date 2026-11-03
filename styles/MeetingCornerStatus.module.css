@@ -39,34 +39,24 @@
   backdrop-filter: blur(8px);
 }
 
-/* Phone: centred on the row of 44px round buttons at the top right, and kept clear of them
-   (three buttons while recording). "Recording" is just its red dot there; the weak-connection
-   hint wraps under it when both don't fit. */
+/* Phone: centred on the row of 44px round buttons at the top right, and icons only: "Recording"
+   is its red dot, the weak connection its signal bars. */
 .cornerPhone {
   top: calc(max(12px, env(safe-area-inset-top, 0px)) + 8px);
   left: max(12px, env(safe-area-inset-left, 0px));
-  flex-wrap: wrap;
   gap: 6px;
-  max-width: calc(100vw - 188px);
 }
 
 .cornerPhone.cornerBesideRail {
   left: calc(max(12px, env(safe-area-inset-left, 0px)) + 44px);
-  max-width: calc(100vw - 232px);
 }
 
 .cornerPhone .rec,
 .cornerPhone .weak {
-  height: 28px;
-  gap: 6px;
-  padding: 0 10px;
-  font-size: 12px;
-}
-
-.cornerPhone .rec {
-  width: 28px;
-  padding: 0;
   justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
 }
 
 .cornerPhone .recLabel,
