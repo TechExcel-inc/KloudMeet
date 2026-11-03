@@ -1,5 +1,5 @@
 /**
- * Gallery layout helpers for the desktop webcam grid.
+ * Gallery layout helpers for the desktop webcam grid (and the phone gallery's column count).
  *
  * Like Zoom, Google Meet and Teams, every tile in the gallery is the same size and 16:9, and
  * a short last row is centred. Only the tile size changes as people join or the window
@@ -43,6 +43,37 @@ export function fitGrid(count: number, width: number, height: number, gap: numbe
 
 /** Hues that read well as a dark tile background with white text. */
 const TILE_HUES = [262, 152, 330, 205, 24, 288, 96, 186, 44, 228];
+
+/** Tile shape the phone gallery aims for: a little taller than wide upright, a little wider on its side. */
+const PHONE_TILE_ASPECT_UPRIGHT = 0.9;
+const PHONE_TILE_ASPECT_SIDEWAYS = 1.25;
+/** What one empty cell in the last row costs, against how far tiles are from that shape. */
+const PHONE_EMPTY_CELL_COST = 0.25;
+
+/**
+ * Columns for the phone gallery (MobileVideoLayout), whose tiles stretch to fill the screen:
+ * the count that makes `count` cells in a W×H box come closest to the phone tile shape, so an
+ * upright phone shows one or two columns of people rather than thin strips (5 people → 2 + 2 + 1,
+ * not 3 + 2), and a phone on its side shows wider rows. At most 4 columns.
+ */
+export function phoneGridColumns(count: number, width: number, height: number, gap: number): number {
+  if (count <= 1 || width <= 0 || height <= 0) return 1;
+  const target = width > height ? PHONE_TILE_ASPECT_SIDEWAYS : PHONE_TILE_ASPECT_UPRIGHT;
+  let best = 1;
+  let bestScore = Infinity;
+  for (let cols = 1; cols <= Math.min(count, 4); cols++) {
+    const rows = Math.ceil(count / cols);
+    const tileWidth = (width - (cols - 1) * gap) / cols;
+    const tileHeight = (height - (rows - 1) * gap) / rows;
+    if (tileWidth <= 0 || tileHeight <= 0) continue;
+    const score = Math.abs(Math.log(tileWidth / tileHeight / target)) + PHONE_EMPTY_CELL_COST * (cols * rows - count);
+    if (score < bestScore) {
+      best = cols;
+      bestScore = score;
+    }
+  }
+  return best;
+}
 
 /** A stable hue per name: the soft tint of camera-off tiles and the home page replay thumbnails. */
 export function tileHue(key: string): number {

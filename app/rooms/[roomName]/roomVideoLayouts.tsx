@@ -20,7 +20,7 @@ import {
 } from '@livekit/components-react';
 import { ParticipantTileRoleMoreMenu } from '@/lib/ParticipantRoleMenu';
 import { getInitials } from '@/lib/getInitials';
-import { tileHue } from '@/lib/tileLayout';
+import { phoneGridColumns, tileHue } from '@/lib/tileLayout';
 import { useI18n } from '@/lib/i18n';
 import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
@@ -363,7 +363,29 @@ export function MobileVideoLayout() {
   const visibleTracks = (!isOver || expanded) ? tracks : tracks.slice(0, MAX_VISIBLE);
   const hiddenCount = totalCount - MAX_VISIBLE;
 
-  const cols = calcGridCols(Math.min(totalCount, MAX_VISIBLE));
+  // Columns follow the shape of the screen (lib/tileLayout.ts): an upright phone gets one or two
+  // columns of people, not thin strips
+  const GRID_GAP = 8;
+  const [box, setBox] = React.useState({ width: 0, height: 0 });
+  React.useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    const measure = () => {
+      const width = grid.clientWidth - 2 * GRID_GAP;
+      const height = grid.clientHeight - 2 * GRID_GAP;
+      setBox((prev) => (prev.width === width && prev.height === height ? prev : { width, height }));
+    };
+    measure();
+    const resize = new ResizeObserver(measure);
+    resize.observe(grid);
+    return () => resize.disconnect();
+  }, []);
+  const cellCount = visibleTracks.length + (isOver && !expanded ? 1 : 0);
+  const cols = box.width > 0 ? phoneGridColumns(cellCount, box.width, box.height, GRID_GAP) : calcGridCols(cellCount);
+  // Twice as many grid columns, each cell spanning two, so a short last row can sit in the middle
+  const lastRowCount = cellCount % cols;
+  const cellColumn = (index: number) =>
+    lastRowCount > 0 && index === cellCount - lastRowCount ? `${cols - lastRowCount + 1} / span 2` : 'span 2';
 
   // 注入 data-lk-name 到每个 placeholder（摄像头关闭时中央显示登录名）
   React.useEffect(() => {
@@ -449,7 +471,7 @@ export function MobileVideoLayout() {
     ? {
       // 展开后允许滚动
       display: 'grid',
-      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gridTemplateColumns: `repeat(${cols * 2}, 1fr)`,
       gap: '8px',
       padding: '8px',
       overflowY: 'auto',
@@ -460,7 +482,7 @@ export function MobileVideoLayout() {
     : {
       // 不超16人 or 收起时：填满高度，不滚动
       display: 'grid',
-      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gridTemplateColumns: `repeat(${cols * 2}, 1fr)`,
       gridAutoRows: '1fr',
       gap: '8px',
       padding: '8px',
@@ -498,6 +520,7 @@ export function MobileVideoLayout() {
           <div
             key={track.participant?.identity ?? i}
             style={{
+              gridColumn: cellColumn(i),
               borderRadius: '12px',
               overflow: 'hidden',
               position: 'relative',
@@ -519,6 +542,7 @@ export function MobileVideoLayout() {
             onClick={() => setExpanded(true)}
             aria-expanded={false}
             style={{
+              gridColumn: cellColumn(cellCount - 1),
               borderRadius: '12px',
               border: 'none',
               background: 'rgba(139, 135, 255, 0.18)',
