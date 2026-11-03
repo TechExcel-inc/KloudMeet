@@ -109,7 +109,11 @@ type RosterRow = {
   participant: Participant;
 };
 
+/** When each PiP window was last sized, so one click doesn't size it twice */
+const lastResizeAt = new WeakMap<Window, number>();
+
 function resizePip(win: Window, innerW: number, innerH: number): boolean {
+  lastResizeAt.set(win, performance.now());
   // The desktop app sizes its own window (keeping the bottom-right corner in place)
   const desktop = getDesktopMiniWindow();
   if (desktop) {
@@ -608,6 +612,22 @@ export function MeetingDocumentPipPanel({
     setMinimized(true);
     onMinimizedChange?.(true);
   }, [collapseSignal, minimized, pipWindow, onMinimizedChange]);
+
+  // Folded without a click to resize on (e.g. the share stopped from Chrome's own bar): the
+  // window is still tall, so the next click in it brings it down to the pill. It runs after the
+  // click's own handlers: Chrome allows one resize per click, and expanding or opening a face's
+  // preview sizes the window itself, so those clicks are left alone.
+  React.useEffect(() => {
+    if (!minimized || previewId || getDesktopMiniWindow()) return;
+    const onClick = () => {
+      if (performance.now() - (lastResizeAt.get(pipWindow) ?? -Infinity) < 500) return;
+      if (pipWindow.innerHeight > PIP_MINIMIZED_H + 8) {
+        resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
+      }
+    };
+    pipWindow.document.addEventListener('click', onClick);
+    return () => pipWindow.document.removeEventListener('click', onClick);
+  }, [minimized, previewId, pipWindow]);
 
   const hidePreview = () => {
     if (!previewId) return;

@@ -58,6 +58,18 @@ function pipMiniKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:mini`;
 }
 
+/** Whether the web PiP window was the slim pill's height when it last closed (Chrome reopens at that size) */
+function pipClosedSlimKey(roomName: string): string {
+  return `skymeet:doc-pip:${roomName}:closed-slim`;
+}
+
+function rememberClosedShape(roomName: string, win: Window): void {
+  if (getDesktopMiniWindow()) return;
+  // Read while closing (pagehide): a window already gone reports 0
+  const h = win.innerHeight;
+  if (h > 0) writeSessionFlag(pipClosedSlimKey(roomName), h <= PIP_MINIMIZED_H + 8);
+}
+
 function pipDismissKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:dismissed`;
 }
@@ -267,6 +279,8 @@ export function useMeetingDocumentPip({
   const meetingTitleRef = useRef(meetingTitle);
   const startedAtRef = useRef(startedAtMs);
   const recordingRef = useRef(isRecording);
+  const keepMinimizedRef = useRef(keepMinimized);
+  keepMinimizedRef.current = keepMinimized;
   meetingTitleRef.current = meetingTitle;
   startedAtRef.current = startedAtMs;
   recordingRef.current = isRecording;
@@ -315,6 +329,7 @@ export function useMeetingDocumentPip({
       return;
     }
     if (win && !win.closed) {
+      rememberClosedShape(roomRef.current.name, win);
       try {
         win.close();
       } catch {
@@ -440,9 +455,12 @@ export function useMeetingDocumentPip({
 
     const roomName = roomRef.current.name;
     // First time in a meeting it opens with people showing; after that it keeps the
-    // shape the person last left it in (full or the slim pill).
+    // shape the person last left it in (full or the slim pill). In the webcam view it always
+    // opens as the pill, since the room already shows everyone.
     if (opts?.minimized !== undefined) {
       minimizedRef.current = opts.minimized;
+    } else if (keepMinimizedRef.current) {
+      minimizedRef.current = true;
     } else {
       minimizedRef.current = sessionFlag(pipMiniKey(roomName)) === true;
     }
@@ -454,15 +472,22 @@ export function useMeetingDocumentPip({
       // 本场第一次：按展开（或上次缩小）的尺寸打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
       // 切到摄像头视图时（resetPlacement）按细条尺寸、默认位置重开。Chrome 130 前不认
       // preferInitialWindowPlacement，同一宽高会还原缓存的大小，所以细条高度每次差 1px，让缓存键对不上。
+      // 上次关闭时的窗口形状和这次要开的不一样（如摄像头视图里原地收成细条后关掉、开共享时再打开），
+      // 还原出来的大小就不对，同样按要开的尺寸、默认位置重开。
+      const closedSlim = sessionFlag(pipClosedSlimKey(roomName));
+      // 不知道上次关闭时的形状：要开细条就按尺寸开，免得还原成展开的大小
+      const shapeChanged =
+        closedSlim === null ? minimizedRef.current : closedSlim !== minimizedRef.current;
+      const sized = firstOpen || Boolean(opts?.resetPlacement) || shapeChanged;
       let pillH = Math.round(PIP_MINIMIZED_H);
-      if (opts?.resetPlacement && !firstOpen) {
+      if (sized && !firstOpen && minimizedRef.current) {
         const flip = sessionFlag(PIP_PILL_FLIP_KEY) !== true;
         writeSessionFlag(PIP_PILL_FLIP_KEY, flip);
         if (flip) pillH += 1;
       }
       const pipWindow = desktop
         ? ensureDesktopWindow()
-        : firstOpen || opts?.resetPlacement
+        : sized
           ? await api!.requestWindow({
               width: PIP_EXPANDED_W,
               height: minimizedRef.current ? pillH : PIP_EXPANDED_H,
@@ -522,6 +547,7 @@ export function useMeetingDocumentPip({
       pipWindow.addEventListener('pagehide', () => {
         if (pipWindowRef.current !== pipWindow) return;
         const fromApi = closingFromApiRef.current;
+        if (!fromApi) rememberClosedShape(roomRef.current.name, pipWindow);
         unbindClicksRef.current?.();
         unbindClicksRef.current = null;
         const root = rootRef.current;
@@ -567,12 +593,14 @@ export function useMeetingDocumentPip({
     if (!win || win.closed) return;
     minimizedRef.current = true;
     writeSessionFlag(pipMiniKey(roomRef.current.name), true);
-    // Chrome only resizes its PiP window on a click inside it, so folding in place leaves a
-    // tall empty window when the switch was clicked in the meeting. That click does let us
-    // open the window again at the pill's size; try it before anything uses the click up.
+    // Chrome only resizes its PiP window on a click inside it (e.g. stopping the share from
+    // SmartCam): then it folds in place. A click in the meeting instead lets us open the window
+    // again at the pill's size; try it before anything uses the click up. With no click at all
+    // (Chrome's own "Stop sharing" bar) the panel shrinks the window on the next click in it.
     if (
       !getDesktopMiniWindow() &&
       win.innerHeight > PIP_MINIMIZED_H + 8 &&
+      !win.navigator.userActivation?.isActive &&
       navigator.userActivation?.isActive
     ) {
       const sticky = stickyRef.current;
