@@ -28,6 +28,7 @@ import { applyBalancedGrid } from './tileLayout';
 import { KloudGridLayout } from './KloudGridLayout';
 import { DEFAULT_GALLERY_PREFS, type GalleryPrefs } from './galleryPrefs';
 import { isRecorderParticipant } from './recorderParticipant';
+import { isParticipantReady, useParticipantActiveTick } from './participantReady';
 
 export type WebcamLayoutMode = 'tile' | 'spotlight';
 
@@ -85,14 +86,18 @@ export function KloudVideoConference({
     ],
     { onlySubscribed: false },
   );
+  // Someone just joining gets a tile once they can hear the room
+  const activeTick = useParticipantActiveTick(room);
   const tracks = React.useMemo(
     () =>
       allTracks.filter(
         (track) =>
           !isRecorderParticipant(track.participant) &&
+          isParticipantReady(track.participant) &&
           !(ignoreScreenShare && track.source === Track.Source.ScreenShare),
       ),
-    [allTracks, ignoreScreenShare],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTick: isActive lives on the participant
+    [allTracks, ignoreScreenShare, activeTick],
   );
 
   const layoutContext = useCreateLayoutContext();

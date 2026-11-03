@@ -15,7 +15,7 @@ import {
 } from '@/lib/documentPipSupport';
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import { I18nScope, useI18n } from '@/lib/i18n';
-import { visibleRemoteParticipants } from '@/lib/recorderParticipant';
+import { shownRemoteParticipants } from '@/lib/participantReady';
 import {
   ParticipantRoleMenuProvider,
   type ParticipantRoleActionsConfig,
@@ -629,7 +629,7 @@ export function useMeetingDocumentPip({
       // to keep an eye on, or you're presenting, and not after being closed twice here.
       setMediaSessionActionHandler('enterpictureinpicture', () => {
         const r = roomRef.current;
-        if (visibleRemoteParticipants(r.remoteParticipants.values()).length === 0 && !shareActiveRef.current) return;
+        if (shownRemoteParticipants(r.remoteParticipants.values()).length === 0 && !shareActiveRef.current) return;
         if (readDismissCount(r.name) >= AUTO_OPEN_DISMISS_LIMIT) return;
         void openPip({ auto: true });
       });
@@ -679,6 +679,7 @@ export function useMeetingDocumentPip({
     };
     const evs = [
       RoomEvent.ParticipantConnected,
+      RoomEvent.ParticipantActive,
       RoomEvent.ParticipantDisconnected,
       RoomEvent.ParticipantNameChanged,
       RoomEvent.TrackMuted,

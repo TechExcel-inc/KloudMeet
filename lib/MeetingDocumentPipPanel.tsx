@@ -7,7 +7,7 @@ import { LiveDocFloatingCollapsedAvatar, LiveDocFloatingGridTile } from '@/app/r
 import type { KloudTileMediaRestrictionProps } from '@/app/rooms/[roomName]/roomVideoLayouts';
 import { getDesktopMiniWindow } from '@/lib/documentPipSupport';
 import { getInitials } from '@/lib/getInitials';
-import { visibleRemoteParticipants } from '@/lib/recorderParticipant';
+import { shownRemoteParticipants } from '@/lib/participantReady';
 import styles from '@/styles/MeetingDocumentPip.module.css';
 
 export interface MeetingDocumentPipLabels {
@@ -411,6 +411,7 @@ export function MeetingDocumentPipPanel({
     const bump = () => setRosterTick((n) => n + 1);
     const evs = [
       RoomEvent.ParticipantConnected,
+      RoomEvent.ParticipantActive,
       RoomEvent.ParticipantDisconnected,
       RoomEvent.ParticipantNameChanged,
       RoomEvent.TrackMuted,
@@ -535,7 +536,7 @@ export function MeetingDocumentPipPanel({
   const sortedEntries = React.useMemo(() => {
     return [
       { id: 'local', name: room.localParticipant.name || localName || labels.you },
-      ...visibleRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
+      ...shownRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
         id: p.identity,
         name: p.name || p.identity || labels.you,
       })),

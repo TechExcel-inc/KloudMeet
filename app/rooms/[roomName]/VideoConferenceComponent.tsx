@@ -156,6 +156,7 @@ import { useMeetingConnection } from './useMeetingConnection';
 import { useLiveDocSession } from './useLiveDocSession';
 import { useMeetingChat } from './useMeetingChat';
 import { isRecorderParticipant, visibleRemoteParticipants } from '@/lib/recorderParticipant';
+import { shownRemoteParticipants, useParticipantActiveTick } from '@/lib/participantReady';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
 
@@ -1420,6 +1421,8 @@ export function VideoConferenceComponent(props: {
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
   const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
+  // Someone just joining shows in the sidebar and counts once they can hear the room
+  useParticipantActiveTick(room);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -3552,7 +3555,7 @@ export function VideoConferenceComponent(props: {
               {showWebcamSidebar && (() => {
                 const allP = [
                   { id: 'local' as string, name: props.userChoices.username || 'You', participant: room.localParticipant },
-                  ...visibleRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
+                  ...shownRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
                     id: p.identity,
                     name: p.name || p.identity || '??',
                     participant: p as any,
@@ -4185,7 +4188,7 @@ export function VideoConferenceComponent(props: {
         {/* --- MODALS --- */}
         <MeetingPipSuggestPrompt
           visible={showPipSuggest}
-          attendeeCount={1 + visibleRemoteParticipants(room.remoteParticipants.values()).length}
+          attendeeCount={1 + shownRemoteParticipants(room.remoteParticipants.values()).length}
           onEnable={() => {
             void documentPip.open({ sticky: true });
           }}

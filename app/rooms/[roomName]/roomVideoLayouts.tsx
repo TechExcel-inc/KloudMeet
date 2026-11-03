@@ -26,6 +26,7 @@ import { parseKloudMemberIdFromMetadata } from '@/lib/meetingOwner';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
 import { KloudConnectionStateToast } from '@/lib/KloudConnectionStateToast';
 import { isRecorderParticipant } from '@/lib/recorderParticipant';
+import { isParticipantReady } from '@/lib/participantReady';
 import { TILE_GLYPH_PATHS } from '@/lib/tileGlyphs';
 
 export type KloudTileMediaRestrictionProps = {
@@ -342,10 +343,14 @@ export function MobileVideoLayout() {
       { source: Track.Source.Camera, withPlaceholder: true },
       { source: Track.Source.ScreenShare, withPlaceholder: false },
     ],
-    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged], onlySubscribed: false },
+    // ParticipantActive: someone just joining gets a tile once they can hear the room
+    { updateOnlyOn: [RoomEvent.ActiveSpeakersChanged, RoomEvent.ParticipantActive], onlySubscribed: false },
   );
   const tracks = React.useMemo(
-    () => allTracks.filter((track) => !isRecorderParticipant(track.participant)),
+    () =>
+      allTracks.filter(
+        (track) => !isRecorderParticipant(track.participant) && isParticipantReady(track.participant),
+      ),
     [allTracks],
   );
 
