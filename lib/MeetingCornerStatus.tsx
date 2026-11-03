@@ -55,7 +55,8 @@ export interface MeetingCornerStatusProps {
   recordingButtonRef: React.Ref<HTMLButtonElement>;
   /** LiveDoc keeps its annotation tools along the left edge: start to the right of them. */
   besideLeftRail?: boolean;
-  /** Phone: in line with the round buttons at the top right, with a shorter weak-connection hint. */
+  /** Phone: in line with the round buttons at the top right; "Recording" is just its red dot and
+   *  the weak-connection hint is shorter. */
   phone?: boolean;
 }
 
@@ -96,18 +97,19 @@ export function MeetingCornerStatus({
             onClick={onOpenRecordingControls}
             aria-haspopup="menu"
             aria-expanded={controlsOpen}
+            aria-label={phone ? recLabel : undefined}
             title={t('toolbar.recordingControls')}
           >
             <span className={styles.recDot} aria-hidden="true" />
-            {recLabel}
+            <span className={styles.recLabel}>{recLabel}</span>
             <svg className={styles.chevron} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
         ) : (
-          <span className={recClass} role="status">
+          <span className={recClass} role="status" aria-label={phone ? recLabel : undefined} title={phone ? recLabel : undefined}>
             <span className={styles.recDot} aria-hidden="true" />
-            {recLabel}
+            <span className={styles.recLabel}>{recLabel}</span>
           </span>
         ))}
       {weak && (
