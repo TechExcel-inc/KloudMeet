@@ -4,7 +4,8 @@ import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { MediaDeviceMenu, useMaybeRoomContext } from '@livekit/components-react';
 import styles from '../styles/KloudMeetToolbar.module.css';
-import { useToolbarIsMobile } from './useToolbarIsMobile';
+import { useIsLandscape, useToolbarIsMobile } from './useToolbarIsMobile';
+import { ShareFullscreenButton } from './ShareFullscreenButton';
 import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
 import { RECORDING_MODES, type RecordingMode, type RecordingState } from './recordingControls';
 import type { LiveDocAiTab } from './liveDocAiProtocol';
@@ -423,6 +424,7 @@ export function KloudMeetToolbar({
   const inviteMenuOpenRef = useRef(inviteMenuOpen);
   inviteMenuOpenRef.current = inviteMenuOpen;
   const isMobile = useToolbarIsMobile();
+  const isLandscape = useIsLandscape();
   const [showSTTSettings, setShowSTTSettings] = useState(false);
   const [localSubtitleVisible, setLocalSubtitleVisible] = useState(true);
   const [liveDocPluginLoaded, setLiveDocPluginLoaded] = useState(false);
@@ -828,11 +830,13 @@ export function KloudMeetToolbar({
     let hideTimer: ReturnType<typeof setTimeout> | null = null;
     let lastTouchTime = 0;
 
+    // Watching a share with the phone on its side, the controls get out of the way sooner
+    const hideAfterMs = isLandscape && hasScreenShare ? 5000 : 30000;
     const startTimer = () => {
       if (hideTimer) clearTimeout(hideTimer);
       hideTimer = setTimeout(() => {
         setVisible(false);
-      }, 30000);
+      }, hideAfterMs);
     };
 
     if (visible) {
@@ -942,7 +946,7 @@ export function KloudMeetToolbar({
       document.removeEventListener('touchstart', handleBodyClick, { capture: true });
       document.removeEventListener('pointerdown', handleBodyClick, { capture: true });
     };
-  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, isClientYInBottomNavZone]);
+  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, isClientYInBottomNavZone, isLandscape, hasScreenShare]);
 
   // LiveDoc iframe click toggles toolbar (desktop + mobile when in iframe).
   useEffect(() => {
@@ -2547,6 +2551,10 @@ export function KloudMeetToolbar({
             />
           </div>
         </div>
+      )}
+
+      {isMobile && hasScreenShare && !screenShareActive && activeView === 'shareScreen' && (
+        <ShareFullscreenButton hidden={!visible} />
       )}
 
       {showCornerStatus && (

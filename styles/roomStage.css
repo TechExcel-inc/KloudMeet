@@ -228,6 +228,93 @@
               .sky-meet-video-wrapper.has-screen-share.mirror-blocked {
                  visibility: hidden !important;
               }
+              /* 7. Phone watching a share (.kloud-mobile-meeting). Upright: the share as wide as the
+                    screen, people in a row under it. On its side: the share fills the screen and
+                    people sit in a column at the left when brought back (VideoConferenceComponent
+                    tucks them away on turning). A phone on its side is too wide for the narrow-
+                    window rules above, so these don't depend on width. */
+              .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-video-conference-inner {
+                height: 100% !important; /* 100vh is taller than what a phone browser shows */
+              }
+              .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-focus-layout {
+                padding: 0 !important;
+                gap: 0 !important;
+              }
+              .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-focus-layout > .lk-participant-tile {
+                flex: 1 1 auto !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                border-radius: 0 !important;
+              }
+              .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-carousel {
+                --screenshare-aside-tile: 88px;
+                padding: 8px !important;
+                gap: 8px !important;
+                scroll-padding: 8px; /* LiveKit snaps tiles to the edge, past the padding */
+              }
+              .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-carousel > .lk-participant-tile {
+                flex: none !important;
+                width: var(--screenshare-aside-tile) !important;
+                max-width: var(--screenshare-aside-tile) !important;
+                height: var(--screenshare-aside-tile) !important;
+              }
+              @media (orientation: portrait) {
+                /* Above the toolbar, as the gallery is */
+                .kloud-mobile-meeting .main-meeting-area.kloud-mobile-share-view {
+                  bottom: var(--kloud-mobile-toolbar-height, 80px) !important;
+                }
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-focus-layout {
+                  flex-direction: column !important;
+                }
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-carousel {
+                  order: 1;
+                  flex-direction: row !important;
+                  align-items: center !important;
+                  width: 100% !important;
+                  min-width: 0 !important;
+                  max-width: 100% !important;
+                  height: calc(var(--screenshare-aside-tile) + 16px) !important;
+                  min-height: calc(var(--screenshare-aside-tile) + 16px) !important;
+                  overflow-x: auto !important;
+                  overflow-y: hidden !important;
+                  touch-action: pan-x;
+                  border-right: none !important;
+                  border-bottom: none !important;
+                  border-top: 1px solid var(--km-stage-border) !important;
+                }
+              }
+              @media (orientation: landscape) {
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-focus-layout {
+                  flex-direction: row !important;
+                }
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .lk-carousel {
+                  order: -1;
+                  flex-direction: column !important;
+                  width: calc(var(--screenshare-aside-tile) + 16px + env(safe-area-inset-left, 0px)) !important;
+                  min-width: calc(var(--screenshare-aside-tile) + 16px + env(safe-area-inset-left, 0px)) !important;
+                  max-width: calc(var(--screenshare-aside-tile) + 16px + env(safe-area-inset-left, 0px)) !important;
+                  height: 100% !important;
+                  padding-left: calc(8px + env(safe-area-inset-left, 0px)) !important;
+                  overflow-x: hidden !important;
+                  overflow-y: auto !important;
+                  touch-action: pan-y;
+                  /* starts under the top-left recording dot */
+                  padding-top: 56px !important;
+                  scroll-padding-top: 56px;
+                  border-bottom: none !important;
+                  border-top: none !important;
+                  border-right: 1px solid var(--km-stage-border) !important;
+                }
+                /* The show / hide people tab sits half-way down, at the edge of the people column */
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share .webcam-collapse-toggle {
+                  top: 50% !important;
+                  transform: translateY(-50%) !important;
+                }
+                .kloud-mobile-meeting .sky-meet-video-wrapper.has-screen-share:not(.sidebar-collapsed) .webcam-collapse-toggle {
+                  left: calc(var(--screenshare-aside-tile, 88px) + 24px + env(safe-area-inset-left, 0px)) !important;
+                }
+              }
+
               /* .screenshare-overlay-badge moved to static block for simpler transitions */
 
 

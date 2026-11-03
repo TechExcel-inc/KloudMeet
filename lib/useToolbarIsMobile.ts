@@ -66,3 +66,20 @@ export function useToolbarIsMobile() {
 
   return isMobile;
 }
+
+/** Whether the screen is wider than it is tall: a phone turned on its side. */
+export function useIsLandscape() {
+  const [landscape, setLandscape] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(orientation: landscape)').matches : false,
+  );
+
+  useEffect(() => {
+    const query = window.matchMedia('(orientation: landscape)');
+    const update = () => setLandscape(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+
+  return landscape;
+}

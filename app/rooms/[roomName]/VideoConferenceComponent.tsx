@@ -52,6 +52,7 @@ import {
   postKloudShowFilePanelToIframe,
   postLivedocRoleToIframe,
   setLivedocOtherPresenter,
+  useIsLandscape,
   useToolbarIsMobile,
 } from '@/lib/useToolbarIsMobile';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
@@ -519,6 +520,14 @@ export function VideoConferenceComponent(props: {
       setIsWebcamSidebarCollapsed(true);
     }
   }, [isRemoteControlMode, hasScreenShare]);
+
+  // Phone watching a share: on its side the share gets the whole screen (the toggle at the left
+  // brings the people back); upright they show in a row under it
+  const isLandscape = useIsLandscape();
+  React.useEffect(() => {
+    if (!isToolbarMobile || !hasScreenShare) return;
+    setIsWebcamSidebarCollapsed(isLandscape);
+  }, [isToolbarMobile, hasScreenShare, isLandscape]);
 
   // 手机端检测：屏幕共享出现时，尝试自动 play 所有视频；如果被浏览器拒绝（微信等），显示「点击播放」按钮
   React.useEffect(() => {
@@ -3482,7 +3491,7 @@ export function VideoConferenceComponent(props: {
             ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
               ? ' kloud-mobile-webcam-view'
               : ''
-          }`}
+          }${isToolbarMobile && hasScreenShare ? ' kloud-mobile-share-view' : ''}`}
           style={{
             position: 'absolute',
             top: 0,
@@ -3814,7 +3823,8 @@ export function VideoConferenceComponent(props: {
                   isToolbarMobile
                     ? {
                       position: 'fixed',
-                      top: 'max(44px, env(safe-area-inset-top, 0px), 7vh)',
+                      // below the top-left recording dot, also with the phone on its side
+                      top: 'max(60px, calc(env(safe-area-inset-top, 0px) + 48px), 7vh)',
                       left: 'max(10px, env(safe-area-inset-left, 0px))',
                       right: 'auto',
                       transform: 'none',
