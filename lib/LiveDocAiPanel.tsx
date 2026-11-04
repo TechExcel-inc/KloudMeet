@@ -702,7 +702,16 @@ export function LiveDocAiPanel({
       label: t('liveDocAi.fromDevice'),
       onClick: () => fileInputRef.current?.click(),
     },
-    { key: 'space', icon: 'space', label: t('liveDocAi.fromLiveDocSpace'), onClick: () => openPicker('space') },
+    ...(state?.documents.companySpaceAllowed
+      ? [
+          {
+            key: 'space',
+            icon: 'space' as GlyphName,
+            label: t('liveDocAi.fromLiveDocSpace'),
+            onClick: () => openPicker('space'),
+          },
+        ]
+      : []),
     {
       key: 'whiteboard',
       icon: 'whiteboard',
