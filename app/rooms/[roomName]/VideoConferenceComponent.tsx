@@ -22,7 +22,7 @@ import {
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
-import dynamic from 'next/dynamic';
+import { useLiveDocBoardRelay } from '@/lib/livedoc/useLiveDocBoardRelay';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -163,9 +163,6 @@ import { isRecorderParticipant, visibleRemoteParticipants } from '@/lib/recorder
 import { shownRemoteParticipants, useParticipantActiveTick } from '@/lib/participantReady';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
-
-/** Excalidraw board stage: large and browser-only, so it loads when a board is first opened */
-const WhiteboardStage = dynamic(() => import('@/lib/whiteboard/WhiteboardStage'), { ssr: false });
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -1291,8 +1288,8 @@ export function VideoConferenceComponent(props: {
     setLivedocOtherPresenter(otherPresenterActive);
   }, [otherPresenterActive]);
 
-  /** Who may draw on an Excalidraw board: host, co-hosts, presenters (lib/whiteboard/protocol.ts) */
-  const whiteboardRoles = React.useMemo(
+  /** Who may draw on the LiveDoc stage's Excalidraw board: host, co-hosts, presenters (the board decides) */
+  const boardRoles = React.useMemo(
     () => ({
       hostIdentity,
       cohostIdentities,
@@ -1448,6 +1445,8 @@ export function VideoConferenceComponent(props: {
   });
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
+  // The Excalidraw board lives in the LiveDoc iframe; KloudMeet only carries its messages
+  useLiveDocBoardRelay(room, boardRoles, shouldMountLiveDoc);
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
   const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
@@ -3056,10 +3055,8 @@ export function VideoConferenceComponent(props: {
 
   useTileNameSync(room);
 
-  /** LiveDoc 当前文件是否为 Excalidraw 白板（来自 iframe 的 onkloudswitchfile.IsWhiteboard） */
+  /** LiveDoc 当前文件是否为会议白板（来自 iframe 的 onkloudswitchfile.IsWhiteboard） */
   const [isWhiteboardDoc, setIsWhiteboardDoc] = React.useState(false);
-  /** AttachmentID of the Excalidraw board on the LiveDoc stage (onkloudswitchfile.IsExcalidraw), else null */
-  const [excalidrawBoardId, setExcalidrawBoardId] = React.useState<number | null>(null);
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   React.useEffect(() => {
@@ -3071,10 +3068,8 @@ export function VideoConferenceComponent(props: {
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
       } else if (data.type === 'onkloudswitchfile') {
-        const file = (e.data as { data?: { IsWhiteboard?: unknown; IsExcalidraw?: unknown; AttachmentID?: unknown } }).data;
+        const file = (e.data as { data?: { IsWhiteboard?: unknown } }).data;
         setIsWhiteboardDoc(file?.IsWhiteboard === true);
-        const boardId = Number(file?.AttachmentID);
-        setExcalidrawBoardId(file?.IsExcalidraw === true && boardId > 0 ? boardId : null);
       } else if (data.type === 'onkloudloaded') {
         setShowWebcamSidebar(false);
       }
@@ -3583,15 +3578,6 @@ export function VideoConferenceComponent(props: {
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
                   livedocRole={livedocEmbedRole}
-                />
-              )}
-              {shouldMountLiveDoc && shouldDisplayLiveDoc && excalidrawBoardId !== null && (
-                <WhiteboardStage
-                  key={excalidrawBoardId}
-                  room={room}
-                  attachmentId={excalidrawBoardId}
-                  username={props.userChoices.username}
-                  roles={whiteboardRoles}
                 />
               )}
             </div>
