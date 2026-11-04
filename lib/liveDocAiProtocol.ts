@@ -57,6 +57,8 @@ export interface LiveDocAiState {
   documents: {
     items: LiveDocAiDocument[];
     currentItemId: number;
+    /** False or missing: this identity can't browse company spaces, so the panel doesn't offer them */
+    companySpaceAllowed?: boolean;
     upload: {
       active: boolean;
       percent: number;

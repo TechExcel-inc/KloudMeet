@@ -42,6 +42,8 @@ type Case = {
   live?: boolean;
   /** "From Space" picker open */
   picker?: boolean;
+  /** An anonymous identity: company spaces aren't offered */
+  guest?: boolean;
   summary?: 'items' | 'empty' | 'loading';
   connecting?: boolean;
 };
@@ -49,6 +51,8 @@ type Case = {
 const CASES: Case[] = [
   { id: 'empty', title: 'Documents · none yet', tab: 'file', docs: 0 },
   { id: 'docs', title: 'Documents · list', tab: 'file', docs: 6 },
+  { id: 'guest-empty', title: 'Documents · none yet, anonymous', tab: 'file', docs: 0, guest: true },
+  { id: 'guest-docs', title: 'Documents · list, anonymous', tab: 'file', docs: 6, guest: true },
   { id: 'picker', title: 'Documents · pick from Space', tab: 'file', docs: 2, picker: true },
   { id: 'design', title: 'Documents · with a design link', tab: 'file', docs: 2, design: true },
   { id: 'uploading', title: 'Documents · uploading', tab: 'file', docs: 3, uploading: true },
@@ -133,6 +137,7 @@ function makeState(c: Case): LiveDocAiState {
         isCurrent: i === 0,
       })),
       currentItemId: count ? 1 : 0,
+      companySpaceAllowed: !c.guest,
       upload: { active: Boolean(c.uploading), percent: 45, fileName: 'Board deck.pptx' },
       annotation: { enabled: true, canToggle: true },
     },
