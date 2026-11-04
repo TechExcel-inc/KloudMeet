@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fitGrid, tileHue } from './tileLayout';
+import { fitGrid, phoneGridColumns, tileHue } from './tileLayout';
 
 describe('fitGrid', () => {
   it('keeps every tile 16:9', () => {
@@ -39,5 +39,36 @@ describe('fitGrid', () => {
 describe('tileHue', () => {
   it('is stable for the same person', () => {
     expect(tileHue('Angela')).toBe(tileHue('Angela'));
+  });
+});
+
+describe('phoneGridColumns', () => {
+  // An upright phone's gallery (360 × 812 screen, less the toolbar and padding) and the same phone on its side
+  const upright = (n: number) => phoneGridColumns(n, 344, 660, 8);
+  const sideways = (n: number) => phoneGridColumns(n, 780, 300, 8);
+
+  it('stacks two or three people on an upright phone', () => {
+    expect(upright(1)).toBe(1);
+    expect(upright(2)).toBe(1);
+    expect(upright(3)).toBe(1);
+  });
+
+  it('uses two columns for 4 to 8 people on an upright phone, not thin strips', () => {
+    for (const n of [4, 5, 6, 7, 8]) expect(upright(n)).toBe(2);
+  });
+
+  it('uses more columns for a big meeting, at most 4', () => {
+    expect(upright(12)).toBe(3);
+    for (const n of [9, 12, 16, 17]) expect(upright(n)).toBeLessThanOrEqual(4);
+    expect(upright(16)).toBeGreaterThanOrEqual(3);
+  });
+
+  it('puts people side by side on a phone turned sideways', () => {
+    expect(sideways(2)).toBe(2);
+    expect(sideways(5)).toBe(3);
+  });
+
+  it('copes with an empty box', () => {
+    expect(phoneGridColumns(5, 0, 0, 8)).toBe(1);
   });
 });

@@ -22,6 +22,7 @@ import {
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
+import dynamic from 'next/dynamic';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -52,6 +53,7 @@ import {
   postKloudShowFilePanelToIframe,
   postLivedocRoleToIframe,
   setLivedocOtherPresenter,
+  useIsLandscape,
   useToolbarIsMobile,
 } from '@/lib/useToolbarIsMobile';
 import { unlockMobileRoomAudio } from '@/lib/mobileAudioUnlock';
@@ -111,6 +113,7 @@ import {
 import { authHeaders } from '@/lib/kloudSession';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
+
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
@@ -135,6 +138,7 @@ import {
   LIVEKIT_RECONNECT_DELAYS_MS,
   MAX_LOCK_TIMEOUT_MS,
   SCREEN_SHARE_ENCODING,
+  SCREEN_SHARE_SIMULCAST_LAYERS,
   screenShareCaptureOptions,
 } from './roomConstants';
 import { MeetingReadyModal, RecordConsentModal } from './roomModals';
@@ -156,8 +160,12 @@ import { useMeetingConnection } from './useMeetingConnection';
 import { useLiveDocSession } from './useLiveDocSession';
 import { useMeetingChat } from './useMeetingChat';
 import { isRecorderParticipant, visibleRemoteParticipants } from '@/lib/recorderParticipant';
+import { shownRemoteParticipants, useParticipantActiveTick } from '@/lib/participantReady';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
+
+/** Excalidraw board stage: large and browser-only, so it loads when a board is first opened */
+const WhiteboardStage = dynamic(() => import('@/lib/whiteboard/WhiteboardStage'), { ssr: false });
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -454,6 +462,7 @@ export function VideoConferenceComponent(props: {
       red: !e2eeEnabled,
       videoCodec,
       screenShareEncoding: SCREEN_SHARE_ENCODING,
+      screenShareSimulcastLayers: SCREEN_SHARE_SIMULCAST_LAYERS,
     };
     return {
       videoCaptureDefaults: videoCaptureDefaults,
@@ -462,7 +471,9 @@ export function VideoConferenceComponent(props: {
         deviceId: normalizeCaptureDeviceId(props.userChoices.audioDeviceId),
       },
       audioOutput: { deviceId: loadAudioOutputDeviceId() },
-      adaptiveStream: true,
+      // 电脑上按屏幕实际像素选层：Retina / 缩放屏上，共享画面不会因为按 1 倍像素算而降到半分辨率那一层。
+      // 摄像头也一样，高分屏上更常拿 720p 那层。手机仍用 SDK 默认（最多 2 倍），免得 3 倍屏多耗流量。
+      adaptiveStream: isMobileClient ? true : { pixelDensity: 'screen' },
       dynacast: true,
       // 手机切后台常见 pagehide/freeze；不断连，靠现有 visibility 恢复音频
       disconnectOnPageLeave: !isMobileClient,
@@ -514,6 +525,14 @@ export function VideoConferenceComponent(props: {
       setIsWebcamSidebarCollapsed(true);
     }
   }, [isRemoteControlMode, hasScreenShare]);
+
+  // Phone watching a share: on its side the share gets the whole screen (the toggle at the left
+  // brings the people back); upright they show in a row under it
+  const isLandscape = useIsLandscape();
+  React.useEffect(() => {
+    if (!isToolbarMobile || !hasScreenShare) return;
+    setIsWebcamSidebarCollapsed(isLandscape);
+  }, [isToolbarMobile, hasScreenShare, isLandscape]);
 
   // 手机端检测：屏幕共享出现时，尝试自动 play 所有视频；如果被浏览器拒绝（微信等），显示「点击播放」按钮
   React.useEffect(() => {
@@ -1272,6 +1291,18 @@ export function VideoConferenceComponent(props: {
     setLivedocOtherPresenter(otherPresenterActive);
   }, [otherPresenterActive]);
 
+  /** Who may draw on an Excalidraw board: host, co-hosts, presenters (lib/whiteboard/protocol.ts) */
+  const whiteboardRoles = React.useMemo(
+    () => ({
+      hostIdentity,
+      cohostIdentities,
+      presenterIdentities: autoPresenterIdentity
+        ? [...copresenterIdentities, autoPresenterIdentity]
+        : copresenterIdentities,
+    }),
+    [hostIdentity, cohostIdentities, copresenterIdentities, autoPresenterIdentity],
+  );
+
   const localIdentity = room.localParticipant.identity;
   const isLocalMicRestricted =
     !isLocalControlOperator &&
@@ -1420,6 +1451,8 @@ export function VideoConferenceComponent(props: {
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
   const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
+  // Someone just joining shows in the sidebar and counts once they can hear the room
+  useParticipantActiveTick(room);
 
   React.useEffect(() => {
     const onConnected = () => setLivekitConnected(true);
@@ -1471,6 +1504,7 @@ export function VideoConferenceComponent(props: {
       you: t('toolbar.you'),
       minimize: t('meeting.documentPipMinimize'),
       restore: t('meeting.documentPipRestore'),
+      restoreLocked: t('meeting.documentPipRestoreLocked'),
       shareBadge: t('meeting.documentPipShareBadge'),
       presentingSelf: t('meeting.documentPipPresentingSelf'),
       shareScreen: t('toolbar.shareScreen'),
@@ -3024,6 +3058,8 @@ export function VideoConferenceComponent(props: {
 
   /** LiveDoc 当前文件是否为 Excalidraw 白板（来自 iframe 的 onkloudswitchfile.IsWhiteboard） */
   const [isWhiteboardDoc, setIsWhiteboardDoc] = React.useState(false);
+  /** AttachmentID of the Excalidraw board on the LiveDoc stage (onkloudswitchfile.IsExcalidraw), else null */
+  const [excalidrawBoardId, setExcalidrawBoardId] = React.useState<number | null>(null);
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   React.useEffect(() => {
@@ -3035,8 +3071,10 @@ export function VideoConferenceComponent(props: {
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
       } else if (data.type === 'onkloudswitchfile') {
-        const file = (e.data as { data?: { IsWhiteboard?: unknown } }).data;
+        const file = (e.data as { data?: { IsWhiteboard?: unknown; IsExcalidraw?: unknown; AttachmentID?: unknown } }).data;
         setIsWhiteboardDoc(file?.IsWhiteboard === true);
+        const boardId = Number(file?.AttachmentID);
+        setExcalidrawBoardId(file?.IsExcalidraw === true && boardId > 0 ? boardId : null);
       } else if (data.type === 'onkloudloaded') {
         setShowWebcamSidebar(false);
       }
@@ -3475,7 +3513,7 @@ export function VideoConferenceComponent(props: {
             ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
               ? ' kloud-mobile-webcam-view'
               : ''
-          }`}
+          }${isToolbarMobile && hasScreenShare ? ' kloud-mobile-share-view' : ''}`}
           style={{
             position: 'absolute',
             top: 0,
@@ -3547,12 +3585,21 @@ export function VideoConferenceComponent(props: {
                   livedocRole={livedocEmbedRole}
                 />
               )}
+              {shouldMountLiveDoc && shouldDisplayLiveDoc && excalidrawBoardId !== null && (
+                <WhiteboardStage
+                  key={excalidrawBoardId}
+                  room={room}
+                  attachmentId={excalidrawBoardId}
+                  username={props.userChoices.username}
+                  roles={whiteboardRoles}
+                />
+              )}
             </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
               {showWebcamSidebar && (() => {
                 const allP = [
                   { id: 'local' as string, name: props.userChoices.username || 'You', participant: room.localParticipant },
-                  ...visibleRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
+                  ...shownRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
                     id: p.identity,
                     name: p.name || p.identity || '??',
                     participant: p as any,
@@ -3807,7 +3854,8 @@ export function VideoConferenceComponent(props: {
                   isToolbarMobile
                     ? {
                       position: 'fixed',
-                      top: 'max(44px, env(safe-area-inset-top, 0px), 7vh)',
+                      // below the top-left recording dot, also with the phone on its side
+                      top: 'max(60px, calc(env(safe-area-inset-top, 0px) + 48px), 7vh)',
                       left: 'max(10px, env(safe-area-inset-left, 0px))',
                       right: 'auto',
                       transform: 'none',
@@ -4185,7 +4233,7 @@ export function VideoConferenceComponent(props: {
         {/* --- MODALS --- */}
         <MeetingPipSuggestPrompt
           visible={showPipSuggest}
-          attendeeCount={1 + visibleRemoteParticipants(room.remoteParticipants.values()).length}
+          attendeeCount={1 + shownRemoteParticipants(room.remoteParticipants.values()).length}
           onEnable={() => {
             void documentPip.open({ sticky: true });
           }}

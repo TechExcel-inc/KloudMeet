@@ -1486,6 +1486,26 @@
     height: 60px;
     padding: 0 8px 0 4px;
   }
+  /* Every button stays at its full size; the logo gives way, so nothing sits on top of it */
+  .toolbarLeft {
+    gap: 0;
+  }
+  .toolbarRight {
+    flex: none;
+    gap: 0;
+  }
+  .logoLink {
+    flex: 0 1 120px;
+    min-width: 0;
+  }
+  .logoLink img {
+    width: 100%;
+    height: auto;
+  }
+  .pillBtn {
+    gap: 4px;
+    padding: 0 6px;
+  }
   .logoText {
     display: none;
   }

@@ -28,6 +28,7 @@ const labels = {
   you: 'You',
   minimize: 'Minimize',
   restore: 'Restore',
+  restoreLocked: "Stays small while you're in the meeting's webcam view",
   shareBadge: 'Sharing screen',
   presentingSelf: 'Presenting',
   shareScreen: 'Share screen',

@@ -6,6 +6,7 @@ import { getInitials } from './getInitials';
 import { ParticipantAttendeeRowMoreMenu } from './ParticipantRoleMenu';
 import type { ChatMsg, ChatUploadState } from './chatProtocol';
 import { isRecorderParticipant } from './recorderParticipant';
+import { isParticipantReady, useParticipantActiveTick } from './participantReady';
 
 export type { ChatMsg } from './chatProtocol';
 
@@ -344,9 +345,12 @@ export function AttendeePanel({
   const { t } = useI18n();
   const room = useRoomContext();
   const allParticipants = useParticipants();
+  // Someone just joining is listed once they can hear the room
+  const activeTick = useParticipantActiveTick(room);
   const participants = useMemo(
-    () => allParticipants.filter((p) => !isRecorderParticipant(p)),
-    [allParticipants],
+    () => allParticipants.filter((p) => !isRecorderParticipant(p) && isParticipantReady(p)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTick: isActive lives on the participant
+    [allParticipants, activeTick],
   );
   const [searchQuery, setSearchQuery] = useState('');
   const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);

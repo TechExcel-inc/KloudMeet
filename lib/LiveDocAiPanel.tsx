@@ -556,6 +556,8 @@ export function LiveDocAiPanel({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const fileMenuBtnRefs = React.useRef<Map<number, HTMLButtonElement>>(new Map());
   const uploadMenuBtnRef = React.useRef<HTMLButtonElement>(null);
+  /** More, in the empty state: opens the same menu as Add, with only the sources not shown as buttons */
+  const emptyMoreBtnRef = React.useRef<HTMLButtonElement>(null);
   const summaryMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const transcriptMenuBtnRef = React.useRef<HTMLButtonElement>(null);
   const activeFileMenuBtnRef = React.useRef<HTMLButtonElement | null>(null);
@@ -692,28 +694,45 @@ export function LiveDocAiPanel({
   const captionGroups = groupBySpeaker(filteredCaptions);
   // From every caption, not just the search hits, so a search doesn't recolour people
   const speakerToneByName = speakerTones(meetingCaptions.items);
-  const addSources: Array<{ key: string; icon: GlyphName; label: string; onClick: () => void }> = [
+  /** `more`: listed under More in the empty state; the Add menu lists every source */
+  const addSources: Array<{ key: string; icon: GlyphName; label: string; onClick: () => void; more?: boolean }> = [
     {
       key: 'local',
       icon: 'upload',
-      label: t('liveDocAi.uploadFromLocal'),
+      label: t('liveDocAi.fromDevice'),
       onClick: () => fileInputRef.current?.click(),
     },
-    { key: 'space', icon: 'space', label: t('liveDocAi.uploadFromSpace'), onClick: () => openPicker('space') },
-    {
-      key: 'files',
-      icon: 'files',
-      label: t('liveDocAi.uploadFromFiles'),
-      onClick: () => openPicker('favorite'),
-    },
+    { key: 'space', icon: 'space', label: t('liveDocAi.fromLiveDocSpace'), onClick: () => openPicker('space') },
     {
       key: 'whiteboard',
       icon: 'whiteboard',
-      label: t('liveDocAi.newWhiteboard'),
+      label: t('liveDocAi.whiteBoard'),
       onClick: () => runAction('document.addBlank'),
     },
+    {
+      key: 'files',
+      icon: 'files',
+      label: t('liveDocAi.fromFiles'),
+      onClick: () => openPicker('favorite'),
+      more: true,
+    },
+    {
+      key: 'excalidraw',
+      icon: 'whiteboard',
+      label: t('liveDocAi.excalidrawBoard'),
+      onClick: () => runAction('document.addExcalidraw'),
+      more: true,
+    },
     ...(onAddDesignLink
-      ? [{ key: 'link', icon: 'link' as GlyphName, label: t('liveDocAi.linkSource'), onClick: onAddDesignLink }]
+      ? [
+          {
+            key: 'link',
+            icon: 'link' as GlyphName,
+            label: t('liveDocAi.linkSource'),
+            onClick: onAddDesignLink,
+            more: true,
+          },
+        ]
       : []),
   ];
 
@@ -1036,22 +1055,35 @@ export function LiveDocAiPanel({
                       </span>
                       <span className={styles.emptyTitle}>{t('liveDocAi.noDocuments')}</span>
                       <span className={styles.emptyHint}>{t('liveDocAi.emptyHint')}</span>
-                      <div className={styles.sourceGrid}>
-                        {addSources.map((source) => (
+                      <div className={styles.sourceRow}>
+                        {addSources
+                          .filter((source) => !source.more)
+                          .map((source) => (
+                            <button
+                              key={source.key}
+                              type="button"
+                              className={`${styles.sourceButton} ${source.key === 'whiteboard' ? styles.sourceButtonPrimary : ''}`}
+                              disabled={busy}
+                              onClick={source.onClick}
+                            >
+                              <Glyph name={source.icon} size={16} />
+                              <span>{source.label}</span>
+                            </button>
+                          ))}
+                        <div className={styles.menuAnchor}>
                           <button
-                            key={source.key}
+                            ref={emptyMoreBtnRef}
                             type="button"
-                            className={styles.sourceCard}
+                            className={styles.sourceButton}
                             disabled={busy}
-                            onClick={source.onClick}
-                            title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
+                            aria-expanded={uploadMenuOpen}
+                            aria-haspopup="menu"
+                            onClick={() => setUploadMenuOpen((value) => !value)}
                           >
-                            <span className={styles.sourceIcon}>
-                              <Glyph name={source.icon} size={18} />
-                            </span>
-                            <span>{source.label}</span>
+                            <Glyph name="more" size={16} />
+                            <span>{t('liveDocAi.more')}</span>
                           </button>
-                        ))}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1426,11 +1458,11 @@ export function LiveDocAiPanel({
 
       {uploadMenuOpen && (
         <FloatingMenu
-          anchorRef={uploadMenuBtnRef}
+          anchorRef={documents.length > 0 ? uploadMenuBtnRef : emptyMoreBtnRef}
           className={styles.sourceMenu}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          {addSources.map((source) => (
+          {addSources.filter((source) => documents.length > 0 || source.more).map((source) => (
             <button
               key={source.key}
               type="button"

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { EgressClient } from 'livekit-server-sdk';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import { onRecordingReady } from '@/lib/billing/limits';
@@ -11,21 +12,9 @@ const API_SECRET = process.env.LIVEKIT_API_SECRET || '';
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) {
+    const member = await getSessionTeamMember(request);
+    if (!member) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const token = authHeader.split(' ')[1];
-    
-    // Fetch session
-    const session = await prisma.session.findUnique({
-      where: { token },
-      include: { teamMember: true }
-    });
-
-    if (!session || !session.teamMember) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
@@ -37,7 +26,7 @@ export async function GET(request: NextRequest) {
     // Find processing recordings for this user
     const processingRecordings = await prisma.recording.findMany({
       where: {
-        teamMemberId: session.teamMember.id,
+        teamMemberId: member.id,
         status: { in: ['PROCESSING', 'UPLOADING'] }
       }
     });
@@ -99,7 +88,7 @@ export async function GET(request: NextRequest) {
 
     // LiveDoc Full: screen sections whose egress has ended
     const open = await prisma.recordingSection.findMany({
-      where: { status: 'PROCESSING', recording: { teamMemberId: session.teamMember.id } },
+      where: { status: 'PROCESSING', recording: { teamMemberId: member.id } },
       select: { recordingId: true },
       distinct: ['recordingId'],
     });
