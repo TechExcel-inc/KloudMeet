@@ -70,6 +70,16 @@ function rememberClosedShape(roomName: string, win: Window): void {
   if (h > 0) writeSessionFlag(pipClosedSlimKey(roomName), h <= PIP_MINIMIZED_H + 8);
 }
 
+/** How long after SmartCam's window opens the focus it takes is not read as leaving the meeting */
+const PIP_FOCUS_GRACE_MS = 1000;
+/** How often to ask whether the person is on the meeting, besides focus events */
+const ON_MEETING_POLL_MS = 500;
+
+/** The meeting's page shows and has the focus (a frame in it, such as LiveDoc, counts too) */
+function lookingAtMeeting(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
+
 function pipDismissKey(roomName: string): string {
   return `skymeet:doc-pip:${roomName}:dismissed`;
 }
@@ -270,8 +280,10 @@ export function useMeetingDocumentPip({
   const onMuteRef = useRef(onMuteParticipant);
   const onDisableVideoRef = useRef(onDisableParticipantVideo);
   const roomRef = useRef(room);
+  /** What SmartCam shows now; the person's own choice is the session flag (pipMiniKey) */
   const minimizedRef = useRef(false);
   const collapseSignalRef = useRef(0);
+  const expandSignalRef = useRef(0);
   const openedInMeetingRef = useRef(false);
   /** Opened by Chrome's automatic picture-in-picture (switching tabs), not by a click */
   const autoOpenedRef = useRef(false);
@@ -281,6 +293,14 @@ export function useMeetingDocumentPip({
   const recordingRef = useRef(isRecording);
   const keepMinimizedRef = useRef(keepMinimized);
   keepMinimizedRef.current = keepMinimized;
+  // Looking at the meeting: its page shows and has the focus. Over in WeChat, VS Code or another
+  // tab, SmartCam goes back to the shape the person picked; a click in SmartCam changes neither.
+  const [onMeeting, setOnMeeting] = useState(true);
+  const lockMinimized = keepMinimized && onMeeting;
+  const lockMinimizedRef = useRef(lockMinimized);
+  lockMinimizedRef.current = lockMinimized;
+  /** Until then, focus leaving the meeting is SmartCam's window opening, not the person going */
+  const focusGraceUntilRef = useRef(0);
   meetingTitleRef.current = meetingTitle;
   startedAtRef.current = startedAtMs;
   recordingRef.current = isRecording;
@@ -306,6 +326,7 @@ export function useMeetingDocumentPip({
   const closePip = useRef(() => {
     const win = pipWindowRef.current;
     stickyRef.current = false;
+    inPipRef.current = false;
     setIsOpen(false);
     closingFromApiRef.current = true;
     unbindClicksRef.current?.();
@@ -389,11 +410,13 @@ export function useMeetingDocumentPip({
               startedAtMs={startedAtRef.current ?? null}
               isRecording={recordingRef.current}
               initialMinimized={minimizedRef.current}
-              onMinimizedChange={(next) => {
+              onMinimizedChange={(next, byUser) => {
                 minimizedRef.current = next;
-                writeSessionFlag(pipMiniKey(roomRef.current.name), next);
+                if (byUser) writeSessionFlag(pipMiniKey(roomRef.current.name), next);
               }}
+              minimizeLocked={lockMinimizedRef.current}
               collapseSignal={collapseSignalRef.current}
+              expandSignal={expandSignalRef.current}
               onToggleMic={() => onToggleMicRef.current()}
               onToggleCam={() => onToggleCamRef.current()}
               onToggleShare={() => {
@@ -455,18 +478,19 @@ export function useMeetingDocumentPip({
 
     const roomName = roomRef.current.name;
     // First time in a meeting it opens with people showing; after that it keeps the
-    // shape the person last left it in (full or the slim pill). In the webcam view it always
-    // opens as the pill, since the room already shows everyone.
-    if (opts?.minimized !== undefined) {
-      minimizedRef.current = opts.minimized;
-    } else if (keepMinimizedRef.current) {
-      minimizedRef.current = true;
-    } else {
-      minimizedRef.current = sessionFlag(pipMiniKey(roomName)) === true;
-    }
+    // shape the person last left it in (full or the slim pill). Opened while looking at the
+    // meeting in the webcam view it is the pill, since the room already shows everyone; that
+    // isn't their choice, so it isn't kept. Chrome's automatic picture-in-picture comes as the
+    // tab goes, so it is never that.
+    const locked = !opts?.auto && keepMinimizedRef.current && lookingAtMeeting();
+    minimizedRef.current =
+      locked || (opts?.minimized ?? sessionFlag(pipMiniKey(roomName)) === true);
+    if (locked) setOnMeeting(true);
     const firstOpen = sessionFlag(pipOpenedKey(roomName)) !== true && !openedInMeetingRef.current;
 
     openingRef.current = true;
+    // Chrome hands the focus to the window it opens: that isn't the person leaving the meeting
+    focusGraceUntilRef.current = performance.now() + PIP_FOCUS_GRACE_MS;
     try {
       // Chrome 用 requestWindow 的宽高当位置缓存键，变了就丢；moveTo 禁用，打开后 resizeTo 也常无效。
       // 本场第一次：按展开（或上次缩小）的尺寸打开。之后不再传宽高，让 Chrome 还原上次关闭时的位置和大小。
@@ -504,10 +528,11 @@ export function useMeetingDocumentPip({
       }
 
       pipWindowRef.current = pipWindow;
+      focusGraceUntilRef.current = performance.now() + PIP_FOCUS_GRACE_MS;
       openedInMeetingRef.current = true;
       autoOpenedRef.current = Boolean(opts?.auto);
       writeSessionFlag(pipOpenedKey(roomName), true);
-      writeSessionFlag(pipMiniKey(roomName), minimizedRef.current);
+      if (!locked) writeSessionFlag(pipMiniKey(roomName), minimizedRef.current);
       copyDocumentStyles(document, pipWindow.document);
 
       pipWindow.document.documentElement.setAttribute('data-lk-theme', 'default');
@@ -553,6 +578,7 @@ export function useMeetingDocumentPip({
         const root = rootRef.current;
         rootRef.current = null;
         pipWindowRef.current = null;
+        inPipRef.current = false;
         if (root) {
           try {
             root.unmount();
@@ -569,6 +595,11 @@ export function useMeetingDocumentPip({
         setIsOpen(false);
         closingFromApiRef.current = false;
       });
+      // From SmartCam over to another app: no longer on the meeting. One listener, though the
+      // desktop app opens the same window again and again.
+      pipWindow.addEventListener('blur', onPipBlur);
+      pipWindow.addEventListener('focus', onPipEnter);
+      pipWindow.addEventListener('pointerdown', onPipEnter, true);
       setIsOpen(true);
       return true;
     } catch {
@@ -585,20 +616,100 @@ export function useMeetingDocumentPip({
     }
   }, [micEnabled, camEnabled, shareActive, hasScreenShare, labels, localName, room, mediaRestrictions, roleActions, i18n, meetingTitle, startedAtMs, isRecording, renderPanel]);
 
-  // Switching to the webcam view folds an open SmartCam; the person can still expand it.
-  // Reopening it later brings back whatever shape and place it was last left in.
+  // Whether the person is on the meeting. Focus moving into SmartCam blurs this window first, so
+  // look once it has landed; while it is in SmartCam nothing changes, so a click there neither
+  // locks the pill (when away) nor frees it (when on the meeting).
+  const checkOnMeetingRef = useRef(() => {});
+  // In SmartCam's window: kept by hand from its own events, since what Chrome reports for the
+  // picture-in-picture window's focus isn't reliable
+  const inPipRef = useRef(false);
+  const onPipEnter = useRef(() => {
+    inPipRef.current = true;
+  }).current;
+  const onPipBlur = useRef(() => {
+    inPipRef.current = false;
+    checkOnMeetingRef.current();
+  }).current;
   useEffect(() => {
-    if (!keepMinimized) return;
+    if (!enabled) return;
+    let timer = 0;
+    const look = () => {
+      const visible = document.visibilityState === 'visible';
+      // SmartCam's window just opened and took the focus: look again once that has settled
+      const grace = focusGraceUntilRef.current - performance.now();
+      if (visible && grace > 0) {
+        timer = window.setTimeout(look, grace);
+        return;
+      }
+      const pip = pipWindowRef.current;
+      try {
+        if (visible && pip && !pip.closed && (inPipRef.current || pip.document.hasFocus())) return;
+      } catch {
+        // a window that just closed
+      }
+      setOnMeeting(lookingAtMeeting());
+    };
+    const check = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(look, 50);
+    };
+    // Focus or a press back in the meeting: out of SmartCam
+    const onMainEnter = () => {
+      inPipRef.current = false;
+      check();
+    };
+    checkOnMeetingRef.current = check;
+    check();
+    window.addEventListener('focus', onMainEnter);
+    window.addEventListener('blur', check);
+    document.addEventListener('visibilitychange', check);
+    document.addEventListener('pointerdown', onMainEnter, true);
+    // Coming back by a click in a frame of the page (LiveDoc) tells only that frame, not this
+    // window, so also ask now and then; hasFocus() counts a focused frame.
+    const poll = window.setInterval(check, ON_MEETING_POLL_MS);
+    return () => {
+      window.clearTimeout(timer);
+      window.clearInterval(poll);
+      checkOnMeetingRef.current = () => {};
+      window.removeEventListener('focus', onMainEnter);
+      window.removeEventListener('blur', check);
+      document.removeEventListener('visibilitychange', check);
+      document.removeEventListener('pointerdown', onMainEnter, true);
+    };
+  }, [enabled]);
+
+  // In the webcam view, while the person is on the meeting, the pill can't be expanded.
+  // Switching to the webcam view folds an expanded SmartCam; coming back from another app or tab
+  // leaves it as it is (still expanded if it was, and it can be minimized from there). Away from
+  // the meeting, or in another view, it is the shape they picked: the desktop app sizes its
+  // window back; the browser's only resizes on a click inside it, so there the expand button
+  // simply works again.
+  const lastKeepMinimizedRef = useRef(keepMinimized);
+  useEffect(() => {
+    const viewSwitched = lastKeepMinimizedRef.current !== keepMinimized;
+    lastKeepMinimizedRef.current = keepMinimized;
     const win = pipWindowRef.current;
     if (!win || win.closed) return;
+    const desktop = getDesktopMiniWindow();
+    if (!lockMinimized) {
+      if (desktop && minimizedRef.current && sessionFlag(pipMiniKey(roomRef.current.name)) !== true) {
+        expandSignalRef.current += 1;
+      }
+      renderPanel();
+      return;
+    }
+    if (!viewSwitched) {
+      renderPanel();
+      return;
+    }
     minimizedRef.current = true;
-    writeSessionFlag(pipMiniKey(roomRef.current.name), true);
     // Chrome only resizes its PiP window on a click inside it (e.g. stopping the share from
-    // SmartCam): then it folds in place. A click in the meeting instead lets us open the window
-    // again at the pill's size; try it before anything uses the click up. With no click at all
-    // (Chrome's own "Stop sharing" bar) the panel shrinks the window on the next click in it.
+    // SmartCam): then it folds in place. A click in the meeting that switched the view lets us
+    // open the window again at the pill's size; do it before anything uses the click up. With
+    // no click at all (Chrome's own "Stop sharing" bar) the panel shrinks the window on the
+    // next click in it.
     if (
-      !getDesktopMiniWindow() &&
+      !desktop &&
       win.innerHeight > PIP_MINIMIZED_H + 8 &&
       !win.navigator.userActivation?.isActive &&
       navigator.userActivation?.isActive
@@ -610,7 +721,7 @@ export function useMeetingDocumentPip({
     }
     collapseSignalRef.current += 1;
     renderPanel();
-  }, [keepMinimized, renderPanel, closePip, openPip]);
+  }, [lockMinimized, keepMinimized, renderPanel, closePip, openPip]);
 
   useEffect(() => {
     if (!enabled || !isMiniWindowEligible()) {

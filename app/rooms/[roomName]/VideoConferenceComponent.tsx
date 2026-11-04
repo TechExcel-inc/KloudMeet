@@ -1487,6 +1487,7 @@ export function VideoConferenceComponent(props: {
       you: t('toolbar.you'),
       minimize: t('meeting.documentPipMinimize'),
       restore: t('meeting.documentPipRestore'),
+      restoreLocked: t('meeting.documentPipRestoreLocked'),
       shareBadge: t('meeting.documentPipShareBadge'),
       presentingSelf: t('meeting.documentPipPresentingSelf'),
       shareScreen: t('toolbar.shareScreen'),

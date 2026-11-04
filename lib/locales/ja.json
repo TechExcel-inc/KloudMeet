@@ -303,6 +303,7 @@
   "meeting.documentPipTitle": "会議中",
   "meeting.documentPipMinimize": "最小化",
   "meeting.documentPipRestore": "元に戻す",
+  "meeting.documentPipRestoreLocked": "会議のカメラ表示を見ている間は小さいままです",
   "meeting.documentPipSharing": "{name}が共有中",
   "meeting.documentPipShareBadge": "共有",
   "meeting.documentPipPresentingSelf": "共有中",

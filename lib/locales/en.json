@@ -311,6 +311,7 @@
   "meeting.documentPipTitle": "In meeting",
   "meeting.documentPipMinimize": "Minimize",
   "meeting.documentPipRestore": "Restore",
+  "meeting.documentPipRestoreLocked": "Stays small while you're in the meeting's webcam view",
   "meeting.documentPipSharing": "{name} is sharing",
   "meeting.documentPipShareBadge": "Sharing",
   "meeting.documentPipPresentingSelf": "Presenting",

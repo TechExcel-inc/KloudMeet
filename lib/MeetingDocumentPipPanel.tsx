@@ -21,6 +21,8 @@ export interface MeetingDocumentPipLabels {
   you: string;
   minimize: string;
   restore: string;
+  /** The pill's expand button while it can't expand (on the meeting, in the webcam view) */
+  restoreLocked: string;
   shareBadge: string;
   /** Shown instead of your own screen: the mini window sits on that screen and would film itself */
   presentingSelf: string;
@@ -59,9 +61,14 @@ export interface MeetingDocumentPipPanelProps {
   onLeave: () => void;
   onEndForAll?: () => void;
   initialMinimized?: boolean;
-  onMinimizedChange?: (minimized: boolean) => void;
+  /** byUser: the person clicked minimize / expand, so it is their choice to keep */
+  onMinimizedChange?: (minimized: boolean, byUser: boolean) => void;
+  /** On the meeting in the webcam view: the pill stays folded, its expand buttons are off */
+  minimizeLocked?: boolean;
   /** Each change folds an expanded panel into the pill (the room switched to the webcam view) */
   collapseSignal?: number;
+  /** Desktop app: each change expands the pill again (the person left the meeting's webcam view) */
+  expandSignal?: number;
   /** Desktop app only: its frameless window needs its own close button */
   onClose?: () => void;
   /** Header: meeting name (instant meetings have none), start time, recording */
@@ -381,7 +388,9 @@ export function MeetingDocumentPipPanel({
   onClose,
   initialMinimized = false,
   onMinimizedChange,
+  minimizeLocked = false,
   collapseSignal = 0,
+  expandSignal = 0,
   meetingTitle,
   startedAtMs = null,
   isRecording = false,
@@ -396,6 +405,9 @@ export function MeetingDocumentPipPanel({
   }, [minimized, startedAtMs, pipWindow]);
   const [exitMenuOpen, setExitMenuOpen] = React.useState(false);
   const [miniControls, setMiniControls] = React.useState(false);
+  // On the meeting in the webcam view the room already shows everyone, so the pill keeps its
+  // controls out instead of the faces; away from it, or in another view, the faces come back
+  const showMiniControls = miniControls || minimizeLocked;
   const [copied, setCopied] = React.useState(false);
   const copiedTimerRef = React.useRef<number | null>(null);
   const leaveWrapRef = React.useRef<HTMLDivElement>(null);
@@ -591,16 +603,17 @@ export function MeetingDocumentPipPanel({
   );
 
   const handleMinimize = () => {
+    if (minimized && minimizeLocked) return;
     setPreviewId(null);
     if (minimized) {
       resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
       setMinimized(false);
-      onMinimizedChange?.(false);
+      onMinimizedChange?.(false, true);
       return;
     }
     resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
     setMinimized(true);
-    onMinimizedChange?.(true);
+    onMinimizedChange?.(true, true);
   };
 
   const lastCollapseSignalRef = React.useRef(collapseSignal);
@@ -611,8 +624,19 @@ export function MeetingDocumentPipPanel({
     setPreviewId(null);
     resizePip(pipWindow, PIP_EXPANDED_W, PIP_MINIMIZED_H);
     setMinimized(true);
-    onMinimizedChange?.(true);
+    onMinimizedChange?.(true, false);
   }, [collapseSignal, minimized, pipWindow, onMinimizedChange]);
+
+  const lastExpandSignalRef = React.useRef(expandSignal);
+  React.useEffect(() => {
+    if (expandSignal === lastExpandSignalRef.current) return;
+    lastExpandSignalRef.current = expandSignal;
+    if (!minimized) return;
+    setPreviewId(null);
+    resizePip(pipWindow, PIP_EXPANDED_W, PIP_EXPANDED_H);
+    setMinimized(false);
+    onMinimizedChange?.(false, false);
+  }, [expandSignal, minimized, pipWindow, onMinimizedChange]);
 
   // Folded without a click to resize on (e.g. the share stopped from Chrome's own bar): the
   // window is still tall, so the next click in it brings it down to the pill. It runs after the
@@ -903,7 +927,7 @@ export function MeetingDocumentPipPanel({
             </div>
           ) : null}
           <div className={styles.pill}>
-            {miniControls ? (
+            {showMiniControls ? (
               renderControls(true)
             ) : (
               <div className={styles.stack}>
@@ -953,15 +977,16 @@ export function MeetingDocumentPipPanel({
                     type="button"
                     className={`${styles.avatar} ${styles.overflow}`}
                     onClick={handleMinimize}
-                    aria-label={labels.restore}
-                    title={labels.restore}
+                    disabled={minimizeLocked}
+                    aria-label={minimizeLocked ? labels.restoreLocked : labels.restore}
+                    title={minimizeLocked ? labels.restoreLocked : labels.restore}
                   >
                     +{sortedEntries.length - pillMax}
                   </button>
                 )}
               </div>
             )}
-            {share && !miniControls ? (
+            {share && !showMiniControls ? (
               <div
                 className={`${styles.pillShareTile}${
                   share.local ? ` ${styles.pillShareTileSelf}${presentingWord ? '' : ` ${styles.pillShareTileIcon}`}` : ''
@@ -992,7 +1017,7 @@ export function MeetingDocumentPipPanel({
                 )}
               </div>
             ) : null}
-            {previewOpen && !miniControls ? (
+            {previewOpen && !showMiniControls ? (
               <button
                 type="button"
                 className={styles.pillDismiss}
@@ -1001,35 +1026,42 @@ export function MeetingDocumentPipPanel({
               />
             ) : null}
             <div className={styles.hoverCluster}>
-              <div
-                className={styles.hoverHit}
-                style={{ width: MINI_HOVER_W }}
-                onClick={hidePreview}
-              />
-              <button
-                type="button"
-                className={styles.miniSettings}
-                onMouseEnter={() => setMiniControls(true)}
-                aria-label={labels.settings}
-                title={labels.settings}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  width="14"
-                  height="14"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.04 1.56V20.3h-3v-.08a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 15a1.7 1.7 0 00-1.56-1.04H5.3v-3h.14A1.7 1.7 0 007 9a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0010.66 5a1.7 1.7 0 001.04-1.56V3.3h3v.14A1.7 1.7 0 0015.74 5a1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019.4 9a1.7 1.7 0 001.56 1.04h.04v3h-.04A1.7 1.7 0 0019.4 15z" />
-                </svg>
-              </button>
+              {/* The controls are out already: no hover area or settings button over them */}
+              {minimizeLocked ? null : (
+                <>
+                  <div
+                    className={styles.hoverHit}
+                    style={{ width: MINI_HOVER_W }}
+                    onClick={hidePreview}
+                  />
+                  <button
+                    type="button"
+                    className={styles.miniSettings}
+                    onMouseEnter={() => setMiniControls(true)}
+                    aria-label={labels.settings}
+                    title={labels.settings}
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="14"
+                      height="14"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.04 1.56V20.3h-3v-.08a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 15a1.7 1.7 0 00-1.56-1.04H5.3v-3h.14A1.7 1.7 0 007 9a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0010.66 5a1.7 1.7 0 001.04-1.56V3.3h3v.14A1.7 1.7 0 0015.74 5a1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019.4 9a1.7 1.7 0 001.56 1.04h.04v3h-.04A1.7 1.7 0 0019.4 15z" />
+                    </svg>
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className={styles.chevron}
                 onClick={handleMinimize}
-                aria-label={labels.restore}
+                disabled={minimizeLocked}
+                aria-label={minimizeLocked ? labels.restoreLocked : labels.restore}
+                title={minimizeLocked ? labels.restoreLocked : undefined}
               >
                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5">
                   <polyline points="6 9 12 15 18 9" />

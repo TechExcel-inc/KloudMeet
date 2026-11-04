@@ -303,6 +303,7 @@
   "meeting.documentPipTitle": "会议中",
   "meeting.documentPipMinimize": "最小化",
   "meeting.documentPipRestore": "还原",
+  "meeting.documentPipRestoreLocked": "在会议的摄像头视图里时保持收起",
   "meeting.documentPipSharing": "{name} 正在共享",
   "meeting.documentPipShareBadge": "共享",
   "meeting.documentPipPresentingSelf": "共享中",
