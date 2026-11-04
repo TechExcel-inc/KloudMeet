@@ -1493,5 +1493,19 @@
   "company.bg.allowOwnOff": "成员只能在公司背景中选择，仍然可以关闭背景或使用虚化。",
   "company.bg.removeTitle": "删除这张背景？",
   "company.bg.removeText": "正在用它的成员会自动换成虚化，房间不会露出来。",
-  "company.bg.removeTextDefault": "它也是成员的默认背景。正在用它的成员会自动换成虚化，房间不会露出来。"
+  "company.bg.removeTextDefault": "它也是成员的默认背景。正在用它的成员会自动换成虚化，房间不会露出来。",
+  "whiteboard.title": "Excalidraw 白板",
+  "whiteboard.loading": "正在加载白板…",
+  "whiteboard.loadFailed": "白板加载失败。切换到其他文件再切回来重试。",
+  "whiteboard.saved": "已保存",
+  "whiteboard.saving": "正在保存…",
+  "whiteboard.unsaved": "有未保存的更改",
+  "whiteboard.offline": "已离线，更改保存在本机",
+  "whiteboard.viewOnly": "仅查看",
+  "whiteboard.followPresenter": "跟随演示者",
+  "liveDocAi.fromDevice": "从设备",
+  "liveDocAi.fromLiveDocSpace": "从 LiveDoc 空间",
+  "liveDocAi.whiteBoard": "白板",
+  "liveDocAi.excalidrawBoard": "Excalidraw 白板",
+  "liveDocAi.fromFiles": "从文件"
 }

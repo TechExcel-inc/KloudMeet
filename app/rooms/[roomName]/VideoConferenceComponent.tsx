@@ -22,6 +22,7 @@ import {
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
+import dynamic from 'next/dynamic';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -112,6 +113,7 @@ import {
 import { authHeaders } from '@/lib/kloudSession';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
+
 import { loadAudioOutputDeviceId } from '@/lib/audioOutputChoice';
 import { DesignStage } from '@/lib/DesignStage';
 import { DesignLinkDialog } from '@/lib/DesignLinkDialog';
@@ -161,6 +163,9 @@ import { isRecorderParticipant, visibleRemoteParticipants } from '@/lib/recorder
 import { shownRemoteParticipants, useParticipantActiveTick } from '@/lib/participantReady';
 import '@/styles/roomStage.css';
 import '@/styles/floatingTiles.css';
+
+/** Excalidraw board stage: large and browser-only, so it loads when a board is first opened */
+const WhiteboardStage = dynamic(() => import('@/lib/whiteboard/WhiteboardStage'), { ssr: false });
 
 export function VideoConferenceComponent(props: {
   userChoices: LocalUserChoices;
@@ -1285,6 +1290,18 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     setLivedocOtherPresenter(otherPresenterActive);
   }, [otherPresenterActive]);
+
+  /** Who may draw on an Excalidraw board: host, co-hosts, presenters (lib/whiteboard/protocol.ts) */
+  const whiteboardRoles = React.useMemo(
+    () => ({
+      hostIdentity,
+      cohostIdentities,
+      presenterIdentities: autoPresenterIdentity
+        ? [...copresenterIdentities, autoPresenterIdentity]
+        : copresenterIdentities,
+    }),
+    [hostIdentity, cohostIdentities, copresenterIdentities, autoPresenterIdentity],
+  );
 
   const localIdentity = room.localParticipant.identity;
   const isLocalMicRestricted =
@@ -3041,6 +3058,8 @@ export function VideoConferenceComponent(props: {
 
   /** LiveDoc 当前文件是否为 Excalidraw 白板（来自 iframe 的 onkloudswitchfile.IsWhiteboard） */
   const [isWhiteboardDoc, setIsWhiteboardDoc] = React.useState(false);
+  /** AttachmentID of the Excalidraw board on the LiveDoc stage (onkloudswitchfile.IsExcalidraw), else null */
+  const [excalidrawBoardId, setExcalidrawBoardId] = React.useState<number | null>(null);
 
   // Listen for postMessage to toggle webcam sidebar in LiveDoc mode
   React.useEffect(() => {
@@ -3052,8 +3071,10 @@ export function VideoConferenceComponent(props: {
       } else if (e.data.type === 'Kloud-HideWebcamView') {
         setShowWebcamSidebar(false);
       } else if (data.type === 'onkloudswitchfile') {
-        const file = (e.data as { data?: { IsWhiteboard?: unknown } }).data;
+        const file = (e.data as { data?: { IsWhiteboard?: unknown; IsExcalidraw?: unknown; AttachmentID?: unknown } }).data;
         setIsWhiteboardDoc(file?.IsWhiteboard === true);
+        const boardId = Number(file?.AttachmentID);
+        setExcalidrawBoardId(file?.IsExcalidraw === true && boardId > 0 ? boardId : null);
       } else if (data.type === 'onkloudloaded') {
         setShowWebcamSidebar(false);
       }
@@ -3562,6 +3583,15 @@ export function VideoConferenceComponent(props: {
                   hostInitInProgress={livedocInitInProgress}
                   isHost={isHost}
                   livedocRole={livedocEmbedRole}
+                />
+              )}
+              {shouldMountLiveDoc && shouldDisplayLiveDoc && excalidrawBoardId !== null && (
+                <WhiteboardStage
+                  key={excalidrawBoardId}
+                  room={room}
+                  attachmentId={excalidrawBoardId}
+                  username={props.userChoices.username}
+                  roles={whiteboardRoles}
                 />
               )}
             </div>

@@ -69,3 +69,5 @@ KloudMeet.env/
 
 # MediaPipe wasm, copied from node_modules by scripts/copy-mediapipe-wasm.cjs
 /public/mediapipe/wasm/
+# Excalidraw fonts, copied from node_modules by scripts/copy-excalidraw-assets.cjs
+/public/excalidraw-assets/
