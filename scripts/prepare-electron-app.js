@@ -252,7 +252,14 @@ const slimPkg = {
     publish: rootBuild.publish,
     win: rootBuild.win,
     nsis: rootBuild.nsis,
-    mac: rootBuild.mac,
+    // codesign runs from the repo root, so the entitlements in .electron-app/build need an absolute path
+    mac: isMacBuild
+      ? {
+          ...rootBuild.mac,
+          entitlements: path.join(iconDestDir, 'entitlements.mac.plist'),
+          entitlementsInherit: path.join(iconDestDir, 'entitlements.mac.plist'),
+        }
+      : rootBuild.mac,
   },
 };
 
