@@ -2453,15 +2453,16 @@ export function VideoConferenceComponent(props: {
               });
             } else {
               const request = { requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName };
-              // Control is mapped onto a whole screen; with one window shared, clicks would land
-              // somewhere else on the presenter's screen. Say so on both sides instead of asking.
+              // Control needs to know where the shared content is on the presenter's screen. Desktop
+              // builds that follow a shared window say controllable; older ones map a window share
+              // onto the whole screen, where clicks would miss. Say so on both sides instead of asking.
               const shareTarget = window.electronAPI?.getShareTargetBounds?.();
               if (!shareTarget) {
                 setRemoteControlRequest(request);
               } else {
                 void shareTarget
                   .then((target) => {
-                    if (target?.kind !== 'window') {
+                    if (target?.kind !== 'window' || target.controllable === true) {
                       setRemoteControlRequest(request);
                       return;
                     }

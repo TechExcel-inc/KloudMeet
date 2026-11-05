@@ -49,6 +49,8 @@ export type ShareTargetBounds = {
   height: number;
   scaleFactor: number;
   kind: 'screen' | 'window';
+  /** False when a shared window's position is unknown (control would miss it). Older desktop builds leave it out. */
+  controllable?: boolean;
 };
 
 /** Message format of the desktop overlay window (public/overlay.html): one point per message. */

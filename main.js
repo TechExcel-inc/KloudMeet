@@ -951,6 +951,45 @@ let sessionAndIpcHandlersInstalled = false;
  */
 let currentShareTarget = null;
 
+/**
+ * The native window functions without nut.js's permission wrapper (which would open macOS's
+ * Accessibility prompt on a lookup). Null where unavailable.
+ */
+let rawLibnut;
+function getRawLibnut() {
+  if (rawLibnut !== undefined) return rawLibnut;
+  rawLibnut = null;
+  const pkg = { darwin: 'libnut-darwin', win32: 'libnut-win32' }[process.platform];
+  if (!pkg) return rawLibnut;
+  try {
+    const dir = path.dirname(require.resolve(`@nut-tree-fork/${pkg}/package.json`));
+    rawLibnut = require(path.join(dir, 'build', 'Release', 'libnut.node'));
+  } catch (e) {
+    appendStartupLog(`[share] window lookup unavailable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return rawLibnut;
+}
+
+/**
+ * Where a shared window is now, in DIPs, from its capture id ("window:<handle>:0"; the handle is
+ * the CGWindowID on macOS and the HWND on Windows). Null if it is gone, minimized or unknown.
+ */
+function sharedWindowRect(handle) {
+  const native = getRawLibnut();
+  if (!native || !handle) return null;
+  try {
+    const r = native.getWindowRect(handle);
+    if (!r || !(r.width > 0) || !(r.height > 0)) return null;
+    if (process.platform === 'win32') {
+      const { screen } = require('electron');
+      return screen.screenToDipRect(null, { x: r.x, y: r.y, width: r.width, height: r.height });
+    }
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  } catch {
+    return null;
+  }
+}
+
 function primaryDisplayBoundsFallback() {
   const { screen } = require('electron');
   const b = screen.getPrimaryDisplay().bounds;
@@ -1012,7 +1051,24 @@ function resolveShareTargetFromSource(source) {
     }
   }
 
-  // Window share: v1 falls back to primary (RC precision limited)
+  // Window share: follow the window itself, so control and annotations line up with it.
+  if (!isScreen) {
+    const handle = Number(sourceId.split(':')[1]);
+    const rect = sharedWindowRect(handle);
+    if (rect) {
+      const display = require('electron').screen.getDisplayMatching(rect);
+      return {
+        sourceId,
+        displayId: display.id,
+        ...rect,
+        scaleFactor: display.scaleFactor || 1,
+        kind: 'window',
+        windowHandle: handle,
+        controllable: true,
+      };
+    }
+  }
+  // Unknown window position: the primary screen, and the page declines control for it.
   return {
     sourceId,
     displayId: primary.displayId,
@@ -1022,6 +1078,7 @@ function resolveShareTargetFromSource(source) {
     height: primary.height,
     scaleFactor: primary.scaleFactor,
     kind: isScreen ? 'screen' : 'window',
+    controllable: isScreen,
   };
 }
 
@@ -1040,8 +1097,30 @@ function applyOverlayToShareTarget(target) {
   }
 }
 
+/** A shared window can move or resize; keep control and the annotation overlay on it. */
+let sharedWindowWatch = null;
+function watchSharedWindow() {
+  if (sharedWindowWatch) clearInterval(sharedWindowWatch);
+  sharedWindowWatch = null;
+  if (!currentShareTarget || !currentShareTarget.windowHandle) return;
+  sharedWindowWatch = setInterval(() => {
+    const t = currentShareTarget;
+    if (!t || !t.windowHandle) {
+      clearInterval(sharedWindowWatch);
+      sharedWindowWatch = null;
+      return;
+    }
+    const rect = sharedWindowRect(t.windowHandle);
+    if (!rect) return; // minimized or hidden for a moment: keep the last place
+    if (rect.x === t.x && rect.y === t.y && rect.width === t.width && rect.height === t.height) return;
+    Object.assign(t, rect);
+    applyOverlayToShareTarget(t);
+  }, 400);
+}
+
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
+  watchSharedWindow();
   // Before the capture starts, or macOS lets viewers see the bar (see ensureRcBarWindow)
   ensureRcBarWindow();
   applyOverlayToShareTarget(currentShareTarget);
@@ -1053,6 +1132,7 @@ function setCurrentShareTarget(source) {
 function clearCurrentShareTarget() {
   if (currentShareTarget) appendStartupLog('[share] stop');
   currentShareTarget = null;
+  watchSharedWindow();
   applyOverlayToShareTarget(primaryDisplayBoundsFallback());
   setFloatingReason('share', false);
 }
