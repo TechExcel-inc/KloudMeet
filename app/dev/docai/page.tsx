@@ -40,8 +40,10 @@ type Case = {
   failures?: boolean;
   /** The real upload queue against a fake LiveDoc */
   live?: boolean;
-  /** "From Space" picker open */
+  /** "From Team Space" picker open */
   picker?: boolean;
+  /** "From My Files" picker open, nothing to list */
+  myFiles?: boolean;
   /** An anonymous identity: company spaces aren't offered */
   guest?: boolean;
   summary?: 'items' | 'empty' | 'loading';
@@ -53,7 +55,9 @@ const CASES: Case[] = [
   { id: 'docs', title: 'Documents · list', tab: 'file', docs: 6 },
   { id: 'guest-empty', title: 'Documents · none yet, anonymous', tab: 'file', docs: 0, guest: true },
   { id: 'guest-docs', title: 'Documents · list, anonymous', tab: 'file', docs: 6, guest: true },
-  { id: 'picker', title: 'Documents · pick from Space', tab: 'file', docs: 2, picker: true },
+  { id: 'picker', title: 'Documents · pick from Team Space', tab: 'file', docs: 2, picker: true },
+  { id: 'my-files', title: 'Documents · My Files, none', tab: 'file', docs: 2, myFiles: true },
+  { id: 'guest-my-files', title: 'Documents · My Files, anonymous', tab: 'file', docs: 2, myFiles: true, guest: true },
   { id: 'design', title: 'Documents · with a design link', tab: 'file', docs: 2, design: true },
   { id: 'uploading', title: 'Documents · uploading', tab: 'file', docs: 3, uploading: true },
   {
@@ -175,8 +179,8 @@ function makeState(c: Case): LiveDocAiState {
     },
     transcript: { items: [], selfUserName: 'Ying', loading: false, error: '' },
     picker: {
-      kind: c.picker ? 'space' : null,
-      open: Boolean(c.picker),
+      kind: c.picker ? 'space' : c.myFiles ? 'favorite' : null,
+      open: Boolean(c.picker || c.myFiles),
       loading: false,
       search: '',
       page: 1,

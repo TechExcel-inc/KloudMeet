@@ -678,6 +678,12 @@
   width: 232px;
 }
 
+.menuDivider {
+  height: 1px;
+  margin: 6px 8px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
 .dropdown .danger,
 .danger {
   color: #f28b82;

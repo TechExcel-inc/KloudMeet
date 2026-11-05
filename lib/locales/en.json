@@ -384,8 +384,8 @@
   "liveDocAi.uploadFail.unknown": "Something went wrong",
   "liveDocAi.enableAnnotation": "Enable Annotation",
   "liveDocAi.uploadFromLocal": "Upload from Computer",
-  "liveDocAi.uploadFromSpace": "Upload from Space",
-  "liveDocAi.uploadFromFiles": "Upload from Files",
+  "liveDocAi.addFromTeamSpace": "Add from Team Space",
+  "liveDocAi.addFromMyFiles": "Add from My Files",
   "liveDocAi.uploadBlankPage": "Upload Blank Page",
   "liveDocAi.moreUploadOptions": "More upload options",
   "liveDocAi.addLink": "Link",
@@ -433,6 +433,8 @@
   "liveDocAi.noData": "No data",
   "liveDocAi.loading": "Loading…",
   "liveDocAi.noFiles": "No files",
+  "liveDocAi.myFilesNotYetOwn": "These aren't your Kloud files yet. Meetings can't open documents with your own Kloud account for now.",
+  "liveDocAi.teamSpaceNeedsOwnAccount": "Team space documents open with your own Kloud account. Meetings can't do that yet; it's still being built.",
   "liveDocAi.totalFiles": "{total} Total Files",
   "liveDocAi.selectedCount": "{count} selected",
   "toolbar.webcam": "Video",
@@ -1509,8 +1511,8 @@
   "company.bg.removeText": "Members using it switch to blur, which keeps their room hidden.",
   "company.bg.removeTextDefault": "It's also the default for members. Anyone using it switches to blur, which keeps their room hidden.",
   "liveDocAi.fromDevice": "From Device",
-  "liveDocAi.fromLiveDocSpace": "From LiveDoc Space",
+  "liveDocAi.fromTeamSpace": "From Team Space",
   "liveDocAi.whiteBoard": "White Board",
   "liveDocAi.excalidrawBoard": "Excalidraw board",
-  "liveDocAi.fromFiles": "From Files"
+  "liveDocAi.fromMyFiles": "From My Files"
 }
