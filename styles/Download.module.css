@@ -1,0 +1,303 @@
+/* Download page. Built on styles/tokens.css (var(--km-*)), light by default and dark via
+   html[data-theme='dark']. globals.css locks the body, so the page scrolls itself. */
+
+.page {
+  height: 100dvh;
+  overflow-y: auto;
+  background: var(--km-bg-subtle);
+  color: var(--km-text);
+  font-family: var(--km-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  height: 64px;
+  padding: 0 24px;
+}
+
+.logoLink {
+  display: flex;
+  align-items: center;
+  border-radius: var(--km-radius-sm);
+}
+
+.joinLink {
+  color: var(--km-primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.joinLink:hover {
+  text-decoration: underline;
+}
+
+.main {
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.appIcon {
+  display: block;
+  margin-bottom: 20px;
+}
+
+.title {
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.15;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.subtitle {
+  max-width: 540px;
+  margin: 12px 0 0;
+  color: var(--km-text-muted);
+  font-size: 17px;
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  min-height: 52px;
+  margin-top: 28px;
+}
+
+.primaryBtn,
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 28px;
+  border-radius: var(--km-radius-pill);
+  font-size: 16px;
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.primaryBtn {
+  border: 1px solid transparent;
+  background: var(--km-primary);
+  color: var(--km-on-primary);
+}
+
+.primaryBtn:hover {
+  background: var(--km-primary-hover);
+}
+
+.secondaryBtn {
+  border: 1px solid var(--km-border);
+  background: var(--km-surface);
+  color: var(--km-text);
+}
+
+.secondaryBtn:hover {
+  background: var(--km-hover);
+}
+
+.primaryBtn:focus-visible,
+.secondaryBtn:focus-visible,
+.buildLink:focus-visible,
+.joinLink:focus-visible,
+.logoLink:focus-visible {
+  outline: none;
+  box-shadow: var(--km-focus-ring);
+}
+
+.note {
+  max-width: 480px;
+  margin: 16px 0 0;
+  padding: 10px 16px;
+  border-radius: var(--km-radius-md);
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.hint {
+  max-width: 480px;
+  margin: 14px 0 0;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  margin-top: 48px;
+}
+
+.card {
+  padding: 20px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-lg);
+  background: var(--km-surface);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.cardIcon {
+  display: flex;
+  color: var(--km-text-muted);
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.buildRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 64px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--km-border);
+}
+
+.buildText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.buildLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.badge {
+  padding: 2px 8px;
+  border-radius: var(--km-radius-pill);
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.buildDetail {
+  color: var(--km-text-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.buildLink {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--km-radius-pill);
+  background: var(--km-tonal);
+  color: var(--km-on-tonal);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.buildLink:hover {
+  filter: brightness(0.96);
+}
+
+.soon {
+  flex-shrink: 0;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.install {
+  margin: 14px 0 0;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.footnote {
+  margin: 32px 0 0;
+  color: var(--km-text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.footnote a {
+  color: var(--km-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.footnote a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 680px) {
+  .header {
+    padding: 0 16px;
+  }
+
+  .main {
+    padding: 16px 16px 40px;
+  }
+
+  .title {
+    font-size: 30px;
+  }
+
+  .subtitle {
+    font-size: 16px;
+  }
+
+  .primaryBtn,
+  .secondaryBtn {
+    width: 100%;
+  }
+
+  .heroActions {
+    width: 100%;
+  }
+
+  .cards {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 36px;
+  }
+}

@@ -798,14 +798,14 @@ function loadMainContents(url) {
 
 function navigateMainToDeepLink(rawUrl) {
   const parsed = parseKloudMeetDeepLink(rawUrl);
-  if (!parsed) return;
-  const pathRoom = encodeURIComponent(parsed.room);
-  const target = `${getAppPageOrigin()}/rooms/${pathRoom}${parsed.search}`;
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-    loadMainContents(target);
-  } else {
+    // kloudmeet://open has no room: bringing the window up is all it asks for
+    if (parsed) {
+      loadMainContents(`${getAppPageOrigin()}/rooms/${encodeURIComponent(parsed.room)}${parsed.search}`);
+    }
+  } else if (parsed) {
     pendingDeepLink = rawUrl;
   }
 }
@@ -1991,6 +1991,8 @@ if (!gotLock) {
       navigateMainToDeepLink(url);
     } else {
       pendingDeepLink = url;
+      // Mac: the app keeps running with its window closed, so a link has to bring the window back
+      if (app.isReady()) void reopenMainWindow();
     }
   });
 

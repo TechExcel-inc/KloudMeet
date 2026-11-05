@@ -1,5 +1,5 @@
 /**
- * The macOS download buttons always show. Until a Mac build is published (latest-mac.yml on the
- * download server), /api/download?os=mac answers with a short "coming soon" page instead of a file.
+ * The macOS download buttons always show. They lead to /download, which offers the build for each
+ * chip, or says it's coming until a Mac build is published (latest-mac.yml on the download server).
  */
 export const MAC_APP_AVAILABLE = true;

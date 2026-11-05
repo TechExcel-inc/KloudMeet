@@ -90,7 +90,7 @@ export function LoginView({
 
       {MAC_APP_AVAILABLE && (
       <a
-        href="/api/download?os=mac"
+        href="/download"
         className={styles.downloadBtn}
         id="download-desktop-app-mac-login-btn"
         title="Download Kloud Meet for Mac"
