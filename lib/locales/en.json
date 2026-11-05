@@ -513,6 +513,8 @@
   "toolbar.stopControl": "Stop Remote Control",
   "toolbar.requestControl": "Request Remote Control",
   "toolbar.shareTools": "Annotate & remote control",
+  "toolbar.shareToolsNeedShare": "Available once someone shares a screen",
+  "toolbar.shareToolsNeedRole": "Hosts and presenters can annotate or take control",
   "toolbar.attendees": "People",
   "toolbar.invite": "Invite",
   "toolbar.inviteCopied": "Invite Link Copied to Clipboard!",

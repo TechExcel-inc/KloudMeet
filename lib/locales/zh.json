@@ -505,6 +505,8 @@
   "toolbar.stopControl": "停止远程控制",
   "toolbar.requestControl": "请求远程控制",
   "toolbar.shareTools": "批注与远程控制",
+  "toolbar.shareToolsNeedShare": "有人共享屏幕后可用",
+  "toolbar.shareToolsNeedRole": "主持人和演示者才能批注或远程控制",
   "toolbar.attendees": "参会者",
   "toolbar.invite": "邀请",
   "toolbar.inviteCopied": "邀请链接已复制到剪贴板！",

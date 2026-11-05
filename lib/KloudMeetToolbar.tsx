@@ -682,7 +682,14 @@ export function KloudMeetToolbar({
   }, [isMobile, inviteMenuOpen, viewModeMenuOpen, shareToolsOpen, activeSheet]);
 
   // The share tools menu goes with the share: never reopen by itself at the next one.
-  const shareToolsAvailable = canSwitchViews && isDesktop && hasScreenShare;
+  // The chevron stays in the desktop app so people can find Annotate and Remote control; the
+  // items work while a screen is shared, and the menu says why when they don't.
+  const shareToolsAvailable = isDesktop;
+  const shareToolsBlockedReason = !canSwitchViews
+    ? tr('toolbar.shareToolsNeedRole', 'Hosts and presenters can annotate or take control')
+    : !hasScreenShare
+      ? tr('toolbar.shareToolsNeedShare', 'Available once someone shares a screen')
+      : null;
   useEffect(() => {
     if (!shareToolsAvailable || !visible) setShareToolsOpen(false);
   }, [shareToolsAvailable, visible]);
@@ -1783,8 +1790,9 @@ export function KloudMeetToolbar({
     );
   };
 
-  /** Annotate / remote control: Electron desktop app + a share in progress + canSwitchViews, as before */
+  /** Annotate / remote control: always listed in the desktop app; usable with a share in progress + canSwitchViews */
   const renderShareToolsMenuItems = () => {
+    const blocked = !!shareToolsBlockedReason;
     const controlLabel = remoteControlPending
       ? t('toolbar.cancelRequest')
       : isRemoteControlMode
@@ -1792,10 +1800,16 @@ export function KloudMeetToolbar({
         : t('toolbar.requestControl');
     return (
       <>
+        {blocked && (
+          <div className={styles.shareToolsNote} role="note">
+            {shareToolsBlockedReason}
+          </div>
+        )}
         <button
           type="button"
           role="menuitemcheckbox"
           aria-checked={isDrawingMode}
+          disabled={blocked}
           className={`${styles.viewModeMenuItem} ${isDrawingMode ? styles.viewModeMenuItemActive : ''}`}
           onClick={() => {
             setShareToolsOpen(false);
@@ -1814,6 +1828,7 @@ export function KloudMeetToolbar({
         <button
           type="button"
           role="menuitem"
+          disabled={blocked}
           className={`${styles.viewModeMenuItem} ${isRemoteControlMode || remoteControlPending ? styles.viewModeMenuItemActive : ''}`}
           onClick={() => {
             setShareToolsOpen(false);

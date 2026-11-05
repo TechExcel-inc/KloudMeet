@@ -505,6 +505,8 @@
   "toolbar.stopControl": "リモート制御を停止",
   "toolbar.requestControl": "リモート制御をリクエスト",
   "toolbar.shareTools": "注釈とリモート操作",
+  "toolbar.shareToolsNeedShare": "誰かが画面を共有すると使えます",
+  "toolbar.shareToolsNeedRole": "注釈とリモート操作はホストと発表者のみ",
   "toolbar.attendees": "参加者",
   "toolbar.invite": "招待",
   "toolbar.inviteCopied": "招待リンクをコピーしました！",

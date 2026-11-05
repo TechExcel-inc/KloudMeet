@@ -782,6 +782,24 @@
   min-width: 248px;
 }
 
+.shareToolsNote {
+  padding: 10px 18px 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9aa0a6;
+}
+
+.viewModeMenuItem:disabled,
+.viewModeMenuItem:disabled:hover {
+  color: rgba(232, 234, 237, 0.38);
+  cursor: default;
+  background: transparent;
+}
+
+.viewModeMenuItem:disabled svg {
+  opacity: 0.38;
+}
+
 .viewModeMenuItemHint {
   margin-left: auto;
   font-size: 12px;
