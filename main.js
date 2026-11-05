@@ -1074,6 +1074,66 @@ function watchShareInterruptions() {
   }
 }
 
+/**
+ * macOS: whether this build may record the screen. Without it, asking for sources makes macOS
+ * send the user to System Settings with no word from us. A grant made for an earlier build
+ * (each unsigned build has a new signature) still looks on in the list but no longer counts.
+ */
+function screenCaptureAllowed() {
+  if (process.platform !== 'darwin') return true;
+  try {
+    const { systemPreferences } = require('electron');
+    return systemPreferences.getMediaAccessStatus('screen') === 'granted';
+  } catch {
+    return true;
+  }
+}
+
+let screenRecordingHelpOpen = false;
+
+/** Says what to turn on and why, then opens the right System Settings page if asked. */
+async function showScreenRecordingHelp() {
+  if (screenRecordingHelpOpen) return;
+  screenRecordingHelpOpen = true;
+  const zh = /^zh/i.test(app.getLocale() || '');
+  const options = zh
+    ? {
+        type: 'info',
+        message: '需要“屏幕录制”权限才能共享屏幕',
+        detail:
+          '在“系统设置 › 隐私与安全性 › 屏幕录制”中打开 Kloud Meet。\n\n' +
+          '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
+          '打开后按提示退出并重新打开 Kloud Meet，再点共享屏幕。',
+        buttons: ['打开系统设置', '取消'],
+        defaultId: 0,
+        cancelId: 1,
+      }
+    : {
+        type: 'info',
+        message: 'Kloud Meet needs Screen Recording to share your screen',
+        detail:
+          'Turn on Kloud Meet in System Settings › Privacy & Security › Screen Recording.\n\n' +
+          'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
+          'Then quit and reopen Kloud Meet when asked, and share again.',
+        buttons: ['Open System Settings', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+      };
+  acquireOverlayHide('screen-permission');
+  try {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    if (response === 0) {
+      await shell
+        .openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
+        .catch(() => {});
+    }
+  } finally {
+    releaseOverlayHide('screen-permission');
+    screenRecordingHelpOpen = false;
+  }
+}
+
 function installSessionAndIpcOnce() {
   if (sessionAndIpcHandlersInstalled) return;
   sessionAndIpcHandlersInstalled = true;
@@ -1081,6 +1141,13 @@ function installSessionAndIpcOnce() {
   installMiniWindowIpc();
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
+    if (!screenCaptureAllowed()) {
+      appendStartupLog('[share] Screen Recording is off for this build: showing the how-to instead of the picker');
+      clearCurrentShareTarget();
+      callback();
+      showScreenRecordingHelp();
+      return;
+    }
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
       let handled = false;
       const template = sources.map((source) => ({
