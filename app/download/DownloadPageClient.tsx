@@ -147,10 +147,9 @@ export function DownloadPageClient({ mac, win }: { mac: MacRelease | null; win: 
   const [chip, setChip] = useState<Chip>(null);
 
   useEffect(() => {
+    // Same default as the home page, and what KloudLogo assumes when choosing its colour
     const stored = window.localStorage.getItem('kloud-theme');
-    if (stored === 'dark' || stored === 'light') {
-      document.documentElement.setAttribute('data-theme', stored);
-    }
+    document.documentElement.setAttribute('data-theme', stored === 'light' ? 'light' : 'dark');
     const seen = detectVisitor();
     setVisitor(seen);
     if (seen === 'mac') void detectMacChip().then(setChip);
