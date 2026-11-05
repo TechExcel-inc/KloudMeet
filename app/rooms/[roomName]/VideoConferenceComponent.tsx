@@ -565,7 +565,7 @@ export function VideoConferenceComponent(props: {
   /**
    * Sharer starts sharing:
    * - remember previous room mode (never capture shareScreen — use lastStable)
-   * - stay on Screen share locally (the stage shows a "you're sharing" card, not the picture)
+   * - stay on Screen share locally (the stage shows the LiveDoc plugin, not the picture)
    * - broadcast shareScreen for everyone else
    */
   const beginLocalScreenShareView = React.useCallback(() => {
@@ -996,8 +996,9 @@ export function VideoConferenceComponent(props: {
   ]);
 
   /**
-   * Toolbar Screen share segment. While you share and have stepped over to LiveDoc, it brings you
-   * back to the "you're sharing" view; from that view it stops the share (as before).
+   * Toolbar Screen share segment. While you share and have stepped over to LiveDoc mode, it brings
+   * you back to the screen-share view (the stage still shows the LiveDoc plugin); from that view it
+   * stops the share.
    */
   const handleShareSegment = React.useCallback(() => {
     if (screenShareActive && activeViewRef.current !== 'shareScreen') {
@@ -1082,8 +1083,9 @@ export function VideoConferenceComponent(props: {
   const isPureLiveDoc = activeView === 'liveDoc';
   // Mirror-blocked: presenter is sharing AND surface detected AND it's NOT a safe "browser tab" share
   const isMirrorBlocked = screenShareActive && surfaceDetected && screenShareSurface !== 'browser';
-  // Own share of a screen or window (or not known yet): the stage shows a card instead of the
-  // picture, which would repeat inside itself. Sharing another browser tab can still be previewed.
+  // Own share of a screen or window (or not known yet): the picture would repeat inside itself.
+  // The stage shows the LiveDoc page instead, without leaving screen-share mode.
+  // Sharing another browser tab can still be previewed.
   const ownShareHidden = screenShareActive && (!surfaceDetected || screenShareSurface !== 'browser');
 
   // Determine host: override (from transfer) takes precedence over join-time computation
@@ -1391,6 +1393,10 @@ export function VideoConferenceComponent(props: {
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  /** Sharer sees the LiveDoc plugin on the stage; the room stays in screen-share mode. */
+  const showLiveDocDuringOwnShare =
+    ownShareHidden && activeView === 'shareScreen' && !isRecorderBot;
+  const showLiveDocStage = shouldDisplayLiveDoc || showLiveDocDuringOwnShare;
   /** Design mode shows the shared link; a screen share still takes the stage first */
   const shouldDisplayDesign = activeView === 'design' && !!designLink && (!hasScreenShare || isLocalScreenShare);
   /** Design mode sync (size, zoom, page, scroll, drawings, laser) on its own data topic */
@@ -1444,7 +1450,8 @@ export function VideoConferenceComponent(props: {
     localName: props.userChoices.username || '',
   });
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
-  const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
+  const shouldMountLiveDoc =
+    livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked || showLiveDocDuringOwnShare;
   // The Excalidraw board lives in the LiveDoc iframe; KloudMeet only carries its messages
   useLiveDocBoardRelay(room, boardRoles, shouldMountLiveDoc);
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
@@ -3082,10 +3089,10 @@ export function VideoConferenceComponent(props: {
   // 不再常驻右侧，因此 KloudMeet 侧也不再预留面板宽度。
   React.useEffect(() => {
     setShowWebcamSidebar(false);
-    if (shouldDisplayLiveDoc) {
+    if (showLiveDocStage) {
       postKloudShowFilePanelToIframe(0);
     }
-  }, [shouldDisplayLiveDoc, isToolbarMobile]);
+  }, [showLiveDocStage, isToolbarMobile]);
 
   const floatingMediaRestrictions = React.useMemo<KloudTileMediaRestrictionProps>(
     () => ({
@@ -3505,10 +3512,10 @@ export function VideoConferenceComponent(props: {
         <div
           className={`main-meeting-area${
             isToolbarMobile &&
-            ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
+            ((activeView === 'webcam' && !hasScreenShare) || showLiveDocStage || shouldDisplayDesign)
               ? ' kloud-mobile-webcam-view'
               : ''
-          }${isToolbarMobile && hasScreenShare ? ' kloud-mobile-share-view' : ''}`}
+          }${isToolbarMobile && hasScreenShare && !showLiveDocDuringOwnShare ? ' kloud-mobile-share-view' : ''}`}
           style={{
             position: 'absolute',
             top: 0,
@@ -3516,7 +3523,7 @@ export function VideoConferenceComponent(props: {
             right: 0,
             bottom:
               isToolbarMobile &&
-              ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
+              ((activeView === 'webcam' && !hasScreenShare) || showLiveDocStage || shouldDisplayDesign)
                 ? 'var(--kloud-mobile-toolbar-height)'
                 : 0,
             overflow: 'hidden',
@@ -3524,30 +3531,6 @@ export function VideoConferenceComponent(props: {
             background: 'var(--km-stage)',
           }}
         >
-          {/* Sharing your own screen: say so instead of showing it (LiveDoc stays one click away) */}
-          {ownShareHidden && activeView === 'shareScreen' && !isRecorderBot && (
-            <div className="km-presenting-cover" role="status">
-              <div className="km-presenting-card">
-                <div className="km-presenting-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" />
-                  </svg>
-                </div>
-                <h2 className="km-presenting-title">{t('meeting.presentingTitle')}</h2>
-                <p className="km-presenting-body">{t('meeting.presentingBody')}</p>
-                <div className="km-presenting-actions">
-                  <button type="button" className="km-presenting-stop" onClick={handleShareScreen}>
-                    {t('toolbar.stopSharing')}
-                  </button>
-                  <button type="button" className="km-presenting-doc" onClick={() => setActiveView('liveDoc')}>
-                    {t('meeting.presentingShowDoc')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
           <div
             style={
@@ -3561,7 +3544,7 @@ export function VideoConferenceComponent(props: {
                     background: 'var(--km-stage)',
                   }
                 : {
-                    display: shouldDisplayLiveDoc ? 'flex' : 'none',
+                    display: showLiveDocStage ? 'flex' : 'none',
                     flex: 1,
                     minWidth: 0,
                     overflow: 'hidden',
@@ -3693,7 +3676,7 @@ export function VideoConferenceComponent(props: {
             style={{
               flex: 1,
               position: 'relative',
-              display: shouldDisplayLiveDoc || shouldDisplayDesign ? 'none' : 'flex',
+              display: showLiveDocStage || shouldDisplayDesign ? 'none' : 'flex',
               flexDirection: 'column',
               minHeight: 0,
               height: '100%',
