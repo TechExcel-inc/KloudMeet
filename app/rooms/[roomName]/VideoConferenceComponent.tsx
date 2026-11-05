@@ -2452,7 +2452,29 @@ export function VideoConferenceComponent(props: {
                 reason: 'busy',
               });
             } else {
-              setRemoteControlRequest({ requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
+              const request = { requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName };
+              // Control is mapped onto a whole screen; with one window shared, clicks would land
+              // somewhere else on the presenter's screen. Say so on both sides instead of asking.
+              const shareTarget = window.electronAPI?.getShareTargetBounds?.();
+              if (!shareTarget) {
+                setRemoteControlRequest(request);
+              } else {
+                void shareTarget
+                  .then((target) => {
+                    if (target?.kind !== 'window') {
+                      setRemoteControlRequest(request);
+                      return;
+                    }
+                    sendMeetingMsg({ type: 'RC_DENIED', ...request, reason: 'window' });
+                    toast(
+                      t('remoteControl.windowShareRequest', {
+                        name: msg.requesterName || t('remoteControl.someone'),
+                      }),
+                      { duration: 6000 },
+                    );
+                  })
+                  .catch(() => setRemoteControlRequest(request));
+              }
             }
           }
         } else if (msg.type === 'RC_APPROVED') {
@@ -2464,6 +2486,16 @@ export function VideoConferenceComponent(props: {
         } else if (msg.type === 'RC_DENIED') {
           if (msg.requesterIdentity === room.localParticipant.identity) {
             setRemoteControlPending(false);
+            const presenterName =
+              Array.from(room.remoteParticipants.values()).find((p) => p.isScreenShareEnabled)?.name ||
+              t('remoteControl.thePresenter');
+            if (msg.reason === 'window') {
+              toast(t('remoteControl.deniedWindowShare', { name: presenterName }), { duration: 6000 });
+            } else if (msg.reason === 'busy') {
+              toast(t('remoteControl.deniedBusy', { name: presenterName }));
+            } else {
+              toast(t('remoteControl.denied', { name: presenterName }));
+            }
           }
         } else if (msg.type === 'RC_REVOKED') {
           if (msg.requesterIdentity === room.localParticipant.identity) {
@@ -2667,6 +2699,7 @@ export function VideoConferenceComponent(props: {
     isLocalControlOperator,
     applyHostHands,
     buildCorrection,
+    t,
   ]);
 
   // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.
