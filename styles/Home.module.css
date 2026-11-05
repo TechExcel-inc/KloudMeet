@@ -931,6 +931,14 @@ a.dropdownItem:focus-visible {
   padding: 0 20px 28px;
 }
 
+.downloadRowLink {
+  text-decoration: none;
+}
+
+.downloadRowLink:hover {
+  text-decoration: underline;
+}
+
 .downloadBtn {
   display: inline-flex;
   align-items: center;

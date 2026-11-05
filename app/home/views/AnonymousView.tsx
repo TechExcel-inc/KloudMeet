@@ -515,7 +515,9 @@ export function AnonymousView({
 
           {/* Download Desktop App - hidden on mobile */}
           <div className={`${styles.downloadRow} ${styles.mobileHidden}`}>
-            <span className={styles.anonFootText}>{t('nav.downloadDesktop')}</span>
+            <a href="/download" className={`${styles.anonFootText} ${styles.downloadRowLink}`}>
+              {t('nav.downloadDesktop')}
+            </a>
             <a
               href="/api/download?os=win"
               className={styles.downloadBtn}
@@ -551,7 +553,7 @@ export function AnonymousView({
 
             {MAC_APP_AVAILABLE && (
               <a
-                href="/api/download?os=mac"
+                href="/download"
                 className={styles.downloadBtn}
                 id="download-desktop-app-mac-btn"
                 title="Download Kloud Meet for Mac"
