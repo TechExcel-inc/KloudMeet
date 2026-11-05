@@ -1305,10 +1305,28 @@ function rcTarget(data) {
   return remoteInput.toScreenPoint(data, bounds, !rcSession.protocol);
 }
 
+/**
+ * Share bounds come from Electron in DIPs; on Windows the input library works in physical pixels,
+ * so at 125% / 150% display scaling every click would land up and to the left. macOS uses points
+ * on both sides.
+ */
+function dipToNativePoint(p) {
+  if (process.platform !== 'win32') return p;
+  const { screen } = require('electron');
+  return screen.dipToScreenPoint({ x: Math.round(p.x), y: Math.round(p.y) });
+}
+
+function nativeToDipPoint(p) {
+  if (process.platform !== 'win32') return p;
+  const { screen } = require('electron');
+  return screen.screenToDipPoint({ x: p.x, y: p.y });
+}
+
 async function rcMoveTo(mouse, Point, target) {
   rcLastInjected = target;
   rcLastInjectAt = Date.now();
-  await mouse.setPosition(new Point(target.x, target.y));
+  const native = dipToNativePoint(target);
+  await mouse.setPosition(new Point(native.x, native.y));
   rcLastInjectAt = Date.now();
 }
 
@@ -1474,7 +1492,7 @@ function startLocalMouseWatch() {
     if (!rcSession.active) return;
     try {
       const { mouse } = getNutTree();
-      const pos = await mouse.getPosition();
+      const pos = nativeToDipPoint(await mouse.getPosition());
       const prev = rcLastSeen;
       rcLastSeen = { x: pos.x, y: pos.y };
       if (!prev || Date.now() - rcLastInjectAt < 250) return;
