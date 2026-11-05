@@ -1089,48 +1089,73 @@ function screenCaptureAllowed() {
   }
 }
 
-let screenRecordingHelpOpen = false;
+/** Which permission-help dialogs are showing, so a second click does not stack another. */
+const permissionHelpOpen = new Set();
 
-/** Says what to turn on and why, then opens the right System Settings page if asked. */
-async function showScreenRecordingHelp() {
-  if (screenRecordingHelpOpen) return;
-  screenRecordingHelpOpen = true;
+/**
+ * macOS drops a permission when a new build is installed (each unsigned build has a new
+ * signature; the old switch still looks on but no longer counts). When a feature needs one that is
+ * off, say which, how to turn it on, and offer the right System Settings page.
+ * @param {'screen' | 'accessibility'} kind
+ * @param {{ controllerName?: string }} [ctx]
+ */
+async function showPermissionHelp(kind, ctx = {}) {
+  if (permissionHelpOpen.has(kind)) return;
+  permissionHelpOpen.add(kind);
   const zh = /^zh/i.test(app.getLocale() || '');
-  const options = zh
-    ? {
-        type: 'info',
-        message: '需要“屏幕录制”权限才能共享屏幕',
-        detail:
-          '在“系统设置 › 隐私与安全性 › 屏幕录制”中打开 Kloud Meet。\n\n' +
-          '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
-          '打开后按提示退出并重新打开 Kloud Meet，再点共享屏幕。',
-        buttons: ['打开系统设置', '取消'],
-        defaultId: 0,
-        cancelId: 1,
-      }
-    : {
-        type: 'info',
-        message: 'Kloud Meet needs Screen Recording to share your screen',
-        detail:
-          'Turn on Kloud Meet in System Settings › Privacy & Security › Screen Recording.\n\n' +
-          'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
-          'Then quit and reopen Kloud Meet when asked, and share again.',
-        buttons: ['Open System Settings', 'Cancel'],
-        defaultId: 0,
-        cancelId: 1,
-      };
-  acquireOverlayHide('screen-permission');
+  const who = (ctx.controllerName || '').trim();
+  const copy = {
+    screen: zh
+      ? {
+          message: '需要“屏幕录制”权限才能共享屏幕',
+          detail:
+            '在“系统设置 › 隐私与安全性 › 屏幕录制”中打开 Kloud Meet。\n\n' +
+            '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
+            '打开后按提示退出并重新打开 Kloud Meet，再点共享屏幕。',
+        }
+      : {
+          message: 'Kloud Meet needs Screen Recording to share your screen',
+          detail:
+            'Turn on Kloud Meet in System Settings › Privacy & Security › Screen Recording.\n\n' +
+            'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
+            'Then quit and reopen Kloud Meet when asked, and share again.',
+        },
+    accessibility: zh
+      ? {
+          message: who ? `需要“辅助功能”权限，${who} 才能控制你的电脑` : '需要“辅助功能”权限才能被远程控制',
+          detail:
+            '在“系统设置 › 隐私与安全性 › 辅助功能”中打开 Kloud Meet。\n\n' +
+            '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
+            '打开后不用重启，对方的鼠标和键盘操作就会生效。',
+        }
+      : {
+          message: who
+            ? `Kloud Meet needs Accessibility so ${who} can control your computer`
+            : 'Kloud Meet needs Accessibility to be controlled remotely',
+          detail:
+            'Turn on Kloud Meet in System Settings › Privacy & Security › Accessibility.\n\n' +
+            'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
+            'Control starts working as soon as it is on; no restart needed.',
+        },
+  }[kind];
+  const pane = kind === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Accessibility';
+  const options = {
+    type: 'info',
+    ...copy,
+    buttons: zh ? ['打开系统设置', '取消'] : ['Open System Settings', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+  };
+  acquireOverlayHide(`permission-${kind}`);
   try {
     const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
     const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
     if (response === 0) {
-      await shell
-        .openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture')
-        .catch(() => {});
+      await shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`).catch(() => {});
     }
   } finally {
-    releaseOverlayHide('screen-permission');
-    screenRecordingHelpOpen = false;
+    releaseOverlayHide(`permission-${kind}`);
+    permissionHelpOpen.delete(kind);
   }
 }
 
@@ -1145,7 +1170,7 @@ function installSessionAndIpcOnce() {
       appendStartupLog('[share] Screen Recording is off for this build: showing the how-to instead of the picker');
       clearCurrentShareTarget();
       callback();
-      showScreenRecordingHelp();
+      showPermissionHelp('screen');
       return;
     }
     desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
@@ -1336,19 +1361,22 @@ async function executeRemoteInput(data) {
 
 /**
  * macOS drops injected input silently unless this app has Accessibility. Checked when a session
- * starts (asking macOS to show its prompt once); the bar says so and links to the setting.
+ * starts: a dialog explains how to turn it on, and the bar says so until it takes effect.
  */
 let rcNeedsAccessibility = false;
 /** @type {ReturnType<typeof setInterval> | null} */
 let rcAccessibilityPoll = null;
 
-function checkAccessibilityForRemoteControl(prompt) {
+function checkAccessibilityForRemoteControl(explain) {
   if (process.platform !== 'darwin') return true;
   const { systemPreferences } = require('electron');
-  const trusted = systemPreferences.isTrustedAccessibilityClient(!!prompt);
+  // Our own dialog instead of macOS's prompt: it says what to do when the switch looks on but
+  // belongs to an earlier build, and the two would otherwise show at once.
+  const trusted = systemPreferences.isTrustedAccessibilityClient(false);
   rcNeedsAccessibility = !trusted;
   if (!trusted) {
     appendStartupLog('[remote-control] Accessibility is off: input will not reach other apps');
+    if (explain) showPermissionHelp('accessibility', { controllerName: rcSession.controllerName });
     // Turned on in System Settings mid-session: clear the notice as soon as it takes effect.
     if (!rcAccessibilityPoll) {
       rcAccessibilityPoll = setInterval(() => {
