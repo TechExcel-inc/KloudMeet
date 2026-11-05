@@ -376,8 +376,8 @@
   "liveDocAi.uploadFail.unknown": "問題が発生しました",
   "liveDocAi.enableAnnotation": "注釈を有効にする",
   "liveDocAi.uploadFromLocal": "ローカルからアップロード",
-  "liveDocAi.uploadFromSpace": "スペースからアップロード",
-  "liveDocAi.uploadFromFiles": "ファイルからアップロード",
+  "liveDocAi.addFromTeamSpace": "チームスペースから追加",
+  "liveDocAi.addFromMyFiles": "マイファイルから追加",
   "liveDocAi.uploadBlankPage": "白紙ページをアップロード",
   "liveDocAi.moreUploadOptions": "その他のアップロードオプション",
   "liveDocAi.addLink": "リンク",
@@ -425,6 +425,8 @@
   "liveDocAi.noData": "データがありません",
   "liveDocAi.loading": "読み込み中…",
   "liveDocAi.noFiles": "ファイルがありません",
+  "liveDocAi.myFilesNotYetOwn": "ここにはまだ Kloud のマイファイルは表示されません。会議ではご自身のアカウントでドキュメントを開くことがまだできません。",
+  "liveDocAi.teamSpaceNeedsOwnAccount": "チームスペースのドキュメントは、ご自身の Kloud アカウントで開きます。会議ではまだご利用いただけません。現在開発中です。",
   "liveDocAi.totalFiles": "合計 {total} ファイル",
   "liveDocAi.selectedCount": "{count} 件選択中",
   "toolbar.webcam": "ビデオ",
@@ -1510,8 +1512,8 @@
   "company.bg.removeText": "使用中のメンバーはぼかしに切り替わり、部屋は映りません。",
   "company.bg.removeTextDefault": "メンバーのデフォルトでもあります。使用中のメンバーはぼかしに切り替わり、部屋は映りません。",
   "liveDocAi.fromDevice": "デバイスから",
-  "liveDocAi.fromLiveDocSpace": "LiveDoc スペースから",
+  "liveDocAi.fromTeamSpace": "チームスペースから",
   "liveDocAi.whiteBoard": "ホワイトボード",
   "liveDocAi.excalidrawBoard": "Excalidraw ボード",
-  "liveDocAi.fromFiles": "ファイルから"
+  "liveDocAi.fromMyFiles": "マイファイルから"
 }

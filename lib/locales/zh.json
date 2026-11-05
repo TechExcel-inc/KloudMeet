@@ -376,8 +376,8 @@
   "liveDocAi.uploadFail.unknown": "出了点问题",
   "liveDocAi.enableAnnotation": "启用批注",
   "liveDocAi.uploadFromLocal": "本地上传",
-  "liveDocAi.uploadFromSpace": "从空间上传",
-  "liveDocAi.uploadFromFiles": "从文件上传",
+  "liveDocAi.addFromTeamSpace": "从团队空间添加",
+  "liveDocAi.addFromMyFiles": "从我的文档添加",
   "liveDocAi.uploadBlankPage": "上传空白页",
   "liveDocAi.moreUploadOptions": "更多上传选项",
   "liveDocAi.addLink": "链接",
@@ -425,6 +425,8 @@
   "liveDocAi.noData": "暂无数据",
   "liveDocAi.loading": "加载中…",
   "liveDocAi.noFiles": "暂无文件",
+  "liveDocAi.myFilesNotYetOwn": "这里还不是你在 Kloud 的“我的文档”。会议暂时还不能用你本人的账号打开文档。",
+  "liveDocAi.teamSpaceNeedsOwnAccount": "团队空间的文档要用你本人的 Kloud 账号打开。会议里暂时还不支持，这个功能正在开发中。",
   "liveDocAi.totalFiles": "共 {total} 个文件",
   "liveDocAi.selectedCount": "已选 {count} 个",
   "toolbar.webcam": "摄像头",
@@ -1495,8 +1497,8 @@
   "company.bg.removeText": "正在用它的成员会自动换成虚化，房间不会露出来。",
   "company.bg.removeTextDefault": "它也是成员的默认背景。正在用它的成员会自动换成虚化，房间不会露出来。",
   "liveDocAi.fromDevice": "从设备",
-  "liveDocAi.fromLiveDocSpace": "从 LiveDoc 空间",
+  "liveDocAi.fromTeamSpace": "从团队空间",
   "liveDocAi.whiteBoard": "白板",
   "liveDocAi.excalidrawBoard": "Excalidraw 白板",
-  "liveDocAi.fromFiles": "从文件"
+  "liveDocAi.fromMyFiles": "从我的文档"
 }

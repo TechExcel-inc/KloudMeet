@@ -541,6 +541,7 @@ export function LiveDocAiPanel({
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
   const [removeItemId, setRemoveItemId] = React.useState<number | null>(null);
+  const [spaceNoticeOpen, setSpaceNoticeOpen] = React.useState(false);
   const [pendingOpenItemId, setPendingOpenItemId] = React.useState<number | null>(null);
   const [summaryMenuOpen, setSummaryMenuOpen] = React.useState(false);
   const [summaryOptionsOpen, setSummaryOptionsOpen] = React.useState(false);
@@ -634,6 +635,7 @@ export function LiveDocAiPanel({
       setFileMenuItemId(null);
       setUploadMenuOpen(false);
       setRemoveItemId(null);
+      setSpaceNoticeOpen(false);
       setPendingOpenItemId(null);
       setSummaryMenuOpen(false);
       setSummaryOptionsOpen(false);
@@ -694,36 +696,46 @@ export function LiveDocAiPanel({
   const captionGroups = groupBySpeaker(filteredCaptions);
   // From every caption, not just the search hits, so a search doesn't recolour people
   const speakerToneByName = speakerTones(meetingCaptions.items);
-  /** `more`: listed under More in the empty state; the Add menu lists every source */
-  const addSources: Array<{ key: string; icon: GlyphName; label: string; onClick: () => void; more?: boolean }> = [
+  /**
+   * `more`: listed under More in the empty state; the Add menu lists every source.
+   * `groupStart`: the Add menu draws a line above it.
+   */
+  const addSources: Array<{
+    key: string;
+    icon: GlyphName;
+    label: string;
+    onClick: () => void;
+    more?: boolean;
+    groupStart?: boolean;
+  }> = [
     {
       key: 'local',
       icon: 'upload',
       label: t('liveDocAi.fromDevice'),
       onClick: () => fileInputRef.current?.click(),
     },
-    ...(state?.documents.companySpaceAllowed
-      ? [
-          {
-            key: 'space',
-            icon: 'space' as GlyphName,
-            label: t('liveDocAi.fromLiveDocSpace'),
-            onClick: () => openPicker('space'),
-          },
-        ]
-      : []),
+    {
+      key: 'space',
+      icon: 'space',
+      label: t('liveDocAi.fromTeamSpace'),
+      // An anonymous identity never lists company documents; the entry says why instead
+      onClick: () => {
+        if (state?.documents.companySpaceAllowed) openPicker('space');
+        else setSpaceNoticeOpen(true);
+      },
+    },
+    {
+      key: 'files',
+      icon: 'files',
+      label: t('liveDocAi.fromMyFiles'),
+      onClick: () => openPicker('favorite'),
+    },
     {
       key: 'whiteboard',
       icon: 'whiteboard',
       label: t('liveDocAi.whiteBoard'),
       onClick: () => runAction('document.addBlank'),
-    },
-    {
-      key: 'files',
-      icon: 'files',
-      label: t('liveDocAi.fromFiles'),
-      onClick: () => openPicker('favorite'),
-      more: true,
+      groupStart: true,
     },
     {
       key: 'excalidraw',
@@ -1351,6 +1363,20 @@ export function LiveDocAiPanel({
           </div>
         )}
 
+        {spaceNoticeOpen && (
+          <div className={styles.nestedOverlay}>
+            <div className={styles.confirmDialog} role="alertdialog" aria-modal="true">
+              <h3>{t('liveDocAi.addFromTeamSpace')}</h3>
+              <p>{t('liveDocAi.teamSpaceNeedsOwnAccount')}</p>
+              <div>
+                <button type="button" onClick={() => setSpaceNoticeOpen(false)}>
+                  {t('liveDocAi.ok')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {pendingOpenItemId !== null && (
           <div className={styles.nestedOverlay}>
             <div
@@ -1472,18 +1498,20 @@ export function LiveDocAiPanel({
           onMouseDown={(event) => event.stopPropagation()}
         >
           {addSources.filter((source) => documents.length > 0 || source.more).map((source) => (
-            <button
-              key={source.key}
-              type="button"
-              title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
-              onClick={() => {
-                setUploadMenuOpen(false);
-                source.onClick();
-              }}
-            >
-              <Glyph name={source.icon} size={18} />
-              {source.label}
-            </button>
+            <React.Fragment key={source.key}>
+              {source.groupStart && <div className={styles.menuDivider} role="separator" />}
+              <button
+                type="button"
+                title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
+                onClick={() => {
+                  setUploadMenuOpen(false);
+                  source.onClick();
+                }}
+              >
+                <Glyph name={source.icon} size={18} />
+                {source.label}
+              </button>
+            </React.Fragment>
           ))}
         </FloatingMenu>
       )}
@@ -1690,7 +1718,7 @@ function PickerDialog({
   const selectedCount = picker.items.filter((item) => item.selected).length;
   const [searchDraft, setSearchDraft] = React.useState(picker.search);
   const pickerTitle =
-    picker.kind === 'space' ? t('liveDocAi.uploadFromSpace') : t('liveDocAi.uploadFromFiles');
+    picker.kind === 'space' ? t('liveDocAi.addFromTeamSpace') : t('liveDocAi.addFromMyFiles');
 
   React.useEffect(() => {
     setSearchDraft(picker.search);
@@ -1770,7 +1798,12 @@ function PickerDialog({
         <div className={styles.pickerList}>
           {picker.loading && <div className={styles.empty}>{t('liveDocAi.loading')}</div>}
           {!picker.loading && !picker.items.length && (
-            <div className={styles.empty}>{t('liveDocAi.noFiles')}</div>
+            <div className={styles.empty}>
+              {/* An anonymous identity lists that account's files, not the person's own */}
+              {picker.kind === 'favorite' && !state.documents.companySpaceAllowed
+                ? t('liveDocAi.myFilesNotYetOwn')
+                : t('liveDocAi.noFiles')}
+            </div>
           )}
           {picker.items.map((item) => (
             <label
