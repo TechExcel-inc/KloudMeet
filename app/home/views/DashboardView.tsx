@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
@@ -40,6 +41,27 @@ import { TopToolbar } from '../components/TopToolbar';
 import { useTx } from '../components/ui';
 import { MeetingDatePicker, fromYmd, toYmd, type Ymd } from '../components/MeetingDatePicker';
 import type { ToastAction } from '../components/useToast';
+
+/** Put the row menu on the viewport. Open upward when the list below would cover it. */
+function placeRowMenu(anchor: HTMLElement, menu: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const gap = 4;
+  const margin = 8;
+  menu.style.maxHeight = '';
+  const height = menu.scrollHeight;
+  const width = menu.offsetWidth;
+  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+  const openUp = spaceBelow < height && spaceAbove > spaceBelow;
+  const room = Math.max(0, openUp ? spaceAbove : spaceBelow);
+  const cap = Math.min(height, room > 0 ? room : height, window.innerHeight - margin * 2);
+  menu.style.maxHeight = `${cap}px`;
+  const used = Math.min(height, cap);
+  const top = openUp ? Math.max(margin, rect.top - gap - used) : rect.bottom + gap;
+  const left = Math.min(Math.max(margin, rect.right - width), window.innerWidth - width - margin);
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
 
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
 
@@ -152,16 +174,50 @@ export function DashboardView({
     return () => clearInterval(timer);
   }, []);
 
+  const menuAnchorRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!inviteMenuRoomName) return;
     const onDocMouseDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('[data-invite-menu-anchor="true"]')) {
+      if (!target?.closest('[data-invite-menu-anchor="true"], [data-invite-menu="true"]')) {
         setInviteMenuRoomName(null);
       }
     };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [inviteMenuRoomName]);
+
+  useLayoutEffect(() => {
+    if (!inviteMenuRoomName) return;
+    const anchor = menuAnchorRef.current;
+    const menu = menuRef.current;
+    if (!anchor || !menu) return;
+    const place = () => {
+      if (!anchor.isConnected) return;
+      placeRowMenu(anchor, menu);
+    };
+    place();
+    const scroller = meetingListScrollRef.current;
+    const onScroll = () => {
+      if (!anchor.isConnected) return;
+      if (scroller) {
+        const row = anchor.getBoundingClientRect();
+        const box = scroller.getBoundingClientRect();
+        if (row.bottom <= box.top + 4 || row.top >= box.bottom - 4) {
+          setInviteMenuRoomName(null);
+          return;
+        }
+      }
+      place();
+    };
+    scroller?.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', place);
+    return () => {
+      scroller?.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', place);
+    };
   }, [inviteMenuRoomName]);
 
   // Fetch personal room ID from profile
@@ -952,8 +1008,14 @@ export function DashboardView({
     m: any,
     opts: { chat: boolean; edit: boolean; remove: boolean; invite: boolean },
   ) =>
-    inviteMenuRoomName === m.roomName ? (
-      <div className={`${styles.dropdownMenu} ${styles.inviteMenu}`} role="menu">
+    inviteMenuRoomName === m.roomName && typeof document !== 'undefined' ? (
+      createPortal(
+      <div
+        ref={menuRef}
+        data-invite-menu="true"
+        className={`${styles.dropdownMenu} ${styles.inviteMenu} ${styles.inviteMenuFloating}`}
+        role="menu"
+      >
         <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
           {t('schedule.copyLink')}
         </button>
@@ -1027,7 +1089,9 @@ export function DashboardView({
             {t('dash.deleteMeeting')}
           </button>
         )}
-      </div>
+      </div>,
+      document.body,
+      )
     ) : null;
 
   /** Personal-room sessions are archived as "<id>_<meetingId>"; show the room ID people type. */
@@ -1190,7 +1254,11 @@ export function DashboardView({
             <span className={styles.rowActionSpacer} aria-hidden="true" />
           )}
           {m.roomName && (
-            <div data-invite-menu-anchor="true" className={styles.anchor}>
+            <div
+              data-invite-menu-anchor="true"
+              className={styles.anchor}
+              ref={cardMenuOpen ? menuAnchorRef : undefined}
+            >
               <button
                 type="button"
                 title={tx('dash.moreActions', 'More actions')}

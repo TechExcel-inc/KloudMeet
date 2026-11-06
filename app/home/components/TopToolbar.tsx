@@ -7,38 +7,8 @@ import type { AuthUser } from '../types';
 import { KloudLogo } from './KloudLogo';
 import { UserAvatarMenu } from '@/lib/UserAvatarMenu';
 
-const LOCALE_TAGS: Record<string, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' };
-
 /** Kloud platform switcher (9-dot menu): hidden until kloud.cn is ready to receive users from Meet. */
 const SHOW_APP_SWITCHER = false;
-
-/** "2:32 PM • Thu, Oct 23" in the active UI language; client-only (rendered after mount). */
-function NavClock() {
-  const { locale } = useI18n();
-  const [now, setNow] = useState<Date | null>(null);
-
-  React.useEffect(() => {
-    setNow(new Date());
-    const id = setInterval(() => setNow(new Date()), 15_000);
-    return () => clearInterval(id);
-  }, []);
-
-  if (!now) return null;
-  const tag = LOCALE_TAGS[locale] || undefined;
-  let text = '';
-  try {
-    const time = now.toLocaleTimeString(tag, { hour: 'numeric', minute: '2-digit' });
-    const date = now.toLocaleDateString(tag, { weekday: 'short', month: 'short', day: 'numeric' });
-    text = `${time} • ${date}`;
-  } catch {
-    text = now.toLocaleString();
-  }
-  return (
-    <span className={styles.navClock} aria-hidden="true">
-      {text}
-    </span>
-  );
-}
 
 export function TopToolbar({
   onBack,
@@ -52,7 +22,6 @@ export function TopToolbar({
   user,
   hideAvatar,
   hideLogo,
-  showClock,
   transparent,
   tagline,
 }: {
@@ -69,7 +38,6 @@ export function TopToolbar({
   hideAvatar?: boolean;
   /** Auth pages show the logo inside the card instead. */
   hideLogo?: boolean;
-  showClock?: boolean;
   transparent?: boolean;
   /** One quiet line beside the logo (the product promise on the signed-in home). */
   tagline?: string;
@@ -174,10 +142,8 @@ export function TopToolbar({
           {tagline && <span className={styles.navTagline}>{tagline}</span>}
         </div>
 
-        {/* ── Right: clock, help, theme, language, apps, account ── */}
+        {/* ── Right: help, theme, language, apps, account ── */}
         <div className={styles.topNavRight}>
-          {showClock && <NavClock />}
-
           <button
             type="button"
             className={styles.topNavIconBtn}
