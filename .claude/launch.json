@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "simeet-dev",
+      "runtimeExecutable": "/private/tmp/claude-501/-Users-tierenz-Documents-Project-KloudMeet/58c26ede-6335-4439-b29d-26c1b00d68ed/scratchpad/simeet-dev.sh",
+      "runtimeArgs": [],
+      "port": 3203
+    },
+    {
+      "name": "kloud-web-plugin",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/tierenz/Documents/Project/Kloud-Web",
+        "run",
+        "dev"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "kloudmeet-dev-3205",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "exec",
+        "next",
+        "dev",
+        "-p",
+        "3205",
+        "--turbopack"
+      ],
+      "port": 3205
+    }
+  ]
+}

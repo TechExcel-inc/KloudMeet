@@ -63,7 +63,16 @@ if [[ "$live" == *"-$target" ]]; then
   echo "origin/main is already live."
   exit 0
 fi
+# New migrations since the live release, worked out here with git: the server script's own report
+# missed add_summary_model.sql when 4629c5e -> 54c87ce went out.
+migrations=
+if [[ -n "$live" ]] && git cat-file -e "${live##*-}^{commit}" 2>/dev/null; then
+  migrations=$(git diff --name-only --diff-filter=A "${live##*-}" origin/main -- 'prisma/*.sql')
+elif [[ -n "$live" ]]; then
+  echo "    Note: live commit ${live##*-} is not in this checkout; only the server's migration report is checked."
+fi
 if [[ $dry == 1 ]]; then
+  [[ -n "$migrations" ]] && { echo "    New migrations since the live release:"; sed 's/^/      /' <<< "$migrations"; }
   step "Dry run: would $([[ $build == 1 ]] && echo "build $target on the server, then ")switch the site to it"
   exit 0
 fi
@@ -78,8 +87,9 @@ if [[ $build == 1 ]]; then
   release=$(sed -n 's/^Built release //p' "$LOG" | tail -1)
   [[ -n "$release" ]] || { tail -20 "$LOG"; echo "The build did not report a release name. Full log: $LOG" >&2; exit 1; }
   echo "    Built $release"
-  if grep -q '^New database migrations' "$LOG"; then
-    sed -n '/^New database migrations/,/^Next:/p' "$LOG" | grep -v '^Next:'
+  if [[ -n "$migrations" ]] || grep -q '^New database migrations' "$LOG"; then
+    echo "New database migrations since the live release:"
+    { [[ -n "$migrations" ]] && cat <<< "$migrations"; sed -n '/^New database migrations/,/^Next:/p' "$LOG" | sed '1d;$d' | sed 's/^ *//'; } | sort -u | sed 's/^/    /'
     echo "Not switched: run these migrations on the database first, then: npm run deploy -- --switch" >&2
     exit 1
   fi

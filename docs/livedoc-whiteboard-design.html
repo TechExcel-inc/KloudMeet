@@ -1,0 +1,372 @@
+<title>LiveDoc Whiteboard Design</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Public+Sans:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column (~72ch) with a sticky section index on wide screens; tables and diagrams scroll inside their own boxes. */
+:root {
+  --bg: #f7f7fb;
+  --surface: #ffffff;
+  --fg: #1d1b29;
+  --muted: #5d5a72;
+  --line: #e2e0ee;
+  --accent: #6a5cf0;
+  --accent-soft: #ecebff;
+  --ok: #1f8a5b;
+  --warn: #b06a00;
+  --code-bg: #f0eff8;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17161f; --surface: #201f2b; --fg: #ecebf5; --muted: #a6a3bd; --line: #33314a;
+    --accent: #9b90ff; --accent-soft: #2c2850; --ok: #4cc58c; --warn: #f0a640; --code-bg: #26243a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17161f; --surface: #201f2b; --fg: #ecebf5; --muted: #a6a3bd; --line: #33314a;
+  --accent: #9b90ff; --accent-soft: #2c2850; --ok: #4cc58c; --warn: #f0a640; --code-bg: #26243a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 80px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+nav.toc { position: sticky; top: calc(24px + env(safe-area-inset-top, 0px)); align-self: start; font-size: 13.5px; }
+nav.toc ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; counter-reset: s; }
+nav.toc li { counter-increment: s; }
+nav.toc a { color: var(--muted); text-decoration: none; display: flex; gap: 8px; }
+nav.toc a::before { content: counter(s, decimal-leading-zero); font-family: var(--font-mono); font-size: 11.5px; color: var(--accent); padding-top: 2px; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--fg); }
+main { min-width: 0; max-width: 76ch; }
+header.doc { display: grid; gap: 10px; margin-bottom: 36px; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); letter-spacing: -.01em; }
+h2 { font-size: 26px; margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); }
+h3 { font-size: 18px; margin-top: 28px; }
+p { margin: 12px 0; }
+.lede { font-size: 18px; color: var(--muted); }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 13.5px; color: var(--muted); }
+.meta b { color: var(--fg); font-weight: 600; }
+a { color: var(--accent); }
+code { font-family: var(--font-mono); font-size: .86em; background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+pre.code { font-family: var(--font-mono); font-size: 13px; line-height: 1.55; background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 14px 0; }
+pre.code code { background: none; padding: 0; font-size: inherit; }
+.tbl { overflow-x: auto; margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; background: var(--code-bg); }
+tr:last-child td { border-bottom: 0; }
+ul, ol.steps { padding-left: 22px; margin: 10px 0; }
+li { margin: 4px 0; }
+.pill { display: inline-block; font-family: var(--font-mono); font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.pill.ok { color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }
+.pill.warn { color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent); }
+.note { border-left: 3px solid var(--warn); padding: 8px 14px; background: color-mix(in srgb, var(--warn) 8%, transparent); border-radius: 0 6px 6px 0; margin: 16px 0; }
+.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; overflow-x: auto; margin: 16px 0; }
+
+/* Button row mockup */
+.mock { background: #22212b; border-radius: 12px; padding: 18px; margin: 16px 0; color: #ecebf5; }
+.mock-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.mock-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #3a3850; background: #2b2a38; color: #ecebf5; font: 600 14px var(--font-body); }
+.mock-btn.primary { background: #6a5cf0; border-color: #6a5cf0; }
+.mock-btn svg { width: 16px; height: 16px; flex: none; }
+.mock-cap { font-size: 12.5px; color: #a6a3bd; margin-top: 10px; }
+
+@media (max-width: 860px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  nav.toc { position: static; margin-bottom: 24px; }
+  nav.toc ol { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+<nav class="toc" aria-label="Sections">
+  <ol>
+    <li><a href="#decisions">Decisions</a></li>
+    <li><a href="#ux">Panel and canvas</a></li>
+    <li><a href="#arch">Architecture</a></li>
+    <li><a href="#model">Document model</a></li>
+    <li><a href="#api">Server API</a></li>
+    <li><a href="#sync">Live sync</a></li>
+    <li><a href="#roles">Roles and camera</a></li>
+    <li><a href="#save">Saving</a></li>
+    <li><a href="#web">Kloud-Web viewer</a></li>
+    <li><a href="#phases">Phases</a></li>
+    <li><a href="#risks">Risks</a></li>
+    <li><a href="#open">Open questions</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="doc">
+  <div class="eyebrow">KloudMeet · Design · Draft for review</div>
+  <h1>LiveDoc Whiteboard</h1>
+  <p class="lede">A white Excalidraw board that the host, co-hosts and presenter can draw on together during a KloudMeet meeting. Everyone else watches the presenter's view. Each board is saved as a LiveDoc document in Kloud, so it can be reopened from LiveDoc Space and viewed in the Kloud web app.</p>
+  <div class="meta"><span><b>Date</b> 2026-11-03</span><span><b>Repos</b> KloudMeet, Kloud-Java-Server, Kloud-Web</span><span><b>Status</b> Not started</span></div>
+</header>
+
+<section id="decisions">
+<h2>Decisions</h2>
+<div class="tbl"><table>
+<thead><tr><th>Topic</th><th>Decision</th></tr></thead>
+<tbody>
+<tr><td>Where it renders</td><td>In KloudMeet (React), drawn over the LiveDoc stage when the current file is a whiteboard</td></tr>
+<tr><td>Where it lives</td><td>A LiveDoc document in Kloud with its own <code>AttachmentID</code>, shown in the meeting's document list and in LiveDoc Space</td></tr>
+<tr><td>Engine</td><td><code>@excalidraw/excalidraw</code> 0.18.x, loaded on demand</td></tr>
+<tr><td>Who can draw</td><td>Host, co-hosts and presenter. Everyone else can only view</td></tr>
+<tr><td>Viewer camera</td><td>Follows the presenter by default. A viewer who pans or zooms gets a <em>Follow presenter</em> button</td></tr>
+<tr><td>Canvas</td><td>White canvas inside KloudMeet's dark controls</td></tr>
+<tr><td>Storage</td><td>One Excalidraw JSON scene per board, with a version number, a PNG preview and the board's text</td></tr>
+<tr><td>Live sync</td><td>LiveKit data channel topic <code>wb</code>. Only changed elements are sent and merged by element version</td></tr>
+<tr><td>Backend</td><td>New <code>/whiteboard</code> endpoints in Kloud-Java-Server <code>kloud-meeting</code>, written by Claude and reviewed by Xiaoyu</td></tr>
+<tr><td>Kloud-Web</td><td>Read-only render of the saved scene, with the PNG as thumbnail and fallback</td></tr>
+<tr><td>Old boards</td><td>Boards on <code>excalidraw.kloud.cn</code> keep opening in the iframe. No migration. The <code>excalidraw_data</code> table is left as it is</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="ux">
+<h2>Panel and canvas</h2>
+<h3>Doc AI › Documents: compact buttons</h3>
+<p>The four large cards in the empty state become one row of compact buttons. The toolbar shown once the meeting has documents uses the same labels.</p>
+<div class="mock" role="img" aria-label="Mockup of the compact button row">
+  <div class="mock-row">
+    <span class="mock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></svg>From Device</span>
+    <span class="mock-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>From LiveDoc Space</span>
+    <span class="mock-btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M7 12l3-3 3 2 4-4M12 16v4M8 20h8"/></svg>White Board</span>
+    <span class="mock-btn"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>More</span>
+  </div>
+  <div class="mock-cap">36px tall, icon and label on one line, wraps on narrow screens. White Board uses the accent color as the main action.</div>
+</div>
+<div class="tbl"><table>
+<thead><tr><th>Label</th><th>Was</th><th>Action</th></tr></thead>
+<tbody>
+<tr><td>From Device</td><td>Upload from Computer</td><td>Local file picker (unchanged)</td></tr>
+<tr><td>From LiveDoc Space</td><td>Upload from Space</td><td><code>openPicker('space')</code> (unchanged)</td></tr>
+<tr><td>White Board</td><td>New whiteboard</td><td>Creates a new LiveDoc whiteboard (see <a href="#api">Server API</a>)</td></tr>
+<tr><td>More</td><td>—</td><td>Menu: From Files (favorites), Paste link, Design link <span class="pill warn">confirm</span></td></tr>
+</tbody></table></div>
+<p>The text is in <code>lib/locales/*.json</code> under <code>liveDocAi.*</code>. The layout is in <code>lib/LiveDocAiPanel.tsx</code>: the empty state, the toolbar near line 1091 and the upload menu near line 1350.</p>
+
+<h3>Whiteboard stage</h3>
+<ul>
+  <li>When the current LiveDoc file is a whiteboard, KloudMeet shows the Excalidraw canvas in the stage area. The LiveDoc iframe stays mounted underneath, so the document list, file switching and following work as they do now.</li>
+  <li>The Excalidraw canvas is white (<code>theme: "light"</code>). Excalidraw's own main menu, library and help are hidden. Editors get a compact dark toolbar in KloudMeet style: select, hand, pen, shapes, arrow, text, eraser, undo/redo and zoom.</li>
+  <li>Editors see each other's cursors with name labels. Viewers see the presenter's cursor.</li>
+  <li>A small status chip shows <em>Saved</em>, <em>Saving…</em> or <em>Offline, changes kept locally</em>.</li>
+</ul>
+</section>
+
+<section id="arch">
+<h2>Architecture</h2>
+<pre class="mermaid">
+flowchart LR
+  subgraph Meet["KloudMeet client (each participant)"]
+    Panel["Doc AI panel<br/>White Board button"]
+    Stage["WhiteboardStage<br/>@excalidraw/excalidraw"]
+    Sync["wb sync<br/>diff · reconcile · roles"]
+    Saver["Elected saver<br/>scene + PNG + text"]
+    Frame["LiveDoc iframe<br/>(Kloud-Web MainStage)"]
+  end
+  LK(("LiveKit room<br/>topic: wb"))
+  API["KloudMeet API routes<br/>/api/whiteboard/*"]
+  Java["Kloud-Java-Server<br/>kloud-meeting /whiteboard"]
+  DB[("whiteboard_scene<br/>+ Document / LessonDocument")]
+  Store[("File storage<br/>preview PNG")]
+  Web["Kloud web app<br/>read-only viewer"]
+
+  Panel -->|create| API
+  Frame -->|"onkloudswitchfile<br/>AttachmentID, FileType"| Stage
+  Stage <--> Sync
+  Sync <-->|elements · pointer · viewport| LK
+  Saver -->|load / save| API
+  API --> Java
+  Java --> DB
+  Java --> Store
+  Web -->|load scene| Java
+</pre>
+<p>KloudMeet does not call the Java server from the browser. It goes through its own API routes, using the same upstream helpers it already uses (<code>lib/peertimeUpstream.ts</code> → <code>buildMeetingServerUrl</code>). This keeps tokens and CORS in one place.</p>
+</section>
+
+<section id="model">
+<h2>Document model</h2>
+<h3>Whiteboard document type</h3>
+<p>A whiteboard is a normal Kloud document (<code>Document</code> plus <code>LessonDocument</code>) with a new <code>FileTypeEnum.WHITEBOARD</code>. Today we spot boards by checking for <code>excalidraw.kloud.cn</code> in the URL; the new file type replaces that check. Its <code>AttachmentUrl</code> is a fixed marker, <code>kloud-whiteboard://{attachmentId}</code>, so older clients that only know URLs don't try to load a web page.</p>
+
+<h3>New table <code>whiteboard_scene</code></h3>
+<div class="tbl"><table>
+<thead><tr><th>Column</th><th>Type</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>attachment_id</code></td><td>INT, PK</td><td>The whiteboard document</td></tr>
+<tr><td><code>version</code></td><td>INT</td><td>Goes up by 1 on each save. Used for optimistic locking</td></tr>
+<tr><td><code>scene</code></td><td>LONGTEXT</td><td>Excalidraw scene JSON: <code>{type, version, elements, appState: {viewBackgroundColor, gridSize}}</code>. Deleted elements are removed before saving</td></tr>
+<tr><td><code>text_content</code></td><td>TEXT</td><td>Text from text elements and labels, in reading order. Used by search and Doc AI</td></tr>
+<tr><td><code>preview_url</code></td><td>VARCHAR(512)</td><td>PNG made on save. Thumbnail in Space and fallback view</td></tr>
+<tr><td><code>element_count</code></td><td>INT</td><td>For quick checks and logs</td></tr>
+<tr><td><code>updated_by</code> / <code>updated_time</code></td><td>INT / DATETIME</td><td></td></tr>
+<tr><td><code>create_by</code> / <code>create_time</code></td><td>INT / DATETIME</td><td></td></tr>
+</tbody></table></div>
+<p>Size: a busy board with 2,000 elements is about 1–2 MB of JSON, so LONGTEXT is enough. Image files are not stored in the scene in Phase 1 (the image tool is off).</p>
+</section>
+
+<section id="api">
+<h2>Server API</h2>
+<p>New controller <code>WhiteboardController</code> at <code>/whiteboard</code> in <code>kloud-meeting</code>. It follows <code>ExcalidrawController</code>: <code>@AuthenticateToken</code>, <code>ResultVO</code> responses, and the controller/service/mapper split.</p>
+<div class="tbl"><table>
+<thead><tr><th>Method</th><th>Path</th><th>Body / query</th><th>Returns</th></tr></thead>
+<tbody>
+<tr><td>POST</td><td><code>/whiteboard/create</code></td><td><code>{lessonId, title?}</code></td><td><code>{attachmentId, itemId, title}</code>. Creates the Document, LessonDocument and an empty scene at version 0. Same flow as <code>addHtmlDefaultPage</code></td></tr>
+<tr><td>GET</td><td><code>/whiteboard/scene</code></td><td><code>?attachmentId</code></td><td><code>{version, scene, updatedTime}</code></td></tr>
+<tr><td>POST</td><td><code>/whiteboard/scene</code></td><td><code>{attachmentId, baseVersion, scene, textContent}</code></td><td><code>{version}</code>. Returns <code>VERSION_CONFLICT</code> with the current version if <code>baseVersion</code> is out of date</td></tr>
+<tr><td>POST</td><td><code>/whiteboard/preview</code></td><td>multipart: <code>attachmentId</code>, <code>version</code>, <code>file</code> (PNG)</td><td><code>{previewUrl}</code>. Also used as the document thumbnail</td></tr>
+</tbody></table></div>
+<p><b>Permission check on save:</b> in Phase 1 the user must be signed in and a member of the lesson. In Phase 2 the server also checks that the user is host, co-host or presenter of the live meeting. The LiveKit receivers already enforce this for live strokes.</p>
+<p><b>Creating from the panel:</b> the <em>White Board</em> button calls <code>POST /api/whiteboard/create</code> in KloudMeet, then asks the LiveDoc iframe to refresh its file list and switch to the new file. Today this is <code>runAction('document.addBlank')</code>; we add an action such as <code>document.openById</code> to MainStage.</p>
+</section>
+
+<section id="sync">
+<h2>Live sync</h2>
+<p>A new LiveKit data topic <code>wb</code>, alongside the existing <code>anno</code>, <code>rc</code> and <code>ctl</code>. Every message has <code>{t, board, from}</code>, where <code>board</code> is the AttachmentID.</p>
+<div class="tbl"><table>
+<thead><tr><th>Type <code>t</code></th><th>Sent by</th><th>Delivery</th><th>Payload and rule</th></tr></thead>
+<tbody>
+<tr><td><code>el</code></td><td>Editors</td><td>Reliable, at most every 50 ms</td><td><code>{elements[]}</code>: only elements whose <code>version</code> went up since the last send. Receivers merge with <code>reconcileElements</code> and apply with <code>captureUpdate: NEVER</code>, so a person's undo only covers their own changes</td></tr>
+<tr><td><code>ptr</code></td><td>Editors</td><td>Lossy, about 30 ms</td><td><code>{x, y, tool, down}</code> in scene coordinates, shown as collaborator cursors</td></tr>
+<tr><td><code>view</code></td><td>Presenter</td><td>Lossy while moving, reliable when stopped</td><td><code>{x, y, w, h}</code>: the visible scene area. Viewers fit this area to their own screen</td></tr>
+<tr><td><code>req</code></td><td>Anyone joining</td><td>Reliable</td><td><code>{haveVersion}</code>: "send me anything newer than this saved version"</td></tr>
+<tr><td><code>full</code></td><td>Elected saver</td><td>LiveKit text stream (<code>sendText</code>, topic <code>wb-bulk</code>)</td><td>The full current scene. Used for <code>req</code> and for any <code>el</code> batch over ~12 KB</td></tr>
+<tr><td><code>saved</code></td><td>Elected saver</td><td>Reliable</td><td><code>{version}</code> so others can show "Saved"</td></tr>
+</tbody></table></div>
+
+<pre class="mermaid">
+sequenceDiagram
+  participant P as Presenter (editor)
+  participant H as Host (editor, saver)
+  participant V as Viewer
+  participant J as Kloud-Java-Server
+  V->>J: GET /whiteboard/scene (version 12)
+  V->>H: wb.req {haveVersion: 12}
+  H-->>V: wb-bulk full scene (unsaved changes)
+  P->>H: wb.el {changed elements}
+  P->>V: wb.el {changed elements}
+  P->>V: wb.view {x, y, w, h}
+  Note over H: 2 s with no changes
+  H->>J: POST /whiteboard/scene (baseVersion 12)
+  J-->>H: version 13
+  H->>P: wb.saved {13}
+  H->>V: wb.saved {13}
+</pre>
+
+<p><b>Role check on receive:</b> each client ignores <code>el</code> and <code>ptr</code> from a sender whose current role is not host, co-host or presenter. It uses the same role data that <code>resolveLiveDocEmbedRole</code> uses. A change made in a hacked browser therefore never reaches anyone else's canvas.</p>
+</section>
+
+<section id="roles">
+<h2>Roles and camera</h2>
+<div class="tbl"><table>
+<thead><tr><th>Role</th><th>Draw</th><th>Camera</th><th>Cursor shown to others</th></tr></thead>
+<tbody>
+<tr><td>Host</td><td><span class="pill ok">yes</span></td><td>Free, with a Follow presenter option</td><td>Editors</td></tr>
+<tr><td>Co-host</td><td><span class="pill ok">yes</span></td><td>Free, with a Follow presenter option</td><td>Editors</td></tr>
+<tr><td>Presenter</td><td><span class="pill ok">yes</span></td><td>Free. This is the view everyone follows</td><td>Everyone</td></tr>
+<tr><td>Participant</td><td><span class="pill">view</span></td><td>Follows the presenter. Panning stops following until <em>Follow presenter</em> is clicked</td><td>—</td></tr>
+</tbody></table></div>
+<ul>
+  <li><b>Whose view is followed:</b> the presenter's. If there is no presenter, the host's. If the host is away, the first co-host's.</li>
+  <li><b>Different screen sizes:</b> the presenter sends the visible <em>scene area</em>, not scroll and zoom values. Each viewer picks the zoom that fits that area in their own stage. A laptop and a 4K monitor show the same content at different scales.</li>
+  <li><b>Role changes during the meeting</b> switch the canvas between edit and view mode immediately (<code>viewModeEnabled</code>). Anything the person was drawing is finished and sent first.</li>
+  <li>The <em>Enable Annotation</em> toggle does not affect whiteboards. Whiteboard rights come only from the person's role.</li>
+</ul>
+</section>
+
+<section id="save">
+<h2>Saving</h2>
+<h3>One saver</h3>
+<p>The save endpoint overwrites the whole scene, so only one client saves. Every client chooses the same saver from the room's current participants: the presenter, else the host, else the co-host with the lowest identity. If the saver leaves, the next one in that order takes over. No messages are needed to decide this.</p>
+<h3>When it saves</h3>
+<ul>
+  <li>After 2 s with no changes, and at least every 10 s while people keep drawing.</li>
+  <li>When the meeting switches to another file, when the saver leaves, and when the meeting ends.</li>
+  <li>Each save sends the scene and the text. Every 3rd save, and always the last one, also sends a new PNG preview from <code>exportToBlob</code> (max 1600 px wide).</li>
+</ul>
+<h3>Conflicts and failures</h3>
+<ul>
+  <li>If the server returns <code>VERSION_CONFLICT</code> (for example a stale saver after a network split), the saver loads the server scene, merges it with <code>reconcileElements</code> and saves again.</li>
+  <li>If a save fails, the saver keeps the scene in IndexedDB under the board ID and retries with backoff. The status chip shows <em>Offline, changes kept locally</em>.</li>
+  <li>Editors who are not the saver also keep a local copy, so nothing is lost if the saver's browser crashes. The new saver picks it up through <code>req</code>/<code>full</code>.</li>
+</ul>
+</section>
+
+<section id="web">
+<h2>Kloud-Web viewer</h2>
+<ul>
+  <li><b>Recognize the type.</b> <code>MainStage.vue</code> sets <code>IsWhiteboard: true</code> and sends <code>FileType</code> in <code>onkloudswitchfile</code> for the new type. KloudMeet already reads this into <code>isWhiteboardDoc</code>.</li>
+  <li><b>Inside KloudMeet</b> (<code>FromJitsi</code>), Kloud-Web shows an empty stage for whiteboard files, because KloudMeet draws the board on top. This avoids loading Excalidraw twice.</li>
+  <li><b>In the Kloud web app and LiveDoc Space</b>, a read-only viewer built from <code>src/components/excalidraw/index.vue</code> with <code>viewModeEnabled</code> loads <code>GET /whiteboard/scene</code>. While the scene loads or if it fails, the PNG preview is shown.</li>
+  <li><b>Excalidraw version.</b> Kloud-Web's bundled UMD build in <code>static/excalidraw/</code> is older than 0.18. We replace it with the 0.18 UMD build so scenes with fractional z-order indexes load correctly.</li>
+</ul>
+</section>
+
+<section id="phases">
+<h2>Phases</h2>
+<h3>Before coding</h3>
+<p>Run <code>git pull origin main</code> in KloudMeet, Kloud-Java-Server and Kloud-Web. KloudMeet has local changes in <code>scripts/deploy-meet.sh</code> and untracked docs; check they don't conflict before pulling.</p>
+<div class="tbl"><table>
+<thead><tr><th>Phase</th><th>Scope</th><th>Repos</th></tr></thead>
+<tbody>
+<tr><td>1 · Board works</td><td>
+<ul>
+<li>Compact buttons, new labels and the More menu</li>
+<li>Whiteboard document type, <code>whiteboard_scene</code> table, create/scene endpoints</li>
+<li>KloudMeet API routes, <code>WhiteboardStage</code>, <code>wb</code> sync (el, req, full, saved)</li>
+<li>Role-based editing, elected saver, local backup</li>
+<li>Kloud-Web: send <code>IsWhiteboard</code>/<code>FileType</code>, empty stage inside KloudMeet</li>
+</ul></td><td>All three</td></tr>
+<tr><td>2 · Feels live</td><td>
+<ul>
+<li>Cursors (<code>ptr</code>), presenter follow (<code>view</code>) and the Follow presenter button</li>
+<li>KloudMeet-style editor toolbar, saved status chip</li>
+<li>Server-side role check on save, PNG preview upload and thumbnail</li>
+</ul></td><td>KloudMeet, Java</td></tr>
+<tr><td>3 · Part of Kloud</td><td>
+<ul>
+<li>Kloud-Web read-only viewer and Excalidraw 0.18 UMD update</li>
+<li>Board text and preview in Doc AI and Summary</li>
+<li>LiveDoc Full recording and playback of boards</li>
+<li>Image tool, with uploaded files</li>
+</ul></td><td>Kloud-Web, KloudMeet, Java</td></tr>
+</tbody></table></div>
+</section>
+
+<section id="risks">
+<h2>Risks</h2>
+<ul>
+  <li><b>Recording.</b> LiveDoc Full recording records Kloud-Web, which only sees the board at each save. Until Phase 3 a recording shows the board only as it was at each save, not stroke by stroke.</li>
+  <li><b>Same-text edits.</b> Two editors typing in the same text box at once: the later version wins for that box. This is acceptable for a whiteboard.</li>
+  <li><b>Bundle size.</b> Excalidraw adds about 1–2 MB. It loads only when a whiteboard opens (<code>next/dynamic</code>, <code>ssr: false</code>), with fonts and assets served by KloudMeet, not a public CDN.</li>
+  <li><b>Data channel limits.</b> A large paste can exceed one reliable data packet. Batches over ~12 KB go through LiveKit text streams.</li>
+  <li><b>Mobile.</b> Viewing works on phones. Drawing on phones is supported by Excalidraw but not a Phase 1 goal.</li>
+</ul>
+</section>
+
+<section id="open">
+<h2>Open questions</h2>
+<ol class="steps">
+  <li>What goes under <em>More</em>? The proposal is From Files (favorites), Paste link and Design link.</li>
+  <li>Does a document created in a meeting appear in the creator's LiveDoc Space automatically, or does it need an explicit "Save to Space"? This decides whether <code>/whiteboard/create</code> also adds a Space entry.</li>
+  <li>Where are preview PNGs stored: the same storage as other document thumbnails?</li>
+  <li>Default board title: "Whiteboard · 2026-11-03 14:30", or the meeting name plus a number?</li>
+  <li>Should guests (not signed in to Kloud) who become presenter be able to draw? They can draw live, but saving depends on a signed-in saver being in the room.</li>
+</ol>
+</section>
+</main>
+</div>
