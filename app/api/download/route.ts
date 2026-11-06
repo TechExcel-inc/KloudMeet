@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   fetchReleaseManifest,
-  findMacDmg,
+  findMacInstaller,
   findWindowsInstaller,
   releaseFileUrl,
 } from '@/lib/desktopReleaseManifest';
@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const file =
     os === 'mac'
-      ? findMacDmg(manifest, params.get('arch') === 'x64' ? 'x64' : 'arm64')
+      ? findMacInstaller(manifest, params.get('arch') === 'x64' ? 'x64' : 'arm64')
       : findWindowsInstaller(manifest);
   if (!file) return toDownloadPage();
 

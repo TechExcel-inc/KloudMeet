@@ -46,8 +46,10 @@ export function parseReleaseManifest(text: string): ReleaseManifest | null {
 }
 
 /** macOS 按芯片分别打包（内置服务带原生模块，无法做 universal），所以一定要拿到对应芯片的 dmg */
-export function findMacDmg(manifest: ReleaseManifest, arch: MacArch): ReleaseFile | null {
-  return manifest.files.find((f) => f.url.endsWith('.dmg') && f.url.includes(`-${arch}.`)) ?? null;
+export function findMacInstaller(manifest: ReleaseManifest, arch: MacArch): ReleaseFile | null {
+  const forArch = manifest.files.filter((f) => f.url.includes(`-${arch}.`));
+  // A DMG when there is one; otherwise the zip, which is always published for updates.
+  return forArch.find((f) => f.url.endsWith('.dmg')) ?? forArch.find((f) => f.url.endsWith('.zip')) ?? null;
 }
 
 export function findWindowsInstaller(manifest: ReleaseManifest): ReleaseFile | null {

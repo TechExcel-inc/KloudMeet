@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  findMacDmg,
+  findMacInstaller,
   findWindowsInstaller,
   parseReleaseManifest,
 } from '../desktopReleaseManifest';
@@ -44,11 +44,23 @@ describe('parseReleaseManifest', () => {
   });
 });
 
-describe('findMacDmg', () => {
+describe('findMacInstaller', () => {
   it('finds the dmg for the chip and never offers another chip', () => {
     const m = parseReleaseManifest(MAC)!;
-    expect(findMacDmg(m, 'arm64')?.url).toBe('Kloud Meet-0.2.6-arm64.dmg');
-    expect(findMacDmg(m, 'x64')).toBeNull();
+    expect(findMacInstaller(m, 'arm64')?.url).toBe('Kloud Meet-0.2.6-arm64.dmg');
+    expect(findMacInstaller(m, 'x64')).toBeNull();
+  });
+
+  it('falls back to the zip when no dmg is published', () => {
+    const m = parseReleaseManifest(`version: 0.2.6
+files:
+  - url: Kloud Meet-0.2.6-arm64.zip
+    size: 10
+  - url: Kloud Meet-0.2.6-x64.zip
+    size: 20
+`)!;
+    expect(findMacInstaller(m, 'arm64')).toEqual({ url: 'Kloud Meet-0.2.6-arm64.zip', size: 10 });
+    expect(findMacInstaller(m, 'x64')?.url).toBe('Kloud Meet-0.2.6-x64.zip');
   });
 });
 

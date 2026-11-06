@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import {
   fetchReleaseManifest,
-  findMacDmg,
+  findMacInstaller,
   findWindowsInstaller,
 } from '@/lib/desktopReleaseManifest';
 import { DownloadPageClient } from './DownloadPageClient';
@@ -20,10 +20,10 @@ export default async function DownloadPage() {
       mac={
         mac && {
           version: mac.version,
-          arm64: findMacDmg(mac, 'arm64')?.size ?? null,
-          hasArm64: !!findMacDmg(mac, 'arm64'),
-          x64: findMacDmg(mac, 'x64')?.size ?? null,
-          hasX64: !!findMacDmg(mac, 'x64'),
+          arm64: findMacInstaller(mac, 'arm64')?.size ?? null,
+          hasArm64: !!findMacInstaller(mac, 'arm64'),
+          x64: findMacInstaller(mac, 'x64')?.size ?? null,
+          hasX64: !!findMacInstaller(mac, 'x64'),
         }
       }
       win={
