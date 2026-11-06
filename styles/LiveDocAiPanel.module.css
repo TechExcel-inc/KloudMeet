@@ -249,7 +249,7 @@
 }
 
 /* Three to a row; a short last row sits in the middle */
-/* Empty state: one row of compact source buttons; White Board is the main action */
+/* Empty state: one row of compact source buttons; Live Board is the main action */
 .sourceRow {
   width: 100%;
   margin-top: 18px;

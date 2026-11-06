@@ -54,7 +54,6 @@ const labels = {
   restore: 'Restore',
   restoreLocked: "Stays small while you're in the meeting's webcam view",
   shareBadge: 'Sharing screen',
-  presentingSelf: 'Presenting',
   shareScreen: 'Share screen',
   stopSharing: 'Stop sharing',
   shareConflict: 'Someone is sharing',
@@ -168,22 +167,21 @@ function makeRoom(c: Case, speaking: number[]): Room {
       src === Track.Source.Microphone ? mic : orig(src);
     (p as unknown as { setIsSpeaking?: (s: boolean) => void }).setIsSpeaking?.(true);
   }
-  if (c.share === 'local') {
-    shareWith(lp, { track: {}, isMuted: false, source: Track.Source.ScreenShare });
-  }
+  const attachShare = (p: Participant) => {
+    // The base class is abstract only in its typings; a plain one is enough to carry the track
+    const Publication = TrackPublication as unknown as new (
+      kind: Track.Kind,
+      sid: string,
+      name: string,
+    ) => TrackPublication;
+    const pub = new Publication(Track.Kind.Video, 'TR_share', 'screen');
+    (pub as unknown as { setTrack: (t: unknown) => void }).setTrack(fakeScreenTrack());
+    shareWith(p, pub);
+  };
+  if (c.share === 'local') attachShare(lp);
   if (c.share === 'remote') {
     const sharer = room.remoteParticipants.get('kloud_2');
-    if (sharer) {
-      // The base class is abstract only in its typings; a plain one is enough to carry the track
-      const Publication = TrackPublication as unknown as new (
-        kind: Track.Kind,
-        sid: string,
-        name: string,
-      ) => TrackPublication;
-      const pub = new Publication(Track.Kind.Video, 'TR_share', 'screen');
-      (pub as unknown as { setTrack: (t: unknown) => void }).setTrack(fakeScreenTrack());
-      shareWith(sharer, pub);
-    }
+    if (sharer) attachShare(sharer);
   }
   return room;
 }

@@ -1478,6 +1478,27 @@ export function VideoConferenceComponent(props: {
   const showLiveDocDuringOwnShare =
     ownShareHidden && activeView === 'shareScreen' && !isRecorderBot;
   const showLiveDocStage = shouldDisplayLiveDoc || showLiveDocDuringOwnShare;
+
+  // The share picture stays off this stage. The plugin was display:none until now, so tell it to
+  // measure again and keep showing the document it already has open.
+  React.useEffect(() => {
+    if (!showLiveDocDuringOwnShare) return;
+    const ping = () => {
+      const frame = document.getElementById('sharedIframePlayer');
+      if (!(frame instanceof HTMLIFrameElement)) return;
+      try {
+        frame.contentWindow?.dispatchEvent(new Event('resize'));
+      } catch {
+        /* The plugin origin may not allow this; its own resize still runs when the box appears. */
+      }
+    };
+    const frameId = window.requestAnimationFrame(ping);
+    const timerId = window.setTimeout(ping, 300);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timerId);
+    };
+  }, [showLiveDocDuringOwnShare]);
   /** Design mode shows the shared link; a screen share still takes the stage first */
   const shouldDisplayDesign =
     activeView === 'design' && !!designLink && (!hasScreenShare || isLocalScreenShare);
@@ -1599,7 +1620,6 @@ export function VideoConferenceComponent(props: {
       restore: t('meeting.documentPipRestore'),
       restoreLocked: t('meeting.documentPipRestoreLocked'),
       shareBadge: t('meeting.documentPipShareBadge'),
-      presentingSelf: t('meeting.documentPipPresentingSelf'),
       shareScreen: t('toolbar.shareScreen'),
       stopSharing: t('toolbar.stopSharing'),
       shareConflict: t('toolbar.shareConflictTitle'),
@@ -3693,45 +3713,6 @@ export function VideoConferenceComponent(props: {
               background: 'var(--km-stage)',
             }}
           >
-            {/* Sharing your own screen: say so instead of showing it (LiveDoc stays one click away) */}
-            {ownShareHidden && activeView === 'shareScreen' && !isRecorderBot && (
-              <div className="km-presenting-cover" role="status">
-                <div className="km-presenting-card">
-                  <div className="km-presenting-icon" aria-hidden="true">
-                    <svg
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <rect x="2" y="3" width="20" height="14" rx="2" />
-                      <path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" />
-                    </svg>
-                  </div>
-                  <h2 className="km-presenting-title">{t('meeting.presentingTitle')}</h2>
-                  <p className="km-presenting-body">{t('meeting.presentingBody')}</p>
-                  <div className="km-presenting-actions">
-                    <button
-                      type="button"
-                      className="km-presenting-stop"
-                      onClick={handleShareScreen}
-                    >
-                      {t('toolbar.stopSharing')}
-                    </button>
-                    <button
-                      type="button"
-                      className="km-presenting-doc"
-                      onClick={() => setActiveView('liveDoc')}
-                    >
-                      {t('meeting.presentingShowDoc')}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
             <div
               style={
@@ -3745,7 +3726,7 @@ export function VideoConferenceComponent(props: {
                       background: 'var(--km-stage)',
                     }
                   : {
-                      display: shouldDisplayLiveDoc ? 'flex' : 'none',
+                      display: showLiveDocStage ? 'flex' : 'none',
                       flex: 1,
                       minWidth: 0,
                       overflow: 'hidden',

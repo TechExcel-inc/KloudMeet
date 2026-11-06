@@ -713,10 +713,10 @@ export function LiveDocAiPanel({
         ]
       : []),
     {
-      key: 'whiteboard',
+      key: 'excalidraw',
       icon: 'whiteboard',
-      label: t('liveDocAi.whiteBoard'),
-      onClick: () => runAction('document.addBlank'),
+      label: t('liveDocAi.excalidrawBoard'),
+      onClick: () => runAction('document.addExcalidraw'),
     },
     {
       key: 'files',
@@ -726,10 +726,10 @@ export function LiveDocAiPanel({
       more: true,
     },
     {
-      key: 'excalidraw',
+      key: 'whiteboard',
       icon: 'whiteboard',
-      label: t('liveDocAi.excalidrawBoard'),
-      onClick: () => runAction('document.addExcalidraw'),
+      label: t('liveDocAi.whiteBoard'),
+      onClick: () => runAction('document.addBlank'),
       more: true,
     },
     ...(onAddDesignLink
@@ -1071,7 +1071,7 @@ export function LiveDocAiPanel({
                             <button
                               key={source.key}
                               type="button"
-                              className={`${styles.sourceButton} ${source.key === 'whiteboard' ? styles.sourceButtonPrimary : ''}`}
+                              className={`${styles.sourceButton} ${source.key === 'excalidraw' ? styles.sourceButtonPrimary : ''}`}
                               disabled={busy}
                               onClick={source.onClick}
                             >
