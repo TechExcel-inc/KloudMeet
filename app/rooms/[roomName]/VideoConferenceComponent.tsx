@@ -17,7 +17,7 @@ import type { LiveDocDesignItem } from '@/lib/LiveDocAiPanel';
 import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
 import {
-  createOrUpdateInstantAccount,
+  getLiveDocStageAccount,
   resolveJitsiInstanceId,
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
@@ -348,9 +348,12 @@ export function VideoConferenceComponent(props: {
 
       // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login
       // (the server records LiveDoc Full whenever the meeting has its LiveDoc).
-      const livedocToken = await createOrUpdateInstantAccount(props.userChoices.username).catch(
-        () => null,
-      );
+      const livedocToken = await getLiveDocStageAccount(
+        props.userChoices.username,
+        props.connectionDetails.roomName,
+      )
+        .then((account) => account.token)
+        .catch(() => null);
 
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',

@@ -117,6 +117,18 @@ async function meetingServerGet(path: string, token: string): Promise<unknown> {
   return body && Number(body.code) === 0 ? body.data : null;
 }
 
+/** The Kloud user ID behind `token` (one call), or null when Kloud rejects it or it is anonymous. */
+export async function fetchKloudUserId(token: string): Promise<string | null> {
+  const profile = (await peerTimeGet('/peertime/V1/User/UserProfile', token).catch(() => null)) as Record<
+    string,
+    unknown
+  > | null;
+  const id = str(profile?.UserID);
+  if (!profile || !id || id === '0') return null;
+  const anonymous = [profile.IsAnonymousUser, profile.IsAnonymous].some((v) => v === true || v === 1 || v === '1');
+  return anonymous ? null : id;
+}
+
 /** Reads the Kloud user behind `token`, with their companies and roles; null when Kloud rejects it. */
 export async function fetchKloudUser(token: string): Promise<KloudUser | null> {
   const profile = (await peerTimeGet('/peertime/V1/User/UserProfile', token)) as Record<string, unknown> | null;

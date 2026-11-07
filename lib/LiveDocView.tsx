@@ -3,7 +3,8 @@
 import React from 'react';
 import {
   buildLiveDocIframeSrc,
-  createOrUpdateInstantAccount,
+  getLiveDocStageAccount,
+  type LiveDocStageAccount,
   resolveLiveDocBaseUrl,
   type LiveDocEmbedRole,
   type LiveDocRuntimeSettings,
@@ -69,6 +70,7 @@ export function LiveDocView({
 }: LiveDocViewProps) {
   const { t, locale } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
+  const [stageSpace, setStageSpace] = React.useState<Pick<LiveDocStageAccount, 'spaceScope' | 'kloudCompanyId'> | null>(null);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
   const [pluginLoaded, setPluginLoaded] = React.useState(false);
@@ -119,10 +121,11 @@ export function LiveDocView({
     let cancelled = false;
     setTokenLoading(true);
     setTokenError(null);
-    createOrUpdateInstantAccount(name)
-      .then((token) => {
+    getLiveDocStageAccount(name, meetingRoomName)
+      .then((account) => {
         if (!cancelled) {
-          setUserToken(token);
+          setUserToken(account.token);
+          setStageSpace({ spaceScope: account.spaceScope, kloudCompanyId: account.kloudCompanyId });
         }
       })
       .catch((e) => {
@@ -139,7 +142,7 @@ export function LiveDocView({
     return () => {
       cancelled = true;
     };
-  }, [participantName]);
+  }, [participantName, meetingRoomName]);
 
   React.useEffect(() => {
     setPluginLoaded(false);
@@ -269,6 +272,7 @@ export function LiveDocView({
     userToken,
     srcLanguageIdRef.current,
     runtimeSettings,
+    stageSpace,
   );
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 

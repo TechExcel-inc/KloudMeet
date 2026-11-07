@@ -1,3 +1,5 @@
+import { authFetch, getKloudSessionBearer } from '@/lib/kloudSession';
+
 export const LIVEDOC_ANONYMOUS_GUID_KEY = 'KloudAnonymousSyncroomID';
 const TOKEN_CACHE_PREFIX = 'KloudMeet_instant_token_';
 const DEFAULT_LIVEDOC_BASE_URL = 'https://kloud.cn';
@@ -82,12 +84,15 @@ export function buildLiveDocIframeSrc(
   userToken: string,
   languageId: 0 | 1,
   settings?: LiveDocRuntimeSettings | null,
+  space?: { spaceScope: LiveDocSpaceScope; kloudCompanyId: string | null } | null,
 ): string {
   const base = resolveLiveDocBaseUrl(settings);
   const id = encodeURIComponent(livedocInstanceId);
   const token = encodeURIComponent(userToken);
   // 注意：不要把 role 写进 URL。身份变更应走 postMessage(onRoleChanged)，避免 iframe 重载闪动。
-  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}`;
+  const scope = space?.spaceScope ?? 'none';
+  const company = scope === 'team' && space?.kloudCompanyId ? `&spacecompany=${encodeURIComponent(space.kloudCompanyId)}` : '';
+  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}&spacescope=${scope}${company}`;
 }
 
 /** MeetingServer `create_meeting_instance` 成功响应：`data` 为数字型 livedoc 实例 ID */
@@ -150,6 +155,61 @@ export async function createOrUpdateInstantAccount(userName: string): Promise<st
   } finally {
     instantAccountInFlight.delete(guid);
   }
+}
+
+/**
+ * What From Space offers on the stage: the host team's company spaces, the person's own spaces
+ * limited to public documents, or nothing (Upload File only).
+ */
+export type LiveDocSpaceScope = 'team' | 'own-public' | 'none';
+
+export type LiveDocStageAccount = {
+  token: string;
+  spaceScope: LiveDocSpaceScope;
+  kloudCompanyId: string | null;
+};
+
+const stageAccountByRoom = new Map<string, Promise<LiveDocStageAccount>>();
+
+/**
+ * The Kloud login this person uses everywhere in the meeting's LiveDoc (stage, instance, member
+ * sync, keepalive, recording), so they all agree: their own Kloud account when the server can
+ * vouch for it (see /api/livedoc/stage-identity), otherwise the anonymous instant account.
+ */
+export function getLiveDocStageAccount(userName: string, roomName: string): Promise<LiveDocStageAccount> {
+  const existing = stageAccountByRoom.get(roomName);
+  if (existing) return existing;
+
+  const request = (async (): Promise<LiveDocStageAccount> => {
+    if (getKloudSessionBearer()) {
+      try {
+        const res = await authFetch('/api/livedoc/stage-identity', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomName }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as Partial<LiveDocStageAccount> & { token?: string | null };
+          if (typeof data.token === 'string' && data.token) {
+            const scope = data.spaceScope === 'team' || data.spaceScope === 'own-public' ? data.spaceScope : 'none';
+            return {
+              token: data.token,
+              spaceScope: scope,
+              kloudCompanyId: typeof data.kloudCompanyId === 'string' ? data.kloudCompanyId : null,
+            };
+          }
+        }
+      } catch {
+        // Fall back to the anonymous account below
+      }
+    }
+    const token = await createOrUpdateInstantAccount(userName);
+    return { token, spaceScope: 'none', kloudCompanyId: null };
+  })();
+
+  stageAccountByRoom.set(roomName, request);
+  request.catch(() => stageAccountByRoom.delete(roomName));
+  return request;
 }
 
 /**
