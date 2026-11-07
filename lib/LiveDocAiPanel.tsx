@@ -1095,25 +1095,10 @@ export function LiveDocAiPanel({
                       onDrop={handleDrop}
                     >
                       <div className={styles.heroSection}>
-                        <div className={styles.heroBadge}>
-                          <Glyph name="files" size={18} />
+                        <div className={styles.heroPlaceholder}>
+                          <Glyph name="files" size={32} />
                         </div>
                         <span className={styles.heroTitle}>{t('liveDocAi.heroTitle')}</span>
-                        <span className={styles.heroSubtitle}>{t('liveDocAi.heroSubtitle')}</span>
-                      </div>
-                      <div className={styles.dropZone}>
-                        <Glyph name="upload" size={28} />
-                        <span className={styles.dropZoneText}>
-                          {t('liveDocAi.dropHere')}{' '}
-                          <button
-                            type="button"
-                            className={styles.browseLink}
-                            disabled={busy}
-                            onClick={() => fileInputRef.current?.click()}
-                          >
-                            {t('liveDocAi.browseFiles')}
-                          </button>
-                        </span>
                       </div>
                       {onToggleSmartCam && (
                         <button
