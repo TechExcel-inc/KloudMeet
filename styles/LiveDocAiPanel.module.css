@@ -225,12 +225,12 @@
   background: rgba(242, 139, 130, 0.12);
 }
 
-/* No documents yet: clean centered placeholder + title, action chips at bottom */
+/* No documents yet: "What do you want to present?" with drop zone + source list */
 .emptyStart {
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 28px 16px 12px;
+  padding: 24px 16px 14px;
   text-align: center;
   border-radius: 12px;
   transition:
@@ -246,27 +246,160 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 4px;
 }
 
-.heroPlaceholder {
-  width: 56px;
-  height: 56px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
+.heroBadge {
+  padding: 3px 10px;
+  border-radius: 999px;
   color: var(--km-on-dark-accent, #c9c8ff);
-  background: rgba(124, 121, 255, 0.1);
-  border: 1px solid rgba(124, 121, 255, 0.16);
+  background: rgba(124, 121, 255, 0.14);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .heroTitle {
+  margin-top: 4px;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.heroSubtitle {
   max-width: 340px;
   text-wrap: balance;
+  margin-top: 2px;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dropZone {
+  margin: 16px 0 0;
+  padding: 24px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.emptyStartDrag .dropZone {
+  border-color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.08);
+}
+
+.dropZoneIcon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.1);
+}
+
+.dropZonePrompt {
   color: var(--km-stage-text, #e8eaed);
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
+}
+
+.dropZoneText {
+  max-width: 300px;
+  text-wrap: balance;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 12px;
   line-height: 1.4;
+}
+
+.browseButton {
+  height: 34px;
+  padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  color: #1f1d6b;
+  background: var(--km-on-dark-accent, #c9c8ff);
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.browseButton:hover:not(:disabled) {
+  background: #d8d7ff;
+}
+
+.browseButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceList {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sourceItem {
+  height: 48px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  color: var(--km-stage-text, #e8eaed);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sourceItem svg {
+  flex: none;
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.sourceItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sourceItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceItemText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.sourceItemTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sourceItemHint {
+  font-size: 11px;
+  color: var(--km-stage-muted, #9aa0a6);
 }
 
 .smartCamButton {
@@ -301,64 +434,6 @@
 }
 
 .smartCamButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.actionRow {
-  margin-top: 16px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-}
-
-.actionChip {
-  height: 30px;
-  padding: 0 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--km-stage-text, #e8eaed);
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.actionChip svg {
-  flex: none;
-  color: var(--km-on-dark-accent, #c9c8ff);
-}
-
-.actionChip:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.09);
-  border-color: rgba(255, 255, 255, 0.16);
-}
-
-.actionChipPrimary {
-  color: #1f1d6b;
-  background: var(--km-on-dark-accent, #c9c8ff);
-  border-color: transparent;
-}
-
-.actionChipPrimary svg {
-  color: currentColor;
-}
-
-.actionChipPrimary:hover:not(:disabled) {
-  background: #d8d7ff;
-  border-color: transparent;
-}
-
-.actionChip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }

@@ -1095,10 +1095,81 @@ export function LiveDocAiPanel({
                       onDrop={handleDrop}
                     >
                       <div className={styles.heroSection}>
-                        <div className={styles.heroPlaceholder}>
-                          <Glyph name="files" size={32} />
-                        </div>
+                        <span className={styles.heroBadge}>{t('liveDocAi.heroBadge')}</span>
                         <span className={styles.heroTitle}>{t('liveDocAi.heroTitle')}</span>
+                        <span className={styles.heroSubtitle}>{t('liveDocAi.heroSubtitle')}</span>
+                      </div>
+                      <div className={styles.dropZone}>
+                        <div className={styles.dropZoneIcon}>
+                          <Glyph name="files" size={28} />
+                        </div>
+                        <span className={styles.dropZonePrompt}>{t('liveDocAi.dropPrompt')}</span>
+                        <span className={styles.dropZoneText}>{t('liveDocAi.dropHint')}</span>
+                        <button
+                          type="button"
+                          className={styles.browseButton}
+                          disabled={busy}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {t('liveDocAi.browseFiles')}
+                        </button>
+                      </div>
+                      <div className={styles.sourceList}>
+                        {state?.documents.companySpaceAllowed && (
+                          <button
+                            type="button"
+                            className={styles.sourceItem}
+                            disabled={busy}
+                            onClick={() => openPicker('space')}
+                          >
+                            <Glyph name="space" size={18} />
+                            <span className={styles.sourceItemText}>
+                              <span className={styles.sourceItemTitle}>
+                                {t('liveDocAi.selectLiveDoc')}
+                              </span>
+                              <span className={styles.sourceItemHint}>
+                                {t('liveDocAi.selectLiveDocHint')}
+                              </span>
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={styles.sourceItem}
+                          disabled={busy}
+                          onClick={() => runAction('document.addExcalidraw')}
+                        >
+                          <Glyph name="whiteboard" size={18} />
+                          <span className={styles.sourceItemText}>
+                            <span className={styles.sourceItemTitle}>
+                              {t('liveDocAi.excalidrawBoard')}
+                            </span>
+                            <span className={styles.sourceItemHint}>
+                              {t('liveDocAi.liveBoardHint')}
+                            </span>
+                          </span>
+                        </button>
+                        <div className={styles.menuAnchor}>
+                          <button
+                            ref={emptyMoreBtnRef}
+                            type="button"
+                            className={styles.sourceItem}
+                            disabled={busy}
+                            aria-expanded={uploadMenuOpen}
+                            aria-haspopup="menu"
+                            onClick={() => setUploadMenuOpen((value) => !value)}
+                          >
+                            <Glyph name="more" size={18} />
+                            <span className={styles.sourceItemText}>
+                              <span className={styles.sourceItemTitle}>
+                                {t('liveDocAi.moreWays')}
+                              </span>
+                              <span className={styles.sourceItemHint}>
+                                {t('liveDocAi.moreWaysHint')}
+                              </span>
+                            </span>
+                          </button>
+                        </div>
                       </div>
                       {onToggleSmartCam && (
                         <button
@@ -1111,51 +1182,6 @@ export function LiveDocAiPanel({
                           <span>{t('liveDocAi.enableSmartCam')}</span>
                         </button>
                       )}
-                      <div className={styles.actionRow}>
-                        <button
-                          type="button"
-                          className={styles.actionChip}
-                          disabled={busy}
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          <Glyph name="upload" size={14} />
-                          <span>{t('liveDocAi.uploadFiles')}</span>
-                        </button>
-                        {state?.documents.companySpaceAllowed && (
-                          <button
-                            type="button"
-                            className={styles.actionChip}
-                            disabled={busy}
-                            onClick={() => openPicker('space')}
-                          >
-                            <Glyph name="space" size={14} />
-                            <span>{t('liveDocAi.fromSpaceShort')}</span>
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          className={`${styles.actionChip} ${styles.actionChipPrimary}`}
-                          disabled={busy}
-                          onClick={() => runAction('document.addExcalidraw')}
-                        >
-                          <Glyph name="whiteboard" size={14} />
-                          <span>{t('liveDocAi.excalidrawBoard')}</span>
-                        </button>
-                        <div className={styles.menuAnchor}>
-                          <button
-                            ref={emptyMoreBtnRef}
-                            type="button"
-                            className={styles.actionChip}
-                            disabled={busy}
-                            aria-expanded={uploadMenuOpen}
-                            aria-haspopup="menu"
-                            onClick={() => setUploadMenuOpen((value) => !value)}
-                          >
-                            <Glyph name="more" size={14} />
-                            <span>{t('liveDocAi.moreEllipsis')}</span>
-                          </button>
-                        </div>
-                      </div>
                     </div>
                   )}
                   {!documents.length && !canManage && (
