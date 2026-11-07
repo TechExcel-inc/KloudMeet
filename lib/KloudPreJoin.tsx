@@ -34,6 +34,8 @@ export interface KloudPreJoinProps {
   subtitle?: React.ReactNode;
   /** Render the subtitle as a highlighted status notice (e.g. "already hosting in another session"). */
   subtitleIsNotice?: boolean;
+  /** Rendered to the right of the join button (e.g. "Sign in"). */
+  joinSecondary?: React.ReactNode;
   /** Rendered directly under the join button (e.g. "Or start a new meeting instead"). */
   joinFooter?: React.ReactNode;
   /** Rendered at the bottom of the right column (share link, desktop app entry). */
@@ -244,6 +246,7 @@ export function KloudPreJoin({
   title,
   subtitle,
   subtitleIsNotice = false,
+  joinSecondary,
   joinFooter,
   footer,
   beforeName,
@@ -741,15 +744,18 @@ export function KloudPreJoin({
 
           {/* Join button */}
           <div className={styles.joinArea}>
-            <button
-              type="submit"
-              className={styles.joinBtn}
-              onClick={handleSubmit}
-              disabled={!isValid || joinButtonDisabled}
-              aria-busy={joinButtonDisabled || undefined}
-            >
-              {joinLabel}
-            </button>
+            <div className={styles.joinButtons}>
+              <button
+                type="submit"
+                className={styles.joinBtn}
+                onClick={handleSubmit}
+                disabled={!isValid || joinButtonDisabled}
+                aria-busy={joinButtonDisabled || undefined}
+              >
+                {joinLabel}
+              </button>
+              {joinSecondary}
+            </div>
             {!isValid && (
               <span id="kloud-prejoin-join-reason" className={styles.joinReason}>
                 {nameRequiredLabel}

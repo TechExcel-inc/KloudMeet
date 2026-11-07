@@ -1101,6 +1101,42 @@
   gap: 10px;
 }
 
+.joinButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.signInBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 52px;
+  padding: 0 26px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-pill);
+  background: transparent;
+  color: var(--km-text);
+  font: 600 16px/1 var(--km-font);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.signInBtn:hover {
+  background: var(--km-bg-subtle);
+}
+
+.signInBtn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px var(--km-bg),
+    0 0 0 6px var(--km-primary);
+}
+
 .joinBtn {
   display: inline-flex;
   align-items: center;
@@ -1590,7 +1626,8 @@
   .stateTitle {
     font-size: 26px;
   }
-  .joinBtn {
+  .joinBtn,
+  .signInBtn {
     width: 100%;
   }
   .menu {

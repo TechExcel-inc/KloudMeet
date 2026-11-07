@@ -1436,6 +1436,13 @@ export function PageClientImpl(props: {
                     <AccessSignInCard access={access} roomName={effectiveRoomName} />
                   ) : undefined
                 }
+                joinSecondary={
+                  !currentUser && !access?.signedInAs ? (
+                    <a className={prejoinStyles.signInBtn} href={signInHref(effectiveRoomName)}>
+                      {t('access.signIn')}
+                    </a>
+                  ) : null
+                }
                 joinFooter={
                   isHost && isActive && !isSameTabRefresh ? (
                     <button
