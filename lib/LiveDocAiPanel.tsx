@@ -733,30 +733,26 @@ export function LiveDocAiPanel({
       onClick: () => runAction('document.addExcalidraw'),
     },
     {
-      key: 'files',
-      icon: 'files',
-      label: t('liveDocAi.fromFiles'),
-      onClick: () => openPicker('favorite'),
-      more: true,
-    },
-    {
       key: 'whiteboard',
       icon: 'whiteboard',
       label: t('liveDocAi.whiteBoard'),
       onClick: () => runAction('document.addBlank'),
       more: true,
     },
-    ...(onAddDesignLink
-      ? [
-          {
-            key: 'link',
-            icon: 'link' as GlyphName,
-            label: t('liveDocAi.linkSource'),
-            onClick: onAddDesignLink,
-            more: true,
-          },
-        ]
-      : []),
+    {
+      key: 'google',
+      icon: 'drive',
+      label: t('liveDocAi.googleDoc'),
+      onClick: () => runAction('document.addGoogleDrive'),
+      more: true,
+    },
+    {
+      key: 'dropbox',
+      icon: 'dropbox',
+      label: t('liveDocAi.dropbox'),
+      onClick: () => runAction('document.addDropbox'),
+      more: true,
+    },
   ];
 
   const handleLocalFile = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -2091,6 +2087,8 @@ type GlyphName =
   | 'files'
   | 'whiteboard'
   | 'link'
+  | 'drive'
+  | 'dropbox'
   | 'sparkle'
   | 'transcript'
   | 'info'
@@ -2170,6 +2168,19 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
       return (
         <svg {...common}>
           <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+        </svg>
+      );
+    case 'drive':
+      return (
+        <svg {...common}>
+          <path d="M8.5 4h7l5.5 9.5-3.5 6h-11L3 13.5z" />
+          <path d="M8.5 4l5.5 9.5h7M14 13.5l-7 6" />
+        </svg>
+      );
+    case 'dropbox':
+      return (
+        <svg {...common}>
+          <path d="M7 4l5 3.2-5 3.2-5-3.2zM17 4l5 3.2-5 3.2-5-3.2zM2 13.6l5-3.2 5 3.2-5 3.2zM12 13.6l5-3.2 5 3.2-5 3.2zM7 18.2l5 3.2 5-3.2" />
         </svg>
       );
     case 'sparkle':
