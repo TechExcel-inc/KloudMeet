@@ -4453,8 +4453,9 @@ export function VideoConferenceComponent(props: {
           />
 
           {/* --- MODALS --- */}
+          {/* Not over the LiveDoc view: its own page is the first thing people see */}
           <MeetingPipSuggestPrompt
-            visible={showPipSuggest}
+            visible={showPipSuggest && activeView !== 'liveDoc'}
             attendeeCount={1 + shownRemoteParticipants(room.remoteParticipants.values()).length}
             onEnable={() => {
               void documentPip.open({ sticky: true });
