@@ -137,7 +137,9 @@
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .close:hover {
@@ -223,45 +225,107 @@
   background: rgba(242, 139, 130, 0.12);
 }
 
-/* No documents yet: say what to do, with every source one click away */
+/* No documents yet: hero tagline at top, drop zone in middle, action chips at bottom */
 .emptyStart {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 26px 8px 8px;
+  align-items: stretch;
+  padding: 20px 16px 12px;
   text-align: center;
+  border-radius: 12px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.emptyTitle {
-  margin-top: 12px;
-  color: var(--km-stage-text, #e8eaed);
-  font-size: 15px;
-  font-weight: 600;
+.emptyStartDrag {
+  background: rgba(124, 121, 255, 0.06);
 }
 
-.emptyHint {
-  max-width: 380px;
-  text-wrap: balance;
-  margin-top: 4px;
-  color: var(--km-stage-muted, #9aa0a6);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-/* Three to a row; a short last row sits in the middle */
-/* Empty state: one row of compact source buttons; Live Board is the main action */
-.sourceRow {
-  width: 100%;
-  margin-top: 18px;
+.heroSection {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   gap: 6px;
 }
 
-.sourceButton {
-  height: 36px;
-  padding: 0 11px;
+.heroBadge {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.14);
+}
+
+.heroTitle {
+  margin-top: 2px;
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.heroSubtitle {
+  max-width: 360px;
+  text-wrap: balance;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dropZone {
+  margin: 18px 0 0;
+  padding: 22px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 12px;
+  color: var(--km-stage-muted, #9aa0a6);
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.emptyStartDrag .dropZone {
+  border-color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.08);
+}
+
+.dropZone svg {
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.dropZoneText {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.browseLink {
+  display: inline;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.browseLink:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.smartCamButton {
+  margin: 14px auto 0;
+  height: 32px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -270,39 +334,84 @@
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.sourceButton svg {
+.smartCamButton svg {
   flex: none;
   color: var(--km-on-dark-accent, #c9c8ff);
 }
 
-.sourceButton:hover:not(:disabled) {
+.smartCamButton:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.16);
 }
 
-.sourceButtonPrimary {
+.smartCamButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.actionRow {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.actionChip {
+  height: 30px;
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--km-stage-text, #e8eaed);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.actionChip svg {
+  flex: none;
+  color: var(--km-on-dark-accent, #c9c8ff);
+}
+
+.actionChip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.actionChipPrimary {
   color: #1f1d6b;
   background: var(--km-on-dark-accent, #c9c8ff);
   border-color: transparent;
 }
 
-.sourceButtonPrimary svg {
+.actionChipPrimary svg {
   color: currentColor;
 }
 
-.sourceButtonPrimary:hover:not(:disabled) {
+.actionChipPrimary:hover:not(:disabled) {
   background: #d8d7ff;
   border-color: transparent;
 }
 
-.sourceButton:disabled {
+.actionChip:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -411,7 +520,9 @@
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .searchBox:focus-within {
@@ -598,7 +709,9 @@
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .moreButton:hover,
@@ -781,7 +894,9 @@
   border: 0;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .uploadIssuesDismiss:hover {
@@ -964,7 +1079,9 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .pickerFooter > button:hover:not(:disabled) {
@@ -1101,12 +1218,30 @@
   font-weight: 700;
 }
 
-.tone0 { background: #353a65; color: #c3c1ff; }
-.tone1 { background: #22474e; color: #8fe0cd; }
-.tone2 { background: #4e4234; color: #f2cc8a; }
-.tone3 { background: #4e354a; color: #f4b2c3; }
-.tone4 { background: #264360; color: #a8d4f2; }
-.tone5 { background: #3c3861; color: #d3bff5; }
+.tone0 {
+  background: #353a65;
+  color: #c3c1ff;
+}
+.tone1 {
+  background: #22474e;
+  color: #8fe0cd;
+}
+.tone2 {
+  background: #4e4234;
+  color: #f2cc8a;
+}
+.tone3 {
+  background: #4e354a;
+  color: #f4b2c3;
+}
+.tone4 {
+  background: #264360;
+  color: #a8d4f2;
+}
+.tone5 {
+  background: #3c3861;
+  color: #d3bff5;
+}
 
 .speakerLabel {
   color: var(--km-stage-text, #e8eaed);
@@ -1474,7 +1609,10 @@
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
 }
 
 .pickerSelectTrigger:hover {

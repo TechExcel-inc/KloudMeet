@@ -51,7 +51,13 @@ type Case = {
 const CASES: Case[] = [
   { id: 'empty', title: 'Documents · none yet', tab: 'file', docs: 0 },
   { id: 'docs', title: 'Documents · list', tab: 'file', docs: 6 },
-  { id: 'guest-empty', title: 'Documents · none yet, anonymous', tab: 'file', docs: 0, guest: true },
+  {
+    id: 'guest-empty',
+    title: 'Documents · none yet, anonymous',
+    tab: 'file',
+    docs: 0,
+    guest: true,
+  },
   { id: 'guest-docs', title: 'Documents · list, anonymous', tab: 'file', docs: 6, guest: true },
   { id: 'picker', title: 'Documents · pick from Space', tab: 'file', docs: 2, picker: true },
   { id: 'design', title: 'Documents · with a design link', tab: 'file', docs: 2, design: true },
@@ -100,7 +106,11 @@ const DOC_NAMES = [
   ['Customer interviews.docx', 'Customer interviews', ''],
   ['Launch budget.xlsx', 'Launch budget', ''],
   ['Onboarding flow.png', 'Onboarding flow', ''],
-  ['kloud-whiteboard.html', 'Whiteboard', 'https://kloud.cn/static/images/meeting-whiteboard-icon.svg'],
+  [
+    'kloud-whiteboard.html',
+    'Whiteboard',
+    'https://kloud.cn/static/images/meeting-whiteboard-icon.svg',
+  ],
 ];
 
 /** [fileName, title, LiveDoc's older icon path] — the last two have no extension in their names */
@@ -248,8 +258,18 @@ function staticUploads(c: Case): LiveDocUploadQueue {
   }
   if (c.failures) {
     const failures = [
-      { id: 'f1', name: 'Factory walkthrough 4K.mov', reason: 'tooLarge' as const, retryable: false },
-      { id: 'f2', name: 'Supplier contract (scanned).pdf', reason: 'convert' as const, retryable: true },
+      {
+        id: 'f1',
+        name: 'Factory walkthrough 4K.mov',
+        reason: 'tooLarge' as const,
+        retryable: false,
+      },
+      {
+        id: 'f2',
+        name: 'Supplier contract (scanned).pdf',
+        reason: 'convert' as const,
+        retryable: true,
+      },
       { id: 'f3', name: 'Q3 numbers.xlsx', reason: 'network' as const, retryable: true },
     ];
     return { ...NO_UPLOADS, failures: c.docs ? failures : failures.slice(1, 2) };
@@ -268,7 +288,11 @@ function useFakeLiveDoc(initial: LiveDocAiState) {
       if (action !== 'document.uploadLocal') return;
       const fileName = String(payload.fileName || '');
       const uploadId = String(payload.uploadId || '');
-      const emit = (status: 'added' | 'failed', itemId: number, reason: LiveDocAiUploadFailReason | '') =>
+      const emit = (
+        status: 'added' | 'failed',
+        itemId: number,
+        reason: LiveDocAiUploadFailReason | '',
+      ) =>
         listeners.current.forEach((listener) =>
           listener({
             type: 'Kloud-LiveDocAiUploadResult',
@@ -289,10 +313,15 @@ function useFakeLiveDoc(initial: LiveDocAiState) {
       const setUpload = (active: boolean, percent: number) =>
         setState((current) => ({
           ...current,
-          documents: { ...current.documents, upload: { ...current.documents.upload, active, percent, fileName } },
+          documents: {
+            ...current.documents,
+            upload: { ...current.documents.upload, active, percent, fileName },
+          },
         }));
       setUpload(true, 0);
-      [20, 45, 70, 90].forEach((percent, i) => window.setTimeout(() => setUpload(true, percent), 300 * (i + 1)));
+      [20, 45, 70, 90].forEach((percent, i) =>
+        window.setTimeout(() => setUpload(true, percent), 300 * (i + 1)),
+      );
       window.setTimeout(() => {
         const reason: LiveDocAiUploadFailReason | '' = /bad/i.test(fileName)
           ? 'convert'
@@ -343,7 +372,10 @@ function LiveCase({ c }: { c: Case }) {
     const state = makeState(c);
     return {
       ...state,
-      documents: { ...state.documents, upload: { ...state.documents.upload, reportsResults: true } },
+      documents: {
+        ...state.documents,
+        upload: { ...state.documents.upload, reportsResults: true },
+      },
     };
   });
   const liveDoc = useFakeLiveDoc(initial);
@@ -391,6 +423,7 @@ function PanelCase({
       designItem={c.design ? DESIGN : null}
       onShowDesign={c.design ? () => {} : undefined}
       onAddDesignLink={() => {}}
+      onToggleSmartCam={() => {}}
     />
   );
 }
