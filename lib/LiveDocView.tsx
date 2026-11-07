@@ -4,7 +4,6 @@ import React from 'react';
 import {
   buildLiveDocIframeSrc,
   getLiveDocStageAccount,
-  type LiveDocStageAccount,
   resolveLiveDocBaseUrl,
   type LiveDocEmbedRole,
   type LiveDocRuntimeSettings,
@@ -70,7 +69,7 @@ export function LiveDocView({
 }: LiveDocViewProps) {
   const { t, locale } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
-  const [stageSpace, setStageSpace] = React.useState<Pick<LiveDocStageAccount, 'spaceScope' | 'kloudCompanyId'> | null>(null);
+  const [isKloudLogin, setIsKloudLogin] = React.useState(false);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
   const [pluginLoaded, setPluginLoaded] = React.useState(false);
@@ -125,7 +124,7 @@ export function LiveDocView({
       .then((account) => {
         if (!cancelled) {
           setUserToken(account.token);
-          setStageSpace({ spaceScope: account.spaceScope, kloudCompanyId: account.kloudCompanyId });
+          setIsKloudLogin(account.isKloudLogin);
         }
       })
       .catch((e) => {
@@ -272,7 +271,7 @@ export function LiveDocView({
     userToken,
     srcLanguageIdRef.current,
     runtimeSettings,
-    stageSpace,
+    isKloudLogin,
   );
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 
