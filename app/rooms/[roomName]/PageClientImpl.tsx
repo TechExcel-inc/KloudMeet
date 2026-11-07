@@ -807,10 +807,11 @@ export function PageClientImpl(props: {
           url.searchParams.append('participantLiveDocAi', participantLiveDocShow ? '1' : '0');
           url.searchParams.append('accessLevel', accessLevel);
         }
+        // A host's join makes many LiveKit calls in a row; far from LiveKit that passes 15 s
         const connectionDetailsResp = await fetchWithTimeout(
           url.toString(),
           connectionDetailsFetchInit(),
-          15_000,
+          30_000,
         );
         if (connectionDetailsResp.status === 401) {
           handleKloudSessionExpired();
