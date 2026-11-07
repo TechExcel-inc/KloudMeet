@@ -51,7 +51,9 @@ export async function setParticipantLiveDocAi(
   if (!client) return false;
   try {
     const rooms = await client.listRooms([roomName]);
-    const existing = rooms[0]?.metadata;
+    // A new meeting's room doesn't exist yet and the update would only fail with 404
+    if (!rooms[0]) return false;
+    const existing = rooms[0].metadata;
     await client.updateRoomMetadata(roomName, mergeParticipantLiveDocAi(existing, show));
     return true;
   } catch (e) {

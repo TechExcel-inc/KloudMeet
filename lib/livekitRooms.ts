@@ -27,8 +27,13 @@ function withTimeout<T>(task: Promise<T>, ms: number, label: string): Promise<T>
 
 /** Returns LiveKit room names that currently have an active session. */
 export async function listActiveRoomNames(): Promise<string[]> {
+  return (await listActiveRoomNamesOrNull()) ?? [];
+}
+
+/** Like listActiveRoomNames, but null when LiveKit could not be asked, so [] means no live rooms. */
+export async function listActiveRoomNamesOrNull(): Promise<string[] | null> {
   const client = getRoomServiceClient();
-  if (!client) return [];
+  if (!client) return null;
   try {
     const rooms = await withTimeout(
       client.listRooms(),
@@ -38,7 +43,7 @@ export async function listActiveRoomNames(): Promise<string[]> {
     return rooms.map((r) => r.name);
   } catch (e) {
     console.error('[livekitRooms] listRooms failed', e);
-    return [];
+    return null;
   }
 }
 
