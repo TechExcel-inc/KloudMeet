@@ -1168,8 +1168,7 @@ export function DashboardView({
           cls: styles.statusScheduled,
           text: d.toLocaleDateString(locale, { month: 'short', day: 'numeric', weekday: 'short', timeZone: userTZ }),
         };
-    } else if (notHeld) chip = { cls: styles.statusFinished, text: tx('dash.statusNotHeld', 'Not held') };
-    else if (finished && recording)
+    } else if (recording)
       chip = {
         cls: styles.statusFinished,
         rec: true,
@@ -1177,7 +1176,8 @@ export function DashboardView({
           recording.visibility === 'PUBLIC' ? t('dash.recordingPublic') : t('dash.recordingPrivate')
         }`,
       };
-    else if (finished && processingRecording) chip = { cls: styles.statusFinished, rec: true, text: t('common.processing') };
+    else if (processingRecording) chip = { cls: styles.statusFinished, rec: true, text: t('common.processing') };
+    else if (notHeld) chip = { cls: styles.statusFinished, text: tx('dash.statusNotHeld', 'Not held') };
 
     const hostLabel = m.createdByMember?.fullName || m.createdByMember?.username || '';
     const instant = !m.title && !m.scheduledFor;
@@ -1187,6 +1187,8 @@ export function DashboardView({
     // The one main action; everything else is in the ⋯ menu
     let primary: { label: string; icon: React.ReactNode; fill?: boolean; onClick: () => void; title?: string } | null = null;
     if (isLive) primary = { label: t('common.join'), icon: videoIcon(15), fill: true, onClick: () => router.push(`/rooms/${m.roomName}`) };
+    else if (recording && !upcoming) primary = { label: replayLabel, icon: playIcon(12), onClick: () => openRecording(recording), title: t('dash.replayTitle') };
+    else if (processingRecording && !upcoming) primary = { label: t('common.processing'), icon: playIcon(12), onClick: () => openFinishedMeeting(m) };
     else if ((upcoming || notHeld) && !canceled) {
       if (isHost) primary = { label: t('common.start'), icon: playIcon(12), onClick: () => handleStartMeetingClick(m) };
       else if (upcoming) primary = { label: t('common.join'), icon: videoIcon(14), onClick: () => router.push(`/rooms/${m.roomName}`) };

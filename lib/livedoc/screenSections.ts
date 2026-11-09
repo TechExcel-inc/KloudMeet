@@ -7,6 +7,7 @@ import {
   type EgressInfo,
 } from 'livekit-server-sdk';
 import { prisma } from '@/lib/db';
+import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 
 /**
@@ -181,7 +182,7 @@ export async function onSectionEgressEnded(info: EgressInfo): Promise<boolean> {
 
 /** An ended egress: its section is READY with the file placed on Kloud's timeline, or FAILED. */
 async function settle(section: { id: number; recordingId: number; startMs: number | null }, info: EgressInfo) {
-  const file = info.fileResults?.[0] ?? (info.result?.case === 'file' ? info.result.value : null);
+  const file = egressOutputFile(info);
   if (info.error || !file?.filename) {
     await prisma.recordingSection.update({ where: { id: section.id }, data: { status: 'FAILED' } });
     return;

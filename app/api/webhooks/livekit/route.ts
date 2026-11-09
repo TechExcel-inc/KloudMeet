@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { WebhookReceiver } from 'livekit-server-sdk';
+import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import {
   expireStaleIdleMeetings,
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest) {
 
     if (event.event === 'egress_ended' && event.egressInfo) {
       const egressId = event.egressInfo.egressId;
-      const fileInfo = event.egressInfo.fileResults?.[0] || (event.egressInfo.result?.case === 'file' ? event.egressInfo.result.value : null);
+      const fileInfo = egressOutputFile(event.egressInfo);
       const error = event.egressInfo.error;
 
       // Find the recording by egressId which we stored in storageKey temporarily

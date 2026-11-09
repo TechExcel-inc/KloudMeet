@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { EgressClient } from 'livekit-server-sdk';
+import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import { onRecordingReady } from '@/lib/billing/limits';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
         const statusStr = egressInfo.status.toString();
         
         let newStatus = null;
-        let fileResults = egressInfo.fileResults?.[0] || (egressInfo.result?.case === 'file' ? egressInfo.result.value : null);
+        const fileInfo = egressOutputFile(egressInfo);
 
         // 3 = EGRESS_COMPLETE, 4 = EGRESS_FAILED, 5 = EGRESS_ABORTED, 6 = EGRESS_LIMIT_REACHED
         if (statusStr === 'EGRESS_COMPLETE' || statusStr === '3') {
@@ -56,19 +57,19 @@ export async function GET(request: NextRequest) {
           newStatus = 'FAILED';
         }
 
-        if (newStatus === 'READY' && fileResults) {
+        if (newStatus === 'READY' && fileInfo) {
           const ready = await prisma.recording.update({
             where: { id: rec.id },
             data: {
               status: 'READY',
               mediaStartedAt:
-                egressTimeToDate(fileResults.startedAt) ??
+                egressTimeToDate(fileInfo.startedAt) ??
                 rec.mediaStartedAt ??
                 egressTimeToDate(egressInfo.startedAt),
-              storageKey: fileResults.filename || egressId,
-              storageUrl: fileResults.location,
-              fileSizeBytes: fileResults.size ? Number(fileResults.size) : null,
-              durationSeconds: fileResults.duration ? Math.floor(Number(fileResults.duration) / 1000000000) : null,
+              storageKey: fileInfo.filename || egressId,
+              storageUrl: fileInfo.location,
+              fileSizeBytes: fileInfo.size ? Number(fileInfo.size) : null,
+              durationSeconds: fileInfo.duration ? Math.floor(Number(fileInfo.duration) / 1000000000) : null,
             }
           });
           // Billing (no-op when disabled): same metering as egress_ended; rec:<id> is idempotent.
