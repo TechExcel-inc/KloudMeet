@@ -76,6 +76,28 @@ function jumpBefore(day: Ymd | null): string | null {
   return next.toISOString();
 }
 
+/** When this meeting happened. A reused personal room is dated by its latest recording, not the day the row was created. */
+function meetingWhen(m: {
+  scheduledFor?: string | null;
+  createdAt?: string | null;
+  actualStartedAt?: string | null;
+  endedAt?: string | null;
+  recordings?: Array<{ createdAt?: string | null }>;
+}): number {
+  if (m.scheduledFor) {
+    const scheduled = new Date(m.scheduledFor).getTime();
+    if (!Number.isNaN(scheduled)) return scheduled;
+  }
+  let latest = 0;
+  const stamps = [m.createdAt, m.actualStartedAt, m.endedAt, ...(m.recordings ?? []).map((r) => r.createdAt)];
+  for (const stamp of stamps) {
+    if (!stamp) continue;
+    const time = new Date(stamp).getTime();
+    if (!Number.isNaN(time) && time > latest) latest = time;
+  }
+  return latest;
+}
+
 function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope, jumpDay: Ymd | null = null): string {
   const qs = new URLSearchParams({
     page: String(page),
@@ -280,11 +302,7 @@ export function DashboardView({
       .then(data => {
         if (gen !== meetingsFetchGenRef.current) return;
         if (data.meetings) {
-          const sorted = data.meetings.sort((a: any, b: any) => {
-            const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-            const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-            return tB - tA;
-          });
+          const sorted = data.meetings.sort((a: any, b: any) => meetingWhen(b) - meetingWhen(a));
           setDbMeetings(sorted);
           setTotalMeetings(data.total || 0);
         }
@@ -376,11 +394,7 @@ export function DashboardView({
               .then(res => res.json())
               .then(d => {
                 if (d.meetings) {
-                  const sorted = d.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-                    return tB - tA;
-                  });
+                  const sorted = d.meetings.sort((a: any, b: any) => meetingWhen(b) - meetingWhen(a));
                   setDbMeetings(sorted);
                   setTotalMeetings(d.total || 0);
                 }
@@ -819,7 +833,7 @@ export function DashboardView({
     date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
 
   const getDisplayDate = (m: any) => {
-    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+    const d = new Date(meetingWhen(m) || Date.now());
     const dateStr = toLocalDateStr(d);
     const todayStr = toLocalDateStr(new Date());
     const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -1118,7 +1132,7 @@ export function DashboardView({
   };
 
   const renderMeetingRow = (m: any, i: number, upcoming: boolean) => {
-    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+    const d = new Date(meetingWhen(m) || Date.now());
     const recording = m.recordings?.find((r: any) => r.status === 'READY');
     const processingRecording =
       !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
@@ -1578,7 +1592,7 @@ export function DashboardView({
               )}
               {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => {
                 const first = (meetings as any[])[0];
-                const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
+                const d = new Date((first ? meetingWhen(first) : 0) || Date.now());
                 const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
                 const day = toYmd(d);
                 const open = datePicker?.day === day && datePicker.anchor.dataset.jumpChip !== 'true';
