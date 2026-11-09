@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { isValidPassword, isValidUsername, normalizeEmail } from '@/lib/authPolicy';
 import { checkCode, codeErrorMessage } from '@/lib/verificationCodes';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -97,6 +98,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
 
     return NextResponse.json({
       token,

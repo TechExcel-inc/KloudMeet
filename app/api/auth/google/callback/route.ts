@@ -12,6 +12,7 @@ import {
 } from '@/lib/googleOAuth';
 import { createDesktopHandoff } from '@/lib/desktopAuth';
 import { redeemLinkIntent } from '@/lib/accountLinking';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -208,6 +209,7 @@ export async function GET(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
 
     // 5. Back to the app; the home page stores the session and follows `next`.
     const params = new URLSearchParams({ sso_token: token });

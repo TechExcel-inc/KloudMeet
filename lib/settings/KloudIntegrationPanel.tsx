@@ -9,6 +9,10 @@ export const REOPEN_ACCOUNT_SETTINGS_KEY = 'simeet.reopenAccountSettings';
 
 type Methods = { kloud: { connected: boolean } };
 
+type SubsystemStatus =
+  | { enabled: false }
+  | { enabled: true; subsystemId: number; joined: boolean; isAdmin: boolean; kloudUserId: string | null };
+
 /**
  * Account Settings → Kloud Integration.
  * 1. Connect Kloud with a login that is owner or admin of the Kloud company.
@@ -29,7 +33,25 @@ export function KloudIntegrationPanel({
   const [connecting, setConnecting] = useState(false);
   const [connectError, setConnectError] = useState('');
   const [confirmUnlink, setConfirmUnlink] = useState(false);
-  const kloud = useKloudCompany(methods?.kloud.connected ? token : null, onNotice);
+  const [subsystem, setSubsystem] = useState<SubsystemStatus | null>(null);
+  const kloud = useKloudCompany(methods?.kloud.connected && subsystem?.enabled === false ? token : null, onNotice);
+
+  // With SiMeet running as a Kloud subsystem there is nothing to connect: show the membership.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetch('/api/account/kloud-subsystem', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => (res.ok ? res.json() : { enabled: false }))
+      .then((data) => {
+        if (!cancelled) setSubsystem(data as SubsystemStatus);
+      })
+      .catch(() => {
+        if (!cancelled) setSubsystem({ enabled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   useEffect(() => {
     if (!token) return;
@@ -164,6 +186,35 @@ export function KloudIntegrationPanel({
         </div>
         <p className={styles.helperText}>{t('settings.kloudLinkNote')}</p>
       </>
+    );
+  }
+
+  if (subsystem?.enabled) {
+    return (
+      <div className={styles.formGroup}>
+        <h3 className={styles.sectionTitle}>{t('settings.kloudIntegration')}</h3>
+        <p className={styles.helperText} style={{ marginBottom: '1.5rem' }}>
+          {t('settings.kloudSubsystemIntro')}
+        </p>
+        <div className={styles.kloudLinkedCard}>
+          <div className={styles.kloudLinkedTitle}>{t('settings.kloudSubsystemName')}</div>
+          <div className={styles.kloudLinkedMeta}>{t('settings.kloudSubsystemOfCorp')}</div>
+        </div>
+        <div className={styles.kloudActions} style={{ marginTop: '1rem' }}>
+          {subsystem.joined ? (
+            <span className={styles.kloudConnected}>
+              ✓ {subsystem.isAdmin ? t('settings.kloudSubsystemAdmin') : t('settings.kloudSubsystemMember')}
+            </span>
+          ) : (
+            <span className={styles.helperText} style={{ margin: 0 }}>
+              {t('settings.kloudSubsystemPending')}
+            </span>
+          )}
+        </div>
+        <p className={styles.helperText}>
+          {subsystem.isAdmin ? t('settings.kloudSubsystemAdminNote') : t('settings.kloudSubsystemMemberNote')}
+        </p>
+      </div>
     );
   }
 

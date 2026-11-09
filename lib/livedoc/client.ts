@@ -178,8 +178,11 @@ export function getLiveDocStageAccount(userName: string, roomName: string): Prom
     try {
       const res = await authFetch('/api/livedoc/stage-identity', { method: 'POST' });
       if (res.ok) {
-        const data = (await res.json()) as { token?: string | null };
-        if (typeof data.token === 'string' && data.token) return { token: data.token, isKloudLogin: true };
+        const data = (await res.json()) as { token?: string | null; kloudLogin?: boolean };
+        if (typeof data.token === 'string' && data.token) {
+          // kloudLogin=false: a SiMeet SubSystem member who may not browse its spaces
+          return { token: data.token, isKloudLogin: data.kloudLogin !== false };
+        }
       }
     } catch {
       // Fall back to the anonymous account below
@@ -213,7 +216,8 @@ export function resolveJitsiInstanceId({
 }
 
 async function requestLivedocInstance(userToken: string, jitsiInstanceId: string): Promise<string> {
-  const response = await fetch('/api/livedoc/create-meeting-instance', {
+  // authFetch: with the SiMeet SubSystem on, a member's meeting is created in the subsystem
+  const response = await authFetch('/api/livedoc/create-meeting-instance', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -272,7 +276,7 @@ export async function keepLivedocInstanceActive({
   jitsiInstanceId: string;
   livedocInstanceId?: string | null;
 }): Promise<string> {
-  const response = await fetch('/api/livedoc/keepalive', {
+  const response = await authFetch('/api/livedoc/keepalive', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
