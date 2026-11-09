@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useI18n } from '@/lib/i18n';
-import { useIsAccountAdmin, useIsInternalStaff } from '@/lib/useIsAccountAdmin';
+import { useIsAccountAdmin } from '@/lib/useIsAccountAdmin';
 import { CalendarSubscribeModal } from '@/lib/CalendarSubscribeModal';
 import { useBillingEnabled } from '@/lib/billing/useBillingSummary';
 import styles from '../styles/Home.module.css';
@@ -34,7 +34,6 @@ export function UserAvatarMenu({
 }: UserAvatarMenuProps) {
   const { t } = useI18n();
   const isAccountAdmin = useIsAccountAdmin();
-  const isInternalStaff = useIsInternalStaff();
   const billingEnabled = useBillingEnabled();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showCalendarSubscribe, setShowCalendarSubscribe] = useState(false);
@@ -153,8 +152,8 @@ export function UserAvatarMenu({
                 {t('nav.companySettings')}
               </Link>
             )}
-            {/* System settings hold the site's infrastructure keys: Kloud Meet staff only. */}
-            {isInternalStaff && onOpenSettings && (
+            {/* Account Settings: Kloud Integration for everyone; the site's keys inside stay staff-only (server-enforced). */}
+            {onOpenSettings && (
               <button
                 className={styles.orgDropdownItem}
                 onClick={() => {

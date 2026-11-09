@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
-import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
+import { SystemSettingsModal, type AccountSettingsTab } from '@/lib/SystemSettingsModal';
+import { REOPEN_ACCOUNT_SETTINGS_KEY } from '@/lib/settings/KloudIntegrationPanel';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { useI18n } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
@@ -112,6 +113,22 @@ export function DashboardView({
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<AccountSettingsTab | undefined>(undefined);
+
+  // Back from connecting Kloud in Account Settings → Kloud Integration: open it again on that tab.
+  useEffect(() => {
+    let reopen: string | null = null;
+    try {
+      reopen = sessionStorage.getItem(REOPEN_ACCOUNT_SETTINGS_KEY);
+      if (reopen) sessionStorage.removeItem(REOPEN_ACCOUNT_SETTINGS_KEY);
+    } catch {
+      // Storage blocked: nothing to reopen.
+    }
+    if (reopen === 'kloud') {
+      setSettingsTab('kloud');
+      setShowSettingsModal(true);
+    }
+  }, []);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
@@ -1827,7 +1844,12 @@ export function DashboardView({
 
       {showSettingsModal && (
         <SystemSettingsModal 
-          onClose={() => setShowSettingsModal(false)}
+          initialTab={settingsTab}
+          onNotice={(message) => toast.show(message)}
+          onClose={() => {
+            setShowSettingsModal(false);
+            setSettingsTab(undefined);
+          }}
           onSave={() => {
             setShowSettingsModal(false);
             toast.show(t('dash.settingsSaved'));

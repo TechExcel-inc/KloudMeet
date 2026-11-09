@@ -1530,6 +1530,7 @@ export function PageClientImpl(props: {
         <SystemSettingsModal
           onClose={() => setShowSettingsModal(false)}
           onSave={() => setShowSettingsModal(false)}
+          inMeeting
         />
       )}
       {showProfileModal && currentUser && (
