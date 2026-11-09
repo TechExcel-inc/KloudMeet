@@ -151,6 +151,9 @@
 .close:focus-visible,
 .moreButton:focus-visible,
 .addButton:focus-visible,
+.browseButton:focus-visible,
+.smartCamButton:focus-visible,
+.sourceItem:focus-visible,
 .sourceButton:focus-visible,
 .primaryButton:focus-visible,
 .documentRow:focus-visible,
@@ -230,7 +233,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  padding: 24px 16px 14px;
+  padding: 16px 12px 10px;
   text-align: center;
   border-radius: 12px;
   transition:
@@ -249,19 +252,7 @@
   gap: 4px;
 }
 
-.heroBadge {
-  padding: 3px 10px;
-  border-radius: 999px;
-  color: var(--km-on-dark-accent, #c9c8ff);
-  background: rgba(124, 121, 255, 0.14);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
 .heroTitle {
-  margin-top: 4px;
   color: var(--km-stage-text, #e8eaed);
   font-size: 16px;
   font-weight: 700;
@@ -269,23 +260,22 @@
 }
 
 .heroSubtitle {
-  max-width: 340px;
-  text-wrap: balance;
   margin-top: 2px;
   color: var(--km-stage-muted, #9aa0a6);
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.4;
+  white-space: nowrap;
 }
 
 .dropZone {
-  margin: 16px 0 0;
-  padding: 24px 16px;
+  margin: 12px 0 0;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 4px;
   border: 1.5px dashed rgba(255, 255, 255, 0.14);
-  border-radius: 12px;
+  border-radius: 10px;
   transition:
     border-color 0.15s ease,
     background 0.15s ease;
@@ -297,18 +287,18 @@
 }
 
 .dropZoneIcon {
-  width: 48px;
-  height: 48px;
+  width: 32px;
+  height: 32px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--km-on-dark-accent, #c9c8ff);
   background: rgba(124, 121, 255, 0.1);
 }
 
 .dropZonePrompt {
   color: var(--km-stage-text, #e8eaed);
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
@@ -321,8 +311,9 @@
 }
 
 .browseButton {
-  height: 34px;
-  padding: 0 18px;
+  height: 28px;
+  margin-top: 2px;
+  padding: 0 14px;
   display: inline-flex;
   align-items: center;
   color: #1f1d6b;
@@ -330,7 +321,7 @@
   border: none;
   border-radius: 8px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s ease;
@@ -346,23 +337,34 @@
 }
 
 .sourceList {
-  margin-top: 14px;
+  margin-top: 12px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sourceList .menuAnchor {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  min-width: 0;
 }
 
 .sourceItem {
-  height: 48px;
-  padding: 0 12px;
+  width: 100%;
+  min-height: 108px;
+  height: auto;
+  padding: 12px 8px 10px;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  text-align: left;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: center;
   color: var(--km-stage-text, #e8eaed);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
+  border-radius: 12px;
   font: inherit;
   cursor: pointer;
   transition:
@@ -370,9 +372,20 @@
     border-color 0.15s ease;
 }
 
-.sourceItem svg {
+.sourceItemIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
   flex: none;
   color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.12);
+  border-radius: 8px;
+}
+
+.sourceItem svg {
+  flex: none;
+  color: inherit;
 }
 
 .sourceItem:hover:not(:disabled) {
@@ -388,33 +401,42 @@
 .sourceItemText {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  align-items: center;
+  gap: 2px;
   min-width: 0;
+  width: 100%;
 }
 
 .sourceItemTitle {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
+  line-height: 1.35;
+  text-wrap: balance;
 }
 
 .sourceItemHint {
-  font-size: 11px;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   color: var(--km-stage-muted, #9aa0a6);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .smartCamButton {
-  margin: 14px auto 0;
   height: 32px;
-  padding: 0 14px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   color: var(--km-stage-text, #e8eaed);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   font: inherit;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -823,7 +845,7 @@
   background: rgba(242, 139, 130, 0.1);
 }
 
-/* Footer: the annotation switch on the left, Add on the right */
+/* Footer: annotation and SmartCam on the left, Add on the right */
 /* Over the site-wide footer look (globals.css): same surface as the panel */
 .documentFooter {
   width: auto;
@@ -987,6 +1009,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.footerStart {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-width: 0;
 }
 
 .footerEnd {

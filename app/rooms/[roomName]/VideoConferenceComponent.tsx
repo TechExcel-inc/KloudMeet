@@ -22,7 +22,7 @@ import {
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
-import { useLiveDocBoardRelay } from '@/lib/livedoc/useLiveDocBoardRelay';
+import { useLiveDocBoardContext } from '@/lib/livedoc/useLiveDocBoardContext';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -1566,8 +1566,8 @@ export function VideoConferenceComponent(props: {
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
   const shouldMountLiveDoc =
     livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked || showLiveDocDuringOwnShare;
-  // The Excalidraw board lives in the LiveDoc iframe; KloudMeet only carries its messages
-  useLiveDocBoardRelay(room, boardRoles, shouldMountLiveDoc);
+  // The Excalidraw board lives and syncs in the LiveDoc iframe; KloudMeet only says who is who
+  useLiveDocBoardContext(room, boardRoles, shouldMountLiveDoc);
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
   const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);

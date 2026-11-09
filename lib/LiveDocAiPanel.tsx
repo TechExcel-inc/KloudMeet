@@ -1091,13 +1091,12 @@ export function LiveDocAiPanel({
                       onDrop={handleDrop}
                     >
                       <div className={styles.heroSection}>
-                        <span className={styles.heroBadge}>{t('liveDocAi.heroBadge')}</span>
                         <span className={styles.heroTitle}>{t('liveDocAi.heroTitle')}</span>
                         <span className={styles.heroSubtitle}>{t('liveDocAi.heroSubtitle')}</span>
                       </div>
                       <div className={styles.dropZone}>
                         <div className={styles.dropZoneIcon}>
-                          <Glyph name="files" size={28} />
+                          <Glyph name="files" size={20} />
                         </div>
                         <span className={styles.dropZonePrompt}>{t('liveDocAi.dropPrompt')}</span>
                         <span className={styles.dropZoneText}>{t('liveDocAi.dropHint')}</span>
@@ -1118,7 +1117,9 @@ export function LiveDocAiPanel({
                             disabled={busy}
                             onClick={() => openPicker('space')}
                           >
-                            <Glyph name="space" size={18} />
+                            <span className={styles.sourceItemIcon}>
+                              <Glyph name="space" size={18} />
+                            </span>
                             <span className={styles.sourceItemText}>
                               <span className={styles.sourceItemTitle}>
                                 {t('liveDocAi.selectLiveDoc')}
@@ -1135,7 +1136,9 @@ export function LiveDocAiPanel({
                           disabled={busy}
                           onClick={() => runAction('document.addExcalidraw')}
                         >
-                          <Glyph name="whiteboard" size={18} />
+                          <span className={styles.sourceItemIcon}>
+                            <Glyph name="whiteboard" size={18} />
+                          </span>
                           <span className={styles.sourceItemText}>
                             <span className={styles.sourceItemTitle}>
                               {t('liveDocAi.excalidrawBoard')}
@@ -1155,7 +1158,9 @@ export function LiveDocAiPanel({
                             aria-haspopup="menu"
                             onClick={() => setUploadMenuOpen((value) => !value)}
                           >
-                            <Glyph name="more" size={18} />
+                            <span className={styles.sourceItemIcon}>
+                              <Glyph name="more" size={18} />
+                            </span>
                             <span className={styles.sourceItemText}>
                               <span className={styles.sourceItemTitle}>
                                 {t('liveDocAi.moreWays')}
@@ -1167,17 +1172,6 @@ export function LiveDocAiPanel({
                           </button>
                         </div>
                       </div>
-                      {onToggleSmartCam && (
-                        <button
-                          type="button"
-                          className={styles.smartCamButton}
-                          disabled={busy}
-                          onClick={onToggleSmartCam}
-                        >
-                          <Glyph name="camera" size={16} />
-                          <span>{t('liveDocAi.enableSmartCam')}</span>
-                        </button>
-                      )}
                     </div>
                   )}
                   {!documents.length && !canManage && (
@@ -1268,25 +1262,38 @@ export function LiveDocAiPanel({
                     )}
                     {canManage && (
                       <div className={styles.footerActions}>
-                        <label
-                          className={`${styles.annotation}${
-                            !state.documents.annotation.canToggle || busy
-                              ? ` ${styles.annotationDisabled}`
-                              : ''
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            role="switch"
-                            className={styles.switch}
-                            checked={state.documents.annotation.enabled}
-                            disabled={!state.documents.annotation.canToggle || busy}
-                            onChange={(event) =>
-                              runAction('annotation.set', { enabled: event.target.checked })
-                            }
-                          />
-                          {t('liveDocAi.enableAnnotation')}
-                        </label>
+                        <div className={styles.footerStart}>
+                          <label
+                            className={`${styles.annotation}${
+                              !state.documents.annotation.canToggle || busy
+                                ? ` ${styles.annotationDisabled}`
+                                : ''
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              className={styles.switch}
+                              checked={state.documents.annotation.enabled}
+                              disabled={!state.documents.annotation.canToggle || busy}
+                              onChange={(event) =>
+                                runAction('annotation.set', { enabled: event.target.checked })
+                              }
+                            />
+                            {t('liveDocAi.enableAnnotation')}
+                          </label>
+                          {onToggleSmartCam && (
+                            <button
+                              type="button"
+                              className={styles.smartCamButton}
+                              disabled={busy}
+                              onClick={onToggleSmartCam}
+                            >
+                              <Glyph name="camera" size={16} />
+                              <span>{t('liveDocAi.enableSmartCam')}</span>
+                            </button>
+                          )}
+                        </div>
                         <input
                           ref={fileInputRef}
                           className={styles.hiddenInput}
