@@ -11,6 +11,9 @@
  * - Proxies to external API (BFF)          → add prefix to LOCAL_API_PREFIXES
  * - Hybrid (DB + external) + external must egress from dev machine → add prefix here
  *
+ * stage-identity only reads the Kloud Meet session, so it is proxied like other DB
+ * routes even though it lives under the local `livedoc` prefix.
+ *
  * Override / extend without code changes:
  *   NEXT_PUBLIC_LOCAL_API_PREFIXES=foo,bar/baz
  */
@@ -77,6 +80,10 @@ function buildDevApiRewrites(remoteApi, env = process.env) {
 
   return {
     beforeFiles: [
+      {
+        source: '/api/livedoc/stage-identity',
+        destination: `${base}/api/livedoc/stage-identity`,
+      },
       {
         source: `/api/${pathParam}`,
         destination: `${base}/api/:path`,

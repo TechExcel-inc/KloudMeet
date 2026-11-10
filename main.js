@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, desktopCapturer, session, Menu, dialog, shell, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, desktopCapturer, session, dialog, shell, globalShortcut } = require('electron');
 const crypto = require('crypto');
 const path = require('path');
 const http = require('http');
@@ -798,14 +798,14 @@ function loadMainContents(url) {
 
 function navigateMainToDeepLink(rawUrl) {
   const parsed = parseKloudMeetDeepLink(rawUrl);
-  if (!parsed) return;
-  const pathRoom = encodeURIComponent(parsed.room);
-  const target = `${getAppPageOrigin()}/rooms/${pathRoom}${parsed.search}`;
   if (mainWindow && !mainWindow.isDestroyed()) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.focus();
-    loadMainContents(target);
-  } else {
+    // kloudmeet://open has no room: bringing the window up is all it asks for
+    if (parsed) {
+      loadMainContents(`${getAppPageOrigin()}/rooms/${encodeURIComponent(parsed.room)}${parsed.search}`);
+    }
+  } else if (parsed) {
     pendingDeepLink = rawUrl;
   }
 }
@@ -951,6 +951,45 @@ let sessionAndIpcHandlersInstalled = false;
  */
 let currentShareTarget = null;
 
+/**
+ * The native window functions without nut.js's permission wrapper (which would open macOS's
+ * Accessibility prompt on a lookup). Null where unavailable.
+ */
+let rawLibnut;
+function getRawLibnut() {
+  if (rawLibnut !== undefined) return rawLibnut;
+  rawLibnut = null;
+  const pkg = { darwin: 'libnut-darwin', win32: 'libnut-win32' }[process.platform];
+  if (!pkg) return rawLibnut;
+  try {
+    const dir = path.dirname(require.resolve(`@nut-tree-fork/${pkg}/package.json`));
+    rawLibnut = require(path.join(dir, 'build', 'Release', 'libnut.node'));
+  } catch (e) {
+    appendStartupLog(`[share] window lookup unavailable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return rawLibnut;
+}
+
+/**
+ * Where a shared window is now, in DIPs, from its capture id ("window:<handle>:0"; the handle is
+ * the CGWindowID on macOS and the HWND on Windows). Null if it is gone, minimized or unknown.
+ */
+function sharedWindowRect(handle) {
+  const native = getRawLibnut();
+  if (!native || !handle) return null;
+  try {
+    const r = native.getWindowRect(handle);
+    if (!r || !(r.width > 0) || !(r.height > 0)) return null;
+    if (process.platform === 'win32') {
+      const { screen } = require('electron');
+      return screen.screenToDipRect(null, { x: r.x, y: r.y, width: r.width, height: r.height });
+    }
+    return { x: r.x, y: r.y, width: r.width, height: r.height };
+  } catch {
+    return null;
+  }
+}
+
 function primaryDisplayBoundsFallback() {
   const { screen } = require('electron');
   const b = screen.getPrimaryDisplay().bounds;
@@ -1012,7 +1051,24 @@ function resolveShareTargetFromSource(source) {
     }
   }
 
-  // Window share: v1 falls back to primary (RC precision limited)
+  // Window share: follow the window itself, so control and annotations line up with it.
+  if (!isScreen) {
+    const handle = Number(sourceId.split(':')[1]);
+    const rect = sharedWindowRect(handle);
+    if (rect) {
+      const display = require('electron').screen.getDisplayMatching(rect);
+      return {
+        sourceId,
+        displayId: display.id,
+        ...rect,
+        scaleFactor: display.scaleFactor || 1,
+        kind: 'window',
+        windowHandle: handle,
+        controllable: true,
+      };
+    }
+  }
+  // Unknown window position: the primary screen, and the page declines control for it.
   return {
     sourceId,
     displayId: primary.displayId,
@@ -1022,6 +1078,7 @@ function resolveShareTargetFromSource(source) {
     height: primary.height,
     scaleFactor: primary.scaleFactor,
     kind: isScreen ? 'screen' : 'window',
+    controllable: isScreen,
   };
 }
 
@@ -1040,8 +1097,30 @@ function applyOverlayToShareTarget(target) {
   }
 }
 
+/** A shared window can move or resize; keep control and the annotation overlay on it. */
+let sharedWindowWatch = null;
+function watchSharedWindow() {
+  if (sharedWindowWatch) clearInterval(sharedWindowWatch);
+  sharedWindowWatch = null;
+  if (!currentShareTarget || !currentShareTarget.windowHandle) return;
+  sharedWindowWatch = setInterval(() => {
+    const t = currentShareTarget;
+    if (!t || !t.windowHandle) {
+      clearInterval(sharedWindowWatch);
+      sharedWindowWatch = null;
+      return;
+    }
+    const rect = sharedWindowRect(t.windowHandle);
+    if (!rect) return; // minimized or hidden for a moment: keep the last place
+    if (rect.x === t.x && rect.y === t.y && rect.width === t.width && rect.height === t.height) return;
+    Object.assign(t, rect);
+    applyOverlayToShareTarget(t);
+  }, 400);
+}
+
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
+  watchSharedWindow();
   // Before the capture starts, or macOS lets viewers see the bar (see ensureRcBarWindow)
   ensureRcBarWindow();
   applyOverlayToShareTarget(currentShareTarget);
@@ -1053,6 +1132,7 @@ function setCurrentShareTarget(source) {
 function clearCurrentShareTarget() {
   if (currentShareTarget) appendStartupLog('[share] stop');
   currentShareTarget = null;
+  watchSharedWindow();
   applyOverlayToShareTarget(primaryDisplayBoundsFallback());
   setFloatingReason('share', false);
 }
@@ -1074,6 +1154,239 @@ function watchShareInterruptions() {
   }
 }
 
+/**
+ * macOS: whether this build may record the screen. Without it, asking for sources makes macOS
+ * send the user to System Settings with no word from us. A grant made for an earlier build
+ * (each unsigned build has a new signature) still looks on in the list but no longer counts.
+ */
+function screenCaptureAllowed() {
+  if (process.platform !== 'darwin') return true;
+  try {
+    const { systemPreferences } = require('electron');
+    return systemPreferences.getMediaAccessStatus('screen') === 'granted';
+  } catch {
+    return true;
+  }
+}
+
+/** Which permission-help dialogs are showing, so a second click does not stack another. */
+const permissionHelpOpen = new Set();
+
+/** System Settings can't open over a full-screen window: it opens on another Mac screen and goes unseen. */
+function leaveFullScreen() {
+  const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+  if (!win || !win.isFullScreen()) return Promise.resolve();
+  return new Promise((resolve) => {
+    win.once('leave-full-screen', resolve);
+    setTimeout(resolve, 1500);
+    win.setFullScreen(false);
+  });
+}
+
+/** `open -b` brings System Settings to the front, even when it was already open on another Mac screen. */
+async function openPrivacySettings(pane) {
+  await leaveFullScreen();
+  spawn('open', ['-b', 'com.apple.systempreferences', `x-apple.systempreferences:com.apple.preference.security?${pane}`], {
+    stdio: 'ignore',
+  }).on('error', () => {});
+}
+
+/**
+ * macOS drops a permission when a new build is installed (each unsigned build has a new
+ * signature; the old switch still looks on but no longer counts). When a feature needs one that is
+ * off, say which, how to turn it on, and offer the right System Settings page.
+ * @param {'screen' | 'accessibility'} kind
+ * @param {{ controllerName?: string }} [ctx]
+ */
+async function showPermissionHelp(kind, ctx = {}) {
+  if (permissionHelpOpen.has(kind)) return;
+  permissionHelpOpen.add(kind);
+  const zh = /^zh/i.test(app.getLocale() || '');
+  const who = (ctx.controllerName || '').trim();
+  const copy = {
+    screen: zh
+      ? {
+          message: '需要“屏幕录制”权限才能共享屏幕',
+          detail:
+            '在“系统设置 › 隐私与安全性 › 屏幕录制”中打开 Kloud Meet。\n\n' +
+            '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
+            '打开后按提示退出并重新打开 Kloud Meet，再点共享屏幕。',
+        }
+      : {
+          message: 'Kloud Meet needs Screen Recording to share your screen',
+          detail:
+            'Turn on Kloud Meet in System Settings › Privacy & Security › Screen Recording.\n\n' +
+            'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
+            'Then quit and reopen Kloud Meet when asked, and share again.',
+        },
+    accessibility: zh
+      ? {
+          message: who ? `需要“辅助功能”权限，${who} 才能控制你的电脑` : '需要“辅助功能”权限才能被远程控制',
+          detail:
+            '在“系统设置 › 隐私与安全性 › 辅助功能”中打开 Kloud Meet。\n\n' +
+            '如果 Kloud Meet 已经是打开状态，请先选中它点“−”删除，再点“+”从“应用程序”里重新添加。\n\n' +
+            '打开后不用重启，对方的鼠标和键盘操作就会生效。',
+        }
+      : {
+          message: who
+            ? `Kloud Meet needs Accessibility so ${who} can control your computer`
+            : 'Kloud Meet needs Accessibility to be controlled remotely',
+          detail:
+            'Turn on Kloud Meet in System Settings › Privacy & Security › Accessibility.\n\n' +
+            'If Kloud Meet is already on, select it and click −, then click + and add it again from Applications.\n\n' +
+            'Control starts working as soon as it is on; no restart needed.',
+        },
+  }[kind];
+  const pane = kind === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Accessibility';
+  // Only a fresh start picks up Screen Recording; closing the window leaves the app running on a Mac.
+  const buttons = [
+    { zh: '打开系统设置', en: 'Open System Settings', run: () => openPrivacySettings(pane) },
+    ...(kind === 'screen'
+      ? [
+          {
+            zh: '退出并重新打开',
+            en: 'Quit & Reopen',
+            run: () => {
+              app.relaunch();
+              app.quit();
+            },
+          },
+        ]
+      : []),
+    { zh: '取消', en: 'Cancel' },
+  ];
+  const options = {
+    type: 'info',
+    ...copy,
+    buttons: buttons.map((button) => (zh ? button.zh : button.en)),
+    defaultId: 0,
+    cancelId: buttons.length - 1,
+  };
+  acquireOverlayHide(`permission-${kind}`);
+  try {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
+    await buttons[response].run?.();
+  } finally {
+    releaseOverlayHide(`permission-${kind}`);
+    permissionHelpOpen.delete(kind);
+  }
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+  if (process.platform === 'darwin') app.focus({ steal: true });
+}
+
+/** The last sound choice in the share picker, kept until the app quits. */
+let shareSound = false;
+let sharePicker = null;
+
+/** Everything that can be shared, leaving out Kloud Meet's own windows. */
+async function shareSources() {
+  const own = new Set(BrowserWindow.getAllWindows().map((win) => win.getMediaSourceId()));
+  const sources = await desktopCapturer.getSources({
+    types: ['screen', 'window'],
+    thumbnailSize: { width: 464, height: 290 },
+    fetchWindowIcons: true,
+  });
+  return sources.filter((source) => source.name && !own.has(source.id));
+}
+
+function shareItems(sources) {
+  return sources.map((source) => ({
+    id: source.id,
+    kind: source.id.startsWith('screen') ? 'screen' : 'window',
+    name: source.name,
+    shot: source.thumbnail.isEmpty() ? '' : `data:image/jpeg;base64,${source.thumbnail.toJPEG(70).toString('base64')}`,
+    icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : '',
+  }));
+}
+
+/** Shows the share picker. Resolves to { source, sound }, or null when nothing was picked. */
+async function pickShareSource() {
+  if (!mainWindow || mainWindow.isDestroyed()) return null;
+  // A second share click while the picker is open goes to the open one.
+  if (sharePicker && !sharePicker.isDestroyed()) {
+    sharePicker.focus();
+    return null;
+  }
+  const sources = { list: await shareSources() };
+  const area = mainWindow.getBounds();
+  const width = Math.min(860, Math.max(560, area.width - 80));
+  const height = Math.min(620, Math.max(420, area.height - 80));
+
+  acquireOverlayHide('share-picker');
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      parent: mainWindow,
+      modal: true,
+      show: false,
+      width,
+      height,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      autoHideMenuBar: true,
+      backgroundColor: '#16171f',
+      title: 'Share your screen',
+      webPreferences: {
+        preload: path.join(__dirname, 'share-picker-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    sharePicker = win;
+    const state = { choice: null };
+
+    const onDone = (event, choice) => {
+      if (event.sender !== win.webContents) return;
+      const source = choice && sources.list.find((item) => item.id === choice.id);
+      if (source) {
+        shareSound = choice.sound === true;
+        state.choice = { source, sound: shareSound };
+      }
+      win.close();
+    };
+    ipcMain.on('share-picker-done', onDone);
+
+    // Previews stay live while the picker is open.
+    const timer = setInterval(async () => {
+      const list = await shareSources().catch(() => null);
+      if (!list || win.isDestroyed()) return;
+      sources.list = list;
+      win.webContents.send('share-picker-sources', { items: shareItems(list) });
+    }, 2000);
+
+    win.once('closed', () => {
+      clearInterval(timer);
+      ipcMain.removeListener('share-picker-done', onDone);
+      releaseOverlayHide('share-picker');
+      sharePicker = null;
+      resolve(state.choice);
+    });
+    win.webContents.once('did-finish-load', () => {
+      if (win.isDestroyed()) return;
+      win.webContents.send('share-picker-sources', {
+        first: true,
+        zh: /^zh/i.test(app.getLocale() || ''),
+        sound: shareSound,
+        items: shareItems(sources.list),
+      });
+      win.show();
+      win.focus();
+    });
+    win.loadFile(path.join(__dirname, 'share-picker.html')).catch((err) => {
+      console.error(err);
+      if (!win.isDestroyed()) win.close();
+    });
+  });
+}
+
 function installSessionAndIpcOnce() {
   if (sessionAndIpcHandlersInstalled) return;
   sessionAndIpcHandlersInstalled = true;
@@ -1081,45 +1394,30 @@ function installSessionAndIpcOnce() {
   installMiniWindowIpc();
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
-    desktopCapturer.getSources({ types: ['screen', 'window'] }).then((sources) => {
-      let handled = false;
-      const template = sources.map((source) => ({
-        label: source.name,
-        click: () => {
-          handled = true;
-          setCurrentShareTarget(source);
-          callback({ video: source, audio: 'loopback' });
-        },
-      }));
-
-      template.push({ type: 'separator' });
-      template.push({
-        label: 'Cancel',
-        click: () => {
-          handled = true;
-          clearCurrentShareTarget();
-          callback();
-        },
-      });
-
-      const menu = Menu.buildFromTemplate(template);
-      const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
-      if (win) menu.popup({ window: win });
-
-      menu.once('menu-will-close', () => {
-        setTimeout(() => {
-          if (!handled) {
-            handled = true;
-            clearCurrentShareTarget();
-            callback();
-          }
-        }, 100);
-      });
-    }).catch((err) => {
-      console.error(err);
+    if (!screenCaptureAllowed()) {
+      appendStartupLog('[share] Screen Recording is off for this build: showing the how-to instead of the picker');
       clearCurrentShareTarget();
       callback();
-    });
+      showPermissionHelp('screen');
+      return;
+    }
+    pickShareSource()
+      .then((choice) => {
+        if (!choice) {
+          clearCurrentShareTarget();
+          callback();
+          return;
+        }
+        setCurrentShareTarget(choice.source);
+        callback(choice.sound ? { video: choice.source, audio: 'loopback' } : { video: choice.source });
+        // Starting a share hides the Dock icon, which sends the app behind others: bring it back.
+        setTimeout(focusMainWindow, 400);
+      })
+      .catch((err) => {
+        console.error(err);
+        clearCurrentShareTarget();
+        callback();
+      });
   });
 
   ipcMain.handle('get-share-target-bounds', () => {
@@ -1213,10 +1511,28 @@ function rcTarget(data) {
   return remoteInput.toScreenPoint(data, bounds, !rcSession.protocol);
 }
 
+/**
+ * Share bounds come from Electron in DIPs; on Windows the input library works in physical pixels,
+ * so at 125% / 150% display scaling every click would land up and to the left. macOS uses points
+ * on both sides.
+ */
+function dipToNativePoint(p) {
+  if (process.platform !== 'win32') return p;
+  const { screen } = require('electron');
+  return screen.dipToScreenPoint({ x: Math.round(p.x), y: Math.round(p.y) });
+}
+
+function nativeToDipPoint(p) {
+  if (process.platform !== 'win32') return p;
+  const { screen } = require('electron');
+  return screen.screenToDipPoint({ x: p.x, y: p.y });
+}
+
 async function rcMoveTo(mouse, Point, target) {
   rcLastInjected = target;
   rcLastInjectAt = Date.now();
-  await mouse.setPosition(new Point(target.x, target.y));
+  const native = dipToNativePoint(target);
+  await mouse.setPosition(new Point(native.x, native.y));
   rcLastInjectAt = Date.now();
 }
 
@@ -1269,19 +1585,22 @@ async function executeRemoteInput(data) {
 
 /**
  * macOS drops injected input silently unless this app has Accessibility. Checked when a session
- * starts (asking macOS to show its prompt once); the bar says so and links to the setting.
+ * starts: a dialog explains how to turn it on, and the bar says so until it takes effect.
  */
 let rcNeedsAccessibility = false;
 /** @type {ReturnType<typeof setInterval> | null} */
 let rcAccessibilityPoll = null;
 
-function checkAccessibilityForRemoteControl(prompt) {
+function checkAccessibilityForRemoteControl(explain) {
   if (process.platform !== 'darwin') return true;
   const { systemPreferences } = require('electron');
-  const trusted = systemPreferences.isTrustedAccessibilityClient(!!prompt);
+  // Our own dialog instead of macOS's prompt: it says what to do when the switch looks on but
+  // belongs to an earlier build, and the two would otherwise show at once.
+  const trusted = systemPreferences.isTrustedAccessibilityClient(false);
   rcNeedsAccessibility = !trusted;
   if (!trusted) {
     appendStartupLog('[remote-control] Accessibility is off: input will not reach other apps');
+    if (explain) showPermissionHelp('accessibility', { controllerName: rcSession.controllerName });
     // Turned on in System Settings mid-session: clear the notice as soon as it takes effect.
     if (!rcAccessibilityPoll) {
       rcAccessibilityPoll = setInterval(() => {
@@ -1302,9 +1621,7 @@ function stopAccessibilityPoll() {
 }
 
 function openAccessibilitySettings() {
-  shell
-    .openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility')
-    .catch(() => {});
+  void openPrivacySettings('Privacy_Accessibility');
 }
 
 function setRemoteControlSession(session) {
@@ -1379,7 +1696,7 @@ function startLocalMouseWatch() {
     if (!rcSession.active) return;
     try {
       const { mouse } = getNutTree();
-      const pos = await mouse.getPosition();
+      const pos = nativeToDipPoint(await mouse.getPosition());
       const prev = rcLastSeen;
       rcLastSeen = { x: pos.x, y: pos.y };
       if (!prev || Date.now() - rcLastInjectAt < 250) return;
@@ -1622,10 +1939,7 @@ function installMiniWindowIpc() {
     } else if (action === 'dispose') {
       miniWindowMayClose = true;
     } else if (action === 'focus-main') {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.show();
-      mainWindow.focus();
-      if (process.platform === 'darwin') app.focus({ steal: true });
+      focusMainWindow();
     }
   });
   ipcMain.on('mini-window-size', (event, size) => {
@@ -1634,6 +1948,69 @@ function installMiniWindowIpc() {
     const height = Number(size && size.height);
     if (!Number.isFinite(width) || !Number.isFinite(height)) return;
     resizeMiniWindow(width, height);
+  });
+}
+
+/**
+ * Mac full screen: the Dock slides over the page when the pointer reaches the bottom edge, which is
+ * where the meeting toolbar sits. While that can happen the whole page moves up above the Dock, and
+ * it comes back down once the pointer has moved up past the toolbar.
+ */
+function clearDockInFullScreen(win) {
+  if (process.platform !== 'darwin') return;
+  const { screen } = require('electron');
+  const pad = 170; // Above the Dock: the moved-up toolbar, plus some room
+  const state = { gap: 0, key: null, timer: null };
+
+  const lift = async () => {
+    if (state.key || win.isDestroyed()) return;
+    state.key = 'pending';
+    state.key = await win.webContents
+      .insertCSS(
+        `html { background: #111 !important; }
+         body { position: fixed !important; top: 0 !important; left: 0 !important; right: 0 !important;
+           height: calc(100vh - ${state.gap}px) !important; overflow: hidden !important; transform: translateZ(0); }`,
+      )
+      .catch(() => null);
+  };
+  const drop = () => {
+    const key = state.key;
+    if (!key || key === 'pending' || win.isDestroyed()) return;
+    state.key = null;
+    win.webContents.removeInsertedCSS(key).catch(() => {});
+  };
+  const stop = () => {
+    clearInterval(state.timer);
+    state.timer = null;
+    drop();
+  };
+
+  win.on('will-enter-full-screen', () => {
+    const display = screen.getDisplayMatching(win.getBounds());
+    const area = display.workArea;
+    const bounds = display.bounds;
+    const bottom = bounds.y + bounds.height - (area.y + area.height);
+    // No room held back at all means the Dock hides itself, but it still slides over when it shows.
+    state.gap = bottom || (area.width === bounds.width ? 72 : 0);
+  });
+  win.on('enter-full-screen', () => {
+    if (!state.gap) return;
+    clearInterval(state.timer);
+    state.timer = setInterval(() => {
+      if (win.isDestroyed()) return stop();
+      if (!win.isFocused()) return drop();
+      const { y } = screen.getCursorScreenPoint();
+      const bounds = screen.getDisplayMatching(win.getBounds()).bounds;
+      const edge = bounds.y + bounds.height;
+      if (y >= edge - 2) return void lift();
+      if (y < edge - state.gap - pad) drop();
+    }, 100);
+  });
+  win.on('leave-full-screen', stop);
+  win.on('closed', () => clearInterval(state.timer));
+  // A page load clears inserted styles.
+  win.webContents.on('did-navigate', () => {
+    state.key = null;
   });
 }
 
@@ -1650,6 +2027,16 @@ function createWindows() {
       nodeIntegration: false,
     },
   });
+
+  clearDockInFullScreen(mainWindow);
+  // During a share SmartCam is the only way back, whichever Space the person moves to.
+  for (const event of ['blur', 'enter-full-screen', 'leave-full-screen']) {
+    mainWindow.on(event, () => {
+      if (!floatingReasons.size) return;
+      refloatWindows();
+      if (miniWindow && !miniWindow.isDestroyed() && miniWindow.isVisible()) miniWindow.moveTop();
+    });
+  }
 
   // The meeting's mini window (see setupMiniWindow); other window.open calls behave as before
   mainWindow.webContents.setWindowOpenHandler(({ frameName, url }) => {
@@ -1991,6 +2378,8 @@ if (!gotLock) {
       navigateMainToDeepLink(url);
     } else {
       pendingDeepLink = url;
+      // Mac: the app keeps running with its window closed, so a link has to bring the window back
+      if (app.isReady()) void reopenMainWindow();
     }
   });
 

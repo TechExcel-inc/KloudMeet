@@ -1,3 +1,5 @@
+import { authFetch } from '@/lib/kloudSession';
+
 export const LIVEDOC_ANONYMOUS_GUID_KEY = 'KloudAnonymousSyncroomID';
 const TOKEN_CACHE_PREFIX = 'KloudMeet_instant_token_';
 const DEFAULT_LIVEDOC_BASE_URL = 'https://kloud.cn';
@@ -82,12 +84,15 @@ export function buildLiveDocIframeSrc(
   userToken: string,
   languageId: 0 | 1,
   settings?: LiveDocRuntimeSettings | null,
+  isKloudLogin = false,
 ): string {
   const base = resolveLiveDocBaseUrl(settings);
   const id = encodeURIComponent(livedocInstanceId);
   const token = encodeURIComponent(userToken);
   // 注意：不要把 role 写进 URL。身份变更应走 postMessage(onRoleChanged)，避免 iframe 重载闪动。
-  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}`;
+  // kloudlogin=1: the token is the person's own Kloud login, so the stage offers From Space
+  const login = isKloudLogin ? '&kloudlogin=1' : '';
+  return `${base}/GoogleMeet/MainStage/${id}/0?token=${token}&usetoken=1&fromjitsi=1&languageid=${languageId}${login}`;
 }
 
 /** MeetingServer `create_meeting_instance` 成功响应：`data` 为数字型 livedoc 实例 ID */
@@ -152,6 +157,45 @@ export async function createOrUpdateInstantAccount(userName: string): Promise<st
   }
 }
 
+export type LiveDocStageAccount = {
+  token: string;
+  /** True when the token is the person's own Kloud login: From Space then works as in Kloud. */
+  isKloudLogin: boolean;
+};
+
+const stageAccountByRoom = new Map<string, Promise<LiveDocStageAccount>>();
+
+/**
+ * The Kloud login this person uses everywhere in the meeting's LiveDoc (stage, instance, member
+ * sync, keepalive, recording), so they all agree: the browser's Kloud login when there is one
+ * (see /api/livedoc/stage-identity), otherwise the anonymous instant account.
+ */
+export function getLiveDocStageAccount(userName: string, roomName: string): Promise<LiveDocStageAccount> {
+  const existing = stageAccountByRoom.get(roomName);
+  if (existing) return existing;
+
+  const request = (async (): Promise<LiveDocStageAccount> => {
+    try {
+      const res = await authFetch('/api/livedoc/stage-identity', { method: 'POST' });
+      if (res.ok) {
+        const data = (await res.json()) as { token?: string | null; kloudLogin?: boolean };
+        if (typeof data.token === 'string' && data.token) {
+          // kloudLogin=false: a SiMeet SubSystem member who may not browse its spaces
+          return { token: data.token, isKloudLogin: data.kloudLogin !== false };
+        }
+      }
+    } catch {
+      // Fall back to the anonymous account below
+    }
+    const token = await createOrUpdateInstantAccount(userName);
+    return { token, isKloudLogin: false };
+  })();
+
+  stageAccountByRoom.set(roomName, request);
+  request.catch(() => stageAccountByRoom.delete(roomName));
+  return request;
+}
+
 /**
  * Personal rooms reuse the same roomName across sessions; suffix meetingId so each
  * session gets its own LiveDoc instance while staying stable within one session.
@@ -172,7 +216,8 @@ export function resolveJitsiInstanceId({
 }
 
 async function requestLivedocInstance(userToken: string, jitsiInstanceId: string): Promise<string> {
-  const response = await fetch('/api/livedoc/create-meeting-instance', {
+  // authFetch: with the SiMeet SubSystem on, a member's meeting is created in the subsystem
+  const response = await authFetch('/api/livedoc/create-meeting-instance', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -231,7 +276,7 @@ export async function keepLivedocInstanceActive({
   jitsiInstanceId: string;
   livedocInstanceId?: string | null;
 }): Promise<string> {
-  const response = await fetch('/api/livedoc/keepalive', {
+  const response = await authFetch('/api/livedoc/keepalive', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

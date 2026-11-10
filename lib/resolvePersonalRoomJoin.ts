@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/db';
 import {
   findKloudMemberHostInLiveRoom,
-  listActiveRoomNames,
+  listActiveRoomNamesOrNull,
 } from '@/lib/livekitRooms';
 import {
   getMeetingIsActiveByRoomName,
@@ -263,13 +263,14 @@ async function resolvePersonalRoomOccupiedByOther(
 
 /**
  * 是否在线：优先用已拉取的 activeRooms（与 listActiveRoomNames 同源，内存匹配）。
- * 仅当 LiveKit 列表拉取失败（空数组）时才按房间名单独查 LiveKit，避免 N 条会议 × 多次 RPC。
+ * 仅当 LiveKit 列表拉取失败（null）时才按房间名单独查 LiveKit，避免 N 条会议 × 多次 RPC。
+ * An empty list means no live rooms: checking each meeting then cost ~2 s apiece.
  */
 async function isMeetingLiveNow(
   roomName: string,
-  activeRooms: string[],
+  activeRooms: string[] | null,
 ): Promise<boolean> {
-  if (activeRooms.length > 0) {
+  if (activeRooms) {
     return isRoomLiveInList(roomName, activeRooms);
   }
   return getMeetingIsActiveByRoomName(roomName);
@@ -282,7 +283,7 @@ async function isMeetingLiveNow(
 async function findOwnerJoinableMeetingFromDb(
   ownerId: number,
   personalRoomId: string,
-  activeRooms: string[],
+  activeRooms: string[] | null,
 ): Promise<LiveSessionResult | null> {
   const meetings = await prisma.meeting.findMany({
     where: {
@@ -387,7 +388,7 @@ async function resolveRegisteredOwnerOtherLiveSession(
 async function resolveOwnerActiveSession(
   ownerId: number,
   personalRoomId: string,
-  activeRooms: string[],
+  activeRooms: string[] | null,
 ): Promise<LiveSessionResult | null> {
   const fromDb = await findOwnerJoinableMeetingFromDb(
     ownerId,
@@ -400,7 +401,7 @@ async function resolveOwnerActiveSession(
   return resolveRegisteredOwnerOtherLiveSession(
     ownerId,
     personalRoomId,
-    activeRooms,
+    activeRooms ?? [],
   );
 }
 
@@ -446,12 +447,13 @@ async function resolvePersonalRoomIdEntry(
   const canonicalId = registeredOwner.personalRoomId?.trim() || personalRoomId.trim();
 
   try {
-    const activeRooms = await listActiveRoomNames();
+    const listedRooms = await listActiveRoomNamesOrNull();
+    const activeRooms = listedRooms ?? [];
 
     const ownerActive = await resolveOwnerActiveSession(
       registeredOwner.id,
       canonicalId,
-      activeRooms,
+      listedRooms,
     );
     if (ownerActive) {
       const hostInfo =

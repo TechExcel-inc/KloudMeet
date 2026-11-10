@@ -3,7 +3,7 @@
 import React from 'react';
 import {
   buildLiveDocIframeSrc,
-  createOrUpdateInstantAccount,
+  getLiveDocStageAccount,
   resolveLiveDocBaseUrl,
   type LiveDocEmbedRole,
   type LiveDocRuntimeSettings,
@@ -69,6 +69,7 @@ export function LiveDocView({
 }: LiveDocViewProps) {
   const { t, locale } = useI18n();
   const [userToken, setUserToken] = React.useState<string | null>(null);
+  const [isKloudLogin, setIsKloudLogin] = React.useState(false);
   const [tokenError, setTokenError] = React.useState<string | null>(null);
   const [tokenLoading, setTokenLoading] = React.useState(true);
   const [pluginLoaded, setPluginLoaded] = React.useState(false);
@@ -119,10 +120,11 @@ export function LiveDocView({
     let cancelled = false;
     setTokenLoading(true);
     setTokenError(null);
-    createOrUpdateInstantAccount(name)
-      .then((token) => {
+    getLiveDocStageAccount(name, meetingRoomName)
+      .then((account) => {
         if (!cancelled) {
-          setUserToken(token);
+          setUserToken(account.token);
+          setIsKloudLogin(account.isKloudLogin);
         }
       })
       .catch((e) => {
@@ -139,7 +141,7 @@ export function LiveDocView({
     return () => {
       cancelled = true;
     };
-  }, [participantName]);
+  }, [participantName, meetingRoomName]);
 
   React.useEffect(() => {
     setPluginLoaded(false);
@@ -269,6 +271,7 @@ export function LiveDocView({
     userToken,
     srcLanguageIdRef.current,
     runtimeSettings,
+    isKloudLogin,
   );
   const baseUrl = resolveLiveDocBaseUrl(runtimeSettings);
 

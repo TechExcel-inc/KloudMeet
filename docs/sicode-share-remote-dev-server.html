@@ -1,0 +1,305 @@
+<title>Share Remote Dev Server</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column with a sticky contents rail on wide screens; diagrams and tables scroll in their own boxes. */
+:root {
+  --bg: #f6f8f9;
+  --paper: #ffffff;
+  --ink: #17212b;
+  --muted: #5a6875;
+  --rule: #d9e1e6;
+  --accent: #0b7a75;
+  --accent-soft: #e2f2f0;
+  --warn: #9a5b00;
+  --warn-soft: #fbf0dc;
+  --code-bg: #eef2f4;
+  --font-display: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Public Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1519; --paper: #151d22; --ink: #e4ebef; --muted: #98a7b2; --rule: #26323a;
+    --accent: #4cc3b9; --accent-soft: #143331; --warn: #f0b552; --warn-soft: #33270f; --code-bg: #1c262d;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1519; --paper: #151d22; --ink: #e4ebef; --muted: #98a7b2; --rule: #26323a;
+  --accent: #4cc3b9; --accent-soft: #143331; --warn: #f0b552; --warn-soft: #33270f; --code-bg: #1c262d;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 16px/1.65 var(--font-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 72px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 900px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 24px; } nav.toc { position: static; } }
+nav.toc { position: sticky; top: calc(24px + env(safe-area-inset-top, 0px)); align-self: start; font-size: 14px; }
+nav.toc p { margin: 0 0 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+nav.toc ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+nav.toc a { color: var(--ink); text-decoration: none; }
+nav.toc a:hover, nav.toc a:focus-visible { color: var(--accent); text-decoration: underline; }
+main { min-width: 0; max-width: 72ch; }
+header.doc { margin-bottom: 32px; }
+.eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 8px; }
+h1 { font: 800 clamp(30px, 4vw, 42px)/1.15 var(--font-display); margin: 0 0 12px; text-wrap: balance; letter-spacing: -0.01em; }
+.meta { color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 0; }
+h2 { font: 700 24px/1.3 var(--font-display); margin: 48px 0 12px; text-wrap: balance; scroll-margin-top: 24px; }
+h3 { font: 700 18px/1.35 var(--font-display); margin: 28px 0 8px; }
+p, ul, ol { margin: 0 0 14px; }
+li { margin-bottom: 6px; }
+code { font: 500 0.88em var(--font-mono); background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre.code { font: 400 13.5px/1.55 var(--font-mono); background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto; margin: 0 0 16px; }
+.lede { font-size: 18px; color: var(--ink); }
+.callout { background: var(--accent-soft); border-radius: 10px; padding: 16px 18px; margin: 18px 0; }
+.callout.warn { background: var(--warn-soft); }
+.callout strong.k { display: block; font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; }
+.callout.warn strong.k { color: var(--warn); }
+.table-wrap { overflow-x: auto; margin: 0 0 18px; border: 1px solid var(--rule); border-radius: 10px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 700; background: var(--code-bg); }
+.diagram { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; overflow-x: auto; margin: 0 0 18px; }
+.diagram pre.mermaid { margin: 0; background: transparent; }
+ol.steps { counter-reset: s; list-style: none; padding: 0; display: grid; gap: 10px; }
+ol.steps > li { counter-increment: s; display: grid; grid-template-columns: 32px minmax(0, 1fr); gap: 12px; margin: 0; }
+ol.steps > li::before { content: counter(s); font: 700 14px/32px var(--font-mono); text-align: center; color: var(--accent); background: var(--accent-soft); border-radius: 50%; width: 32px; height: 32px; }
+ol.steps > li > div { min-width: 0; padding-top: 4px; }
+.phases { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 0 0 18px; }
+.phase { background: var(--paper); border: 1px solid var(--rule); border-radius: 10px; padding: 16px; min-width: 0; }
+.phase h3 { margin: 0 0 6px; font-size: 16px; }
+.phase .tag { font: 500 12px var(--font-mono); color: var(--accent); }
+.phase ul { padding-left: 18px; margin: 8px 0 0; font-size: 14.5px; }
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; }
+a { color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <p>Contents</p>
+    <ol>
+      <li><a href="#goal">Goal</a></li>
+      <li><a href="#today">What SiCode has today</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#pilot">EAD Pilot: register and share</a></li>
+      <li><a href="#connect">Connecting, step by step</a></li>
+      <li><a href="#windows">Windows dev computers</a></li>
+      <li><a href="#people">Several people, one computer</a></li>
+      <li><a href="#security">Security</a></li>
+      <li><a href="#code">Where the code changes go</a></li>
+      <li><a href="#phases">Phases</a></li>
+      <li><a href="#open">Open questions</a></li>
+    </ol>
+  </nav>
+
+  <main>
+    <header class="doc">
+      <p class="eyebrow">SiCode design · draft for review</p>
+      <h1>Share Remote Dev Server</h1>
+      <p class="meta"><span>2026-10-26</span><span>Repo: TechExcel-inc/SiCode</span><span>Status: proposal, no code yet</span></p>
+    </header>
+
+    <section id="goal">
+      <h2>Goal</h2>
+      <p class="lede">A developer works in SiCode on a Mac, while the code lives, builds and runs on a remote dev computer, such as the Windows machine that P1's .NET backend needs. The team registers that computer once in EAD Pilot; everyone allowed to use it sees it in SiCode and opens its projects as remote projects.</p>
+      <div class="callout">
+        <strong class="k">Short answer</strong>
+        Yes, the approach works. SiCode already separates the app from the server that does the work, and it already has a placeholder <code>ssh</code> server type. The missing parts are: opening the SSH connection, starting SiCode's server on the remote computer, tunnelling to it, and an EAD Pilot list of shared dev computers.
+      </div>
+      <p>This is the same model the Claude desktop app (SSH environments) and VS Code Remote-SSH use: the agent and the tools run on the remote computer, and only the window runs locally.</p>
+    </section>
+
+    <section id="today">
+      <h2>What SiCode has today</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Piece</th><th>Where</th><th>What it gives us</th></tr></thead>
+          <tbody>
+            <tr><td>App ↔ server split</td><td><code>packages/app</code> talks HTTP to <code>packages/opencode</code></td><td>The window and the agent are already separate. A remote server only needs to be reachable.</td></tr>
+            <tr><td>Local server</td><td><code>desktop-electron/src/main/server.ts</code> <code>spawnLocalServer</code></td><td>Runs on <code>127.0.0.1</code> with a random password (Basic auth, user <code>opencode</code>) and a <code>/global/health</code> check. The remote server works the same way.</td></tr>
+            <tr><td>Server connection types</td><td><code>app/src/context/server.tsx</code></td><td><code>http</code>, <code>sidecar</code> (base or WSL) and <code>ssh</code>. The <code>ssh</code> type is defined ("SSH client exposes an HTTP server for the app to use as a proxy") but nothing creates one.</td></tr>
+            <tr><td>Projects per server</td><td><code>server.tsx</code> store <code>projects</code>, <code>lastProject</code></td><td>Each server keeps its own project list, so remote folders become that server's projects with no new model.</td></tr>
+            <tr><td>Health polling</td><td><code>server.tsx</code> <code>startHealthPolling</code></td><td>Shows when a server is down; reconnect can hook in here.</td></tr>
+            <tr><td>Headless server</td><td><code>opencode serve</code> (<code>cli/cmd/serve.ts</code>)</td><td>Already runs the server without a window; warns when <code>OPENCODE_SERVER_PASSWORD</code> is not set.</td></tr>
+            <tr><td>Windows build</td><td><code>dist-win</code></td><td>SiCode already ships for Windows, so its server can run natively there.</td></tr>
+            <tr><td>EAD Pilot</td><td><code>app/src/ead/*</code>, eadfm.com API</td><td>Sign-in, products and source paths per product. The natural place to register a team's dev computers.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="how">
+      <h2>How it works</h2>
+      <p>SiCode on the Mac opens one SSH connection to the dev computer with the user's own key, starts (or finds) a SiCode server there bound to <code>localhost</code>, and forwards a local port to it through the SSH connection. The app then uses that server exactly like its local one.</p>
+      <div class="diagram">
+<pre class="mermaid">
+flowchart LR
+  subgraph Mac["Developer's Mac"]
+    APP["SiCode app"]
+    TUN["127.0.0.1:41xxx<br/>forwarded port"]
+  end
+  subgraph EAD["EAD Pilot · eadfm.com"]
+    REG["Dev server registry<br/>who may use it,<br/>product → folder"]
+  end
+  subgraph WIN["Remote dev computer (Windows)"]
+    SSHD["OpenSSH server"]
+    SRV["SiCode server<br/>127.0.0.1 only,<br/>random password"]
+    SRC["Projects<br/>C:\Projects\P1Web …"]
+    TOOLS["git · dotnet / MSBuild · node"]
+  end
+  APP -- "1. list my dev servers" --> REG
+  APP -- "2. SSH with my key" --> SSHD
+  SSHD -- "3. start or find" --> SRV
+  APP -- "4. HTTP + password" --> TUN
+  TUN -. "tunnel inside SSH" .-> SRV
+  SRV --> SRC
+  SRV --> TOOLS
+</pre>
+      </div>
+      <p>Nothing on the dev computer is opened to the network except SSH. The SiCode server listens only on the computer's own <code>localhost</code>, and only the tunnel can reach it.</p>
+    </section>
+
+    <section id="pilot">
+      <h2>EAD Pilot: register and share</h2>
+      <p>An admin registers each dev computer once in EAD Pilot. Pilot shares the computer's details and who may use it, never a password.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Field</th><th>Example</th><th>Notes</th></tr></thead>
+          <tbody>
+            <tr><td>Name</td><td>P1 Windows dev</td><td>Shown in SiCode's server list.</td></tr>
+            <tr><td>Host, port</td><td><code>108.175.14.99</code>, <code>50725</code></td><td>The SSH address.</td></tr>
+            <tr><td>Host key fingerprint</td><td><code>SHA256:…</code></td><td>Recorded on first registration; SiCode refuses to connect if it changes.</td></tr>
+            <tr><td>OS</td><td>Windows</td><td>Picks the right server build and shell.</td></tr>
+            <tr><td>Members</td><td>EAD users or groups</td><td>Who sees it in SiCode. Removing someone hides it and revokes their key.</td></tr>
+            <tr><td>Login per member</td><td>Windows account, public key</td><td>Each member signs in as themself with their own key.</td></tr>
+            <tr><td>Product folders</td><td>P1 API → <code>C:\Projects\P1_API</code></td><td>Links EAD products to folders on that computer, alongside today's source paths.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>In SiCode, a signed-in user then sees a <strong>Remote dev servers</strong> section in the server picker, with the computers shared with them. Choosing a product in the EAD map can open its folder on the right computer.</p>
+    </section>
+
+    <section id="connect">
+      <h2>Connecting, step by step</h2>
+      <ol class="steps">
+        <li><div><strong>List.</strong> SiCode loads the user's dev servers from EAD Pilot (new API next to <code>loadProducts</code>).</div></li>
+        <li><div><strong>SSH in.</strong> The desktop app (main process) opens SSH with the user's private key, checking the host key against the fingerprint EAD recorded.</div></li>
+        <li><div><strong>Install or update the server.</strong> SiCode checks for its server in <code>%LOCALAPPDATA%\SiCode\server\&lt;version&gt;</code>; if the version doesn't match the app, it uploads the matching build over the same connection.</div></li>
+        <li><div><strong>Start or reuse.</strong> If this user's server is already running, reuse it; otherwise start it detached so it survives a dropped connection, with a fresh random password and <code>--hostname 127.0.0.1 --port 0</code>. It writes its port to a state file in the user's profile.</div></li>
+        <li><div><strong>Tunnel.</strong> Forward a free local port on the Mac to that remote port through the SSH connection.</div></li>
+        <li><div><strong>Check health.</strong> Call <code>/global/health</code> through the tunnel, as the local sidecar does today.</div></li>
+        <li><div><strong>Add the server.</strong> Register an <code>ssh</code> connection (<code>host</code> plus the tunnel URL and password) in the server list and make it active.</div></li>
+        <li><div><strong>Open projects.</strong> The user picks folders on the dev computer, or opens the product folders from EAD. They are stored as that server's projects.</div></li>
+      </ol>
+      <p>If the connection drops, health polling notices; SiCode reconnects, re-forwards the port and reuses the running server, so sessions continue.</p>
+    </section>
+
+    <section id="windows">
+      <h2>Windows dev computers</h2>
+      <ul>
+        <li><strong>OpenSSH Server</strong> is a built-in Windows feature; it must be on, with the <code>sshd</code> service set to start automatically.</li>
+        <li><strong>Keys for administrators</strong> are read from <code>C:\ProgramData\ssh\administrators_authorized_keys</code>; for other accounts, from the user's <code>.ssh\authorized_keys</code>. Non-admin accounts are better.</li>
+        <li><strong>Tools on PATH</strong> for the account: <code>git</code>, the .NET SDK or MSBuild (Visual Studio Build Tools for .NET Framework projects), and Node for Vue front ends.</li>
+        <li><strong>Keeping the server running</strong>: start it as a detached process (or a per-user scheduled task), so closing the SSH connection doesn't stop it.</li>
+        <li><strong>Shell</strong>: the agent's shell commands run in PowerShell on Windows; prompts and tools must expect Windows paths.</li>
+      </ul>
+    </section>
+
+    <section id="people">
+      <h2>Several people, one computer</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Option</th><th>How</th><th>Trade-off</th></tr></thead>
+          <tbody>
+            <tr><td><strong>One Windows account per developer</strong> (recommended)</td><td>Each person signs in as themself; each gets their own SiCode server, settings and checkouts.</td><td>Clean separation and auditing; an admin creates the accounts.</td></tr>
+            <tr><td>Shared account, separate folders</td><td>One account; SiCode keeps one server per EAD user (own state folder and port) and a <code>git worktree</code> per person or task.</td><td>Less setup, but everyone can read everyone's files, and the shared password problem returns.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Either way, two people never work in the same checkout. Builds that write to shared folders (IIS sites, shared databases) still need team rules.</p>
+    </section>
+
+    <section id="security">
+      <h2>Security</h2>
+      <ul>
+        <li>No shared administrator password, in EAD or anywhere else. Each person uses their own SSH key; EAD stores only public keys and fingerprints.</li>
+        <li>The SiCode server listens on <code>127.0.0.1</code> only, with a random password per start. Only the SSH tunnel can reach it.</li>
+        <li>The host key is pinned when the computer is registered, which protects against connecting to an impostor.</li>
+        <li>Removing a member in EAD removes their key from the computer (phase 3) and hides the server in SiCode at once.</li>
+        <li>The private key stays on the developer's Mac, in the macOS Keychain or <code>~/.ssh</code>, never in EAD.</li>
+      </ul>
+      <div class="callout warn">
+        <strong class="k">Before starting</strong>
+        Administrator passwords for the P1 servers were pasted into a chat during this discussion. Change them, and move to per-person SSH keys as above.
+      </div>
+    </section>
+
+    <section id="code">
+      <h2>Where the code changes go</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Area</th><th>Change</th></tr></thead>
+          <tbody>
+            <tr><td><code>desktop-electron/src/main/ssh.ts</code> (new)</td><td>SSH connect (the <code>ssh2</code> library, so macOS and Windows behave the same), host-key check, upload, remote start, port forwarding, reconnect.</td></tr>
+            <tr><td><code>desktop-electron/src/main/server.ts</code>, <code>ipc.ts</code>, <code>preload</code></td><td>IPC to connect, disconnect and report status for a remote server; remote server versions to match the app.</td></tr>
+            <tr><td><code>app/src/context/server.tsx</code></td><td>Make the <code>ssh</code> type real: add, store, health and reconnect, alongside <code>http</code>.</td></tr>
+            <tr><td>Server picker UI</td><td>A "Remote dev servers" section, connection status, and a folder browser on the remote computer.</td></tr>
+            <tr><td><code>app/src/ead/api.ts</code></td><td><code>loadDevServers</code>, and product → folder links per dev server.</td></tr>
+            <tr><td>EAD backend (eadfm.com)</td><td>Dev server registry, members, public keys and API; Pilot screens to manage them.</td></tr>
+            <tr><td><code>opencode serve</code></td><td>A <code>--state-file</code> option to write the chosen port, so a reconnect can find the running server.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="phases">
+      <h2>Phases</h2>
+      <div class="phases">
+        <div class="phase">
+          <span class="tag">Phase 1</span>
+          <h3>Remote server in SiCode</h3>
+          <p>A user adds an SSH server by hand (host, port, user, key). SiCode installs, starts and tunnels to its server, and opens remote projects.</p>
+          <ul><li>Proven on the P1 Windows dev computer</li><li>No EAD changes</li></ul>
+        </div>
+        <div class="phase">
+          <span class="tag">Phase 2</span>
+          <h3>Share through EAD Pilot</h3>
+          <p>Admins register dev computers and members in Pilot; SiCode lists them for each user, and links EAD products to folders on them.</p>
+          <ul><li>EAD backend and Pilot screens</li><li>Host key pinning from the registry</li></ul>
+        </div>
+        <div class="phase">
+          <span class="tag">Phase 3</span>
+          <h3>Keys and access, automated</h3>
+          <p>A small service on each dev computer syncs authorized keys from EAD, so adding or removing a member takes effect without anyone logging in to the computer.</p>
+          <ul><li>Revoke in one place</li><li>Audit of who connected</li></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="open">
+      <h2>Open questions</h2>
+      <ol>
+        <li>Who builds the EAD backend part (registry, members, keys), and on which EAD release?</li>
+        <li>One Windows account per developer, or one shared account with separate folders?</li>
+        <li>Is P1's backend modern .NET (which also builds on a Mac) or .NET Framework (Windows only)? This decides how much work must run remotely.</li>
+        <li>Should a dev computer also be usable from SiCode on Windows desktops, not only Macs? The design allows it; it needs testing.</li>
+        <li>Does any project need the remote computer's GUI (Visual Studio debugging, IIS Manager)? Those still need Remote Desktop alongside SiCode.</li>
+      </ol>
+    </section>
+
+    <footer>
+      Based on the SiCode source as of commit 7b66d4313 (2026-10-25): <code>packages/app/src/context/server.tsx</code>, <code>packages/desktop-electron/src/main/server.ts</code>, <code>packages/opencode/src/cli/cmd/serve.ts</code>, <code>packages/app/src/ead/api.ts</code>.
+    </footer>
+  </main>
+</div>

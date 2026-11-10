@@ -65,6 +65,8 @@ interface LiveDocAiPanelProps {
   onShowDesign?: () => void;
   /** "Link" next to the upload options opens "Show a link" (only for people who may switch views) */
   onAddDesignLink?: () => void;
+  /** Toggle SmartCam (Document PiP) from the empty state */
+  onToggleSmartCam?: () => void;
 }
 
 interface MeetingCaption {
@@ -226,7 +228,8 @@ function getActiveMeetingId(): number | null {
 
 function getMeetingStartedAtMs(): number | null {
   try {
-    const raw = typeof window !== 'undefined' ? localStorage.getItem('activeMeetingStartedAt') : null;
+    const raw =
+      typeof window !== 'undefined' ? localStorage.getItem('activeMeetingStartedAt') : null;
     if (!raw) return null;
     const ms = new Date(raw).getTime();
     return Number.isNaN(ms) ? null : ms;
@@ -309,9 +312,7 @@ function parseChatForSummary(value: unknown): LiveDocAiTranscriptItem | null {
   const message = typeof row.message === 'string' ? row.message.trim() : '';
   if (!message) return null;
   const senderName =
-    typeof row.senderName === 'string' && row.senderName.trim()
-      ? row.senderName.trim()
-      : 'Unknown';
+    typeof row.senderName === 'string' && row.senderName.trim() ? row.senderName.trim() : 'Unknown';
   const timestamp =
     typeof row.timestamp === 'number' && Number.isFinite(row.timestamp) ? row.timestamp : 0;
   const id =
@@ -358,9 +359,10 @@ function parseCaption(value: unknown): MeetingCaption | null {
   const item = value as Record<string, unknown>;
   const content = typeof item.content === 'string' ? item.content.trim() : '';
   if (!content) return null;
-  const speakerName = typeof item.speakerName === 'string' && item.speakerName.trim()
-    ? item.speakerName.trim()
-    : 'Unknown';
+  const speakerName =
+    typeof item.speakerName === 'string' && item.speakerName.trim()
+      ? item.speakerName.trim()
+      : 'Unknown';
   const offsetSeconds = typeof item.offsetSeconds === 'number' ? item.offsetSeconds : null;
   const id = item.id;
   return {
@@ -479,14 +481,18 @@ function useMeetingCaptions(enabled: boolean): { items: MeetingCaption[]; loadin
       const requestId = ++seq;
       if (first) setLoading(true);
       try {
-        const res = await authFetch(`/api/transcripts/${meetingId}`, { headers: roomAuthHeaders() });
+        const res = await authFetch(`/api/transcripts/${meetingId}`, {
+          headers: roomAuthHeaders(),
+        });
         if (!res.ok) {
           if (!cancelled && first && requestId === seq) setItems([]);
           return;
         }
         const data: unknown = await res.json();
         const raw =
-          data && typeof data === 'object' && Array.isArray((data as { captions?: unknown }).captions)
+          data &&
+          typeof data === 'object' &&
+          Array.isArray((data as { captions?: unknown }).captions)
             ? (data as { captions: unknown[] }).captions
             : [];
         if (cancelled || requestId !== seq) return;
@@ -533,6 +539,7 @@ export function LiveDocAiPanel({
   designItem = null,
   onShowDesign,
   onAddDesignLink,
+  onToggleSmartCam,
 }: LiveDocAiPanelProps) {
   const { t } = useI18n();
   const [activeTab, setActiveTab] = React.useState<LiveDocAiTab>('file');
@@ -540,6 +547,7 @@ export function LiveDocAiPanel({
   const [transcriptSearch, setTranscriptSearch] = React.useState('');
   const [fileMenuItemId, setFileMenuItemId] = React.useState<number | null>(null);
   const [uploadMenuOpen, setUploadMenuOpen] = React.useState(false);
+  const [dragActive, setDragActive] = React.useState(false);
   const [removeItemId, setRemoveItemId] = React.useState<number | null>(null);
   const [pendingOpenItemId, setPendingOpenItemId] = React.useState<number | null>(null);
   const [summaryMenuOpen, setSummaryMenuOpen] = React.useState(false);
@@ -695,51 +703,70 @@ export function LiveDocAiPanel({
   // From every caption, not just the search hits, so a search doesn't recolour people
   const speakerToneByName = speakerTones(meetingCaptions.items);
   /** `more`: listed under More in the empty state; the Add menu lists every source */
-  const addSources: Array<{ key: string; icon: GlyphName; label: string; onClick: () => void; more?: boolean }> = [
+  const addSources: Array<{
+    key: string;
+    icon: GlyphName;
+    label: string;
+    onClick: () => void;
+    more?: boolean;
+  }> = [
     {
       key: 'local',
       icon: 'upload',
       label: t('liveDocAi.fromDevice'),
       onClick: () => fileInputRef.current?.click(),
     },
-    { key: 'space', icon: 'space', label: t('liveDocAi.fromLiveDocSpace'), onClick: () => openPicker('space') },
-    {
-      key: 'whiteboard',
-      icon: 'whiteboard',
-      label: t('liveDocAi.whiteBoard'),
-      onClick: () => runAction('document.addBlank'),
-    },
-    {
-      key: 'files',
-      icon: 'files',
-      label: t('liveDocAi.fromFiles'),
-      onClick: () => openPicker('favorite'),
-      more: true,
-    },
+    ...(state?.documents.companySpaceAllowed
+      ? [
+          {
+            key: 'space',
+            icon: 'space' as GlyphName,
+            label: t('liveDocAi.fromLiveDocSpace'),
+            onClick: () => openPicker('space'),
+          },
+        ]
+      : []),
     {
       key: 'excalidraw',
       icon: 'whiteboard',
       label: t('liveDocAi.excalidrawBoard'),
       onClick: () => runAction('document.addExcalidraw'),
+    },
+    {
+      key: 'whiteboard',
+      icon: 'whiteboard',
+      label: t('liveDocAi.whiteBoard'),
+      onClick: () => runAction('document.addBlank'),
       more: true,
     },
-    ...(onAddDesignLink
-      ? [
-          {
-            key: 'link',
-            icon: 'link' as GlyphName,
-            label: t('liveDocAi.linkSource'),
-            onClick: onAddDesignLink,
-            more: true,
-          },
-        ]
-      : []),
+    {
+      key: 'google',
+      icon: 'drive',
+      label: t('liveDocAi.googleDoc'),
+      onClick: () => runAction('document.addGoogleDrive'),
+      more: true,
+    },
+    {
+      key: 'dropbox',
+      icon: 'dropbox',
+      label: t('liveDocAi.dropbox'),
+      onClick: () => runAction('document.addDropbox'),
+      more: true,
+    },
   ];
 
   const handleLocalFile = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
     event.target.value = '';
     enqueueUploads(files);
+  };
+
+  const handleDrop = (event: React.DragEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    const files = Array.from(event.dataTransfer?.files || []);
+    if (files.length) enqueueUploads(files);
   };
 
   const copySummary = () => {
@@ -970,10 +997,7 @@ export function LiveDocAiPanel({
                   </div>
                 )}
                 {captionGroups.map((group, groupIndex) => (
-                  <section
-                    key={`${group.speaker}-${groupIndex}`}
-                    className={styles.captionGroup}
-                  >
+                  <section key={`${group.speaker}-${groupIndex}`} className={styles.captionGroup}>
                     <div className={styles.speakerRow}>
                       <span
                         className={`${styles.speakerAvatar} ${styles[`tone${speakerToneByName.get(group.speaker) ?? 0}`]}`}
@@ -1049,39 +1073,102 @@ export function LiveDocAiPanel({
                     />
                   )}
                   {!documents.length && canManage && (
-                    <div className={styles.emptyStart}>
-                      <span className={styles.emptyIcon}>
-                        <Glyph name="files" size={22} />
-                      </span>
-                      <span className={styles.emptyTitle}>{t('liveDocAi.noDocuments')}</span>
-                      <span className={styles.emptyHint}>{t('liveDocAi.emptyHint')}</span>
-                      <div className={styles.sourceRow}>
-                        {addSources
-                          .filter((source) => !source.more)
-                          .map((source) => (
-                            <button
-                              key={source.key}
-                              type="button"
-                              className={`${styles.sourceButton} ${source.key === 'whiteboard' ? styles.sourceButtonPrimary : ''}`}
-                              disabled={busy}
-                              onClick={source.onClick}
-                            >
-                              <Glyph name={source.icon} size={16} />
-                              <span>{source.label}</span>
-                            </button>
-                          ))}
+                    <div
+                      className={`${styles.emptyStart}${dragActive ? ` ${styles.emptyStartDrag}` : ''}`}
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        setDragActive(true);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setDragActive(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        setDragActive(false);
+                      }}
+                      onDrop={handleDrop}
+                    >
+                      <div className={styles.heroSection}>
+                        <span className={styles.heroTitle}>{t('liveDocAi.heroTitle')}</span>
+                        <span className={styles.heroSubtitle}>{t('liveDocAi.heroSubtitle')}</span>
+                      </div>
+                      <div className={styles.dropZone}>
+                        <div className={styles.dropZoneIcon}>
+                          <Glyph name="files" size={20} />
+                        </div>
+                        <span className={styles.dropZonePrompt}>{t('liveDocAi.dropPrompt')}</span>
+                        <span className={styles.dropZoneText}>{t('liveDocAi.dropHint')}</span>
+                        <button
+                          type="button"
+                          className={styles.browseButton}
+                          disabled={busy}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          {t('liveDocAi.browseFiles')}
+                        </button>
+                      </div>
+                      <div className={styles.sourceList}>
+                        {state?.documents.companySpaceAllowed && (
+                          <button
+                            type="button"
+                            className={styles.sourceItem}
+                            disabled={busy}
+                            onClick={() => openPicker('space')}
+                          >
+                            <span className={styles.sourceItemIcon}>
+                              <Glyph name="space" size={18} />
+                            </span>
+                            <span className={styles.sourceItemText}>
+                              <span className={styles.sourceItemTitle}>
+                                {t('liveDocAi.selectLiveDoc')}
+                              </span>
+                              <span className={styles.sourceItemHint}>
+                                {t('liveDocAi.selectLiveDocHint')}
+                              </span>
+                            </span>
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className={styles.sourceItem}
+                          disabled={busy}
+                          onClick={() => runAction('document.addExcalidraw')}
+                        >
+                          <span className={styles.sourceItemIcon}>
+                            <Glyph name="whiteboard" size={18} />
+                          </span>
+                          <span className={styles.sourceItemText}>
+                            <span className={styles.sourceItemTitle}>
+                              {t('liveDocAi.excalidrawBoard')}
+                            </span>
+                            <span className={styles.sourceItemHint}>
+                              {t('liveDocAi.liveBoardHint')}
+                            </span>
+                          </span>
+                        </button>
                         <div className={styles.menuAnchor}>
                           <button
                             ref={emptyMoreBtnRef}
                             type="button"
-                            className={styles.sourceButton}
+                            className={styles.sourceItem}
                             disabled={busy}
                             aria-expanded={uploadMenuOpen}
                             aria-haspopup="menu"
                             onClick={() => setUploadMenuOpen((value) => !value)}
                           >
-                            <Glyph name="more" size={16} />
-                            <span>{t('liveDocAi.more')}</span>
+                            <span className={styles.sourceItemIcon}>
+                              <Glyph name="more" size={18} />
+                            </span>
+                            <span className={styles.sourceItemText}>
+                              <span className={styles.sourceItemTitle}>
+                                {t('liveDocAi.moreWays')}
+                              </span>
+                              <span className={styles.sourceItemHint}>
+                                {t('liveDocAi.moreWaysHint')}
+                              </span>
+                            </span>
                           </button>
                         </div>
                       </div>
@@ -1121,115 +1208,130 @@ export function LiveDocAiPanel({
                         </span>
                       )}
                       {canManage && (
-                      <div className={styles.menuAnchor}>
-                        <button
-                          ref={(node) => {
-                            if (node) fileMenuBtnRefs.current.set(item.itemId, node);
-                            else fileMenuBtnRefs.current.delete(item.itemId);
-                          }}
-                          type="button"
-                          className={styles.moreButton}
-                          aria-label={t('liveDocAi.more')}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setUploadMenuOpen(false);
-                            setSummaryMenuOpen(false);
-                            setFileMenuItemId((current) =>
-                              current === item.itemId ? null : item.itemId,
-                            );
-                          }}
-                        >
-                          <Glyph name="more" size={18} />
-                        </button>
-                      </div>
+                        <div className={styles.menuAnchor}>
+                          <button
+                            ref={(node) => {
+                              if (node) fileMenuBtnRefs.current.set(item.itemId, node);
+                              else fileMenuBtnRefs.current.delete(item.itemId);
+                            }}
+                            type="button"
+                            className={styles.moreButton}
+                            aria-label={t('liveDocAi.more')}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setUploadMenuOpen(false);
+                              setSummaryMenuOpen(false);
+                              setFileMenuItemId((current) =>
+                                current === item.itemId ? null : item.itemId,
+                              );
+                            }}
+                          >
+                            <Glyph name="more" size={18} />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
 
                 {(canManage || onAddDesignLink || uploadShowing) && (
-                <footer className={styles.documentFooter}>
-                  {uploadShowing && (
-                    <div className={styles.uploadProgress} role="status">
-                      <div className={styles.uploadProgressText}>
-                        <span>
-                          {uploads.active && uploads.total > 1 && (
-                            <span className={styles.uploadCount}>
-                              {t('liveDocAi.uploadCount', {
-                                position: uploads.position,
-                                total: uploads.total,
-                              })}
-                            </span>
-                          )}
-                          {uploadName || t('liveDocAi.uploading')}
-                        </span>
-                        {liveUpload?.active && <span>{uploadPercent}%</span>}
-                      </div>
-                      <div className={styles.uploadProgressTrack}>
-                        <div
-                          className={styles.uploadProgressFill}
-                          style={{ width: `${uploadPercent}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  {canManage && (
-                  <div className={styles.footerActions}>
-                    <label
-                      className={`${styles.annotation}${
-                        !state.documents.annotation.canToggle || busy ? ` ${styles.annotationDisabled}` : ''
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        role="switch"
-                        className={styles.switch}
-                        checked={state.documents.annotation.enabled}
-                        disabled={!state.documents.annotation.canToggle || busy}
-                        onChange={(event) =>
-                          runAction('annotation.set', { enabled: event.target.checked })
-                        }
-                      />
-                      {t('liveDocAi.enableAnnotation')}
-                    </label>
-                    <input
-                      ref={fileInputRef}
-                      className={styles.hiddenInput}
-                      type="file"
-                      accept={FILE_ACCEPT}
-                      multiple
-                      onChange={handleLocalFile}
-                    />
-                    {/* With no documents yet the sources sit in the list as cards; then they move here */}
-                    {documents.length > 0 && (
-                      <div className={styles.menuAnchor}>
-                        <button
-                          ref={uploadMenuBtnRef}
-                          type="button"
-                          className={styles.addButton}
-                          disabled={busy}
-                          aria-expanded={uploadMenuOpen}
-                          aria-haspopup="menu"
-                          onClick={() => {
-                            setFileMenuItemId(null);
-                            setSummaryMenuOpen(false);
-                            setUploadMenuOpen((value) => !value);
-                          }}
-                        >
-                          <Glyph name="plus" size={16} />
-                          {t('liveDocAi.add')}
-                        </button>
+                  <footer className={styles.documentFooter}>
+                    {uploadShowing && (
+                      <div className={styles.uploadProgress} role="status">
+                        <div className={styles.uploadProgressText}>
+                          <span>
+                            {uploads.active && uploads.total > 1 && (
+                              <span className={styles.uploadCount}>
+                                {t('liveDocAi.uploadCount', {
+                                  position: uploads.position,
+                                  total: uploads.total,
+                                })}
+                              </span>
+                            )}
+                            {uploadName || t('liveDocAi.uploading')}
+                          </span>
+                          {liveUpload?.active && <span>{uploadPercent}%</span>}
+                        </div>
+                        <div className={styles.uploadProgressTrack}>
+                          <div
+                            className={styles.uploadProgressFill}
+                            style={{ width: `${uploadPercent}%` }}
+                          />
+                        </div>
                       </div>
                     )}
-                  </div>
-                  )}
-                  {/* A presenter who can't manage LiveDocs can still show a design link */}
-                  {!canManage && onAddDesignLink && (
-                    <div className={styles.footerEnd}>
-                      <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />
-                    </div>
-                  )}
-                </footer>
+                    {canManage && (
+                      <div className={styles.footerActions}>
+                        <div className={styles.footerStart}>
+                          <label
+                            className={`${styles.annotation}${
+                              !state.documents.annotation.canToggle || busy
+                                ? ` ${styles.annotationDisabled}`
+                                : ''
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              role="switch"
+                              className={styles.switch}
+                              checked={state.documents.annotation.enabled}
+                              disabled={!state.documents.annotation.canToggle || busy}
+                              onChange={(event) =>
+                                runAction('annotation.set', { enabled: event.target.checked })
+                              }
+                            />
+                            {t('liveDocAi.enableAnnotation')}
+                          </label>
+                          {onToggleSmartCam && (
+                            <button
+                              type="button"
+                              className={styles.smartCamButton}
+                              disabled={busy}
+                              onClick={onToggleSmartCam}
+                            >
+                              <Glyph name="camera" size={16} />
+                              <span>{t('liveDocAi.enableSmartCam')}</span>
+                            </button>
+                          )}
+                        </div>
+                        <input
+                          ref={fileInputRef}
+                          className={styles.hiddenInput}
+                          type="file"
+                          accept={FILE_ACCEPT}
+                          multiple
+                          onChange={handleLocalFile}
+                        />
+                        {/* With no documents yet the sources sit in the list as cards; then they move here */}
+                        {documents.length > 0 && (
+                          <div className={styles.menuAnchor}>
+                            <button
+                              ref={uploadMenuBtnRef}
+                              type="button"
+                              className={styles.addButton}
+                              disabled={busy}
+                              aria-expanded={uploadMenuOpen}
+                              aria-haspopup="menu"
+                              onClick={() => {
+                                setFileMenuItemId(null);
+                                setSummaryMenuOpen(false);
+                                setUploadMenuOpen((value) => !value);
+                              }}
+                            >
+                              <Glyph name="plus" size={16} />
+                              {t('liveDocAi.add')}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* A presenter who can't manage LiveDocs can still show a design link */}
+                    {!canManage && onAddDesignLink && (
+                      <div className={styles.footerEnd}>
+                        <DesignLinkButton onClick={onAddDesignLink} disabled={busy} />
+                      </div>
+                    )}
+                  </footer>
                 )}
               </div>
             )}
@@ -1462,20 +1564,22 @@ export function LiveDocAiPanel({
           className={styles.sourceMenu}
           onMouseDown={(event) => event.stopPropagation()}
         >
-          {addSources.filter((source) => documents.length > 0 || source.more).map((source) => (
-            <button
-              key={source.key}
-              type="button"
-              title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
-              onClick={() => {
-                setUploadMenuOpen(false);
-                source.onClick();
-              }}
-            >
-              <Glyph name={source.icon} size={18} />
-              {source.label}
-            </button>
-          ))}
+          {addSources
+            .filter((source) => documents.length > 0 || source.more)
+            .map((source) => (
+              <button
+                key={source.key}
+                type="button"
+                title={source.key === 'link' ? t('liveDocAi.addLinkTip') : undefined}
+                onClick={() => {
+                  setUploadMenuOpen(false);
+                  source.onClick();
+                }}
+              >
+                <Glyph name={source.icon} size={18} />
+                {source.label}
+              </button>
+            ))}
         </FloatingMenu>
       )}
 
@@ -1559,7 +1663,9 @@ function FloatingMenu({
     <div
       ref={menuRef}
       className={`${styles.dropdown} ${styles.dropdownFloating} ${className || ''}`}
-      style={pos ? { top: pos.top, left: pos.left, visibility: 'visible' } : { visibility: 'hidden' }}
+      style={
+        pos ? { top: pos.top, left: pos.left, visibility: 'visible' } : { visibility: 'hidden' }
+      }
       onMouseDown={onMouseDown}
     >
       {children}
@@ -1821,11 +1927,21 @@ function DesignRow({ item, onShow }: { item: LiveDocDesignItem; onShow?: () => v
     : item.kindLabel;
   const body = (
     <>
-      <span className={item.kind === 'figma' ? styles.designThumbFigma : styles.designThumbWeb} aria-hidden="true">
+      <span
+        className={item.kind === 'figma' ? styles.designThumbFigma : styles.designThumbWeb}
+        aria-hidden="true"
+      >
         {item.kind === 'figma' ? (
           'F'
         ) : (
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="1.8">
+          <svg
+            viewBox="0 0 24 24"
+            width="15"
+            height="15"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          >
             <circle cx="12" cy="12" r="9" />
             <path d="M3 12h18M12 3a14 14 0 014 9 14 14 0 01-4 9 14 14 0 01-4-9 14 14 0 014-9z" />
           </svg>
@@ -1978,10 +2094,13 @@ type GlyphName =
   | 'files'
   | 'whiteboard'
   | 'link'
+  | 'drive'
+  | 'dropbox'
   | 'sparkle'
   | 'transcript'
   | 'info'
-  | 'alert';
+  | 'alert'
+  | 'camera';
 
 /** Line icons of the panel, 24-unit grid, drawn in the current text colour */
 function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
@@ -2058,6 +2177,19 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
           <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
         </svg>
       );
+    case 'drive':
+      return (
+        <svg {...common}>
+          <path d="M8.5 4h7l5.5 9.5-3.5 6h-11L3 13.5z" />
+          <path d="M8.5 4l5.5 9.5h7M14 13.5l-7 6" />
+        </svg>
+      );
+    case 'dropbox':
+      return (
+        <svg {...common}>
+          <path d="M7 4l5 3.2-5 3.2-5-3.2zM17 4l5 3.2-5 3.2-5-3.2zM2 13.6l5-3.2 5 3.2-5 3.2zM12 13.6l5-3.2 5 3.2-5 3.2zM7 18.2l5 3.2 5-3.2" />
+        </svg>
+      );
     case 'sparkle':
       return (
         <svg {...common}>
@@ -2084,6 +2216,13 @@ function Glyph({ name, size = 18 }: { name: GlyphName; size?: number }) {
         <svg {...common}>
           <circle cx="12" cy="12" r="8.5" />
           <path d="M12 7.5V13M12 16.2v.2" />
+        </svg>
+      );
+    case 'camera':
+      return (
+        <svg {...common}>
+          <path d="M3.5 8a2 2 0 012-2h1.7l1-1.5h5.6l1 1.5H17.5a2 2 0 012 2v8.5a2 2 0 01-2 2h-12a2 2 0 01-2-2z" />
+          <circle cx="11.5" cy="12" r="3.2" />
         </svg>
       );
   }

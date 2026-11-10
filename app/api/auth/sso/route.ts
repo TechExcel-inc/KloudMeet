@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { usernameBaseFromEmail } from '@/lib/googleOAuth';
 import { fetchKloudUser, recordKloudCompanies } from '@/lib/kloudAuth';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 /**
  * GET /api/auth/sso
@@ -82,6 +83,7 @@ export async function GET(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
 
     return NextResponse.json({
       token,

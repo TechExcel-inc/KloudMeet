@@ -723,6 +723,13 @@ export function useMeetingDocumentPip({
     renderPanel();
   }, [lockMinimized, keepMinimized, renderPanel, closePip, openPip]);
 
+  // Desktop app: a share hides the Dock icon and takes the app out of Cmd+Tab, so SmartCam is the
+  // way back. A window that is only covered never reports hidden, so go by the focus leaving.
+  useEffect(() => {
+    if (!enabled || !shareActive || onMeeting || !getDesktopMiniWindow()) return;
+    if (!pipWindowRef.current) void openPip();
+  }, [enabled, shareActive, onMeeting, openPip]);
+
   useEffect(() => {
     if (!enabled || !isMiniWindowEligible()) {
       closePip();

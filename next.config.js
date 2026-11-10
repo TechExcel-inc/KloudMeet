@@ -63,8 +63,10 @@ const nextConfig = {
   },
   // Proxy SkyMeet backend /api/* to remote — see config/devApiProxy.mjs for local-only exclusions.
   rewrites: async () => {
-    if (!REMOTE_API) return [];
-    return buildDevApiRewrites(REMOTE_API);
+    // People type /Download; pages are case-sensitive, rewrite sources are not
+    const afterFiles = [{ source: '/download', destination: '/download' }];
+    if (!REMOTE_API) return { beforeFiles: [], afterFiles, fallback: [] };
+    return { ...buildDevApiRewrites(REMOTE_API), afterFiles, fallback: [] };
   },
 };
 

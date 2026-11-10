@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Prisma } from '@prisma/client';
+import { Prisma, type Prisma as PrismaTypes } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { listActiveRoomNames } from '@/lib/livekitRooms';
 import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
@@ -12,7 +12,7 @@ import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { attendanceOverlapsRecording } from '@/lib/recordingAttendance';
 
 /** A meeting's date is its scheduled time, or when it was created — the same date the list groups by. */
-function meetingDatedBefore(before: Date): Prisma.MeetingWhereInput {
+function meetingDatedBefore(before: Date): PrismaTypes.MeetingWhereInput {
   return {
     OR: [
       { scheduledFor: { lt: before } },
@@ -36,10 +36,10 @@ export async function GET(request: NextRequest) {
     // Go to date: only meetings dated before this instant (the start of the day after the picked one)
     const beforeParam = searchParams.get('before');
     const before = beforeParam ? new Date(beforeParam) : null;
-    const beforeFilter: Prisma.MeetingWhereInput | null =
+    const beforeFilter: PrismaTypes.MeetingWhereInput | null =
       before && !Number.isNaN(before.getTime()) ? meetingDatedBefore(before) : null;
 
-    const searchFilter: Prisma.MeetingWhereInput | null = search
+    const searchFilter: PrismaTypes.MeetingWhereInput | null = search
       ? {
           OR: [
             { title: { contains: search } },
@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
           ],
         }
       : null;
-    const accessFilter: Prisma.MeetingWhereInput =
+    const accessFilter: PrismaTypes.MeetingWhereInput =
       scope === 'hosted'
         ? { createdByMemberId: member.id }
         : {
@@ -56,40 +56,86 @@ export async function GET(request: NextRequest) {
               { participants: { some: { teamMemberId: member.id } } },
             ],
           };
-    const whereClause: Prisma.MeetingWhereInput = {
+    const whereClause: PrismaTypes.MeetingWhereInput = {
       deletedAt: null,
       AND: [accessFilter, ...(searchFilter ? [searchFilter] : []), ...(beforeFilter ? [beforeFilter] : [])],
     };
 
-    const [total, meetings] = await Promise.all([
+    // Personal rooms keep one row (A999) until End for all. Order by the latest
+    // session — a recording, the real start, or the end — not the day the row was created.
+    const accessSql =
+      scope === 'hosted'
+        ? Prisma.sql`m.createdByMemberId = ${member.id}`
+        : Prisma.sql`(m.createdByMemberId = ${member.id} OR EXISTS (
+            SELECT 1 FROM MeetingParticipant p
+            WHERE p.meetingId = m.id AND p.teamMemberId = ${member.id}
+          ))`;
+    const searchSql = search
+      ? Prisma.sql`AND (m.title LIKE ${`%${search}%`} OR m.roomName LIKE ${`%${search}%`})`
+      : Prisma.empty;
+    const beforeSql =
+      before && !Number.isNaN(before.getTime())
+        ? Prisma.sql`AND (m.scheduledFor < ${before} OR (m.scheduledFor IS NULL AND m.createdAt < ${before}))`
+        : Prisma.empty;
+    const activityOrder = Prisma.sql`
+      CASE WHEN m.scheduledFor IS NOT NULL THEN m.scheduledFor
+      ELSE GREATEST(
+        m.createdAt,
+        IFNULL(m.actualStartedAt, m.createdAt),
+        IFNULL(m.endedAt, m.createdAt),
+        IFNULL(rec.recAt, m.createdAt)
+      ) END DESC`;
+    const idRows = await prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+      SELECT m.id
+      FROM Meeting m
+      LEFT JOIN (
+        SELECT meetingId, MAX(createdAt) AS recAt
+        FROM Recording
+        WHERE deletedAt IS NULL
+        GROUP BY meetingId
+      ) rec ON rec.meetingId = m.id
+      WHERE m.deletedAt IS NULL
+        AND ${accessSql}
+        ${searchSql}
+        ${beforeSql}
+      ORDER BY ${activityOrder}
+      LIMIT ${pageSize} OFFSET ${skip}
+    `);
+    const pageIds = idRows.map((row) => Number(row.id));
+
+    const [total, unordered] = await Promise.all([
       prisma.meeting.count({ where: whereClause }),
-      prisma.meeting.findMany({
-        where: whereClause,
-        orderBy: { createdAt: 'desc' },
-        skip,
-        take: pageSize,
-        include: {
-          recordings: {
-            select: {
-              id: true,
-              shareKey: true,
-              visibility: true,
-              status: true,
-              durationSeconds: true,
-              teamMemberId: true,
-              createdAt: true,
-              mediaStartedAt: true,
+      pageIds.length
+        ? prisma.meeting.findMany({
+            where: { id: { in: pageIds } },
+            include: {
+              recordings: {
+                select: {
+                  id: true,
+                  shareKey: true,
+                  visibility: true,
+                  status: true,
+                  durationSeconds: true,
+                  teamMemberId: true,
+                  createdAt: true,
+                  mediaStartedAt: true,
+                },
+              },
+              createdByMember: {
+                select: { fullName: true, username: true },
+              },
+              _count: {
+                select: { participants: true },
+              },
             },
-          },
-          createdByMember: {
-            select: { fullName: true, username: true },
-          },
-          _count: {
-            select: { participants: true },
-          },
-        },
-      }),
+          })
+        : Promise.resolve([]),
     ]);
+    const byId = new Map(unordered.map((m) => [m.id, m]));
+    const meetings = pageIds.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
 
     const activeRooms = await listActiveRoomNames();
 

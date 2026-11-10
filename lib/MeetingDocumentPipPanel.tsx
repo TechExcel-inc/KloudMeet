@@ -24,8 +24,6 @@ export interface MeetingDocumentPipLabels {
   /** The pill's expand button while it can't expand (on the meeting, in the webcam view) */
   restoreLocked: string;
   shareBadge: string;
-  /** Shown instead of your own screen: the mini window sits on that screen and would film itself */
-  presentingSelf: string;
   shareScreen: string;
   stopSharing: string;
   shareConflict: string;
@@ -84,8 +82,6 @@ const HERO_ROWS = 2;
 const HERO_GAP = 6;
 const HERO_MIN = 64;
 const TILE_RATIO = 9 / 16;
-/** Your own share is a slim "Presenting" strip above the people, not a picture */
-const PRESENTING_STRIP_H = 30;
 /** Height the "Only you here" invite card takes under your own tile */
 const ALONE_CARD_H = 96;
 const PREVIEW_TILE = 108;
@@ -94,10 +90,6 @@ const COMPACT_MIN = 48;
 const COMPACT_COLS_MIN = 4;
 const COMPACT_COLS_MAX = 8;
 const COLLAPSED_MAX = 5;
-/** With a share in the pill one face makes room for it */
-const COLLAPSED_MAX_WITH_SHARE = 4;
-/** Up to this many people your "Presenting" chip keeps its word; past it, just the icon */
-const PRESENTING_CHIP_WORD_MAX = 3;
 /** Avatar tones in the pill (.tone0–5), the same calm set as the replay page */
 const AVATAR_TONES = 6;
 const AVATAR_SIZE = 30;
@@ -171,7 +163,6 @@ export function pipMiniWindowSize(count: number): { w: number; h: number } {
 type ShareInfo = {
   participant: Participant;
   publication: TrackPublication;
-  local: boolean;
   rosterId: string;
 };
 
@@ -181,7 +172,6 @@ function findShare(room: Room): ShareInfo | null {
     return {
       participant: room.localParticipant,
       publication: localPub,
-      local: true,
       rosterId: 'local',
     };
   }
@@ -191,7 +181,6 @@ function findShare(room: Room): ShareInfo | null {
       return {
         participant: p,
         publication: pub,
-        local: false,
         rosterId: p.identity,
       };
     }
@@ -571,14 +560,14 @@ export function MeetingDocumentPipPanel({
     sortedEntries.length === 1 ? labels.person : labels.people.replace('{n}', String(sortedEntries.length));
   const headerTitle = meetingTitle?.trim() || labels.meeting;
 
-  // The share sits above everyone at full width: someone else's as a 16:9 picture, yours as a slim strip
-  const shareLeadH = share ? (share.local ? PRESENTING_STRIP_H : stageW * TILE_RATIO) + HERO_GAP : 0;
+  // The share is one more tile after the last person, the same size, so it counts in the fit
+  const galleryCount = sortedEntries.length + (share ? 1 : 0);
   const aloneCardH = alone ? ALONE_CARD_H + HERO_GAP : 0;
   const maxHeroCols = fitCols(stageW, HERO_GAP, HERO_MIN);
   const fitAll = galleryCols(
-    sortedEntries.length,
+    galleryCount,
     stageW,
-    stageH - shareLeadH - aloneCardH,
+    stageH - aloneCardH,
     HERO_GAP,
     maxHeroCols,
   );
@@ -678,16 +667,13 @@ export function MeetingDocumentPipPanel({
     : undefined;
   const previewOpen = Boolean(previewRow && previewParticipant);
   const isSharer = (id: string) => Boolean(share && share.rosterId === id);
-  const pillMax = share ? COLLAPSED_MAX_WITH_SHARE : COLLAPSED_MAX;
-  const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null, pillMax);
+  const collapsed = pillEntries(sortedEntries, share ? share.rosterId : null, COLLAPSED_MAX);
   // A tone per person in join order, as on the replay page: neighbours differ, and nobody's tone
   // changes when the sharer moves to the front
   const avatarToneById = React.useMemo(
     () => new Map(sortedEntries.map((e, i) => [e.id, i % AVATAR_TONES])),
     [sortedEntries],
   );
-  const presentingWord = sortedEntries.length <= PRESENTING_CHIP_WORD_MAX;
-
   const backToTab = (e?: React.SyntheticEvent) => {
     e?.stopPropagation();
     focusOpener(pipWindow);
@@ -700,63 +686,22 @@ export function MeetingDocumentPipPanel({
       </span>
     ) : null;
 
-  // Your own share is not drawn: the mini window is on the shared screen and would show itself, endlessly
-  const sharePicture = share ? (
-    share.local ? (
-      <div className={styles.sharePresenting}>
-        <ShareGlyph />
-        <span>{labels.presentingSelf}</span>
-      </div>
-    ) : (
-      <VideoTrack
-        trackRef={{
-          participant: share.participant,
-          source: Track.Source.ScreenShare,
-          publication: share.publication,
-        }}
-      />
-    )
-  ) : null;
-
+  // Host and everyone else see the same screen picture, as the last face
   const shareVideo = share ? (
-    <div
-      className={styles.shareTile}
-      role="button"
-      tabIndex={0}
-      title={labels.shareBadge}
-      aria-label={labels.shareBadge}
-      onClick={backToTab}
-      onKeyDown={(e) => {
-        if (e.key !== 'Enter' && e.key !== ' ') return;
-        e.preventDefault();
-        backToTab(e);
+    <VideoTrack
+      trackRef={{
+        participant: share.participant,
+        source: Track.Source.ScreenShare,
+        publication: share.publication,
       }}
-    >
-      {sharePicture}
-    </div>
+    />
   ) : null;
 
-  const shareLead = share ? (
-    share.local ? (
-      <div
-        className={styles.presentingStrip}
-        role="button"
-        tabIndex={0}
-        title={labels.backToMain}
-        onClick={backToTab}
-        onKeyDown={(e) => {
-          if (e.key !== 'Enter' && e.key !== ' ') return;
-          e.preventDefault();
-          backToTab(e);
-        }}
-      >
-        <ShareGlyph />
-        <span>{labels.presentingSelf}</span>
-      </div>
-    ) : (
-      <div className={styles.shareLead}>{shareVideo}</div>
-    )
-  ) : null;
+  const openShare = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    backToTab(e);
+  };
 
   const flashCopied = () => {
     void copyMeetingLink(pipWindow).then((ok) => {
@@ -934,7 +879,7 @@ export function MeetingDocumentPipPanel({
                 {collapsed.map((e, i) => {
                   const participant =
                     e.id === 'local' ? room.localParticipant : room.remoteParticipants.get(e.id);
-                  const z = { zIndex: COLLAPSED_MAX - i };
+                  const z = { zIndex: COLLAPSED_MAX - i + 1 };
                   const personClass = `${styles.pillPerson} ${styles[`tone${avatarToneById.get(e.id) ?? 0}`]}`;
                   const mark = isSharer(e.id);
                   if (!participant) {
@@ -972,7 +917,7 @@ export function MeetingDocumentPipPanel({
                     </div>
                   );
                 })}
-                {sortedEntries.length > pillMax && (
+                {sortedEntries.length > COLLAPSED_MAX && (
                   <button
                     type="button"
                     className={`${styles.avatar} ${styles.overflow}`}
@@ -981,42 +926,26 @@ export function MeetingDocumentPipPanel({
                     aria-label={minimizeLocked ? labels.restoreLocked : labels.restore}
                     title={minimizeLocked ? labels.restoreLocked : labels.restore}
                   >
-                    +{sortedEntries.length - pillMax}
+                    +{sortedEntries.length - COLLAPSED_MAX}
                   </button>
                 )}
+                {shareVideo ? (
+                  <div className={`${styles.pillPerson} ${styles.pillSharePerson}`}>
+                    <div
+                      className={styles.pillShareFace}
+                      role="button"
+                      tabIndex={0}
+                      title={labels.shareBadge}
+                      aria-label={labels.shareBadge}
+                      onClick={backToTab}
+                      onKeyDown={openShare}
+                    >
+                      {shareVideo}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
-            {share && !showMiniControls ? (
-              <div
-                className={`${styles.pillShareTile}${
-                  share.local ? ` ${styles.pillShareTileSelf}${presentingWord ? '' : ` ${styles.pillShareTileIcon}`}` : ''
-                }`}
-                title={share.local ? labels.backToMain : labels.shareBadge}
-                role="button"
-                tabIndex={0}
-                onClick={backToTab}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  e.preventDefault();
-                  backToTab(e);
-                }}
-              >
-                {share.local ? (
-                  <span className={styles.pillSharePresenting}>
-                    <ShareGlyph />
-                    {presentingWord ? labels.presentingSelf : null}
-                  </span>
-                ) : (
-                  <VideoTrack
-                    trackRef={{
-                      participant: share.participant,
-                      source: Track.Source.ScreenShare,
-                      publication: share.publication,
-                    }}
-                  />
-                )}
-              </div>
-            ) : null}
             {previewOpen && !showMiniControls ? (
               <button
                 type="button"
@@ -1141,7 +1070,6 @@ export function MeetingDocumentPipPanel({
               } as React.CSSProperties
             }
           >
-            {shareLead}
             <div className={styles.heroGrid}>
               {heroes.map((e) => (
                 <div key={e.id} className={styles.heroCell}>
@@ -1154,6 +1082,21 @@ export function MeetingDocumentPipPanel({
                   {personBadge(e.id)}
                 </div>
               ))}
+              {shareVideo && rest.length === 0 ? (
+                <div className={styles.heroCell}>
+                  <div
+                    className={styles.shareTile}
+                    role="button"
+                    tabIndex={0}
+                    title={labels.shareBadge}
+                    aria-label={labels.shareBadge}
+                    onClick={backToTab}
+                    onKeyDown={openShare}
+                  >
+                    {shareVideo}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {alone ? (
@@ -1185,6 +1128,23 @@ export function MeetingDocumentPipPanel({
                     {personBadge(e.id)}
                   </div>
                 ))}
+                {shareVideo ? (
+                  <div
+                    className={`${styles.compactCell}${(rest.length + 1) % compactCols === 0 ? ` ${styles.compactCellRowEnd}` : ''}`}
+                  >
+                    <div
+                      className={styles.shareTile}
+                      role="button"
+                      tabIndex={0}
+                      title={labels.shareBadge}
+                      aria-label={labels.shareBadge}
+                      onClick={backToTab}
+                      onKeyDown={openShare}
+                    >
+                      {shareVideo}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             )}
           </div>

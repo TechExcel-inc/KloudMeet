@@ -17,12 +17,12 @@ import type { LiveDocDesignItem } from '@/lib/LiveDocAiPanel';
 import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
 import {
-  createOrUpdateInstantAccount,
+  getLiveDocStageAccount,
   resolveJitsiInstanceId,
   resolveLiveDocEmbedRole,
 } from '@/lib/livedoc/client';
 import { AnnotationCanvas } from '@/lib/AnnotationCanvas';
-import { useLiveDocBoardRelay } from '@/lib/livedoc/useLiveDocBoardRelay';
+import { useLiveDocBoardContext } from '@/lib/livedoc/useLiveDocBoardContext';
 import { RemoteControlOverlay, RemoteControlRequest } from '@/lib/RemoteControlOverlay';
 import { useCaptions } from '@/lib/RtasrHelper/useCaptions';
 import { CaptionsOverlay } from '@/lib/RtasrHelper/CaptionsOverlay';
@@ -32,7 +32,11 @@ import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
-import { getDesktopMiniWindow, isMiniWindowEligible, isWebDocumentPipEligible } from '@/lib/documentPipSupport';
+import {
+  getDesktopMiniWindow,
+  isMiniWindowEligible,
+  isWebDocumentPipEligible,
+} from '@/lib/documentPipSupport';
 import { useIsDesktop } from '@/lib/useIsDesktop';
 import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import {
@@ -89,9 +93,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
-import {
-  AttendeePanel,
-} from '@/lib/ChatAndAttendeePanel';
+import { AttendeePanel } from '@/lib/ChatAndAttendeePanel';
 import { useLivedocRecordingBridge } from '@/lib/useLivedocRecordingBridge';
 import {
   ParticipantRoleMenuProvider,
@@ -106,10 +108,7 @@ import {
   parseKloudMemberIdFromMetadata,
 } from './roomVideoLayouts';
 import { isDbMeetingOwner } from '@/lib/meetingOwner';
-import {
-  normalizeCaptureDeviceId,
-  patchStoredUserMediaChoices,
-} from '@/lib/userMediaChoices';
+import { normalizeCaptureDeviceId, patchStoredUserMediaChoices } from '@/lib/userMediaChoices';
 import { authHeaders } from '@/lib/kloudSession';
 
 const SHOW_SETTINGS_MENU = process.env.NEXT_PUBLIC_SHOW_SETTINGS_MENU == 'true';
@@ -125,7 +124,11 @@ import {
   type DesignLink,
   type StoredDesignLink,
 } from '@/lib/designLink';
-import { checkDesignLinkEmbed, persistMeetingDesignLink, rememberDesignLink } from '@/lib/designLinkClient';
+import {
+  checkDesignLinkEmbed,
+  persistMeetingDesignLink,
+  rememberDesignLink,
+} from '@/lib/designLinkClient';
 import type { DesignEmbedCheck } from '@/lib/designEmbed';
 import { DESIGN_TOPIC, parseDesignSyncMessage } from '@/lib/designSync';
 import { useDesignSync, type DesignSyncTransport } from '@/lib/useDesignSync';
@@ -256,8 +259,11 @@ export function VideoConferenceComponent(props: {
   const [isRemoteControlMode, setIsRemoteControlMode] = React.useState(false);
   // Remote control permission flow
   const [remoteControlPending, setRemoteControlPending] = React.useState(false);
-  const [remoteControlRequest, setRemoteControlRequest] = React.useState<RemoteControlRequest | null>(null);
-  const [approvedControllerIdentity, setApprovedControllerIdentity] = React.useState<string | null>(null);
+  const [remoteControlRequest, setRemoteControlRequest] =
+    React.useState<RemoteControlRequest | null>(null);
+  const [approvedControllerIdentity, setApprovedControllerIdentity] = React.useState<string | null>(
+    null,
+  );
   const approvedControllerIdentityRef = React.useRef<string | null>(null);
   approvedControllerIdentityRef.current = approvedControllerIdentity;
   const [screenShareSurface, setScreenShareSurface] = React.useState<
@@ -280,22 +286,21 @@ export function VideoConferenceComponent(props: {
   const [recordingState, setRecordingState] = React.useState<RecordingState>(IDLE_RECORDING_STATE);
   const isRecording = recordingState.active;
   const setIsRecording = React.useCallback(
-    (on: boolean) => setRecordingState((s) => ({ ...s, active: on, paused: on ? s.paused : false })),
+    (on: boolean) =>
+      setRecordingState((s) => ({ ...s, active: on, paused: on ? s.paused : false })),
     [],
   );
   /** True on the client that started the recording: leaving from here stops it, as before. */
   const startedRecordingHereRef = React.useRef(false);
   const broadcastRecordingStateRef = React.useRef<(state: RecordingState) => void>(() => {});
-  const applyRecordingState = React.useCallback((state: RecordingState | undefined | null, broadcast: boolean) => {
-    if (!state) return;
-    setRecordingState(state);
-    if (broadcast) broadcastRecordingStateRef.current(state);
-  }, []);
-  useLivedocRecordingBridge({
-    state: recordingState,
-    startedHereRef: startedRecordingHereRef,
-    screenShareOn: activeView === 'shareScreen',
-  });
+  const applyRecordingState = React.useCallback(
+    (state: RecordingState | undefined | null, broadcast: boolean) => {
+      if (!state) return;
+      setRecordingState(state);
+      if (broadcast) broadcastRecordingStateRef.current(state);
+    },
+    [],
+  );
   const [showRecordPopup, setShowRecordPopup] = React.useState(false);
   const [showRecordingConsent, setShowRecordingConsent] = React.useState(false);
   const [showHelp, setShowHelp] = React.useState(false);
@@ -307,21 +312,30 @@ export function VideoConferenceComponent(props: {
   const handleToggleRecording = async (action: 'start' | 'stop') => {
     // Get user from localStorage → fallback sessionStorage → fallback cookie
     let dbUser: { id?: string } = {};
-    try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch { }
+    try {
+      dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}');
+    } catch {}
     if (!dbUser.id) {
-      try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch { }
+      try {
+        dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}');
+      } catch {}
     }
     if (!dbUser.id) {
       // Try cookie
       const match = document.cookie.match(/(?:^|;\s*)kloudUser=([^;]*)/);
-      if (match) { try { dbUser = JSON.parse(decodeURIComponent(match[1])); } catch { } }
+      if (match) {
+        try {
+          dbUser = JSON.parse(decodeURIComponent(match[1]));
+        } catch {}
+      }
     }
 
     if (!dbUser.id) {
       // Use toolbar toast instead of browser alert
       const toastEl = document.createElement('div');
       toastEl.textContent = t('toolbar.recordLoginRequired') || 'You must be logged in to record';
-      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      toastEl.style.cssText =
+        'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
       document.body.appendChild(toastEl);
       setTimeout(() => toastEl.remove(), 3000);
       return;
@@ -334,12 +348,22 @@ export function VideoConferenceComponent(props: {
 
       // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login
       // (the server records LiveDoc Full whenever the meeting has its LiveDoc).
-      const livedocToken = await createOrUpdateInstantAccount(props.userChoices.username).catch(() => null);
+      const livedocToken = await getLiveDocStageAccount(
+        props.userChoices.username,
+        props.connectionDetails.roomName,
+      )
+        .then((account) => account.token)
+        .catch(() => null);
 
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
-        body: JSON.stringify({ action, pageUrl: pageUrlStr, mode: recordingState.mode, livedocToken }),
+        body: JSON.stringify({
+          action,
+          pageUrl: pageUrlStr,
+          mode: recordingState.mode,
+          livedocToken,
+        }),
       });
 
       const data = await res.json();
@@ -357,7 +381,8 @@ export function VideoConferenceComponent(props: {
             : data?.code === 'RECORDING_NOT_ALLOWED'
               ? t('toolbar.recordingNotAllowed')
               : `${t('toolbar.recordingFailed') || 'Recording failed'}: ${data.error}`;
-        toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
+        toastEl.style.cssText =
+          'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
         document.body.appendChild(toastEl);
         setTimeout(() => toastEl.remove(), 4000);
       } else {
@@ -367,8 +392,10 @@ export function VideoConferenceComponent(props: {
       console.error(e);
       setIsRecording(action === 'stop');
       const toastEl = document.createElement('div');
-      toastEl.textContent = t('toolbar.recordNetworkError') || 'Network error while toggling recording';
-      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      toastEl.textContent =
+        t('toolbar.recordNetworkError') || 'Network error while toggling recording';
+      toastEl.style.cssText =
+        'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
       document.body.appendChild(toastEl);
       setTimeout(() => toastEl.remove(), 3000);
     }
@@ -376,12 +403,22 @@ export function VideoConferenceComponent(props: {
 
   /** Pause / resume and recording settings: ask the server, then tell everyone. */
   const recordingRequest = React.useCallback(
-    async (body: { action: 'pause' | 'resume' } | { action: 'settings'; mode?: RecordingMode; hostOnly?: boolean; syncTranscript?: boolean }) => {
+    async (
+      body:
+        | { action: 'pause' | 'resume' }
+        | {
+            action: 'settings';
+            mode?: RecordingMode;
+            hostOnly?: boolean;
+            syncTranscript?: boolean;
+          },
+    ) => {
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
       const showError = (text: string) => {
         const toastEl = document.createElement('div');
         toastEl.textContent = text;
-        toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
+        toastEl.style.cssText =
+          'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:80vw;text-align:center;';
         document.body.appendChild(toastEl);
         setTimeout(() => toastEl.remove(), 3500);
       };
@@ -488,12 +525,27 @@ export function VideoConferenceComponent(props: {
   const screenShareTracks = useTracks([Track.Source.ScreenShare], { room, onlySubscribed: false });
   const hasScreenShare = screenShareTracks.length > 0;
 
+  useLivedocRecordingBridge({
+    state: recordingState,
+    startedHereRef: startedRecordingHereRef,
+    screenShareOn: activeView === 'shareScreen',
+    room,
+  });
+
   // LiveDoc Full: the page that started the recording reports each screen share that starts, so it is
   // recorded even when LiveKit's webhook doesn't reach the server.
-  const screenSids = screenShareTracks.map((ref) => ref.publication?.trackSid ?? '').filter(Boolean).join(',');
+  const screenSids = screenShareTracks
+    .map((ref) => ref.publication?.trackSid ?? '')
+    .filter(Boolean)
+    .join(',');
   const reportedSidsRef = React.useRef(new Set<string>());
   React.useEffect(() => {
-    if (!recordingState.active || recordingState.option !== 'livedoc_full' || !startedRecordingHereRef.current) return;
+    if (
+      !recordingState.active ||
+      recordingState.option !== 'livedoc_full' ||
+      !startedRecordingHereRef.current
+    )
+      return;
     const fresh = screenSids.split(',').filter((sid) => sid && !reportedSidsRef.current.has(sid));
     if (fresh.length === 0) return;
     fresh.forEach((sid) => reportedSidsRef.current.add(sid));
@@ -540,10 +592,16 @@ export function VideoConferenceComponent(props: {
     // 短暂等待 LiveKit 把 video 元素渲染出来
     const timer = setTimeout(() => {
       const videos = Array.from(document.querySelectorAll('video'));
-      if (videos.length === 0) { setNeedsPlayTap(true); return; }
+      if (videos.length === 0) {
+        setNeedsPlayTap(true);
+        return;
+      }
       // 尝试 play，如果所有 video 都已经在播放则不需要显示按钮
       const allPlaying = videos.every((v) => !v.paused);
-      if (allPlaying) { setNeedsPlayTap(false); return; }
+      if (allPlaying) {
+        setNeedsPlayTap(false);
+        return;
+      }
       // 尝试静默 play
       Promise.all(videos.map((v) => v.play().catch(() => null)))
         .then(() => {
@@ -565,7 +623,7 @@ export function VideoConferenceComponent(props: {
   /**
    * Sharer starts sharing:
    * - remember previous room mode (never capture shareScreen — use lastStable)
-   * - stay on Screen share locally (the stage shows a "you're sharing" card, not the picture)
+   * - stay on Screen share locally (the stage shows the LiveDoc plugin, not the picture)
    * - broadcast shareScreen for everyone else
    */
   const beginLocalScreenShareView = React.useCallback(() => {
@@ -806,7 +864,8 @@ export function VideoConferenceComponent(props: {
   const showMediaUnavailableToast = React.useCallback(() => {
     const toastEl = document.createElement('div');
     toastEl.textContent = t('prejoin.mediaRequiresSecureContext');
-    toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
+    toastEl.style.cssText =
+      'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;z-index:99999;pointer-events:none;max-width:82vw;text-align:center;';
     document.body.appendChild(toastEl);
     setTimeout(() => toastEl.remove(), 2800);
   }, [t]);
@@ -941,7 +1000,8 @@ export function VideoConferenceComponent(props: {
     if (isToolbarMobile) {
       const toastEl = document.createElement('div');
       toastEl.textContent = t('toolbar.mobileShareUnsupported');
-      toastEl.style.cssText = 'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
+      toastEl.style.cssText =
+        'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
       document.body.appendChild(toastEl);
       setTimeout(() => toastEl.remove(), 3000);
       return;
@@ -966,17 +1026,17 @@ export function VideoConferenceComponent(props: {
     room.localParticipant
       .setScreenShareEnabled(next, next ? screenShareCaptureOptions() : undefined)
       .catch((e: unknown) => {
-      setScreenShareActive(false);
-      screenShareRestorePendingRef.current = false;
-      if (next) {
-        // The desktop app already took the picked source as shared; let it go again.
-        void window.electronAPI?.clearShareTarget?.();
-        const restored = endLocalScreenShareView();
-        if (restored) setActiveView(restored);
-        showScreenShareFailureToast(e);
-      }
-      console.error(e);
-    });
+        setScreenShareActive(false);
+        screenShareRestorePendingRef.current = false;
+        if (next) {
+          // The desktop app already took the picked source as shared; let it go again.
+          void window.electronAPI?.clearShareTarget?.();
+          const restored = endLocalScreenShareView();
+          if (restored) setActiveView(restored);
+          showScreenShareFailureToast(e);
+        }
+        console.error(e);
+      });
 
     // 开启共享时按底部画中画按钮的方式打开。
     // requestWindow 与 getDisplayMedia 争用同一次用户手势，抢不到就静默放弃，
@@ -996,8 +1056,9 @@ export function VideoConferenceComponent(props: {
   ]);
 
   /**
-   * Toolbar Screen share segment. While you share and have stepped over to LiveDoc, it brings you
-   * back to the "you're sharing" view; from that view it stops the share (as before).
+   * Toolbar Screen share segment. While you share and have stepped over to LiveDoc mode, it brings
+   * you back to the screen-share view (the stage still shows the LiveDoc plugin); from that view it
+   * stops the share.
    */
   const handleShareSegment = React.useCallback(() => {
     if (screenShareActive && activeViewRef.current !== 'shareScreen') {
@@ -1039,9 +1100,13 @@ export function VideoConferenceComponent(props: {
       // Call the stop-recording API
       try {
         let dbUser: { id?: string } = {};
-        try { dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}'); } catch { }
+        try {
+          dbUser = JSON.parse(localStorage.getItem('kloudUser') || '{}');
+        } catch {}
         if (!dbUser.id) {
-          try { dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}'); } catch { }
+          try {
+            dbUser = JSON.parse(sessionStorage.getItem('kloudUser') || '{}');
+          } catch {}
         }
 
         const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
@@ -1051,9 +1116,13 @@ export function VideoConferenceComponent(props: {
             method: 'POST',
             headers: authHeaders({ 'Content-Type': 'application/json' }),
             body: JSON.stringify({ action: 'stop', pageUrl: pageUrlStr }),
-          }).catch(() => { /* best effort */ });
+          }).catch(() => {
+            /* best effort */
+          });
         }
-      } catch { /* best effort */ }
+      } catch {
+        /* best effort */
+      }
 
       // Show success for 1.5s then exit
       setRecordSavePhase('saved');
@@ -1082,9 +1151,8 @@ export function VideoConferenceComponent(props: {
   const isPureLiveDoc = activeView === 'liveDoc';
   // Mirror-blocked: presenter is sharing AND surface detected AND it's NOT a safe "browser tab" share
   const isMirrorBlocked = screenShareActive && surfaceDetected && screenShareSurface !== 'browser';
-  // Own share of a screen or window (or not known yet): the stage shows a card instead of the
-  // picture, which would repeat inside itself. Sharing another browser tab can still be previewed.
-  const ownShareHidden = screenShareActive && (!surfaceDetected || screenShareSurface !== 'browser');
+  const ownShareHidden =
+    screenShareActive && (!surfaceDetected || screenShareSurface !== 'browser');
 
   // Determine host: override (from transfer) takes precedence over join-time computation
   const [hostIdentityOverride, setHostIdentityOverride] = React.useState<string | null>(null);
@@ -1162,11 +1230,19 @@ export function VideoConferenceComponent(props: {
   const isCopresenter = copresenterIdentities.includes(room.localParticipant.identity);
   const [cohostIdentities, setCohostIdentities] = React.useState<string[]>([]);
   const [hostMutedIdentities, setHostMutedIdentities] = React.useState<string[]>([]);
-  const [hostMutedUntilByIdentity, setHostMutedUntilByIdentity] = React.useState<Record<string, number>>({});
+  const [hostMutedUntilByIdentity, setHostMutedUntilByIdentity] = React.useState<
+    Record<string, number>
+  >({});
   const [muteAllLockUntil, setMuteAllLockUntil] = React.useState<number | null>(null);
-  const [hostDisabledVideoIdentities, setHostDisabledVideoIdentities] = React.useState<string[]>([]);
-  const [hostDisabledVideoUntilByIdentity, setHostDisabledVideoUntilByIdentity] = React.useState<Record<string, number>>({});
-  const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>([]);
+  const [hostDisabledVideoIdentities, setHostDisabledVideoIdentities] = React.useState<string[]>(
+    [],
+  );
+  const [hostDisabledVideoUntilByIdentity, setHostDisabledVideoUntilByIdentity] = React.useState<
+    Record<string, number>
+  >({});
+  const [exemptFromMuteAllIdentities, setExemptFromMuteAllIdentities] = React.useState<string[]>(
+    [],
+  );
   // 举手：handRaised 是本地用户自己的权威状态（心跳上报的数据源），
   // raisedHands 是主持人下发的全房间举手队列镜像（驱动 tile 角标与参会者面板）。
   const [handRaised, setHandRaised] = React.useState(false);
@@ -1184,7 +1260,12 @@ export function VideoConferenceComponent(props: {
     hostDisabledVideoIdentitiesRef.current = hostDisabledVideoIdentities;
     muteAllActiveRef.current = muteAllActive;
     exemptFromMuteAllIdentitiesRef.current = exemptFromMuteAllIdentities;
-  }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, exemptFromMuteAllIdentities]);
+  }, [
+    hostMutedIdentities,
+    hostDisabledVideoIdentities,
+    muteAllActive,
+    exemptFromMuteAllIdentities,
+  ]);
 
   React.useEffect(() => {
     handRaisedRef.current = handRaised;
@@ -1199,11 +1280,14 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     const refreshTimedMicLocks = () => {
       const now = Date.now();
-      const activeEntries = Object.entries(hostMutedUntilByIdentity).filter(([, until]) => until > now);
+      const activeEntries = Object.entries(hostMutedUntilByIdentity).filter(
+        ([, until]) => until > now,
+      );
       const activeIdentities = activeEntries.map(([identity]) => identity);
 
       setHostMutedIdentities((prev) =>
-        prev.length === activeIdentities.length && prev.every((id, index) => id === activeIdentities[index])
+        prev.length === activeIdentities.length &&
+        prev.every((id, index) => id === activeIdentities[index])
           ? prev
           : activeIdentities,
       );
@@ -1219,11 +1303,14 @@ export function VideoConferenceComponent(props: {
         setExemptFromMuteAllIdentities([]);
       }
 
-      const activeVideoEntries = Object.entries(hostDisabledVideoUntilByIdentity).filter(([, until]) => until > now);
+      const activeVideoEntries = Object.entries(hostDisabledVideoUntilByIdentity).filter(
+        ([, until]) => until > now,
+      );
       const activeVideoIdentities = activeVideoEntries.map(([identity]) => identity);
 
       setHostDisabledVideoIdentities((prev) =>
-        prev.length === activeVideoIdentities.length && prev.every((id, index) => id === activeVideoIdentities[index])
+        prev.length === activeVideoIdentities.length &&
+        prev.every((id, index) => id === activeVideoIdentities[index])
           ? prev
           : activeVideoIdentities,
       );
@@ -1256,9 +1343,8 @@ export function VideoConferenceComponent(props: {
 
   const isCohost = cohostIdentities.includes(room.localParticipant.identity);
   // Auto-assign Presenter: whoever owns the active screen share track
-  const autoPresenterIdentity = screenShareTracks.length > 0
-    ? (screenShareTracks[0].participant?.identity ?? null)
-    : null;
+  const autoPresenterIdentity =
+    screenShareTracks.length > 0 ? (screenShareTracks[0].participant?.identity ?? null) : null;
   const isAutoPresenter = autoPresenterIdentity === room.localParticipant.identity;
   const isLocalControlOperator = isHost || isCohost || isCopresenter || isAutoPresenter;
   /** LiveDoc 批注：仅 host / co-host / presenter(含 co-presenter、屏幕共享 presenter) */
@@ -1391,8 +1477,34 @@ export function VideoConferenceComponent(props: {
   const [livedocInitError, setLivedocInitError] = React.useState<string | null>(null);
   const [livedocInitInProgress, setLivedocInitInProgress] = React.useState(false);
   const shouldDisplayLiveDoc = isPureLiveDoc && (!hasScreenShare || isLocalScreenShare);
+  /** Sharer sees the LiveDoc plugin on the stage; the room stays in screen-share mode. */
+  const showLiveDocDuringOwnShare =
+    ownShareHidden && activeView === 'shareScreen' && !isRecorderBot;
+  const showLiveDocStage = shouldDisplayLiveDoc || showLiveDocDuringOwnShare;
+
+  // The share picture stays off this stage. The plugin was display:none until now, so tell it to
+  // measure again and keep showing the document it already has open.
+  React.useEffect(() => {
+    if (!showLiveDocDuringOwnShare) return;
+    const ping = () => {
+      const frame = document.getElementById('sharedIframePlayer');
+      if (!(frame instanceof HTMLIFrameElement)) return;
+      try {
+        frame.contentWindow?.dispatchEvent(new Event('resize'));
+      } catch {
+        /* The plugin origin may not allow this; its own resize still runs when the box appears. */
+      }
+    };
+    const frameId = window.requestAnimationFrame(ping);
+    const timerId = window.setTimeout(ping, 300);
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      window.clearTimeout(timerId);
+    };
+  }, [showLiveDocDuringOwnShare]);
   /** Design mode shows the shared link; a screen share still takes the stage first */
-  const shouldDisplayDesign = activeView === 'design' && !!designLink && (!hasScreenShare || isLocalScreenShare);
+  const shouldDisplayDesign =
+    activeView === 'design' && !!designLink && (!hasScreenShare || isLocalScreenShare);
   /** Design mode sync (size, zoom, page, scroll, drawings, laser) on its own data topic */
   const designTransport = React.useMemo<DesignSyncTransport>(() => {
     const designEncoder = new TextEncoder();
@@ -1409,7 +1521,12 @@ export function VideoConferenceComponent(props: {
           .catch(() => {});
       },
       subscribe(handler) {
-        const onData = (payload: Uint8Array, participant?: RemoteParticipant, _kind?: unknown, topic?: string) => {
+        const onData = (
+          payload: Uint8Array,
+          participant?: RemoteParticipant,
+          _kind?: unknown,
+          topic?: string,
+        ) => {
           if (topic !== DESIGN_TOPIC || !participant) return;
           try {
             const msg = parseDesignSyncMessage(JSON.parse(designDecoder.decode(payload)));
@@ -1439,14 +1556,18 @@ export function VideoConferenceComponent(props: {
     active: shouldDisplayDesign,
     linkUrl: designLink?.url ?? null,
     isDriver: isDesignDriver,
-    isAllowedSender: React.useCallback((identity: string) => designSenderAllowedRef.current(identity), []),
+    isAllowedSender: React.useCallback(
+      (identity: string) => designSenderAllowedRef.current(identity),
+      [],
+    ),
     localIdentity,
     localName: props.userChoices.username || '',
   });
   const [livedocHasBeenActivated, setLivedocHasBeenActivated] = React.useState(false);
-  const shouldMountLiveDoc = livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked;
-  // The Excalidraw board lives in the LiveDoc iframe; KloudMeet only carries its messages
-  useLiveDocBoardRelay(room, boardRoles, shouldMountLiveDoc);
+  const shouldMountLiveDoc =
+    livedocHasBeenActivated || shouldDisplayLiveDoc || isMirrorBlocked || showLiveDocDuringOwnShare;
+  // The Excalidraw board lives and syncs in the LiveDoc iframe; KloudMeet only says who is who
+  useLiveDocBoardContext(room, boardRoles, shouldMountLiveDoc);
   /** 共享非浏览器画面时，LiveDoc 盖住整个视频区，避免画面套娃 */
   const liveDocMirrorOverlay = isMirrorBlocked && shouldMountLiveDoc && isPureLiveDoc;
   const [livekitConnected, setLivekitConnected] = React.useState(false);
@@ -1470,10 +1591,7 @@ export function VideoConferenceComponent(props: {
   }, [room]);
 
   const speakActivityToken = searchParams?.get(SPEAK_TOKEN_PARAM) ?? null;
-  useSpeakActivityRecorder(
-    room,
-    isRecorderBot && livekitConnected ? speakActivityToken : null,
-  );
+  useSpeakActivityRecorder(room, isRecorderBot && livekitConnected ? speakActivityToken : null);
 
   const speakWhileMutedMonitoring =
     livekitConnected &&
@@ -1505,7 +1623,6 @@ export function VideoConferenceComponent(props: {
       restore: t('meeting.documentPipRestore'),
       restoreLocked: t('meeting.documentPipRestoreLocked'),
       shareBadge: t('meeting.documentPipShareBadge'),
-      presentingSelf: t('meeting.documentPipPresentingSelf'),
       shareScreen: t('toolbar.shareScreen'),
       stopSharing: t('toolbar.stopSharing'),
       shareConflict: t('toolbar.shareConflictTitle'),
@@ -1569,8 +1686,7 @@ export function VideoConferenceComponent(props: {
     designLink: parseStoredDesignLink(props.connectionDetails.designLink),
   });
   if (isHost) {
-    authState.current.participantLiveDocAi =
-      props.connectionDetails.participantLiveDocAi !== false;
+    authState.current.participantLiveDocAi = props.connectionDetails.participantLiveDocAi !== false;
   }
 
   const presenterListsEqual = React.useCallback(
@@ -1610,9 +1726,8 @@ export function VideoConferenceComponent(props: {
   // but other participants should be in 'shareScreen', so store 'shareScreen' as authoritative.
   React.useEffect(() => {
     if (isHost) {
-      authState.current.view = (activeView === 'liveDoc' && isLocalScreenShare)
-        ? 'shareScreen'
-        : activeView;
+      authState.current.view =
+        activeView === 'liveDoc' && isLocalScreenShare ? 'shareScreen' : activeView;
     }
   }, [isHost, activeView, isLocalScreenShare]);
 
@@ -1827,10 +1942,7 @@ export function VideoConferenceComponent(props: {
     sendMeetingMsg({ type: 'RAISE_HAND', identity, raisedAt });
     if (isHost) {
       authState.current.raisedHandAtByIdentity[identity] = raisedAt;
-      applyHostHands([
-        ...authState.current.raisedHands.filter((id) => id !== identity),
-        identity,
-      ]);
+      applyHostHands([...authState.current.raisedHands.filter((id) => id !== identity), identity]);
     }
   }, [room, isHost, sendMeetingMsg, applyHostHands]);
 
@@ -1877,10 +1989,12 @@ export function VideoConferenceComponent(props: {
         });
         setHostMutedIdentities((prev) => prev.filter((id) => id !== identity));
       }
-      setExemptFromMuteAllIdentities(prev =>
+      setExemptFromMuteAllIdentities((prev) =>
         !disable
-          ? (prev.includes(identity) ? prev : [...prev, identity])
-          : prev.filter(id => id !== identity)
+          ? prev.includes(identity)
+            ? prev
+            : [...prev, identity]
+          : prev.filter((id) => id !== identity),
       );
     },
     [sendMeetingMsg],
@@ -1953,24 +2067,23 @@ export function VideoConferenceComponent(props: {
       if (id && id !== localId) remotes.add(id);
     }
     remotes.forEach((id) => {
-      sendMeetingMsg(
-        { type: 'FORCE_STOP_SHARE', requesterIdentity: localId },
-        [id],
-      );
+      sendMeetingMsg({ type: 'FORCE_STOP_SHARE', requesterIdentity: localId }, [id]);
     });
 
     const startLocalShare = () => {
       takeoverTimerRef.current = null;
       setScreenShareActive(true);
       beginLocalScreenShareView();
-      room.localParticipant.setScreenShareEnabled(true, screenShareCaptureOptions()).catch((e: unknown) => {
-        setScreenShareActive(false);
-        void window.electronAPI?.clearShareTarget?.();
-        const restored = endLocalScreenShareView();
-        if (restored) setActiveView(restored);
-        showScreenShareFailureToast(e);
-        console.error(e);
-      });
+      room.localParticipant
+        .setScreenShareEnabled(true, screenShareCaptureOptions())
+        .catch((e: unknown) => {
+          setScreenShareActive(false);
+          void window.electronAPI?.clearShareTarget?.();
+          const restored = endLocalScreenShareView();
+          if (restored) setActiveView(restored);
+          showScreenShareFailureToast(e);
+          console.error(e);
+        });
     };
 
     const remoteStillSharing = () =>
@@ -1988,7 +2101,14 @@ export function VideoConferenceComponent(props: {
       takeoverTimerRef.current = setTimeout(poll, 150);
     };
     takeoverTimerRef.current = setTimeout(poll, 150);
-  }, [room, screenShareTracks, sendMeetingMsg, beginLocalScreenShareView, endLocalScreenShareView, showScreenShareFailureToast]);
+  }, [
+    room,
+    screenShareTracks,
+    sendMeetingMsg,
+    beginLocalScreenShareView,
+    endLocalScreenShareView,
+    showScreenShareFailureToast,
+  ]);
 
   React.useEffect(
     () => () => {
@@ -2004,10 +2124,7 @@ export function VideoConferenceComponent(props: {
   const handleEndForAll = React.useCallback(async () => {
     await stopRecordingAndThen(async () => {
       const rn = window.location.pathname.split('/').filter(Boolean).pop() || '';
-      const isOwner = isDbMeetingOwner(
-        props.meetingOwnerMemberId,
-        room.localParticipant.metadata,
-      );
+      const isOwner = isDbMeetingOwner(props.meetingOwnerMemberId, room.localParticipant.metadata);
 
       hostEndedHandledRef.current = true;
       markIntentionalDisconnect();
@@ -2089,15 +2206,18 @@ export function VideoConferenceComponent(props: {
   }, [broadcastViewChange]);
 
   /* ── Design mode: a link everyone views ── */
-  const persistDesignLink = React.useCallback((url: string | null, view?: ViewMode, embed?: 'blocked') => {
-    const token = connectionDetailsRef.current.participantToken;
-    const rn = connectionDetailsRef.current.roomName;
-    if (!token || !rn) return;
-    // Guests can't store it for late joiners (403); the live message still reached everyone.
-    void persistMeetingDesignLink({ roomName: rn, url, view, embed, livekitToken: token }).catch((err) =>
-      console.warn('[design] persist failed', err),
-    );
-  }, []);
+  const persistDesignLink = React.useCallback(
+    (url: string | null, view?: ViewMode, embed?: 'blocked') => {
+      const token = connectionDetailsRef.current.participantToken;
+      const rn = connectionDetailsRef.current.roomName;
+      if (!token || !rn) return;
+      // Guests can't store it for late joiners (403); the live message still reached everyone.
+      void persistMeetingDesignLink({ roomName: rn, url, view, embed, livekitToken: token }).catch(
+        (err) => console.warn('[design] persist failed', err),
+      );
+    },
+    [],
+  );
 
   const applyDesignLink = React.useCallback(
     (next: StoredDesignLink | null, nextView?: ViewMode) => {
@@ -2138,7 +2258,11 @@ export function VideoConferenceComponent(props: {
         setAt: Date.now(),
         ...(check?.embed === 'blocked' ? { embed: 'blocked' as const } : {}),
       });
-      rememberDesignLink({ url: link.url, label: link.kind === 'figma' ? link.label : link.host, kind: link.kind });
+      rememberDesignLink({
+        url: link.url,
+        label: link.kind === 'figma' ? link.label : link.host,
+        kind: link.kind,
+      });
       setDesignDialogOpen(false);
       handleViewChange('design');
     },
@@ -2211,7 +2335,11 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === 'DESIGN_LINK') {
           // Only people who may switch the stage can change what everyone views
-          if (senderIdentity && senderIdentity !== room.localParticipant.identity && designSenderAllowedRef.current(senderIdentity)) {
+          if (
+            senderIdentity &&
+            senderIdentity !== room.localParticipant.identity &&
+            designSenderAllowedRef.current(senderIdentity)
+          ) {
             const next = msg.link === null ? null : parseStoredDesignLink(msg.link);
             if (msg.link === null || next) {
               setDesignStored(next);
@@ -2237,7 +2365,9 @@ export function VideoConferenceComponent(props: {
             setActiveView(msg.view as ViewMode);
           }
           if (msg.presenter !== undefined) {
-            setCopresenterIdentities(Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : []);
+            setCopresenterIdentities(
+              Array.isArray(msg.presenter) ? msg.presenter : msg.presenter ? [msg.presenter] : [],
+            );
           }
           if (typeof (msg as { livedocInstanceId?: string }).livedocInstanceId === 'string') {
             setLivedocInstanceId((msg as { livedocInstanceId: string }).livedocInstanceId);
@@ -2272,7 +2402,10 @@ export function VideoConferenceComponent(props: {
           if (Array.isArray(msg.hostDisabledVideoIdentities)) {
             setHostDisabledVideoIdentities(msg.hostDisabledVideoIdentities);
           }
-          if (msg.hostDisabledVideoUntilByIdentity && typeof msg.hostDisabledVideoUntilByIdentity === 'object') {
+          if (
+            msg.hostDisabledVideoUntilByIdentity &&
+            typeof msg.hostDisabledVideoUntilByIdentity === 'object'
+          ) {
             const now = Date.now();
             const activeVideoLocks = Object.fromEntries(
               Object.entries(msg.hostDisabledVideoUntilByIdentity as Record<string, number>).filter(
@@ -2284,7 +2417,9 @@ export function VideoConferenceComponent(props: {
           if (typeof (msg as { captionsOn?: boolean }).captionsOn === 'boolean') {
             setCaptionsOpenRef.current?.((msg as { captionsOn: boolean }).captionsOn);
           }
-          if (typeof (msg as { participantLiveDocAi?: boolean }).participantLiveDocAi === 'boolean') {
+          if (
+            typeof (msg as { participantLiveDocAi?: boolean }).participantLiveDocAi === 'boolean'
+          ) {
             const hostId = hostIdentityRef.current;
             if (!hostId || senderIdentity === hostId) {
               setParticipantLiveDocAi(
@@ -2328,10 +2463,7 @@ export function VideoConferenceComponent(props: {
           // 仅参会者提示；结束方（主持人/联席）不弹窗
           if (senderIdentity === room.localParticipant.identity) return;
           if (
-            isDbMeetingOwner(
-              props.meetingOwnerMemberId,
-              room.localParticipant.metadata,
-            ) ||
+            isDbMeetingOwner(props.meetingOwnerMemberId, room.localParticipant.metadata) ||
             isHost ||
             isCohost
           ) {
@@ -2389,10 +2521,12 @@ export function VideoConferenceComponent(props: {
             setHostMutedUntilByIdentity((prev) => {
               return { ...prev, [msg.targetIdentity]: lockUntil };
             });
-            setHostMutedIdentities(prev =>
-              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            setHostMutedIdentities((prev) =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity],
             );
-            setExemptFromMuteAllIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
+            setExemptFromMuteAllIdentities((prev) =>
+              prev.filter((id) => id !== msg.targetIdentity),
+            );
           }
         } else if (msg.type === 'UNMUTE_PARTICIPANT') {
           // Cancel host mic restriction only — do NOT turn on the participant's microphone
@@ -2402,9 +2536,9 @@ export function VideoConferenceComponent(props: {
               delete next[msg.targetIdentity];
               return next;
             });
-            setHostMutedIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
-            setExemptFromMuteAllIdentities(prev =>
-              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            setHostMutedIdentities((prev) => prev.filter((id) => id !== msg.targetIdentity));
+            setExemptFromMuteAllIdentities((prev) =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity],
             );
           }
         } else if (msg.type === 'DISABLE_VIDEO_PARTICIPANT') {
@@ -2420,8 +2554,8 @@ export function VideoConferenceComponent(props: {
             setHostDisabledVideoUntilByIdentity((prev) => {
               return { ...prev, [msg.targetIdentity]: lockUntil };
             });
-            setHostDisabledVideoIdentities(prev =>
-              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity]
+            setHostDisabledVideoIdentities((prev) =>
+              prev.includes(msg.targetIdentity) ? prev : [...prev, msg.targetIdentity],
             );
           }
         } else if (msg.type === 'ENABLE_VIDEO_PARTICIPANT') {
@@ -2431,7 +2565,9 @@ export function VideoConferenceComponent(props: {
               delete next[msg.targetIdentity];
               return next;
             });
-            setHostDisabledVideoIdentities(prev => prev.filter(id => id !== msg.targetIdentity));
+            setHostDisabledVideoIdentities((prev) =>
+              prev.filter((id) => id !== msg.targetIdentity),
+            );
           }
         } else if (msg.type === 'RC_REQUEST') {
           // Remote Control: someone is requesting control of our screen
@@ -2445,7 +2581,30 @@ export function VideoConferenceComponent(props: {
                 reason: 'busy',
               });
             } else {
-              setRemoteControlRequest({ requesterIdentity: msg.requesterIdentity, requesterName: msg.requesterName });
+              const request = {
+                requesterIdentity: msg.requesterIdentity,
+                requesterName: msg.requesterName,
+              };
+              const shareTarget = window.electronAPI?.getShareTargetBounds?.();
+              if (!shareTarget) {
+                setRemoteControlRequest(request);
+              } else {
+                void shareTarget
+                  .then((target) => {
+                    if (target?.kind !== 'window' || target.controllable === true) {
+                      setRemoteControlRequest(request);
+                      return;
+                    }
+                    sendMeetingMsg({ type: 'RC_DENIED', ...request, reason: 'window' });
+                    toast(
+                      t('remoteControl.windowShareRequest', {
+                        name: msg.requesterName || t('remoteControl.someone'),
+                      }),
+                      { duration: 6000 },
+                    );
+                  })
+                  .catch(() => setRemoteControlRequest(request));
+              }
             }
           }
         } else if (msg.type === 'RC_APPROVED') {
@@ -2457,6 +2616,18 @@ export function VideoConferenceComponent(props: {
         } else if (msg.type === 'RC_DENIED') {
           if (msg.requesterIdentity === room.localParticipant.identity) {
             setRemoteControlPending(false);
+            const presenterName =
+              Array.from(room.remoteParticipants.values()).find((p) => p.isScreenShareEnabled)
+                ?.name || t('remoteControl.thePresenter');
+            if (msg.reason === 'window') {
+              toast(t('remoteControl.deniedWindowShare', { name: presenterName }), {
+                duration: 6000,
+              });
+            } else if (msg.reason === 'busy') {
+              toast(t('remoteControl.deniedBusy', { name: presenterName }));
+            } else {
+              toast(t('remoteControl.denied', { name: presenterName }));
+            }
           }
         } else if (msg.type === 'RC_REVOKED') {
           if (msg.requesterIdentity === room.localParticipant.identity) {
@@ -2502,7 +2673,9 @@ export function VideoConferenceComponent(props: {
             // View restore happens in hasScreenShare effect when the track ends
           }
           // If we were a co-presenter, remove ourselves
-          setCopresenterIdentities((prev) => prev.filter((id) => id !== room.localParticipant.identity));
+          setCopresenterIdentities((prev) =>
+            prev.filter((id) => id !== room.localParticipant.identity),
+          );
           // Let the host know our presenter role is gone
           if (!isHost) {
             sendMeetingMsg({ type: 'REMOVE_PRESENTER', identity: room.localParticipant.identity });
@@ -2532,7 +2705,11 @@ export function VideoConferenceComponent(props: {
             // 仅在队列确实发生变化时转发，避免主持人身份切换期间来回转发。
             const wasQueued = authState.current.raisedHands.includes(target);
             applyHostHands(authState.current.raisedHands.filter((id) => id !== target));
-            if (wasQueued && target !== senderIdentity && target !== room.localParticipant.identity) {
+            if (
+              wasQueued &&
+              target !== senderIdentity &&
+              target !== room.localParticipant.identity
+            ) {
               sendMeetingMsg({ type: 'LOWER_HAND', identity: target }, [target]);
             }
           }
@@ -2579,16 +2756,18 @@ export function VideoConferenceComponent(props: {
             ? msg.hostDisabledVideoIdentities
             : [];
           const guestHostDisabledVideoUntil =
-            msg.hostDisabledVideoUntilByIdentity && typeof msg.hostDisabledVideoUntilByIdentity === 'object'
+            msg.hostDisabledVideoUntilByIdentity &&
+            typeof msg.hostDisabledVideoUntilByIdentity === 'object'
               ? (msg.hostDisabledVideoUntilByIdentity as Record<string, number>)
               : {};
 
           // 举手持久化：每个参会者在心跳里上报自己的举手态，主持人据此重建权威队列。
           // 主持人刷新/重连后队列会在一个心跳周期内自动恢复，无需服务端存储。
           const guestHandRaised = (msg as { handRaised?: boolean }).handRaised === true;
-          const guestHandRaisedAt = typeof (msg as { handRaisedAt?: number }).handRaisedAt === 'number'
-            ? (msg as { handRaisedAt: number }).handRaisedAt
-            : Date.now();
+          const guestHandRaisedAt =
+            typeof (msg as { handRaisedAt?: number }).handRaisedAt === 'number'
+              ? (msg as { handRaisedAt: number }).handRaisedAt
+              : Date.now();
           const authHands = auth.raisedHands;
           if (guestHandRaised && !authHands.includes(senderIdentity)) {
             auth.raisedHandAtByIdentity[senderIdentity] = guestHandRaisedAt;
@@ -2603,7 +2782,7 @@ export function VideoConferenceComponent(props: {
             applyHostHands(authHands.filter((id) => id !== senderIdentity));
           }
           const guestRaisedHands = Array.isArray((msg as { raisedHands?: unknown }).raisedHands)
-            ? ((msg as { raisedHands: string[] }).raisedHands)
+            ? (msg as { raisedHands: string[] }).raisedHands
             : [];
 
           if (
@@ -2615,7 +2794,8 @@ export function VideoConferenceComponent(props: {
             JSON.stringify(guestHostMutedUntil) !== JSON.stringify(auth.hostMutedUntilByIdentity) ||
             !presenterListsEqual(guestMuteAllExemptions, auth.exemptFromMuteAllIdentities) ||
             !presenterListsEqual(guestHostDisabledVideo, auth.hostDisabledVideoIdentities) ||
-            JSON.stringify(guestHostDisabledVideoUntil) !== JSON.stringify(auth.hostDisabledVideoUntilByIdentity) ||
+            JSON.stringify(guestHostDisabledVideoUntil) !==
+              JSON.stringify(auth.hostDisabledVideoUntilByIdentity) ||
             livedocMismatch ||
             captionsMismatch ||
             !presenterListsEqual(guestRaisedHands, auth.raisedHands)
@@ -2660,6 +2840,7 @@ export function VideoConferenceComponent(props: {
     isLocalControlOperator,
     applyHostHands,
     buildCorrection,
+    t,
   ]);
 
   // When this client becomes host (e.g. meeting owner joins after guests), push state to everyone already in the room.
@@ -2668,8 +2849,7 @@ export function VideoConferenceComponent(props: {
     if (!livekitConnected) return;
     if (isHost && !wasHostRef.current) {
       const auth = authState.current;
-      auth.view =
-        activeView === 'liveDoc' && isLocalScreenShare ? 'shareScreen' : activeView;
+      auth.view = activeView === 'liveDoc' && isLocalScreenShare ? 'shareScreen' : activeView;
       auth.presenter = copresenterIdentities;
       auth.livedocInstanceId = livedocInstanceId;
       // 接过主持人身份时用本地举手队列镜像播种，避免主持人转让后队列被清空
@@ -2734,9 +2914,7 @@ export function VideoConferenceComponent(props: {
       if (timer !== null) return;
       timer = setTimeout(() => {
         timer = null;
-        const names = Array.from(pending).map(
-          (id) => room.remoteParticipants.get(id)?.name || id,
-        );
+        const names = Array.from(pending).map((id) => room.remoteParticipants.get(id)?.name || id);
         pending.clear();
         const name = names[0];
         if (!name) return;
@@ -2766,9 +2944,7 @@ export function VideoConferenceComponent(props: {
           : prev,
       );
       if (isHost) {
-        applyHostHands(
-          authState.current.raisedHands.filter((id) => id !== participant.identity),
-        );
+        applyHostHands(authState.current.raisedHands.filter((id) => id !== participant.identity));
       }
     };
     room.on(RoomEvent.ParticipantDisconnected, handleLeft);
@@ -2793,7 +2969,9 @@ export function VideoConferenceComponent(props: {
           // An attendee looking at their own choice reports the room view, so the host doesn't pull them back
           view: localViewChoiceRef.current
             ? roomViewRef.current
-            : (activeView === 'liveDoc' && isLocalScreenShare) ? 'shareScreen' : activeView,
+            : activeView === 'liveDoc' && isLocalScreenShare
+              ? 'shareScreen'
+              : activeView,
           presenter: copresenterIdentities,
           identity: room.localParticipant.identity,
           livedocInstanceId,
@@ -3000,9 +3178,7 @@ export function VideoConferenceComponent(props: {
     (identity: string) => {
       setApprovedControllerIdentity(identity);
       setRemoteControlRequest(null);
-      sendMeetingMsg(
-        { type: 'RC_APPROVED', requesterIdentity: identity, requesterName: '' },
-      );
+      sendMeetingMsg({ type: 'RC_APPROVED', requesterIdentity: identity, requesterName: '' });
     },
     [sendMeetingMsg],
   );
@@ -3011,9 +3187,7 @@ export function VideoConferenceComponent(props: {
   const handleDenyRcRequest = React.useCallback(
     (identity: string) => {
       setRemoteControlRequest(null);
-      sendMeetingMsg(
-        { type: 'RC_DENIED', requesterIdentity: identity, requesterName: '' },
-      );
+      sendMeetingMsg({ type: 'RC_DENIED', requesterIdentity: identity, requesterName: '' });
     },
     [sendMeetingMsg],
   );
@@ -3025,7 +3199,9 @@ export function VideoConferenceComponent(props: {
   pendingRcRequestRef.current = pendingRcRequest;
   React.useEffect(() => {
     window.electronAPI?.setRemoteControlRequest?.(
-      pendingRcRequest ? { name: pendingRcRequest.requesterName || pendingRcRequest.requesterIdentity } : null,
+      pendingRcRequest
+        ? { name: pendingRcRequest.requesterName || pendingRcRequest.requesterIdentity }
+        : null,
     );
   }, [pendingRcRequest]);
   React.useEffect(() => {
@@ -3082,10 +3258,10 @@ export function VideoConferenceComponent(props: {
   // 不再常驻右侧，因此 KloudMeet 侧也不再预留面板宽度。
   React.useEffect(() => {
     setShowWebcamSidebar(false);
-    if (shouldDisplayLiveDoc) {
+    if (showLiveDocStage) {
       postKloudShowFilePanelToIframe(0);
     }
-  }, [shouldDisplayLiveDoc, isToolbarMobile]);
+  }, [showLiveDocStage, isToolbarMobile]);
 
   const floatingMediaRestrictions = React.useMemo<KloudTileMediaRestrictionProps>(
     () => ({
@@ -3165,8 +3341,7 @@ export function VideoConferenceComponent(props: {
         // 先通知对方立即离开，再由服务端强制移除
         sendMeetingMsg({ type: 'REMOVED_FROM_MEETING', identity }, [identity]);
 
-        const roomSeg =
-          window.location.pathname.split('/').filter(Boolean).pop() || '';
+        const roomSeg = window.location.pathname.split('/').filter(Boolean).pop() || '';
         if (roomSeg) {
           void fetch(`/api/meetings/${encodeURIComponent(roomSeg)}/remove-participant`, {
             method: 'POST',
@@ -3290,7 +3465,12 @@ export function VideoConferenceComponent(props: {
   const meetingRolesKey = JSON.stringify({
     host: hostIdentity || null,
     cohosts: [...cohostIdentities].sort(),
-    presenters: [...new Set([...copresenterIdentities, ...(autoPresenterIdentity ? [autoPresenterIdentity] : [])])].sort(),
+    presenters: [
+      ...new Set([
+        ...copresenterIdentities,
+        ...(autoPresenterIdentity ? [autoPresenterIdentity] : []),
+      ]),
+    ].sort(),
   });
   React.useEffect(() => {
     if (!livekitConnected || !isHost || isRecorderBot) return;
@@ -3325,7 +3505,10 @@ export function VideoConferenceComponent(props: {
     let wantView: ViewMode = meetingView;
     if (botMode === 'gallery') wantView = 'webcam';
     if (botMode === 'speaker') {
-      wantView = hasScreenShare || meetingView === 'liveDoc' || meetingView === 'design' ? meetingView : 'webcam';
+      wantView =
+        hasScreenShare || meetingView === 'liveDoc' || meetingView === 'design'
+          ? meetingView
+          : 'webcam';
     }
     if (wantView !== activeView) {
       botForcingViewRef.current = true;
@@ -3424,518 +3607,827 @@ export function VideoConferenceComponent(props: {
   });
 
   return (
-    <div className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`} style={{ position: 'relative', height: '100%' }}>
+    <div
+      className={`lk-room-container ${isToolbarMobile ? 'kloud-mobile-meeting' : ''}`}
+      style={{ position: 'relative', height: '100%' }}
+    >
       <RoomContext.Provider value={room}>
         <ParticipantRoleMenuProvider {...participantRoleActions}>
-        {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
-        {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
-        {/* 桌面端远端音频挂在错误边界之外：视频区域反复出错被卸载时仍能听到声音 */}
-        {/* While recording is paused the recorder bot shows a slate instead of the meeting
+          {/* 移动端始终挂载独立音频渲染；屏幕共享时 VideoConference 内 audio 由 CSS 隐藏，避免双挂回声 */}
+          {isToolbarMobile && <KloudMobileRoomAudioRenderer />}
+          {/* 桌面端远端音频挂在错误边界之外：视频区域反复出错被卸载时仍能听到声音 */}
+          {/* While recording is paused the recorder bot shows a slate instead of the meeting
             (and goes silent below), so nothing said or shown during the pause is in the file */}
-        {isRecorderBot && recordingState.paused && <RecorderPausedSlate />}
-        {/* The recorder bot goes silent while recording is paused, so the pause isn't in the file */}
-        {!isToolbarMobile && <RoomAudioRenderer muted={isRecorderBot && recordingState.paused} />}
-        <KeyboardShortcuts />
+          {isRecorderBot && recordingState.paused && <RecorderPausedSlate />}
+          {/* The recorder bot goes silent while recording is paused, so the pause isn't in the file */}
+          {!isToolbarMobile && <RoomAudioRenderer muted={isRecorderBot && recordingState.paused} />}
+          <KeyboardShortcuts />
 
-        {/* ── Host ended meeting (remote end or END_MEETING) ── */}
-        {meetingEndedByHost && (
-          <HostEndedOverlay
-            onReturnHome={() => {
-              if (hostEndedRedirectTimerRef.current) {
-                clearTimeout(hostEndedRedirectTimerRef.current);
-                hostEndedRedirectTimerRef.current = null;
-              }
-              router.push('/');
-            }}
-          />
-        )}
-
-        {/* ── Duplicate session eviction (same user joined elsewhere) ── */}
-        {evictedByDuplicateSession && (
-          <DuplicateSessionOverlay
-            onReturnHome={() => router.push('/')}
-            onRejoin={rejoinAfterDuplicateSession}
-          />
-        )}
-
-        {/* ── Removed from meeting by host / co-host ── */}
-        {removedFromMeeting && <RemovedFromMeetingOverlay onReturnHome={() => router.push('/')} />}
-
-        {/* ── Connection Error / Retry Overlay ── */}
-        {connectError !== null && !meetingEndedByHost && (
-          <ConnectErrorOverlay
-            error={connectError}
-            onCancel={() => {
-              // Go back to dashboard
-              markIntentionalDisconnect();
-              clearActiveKloudRoom();
-              setConnectError(null);
-              room.disconnect().catch(console.error);
-              router.push('/');
-            }}
-            onRejoin={rejoinManually}
-          />
-        )}
-
-        {/* ── Recording Save Overlay ── */}
-        {recordSavePhase !== null && <RecordingSaveOverlay phase={recordSavePhase} />}
-
-        {/* Remote Control approval dialog — rendered at top level to avoid overflow clipping */}
-        {remoteControlRequest && screenShareActive && (
-          <RemoteControlApprovalDialog
-            request={remoteControlRequest}
-            onDeny={handleDenyRcRequest}
-            onApprove={handleApproveRcRequest}
-          />
-        )}
-
-        {/* ── Screen Share Takeover Dialog ── */}
-        {showShareTakeoverDialog && (
-          <ShareTakeoverDialog
-            presenter={
-              screenShareTracks[0]?.participant?.name ||
-              screenShareTracks[0]?.participant?.identity
-            }
-            onCancel={() => setShowShareTakeoverDialog(false)}
-            onConfirm={handleConfirmShareTakeover}
-          />
-        )}
-
-        {/* View content area */}
-        <div
-          className={`main-meeting-area${
-            isToolbarMobile &&
-            ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
-              ? ' kloud-mobile-webcam-view'
-              : ''
-          }${isToolbarMobile && hasScreenShare ? ' kloud-mobile-share-view' : ''}`}
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom:
-              isToolbarMobile &&
-              ((activeView === 'webcam' && !hasScreenShare) || shouldDisplayLiveDoc || shouldDisplayDesign)
-                ? 'var(--kloud-mobile-toolbar-height)'
-                : 0,
-            overflow: 'hidden',
-            display: 'flex',
-            background: 'var(--km-stage)',
-          }}
-        >
-          {/* Sharing your own screen: say so instead of showing it (LiveDoc stays one click away) */}
-          {ownShareHidden && activeView === 'shareScreen' && !isRecorderBot && (
-            <div className="km-presenting-cover" role="status">
-              <div className="km-presenting-card">
-                <div className="km-presenting-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                    <path d="M8 21h8M12 17v4M12 13V7M9 10l3-3 3 3" />
-                  </svg>
-                </div>
-                <h2 className="km-presenting-title">{t('meeting.presentingTitle')}</h2>
-                <p className="km-presenting-body">{t('meeting.presentingBody')}</p>
-                <div className="km-presenting-actions">
-                  <button type="button" className="km-presenting-stop" onClick={handleShareScreen}>
-                    {t('toolbar.stopSharing')}
-                  </button>
-                  <button type="button" className="km-presenting-doc" onClick={() => setActiveView('liveDoc')}>
-                    {t('meeting.presentingShowDoc')}
-                  </button>
-                </div>
-              </div>
-            </div>
+          {/* ── Host ended meeting (remote end or END_MEETING) ── */}
+          {meetingEndedByHost && (
+            <HostEndedOverlay
+              onReturnHome={() => {
+                if (hostEndedRedirectTimerRef.current) {
+                  clearTimeout(hostEndedRedirectTimerRef.current);
+                  hostEndedRedirectTimerRef.current = null;
+                }
+                router.push('/');
+              }}
+            />
           )}
 
-          {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
+          {/* ── Duplicate session eviction (same user joined elsewhere) ── */}
+          {evictedByDuplicateSession && (
+            <DuplicateSessionOverlay
+              onReturnHome={() => router.push('/')}
+              onRejoin={rejoinAfterDuplicateSession}
+            />
+          )}
+
+          {/* ── Removed from meeting by host / co-host ── */}
+          {removedFromMeeting && (
+            <RemovedFromMeetingOverlay onReturnHome={() => router.push('/')} />
+          )}
+
+          {/* ── Connection Error / Retry Overlay ── */}
+          {connectError !== null && !meetingEndedByHost && (
+            <ConnectErrorOverlay
+              error={connectError}
+              onCancel={() => {
+                // Go back to dashboard
+                markIntentionalDisconnect();
+                clearActiveKloudRoom();
+                setConnectError(null);
+                room.disconnect().catch(console.error);
+                router.push('/');
+              }}
+              onRejoin={rejoinManually}
+            />
+          )}
+
+          {/* ── Recording Save Overlay ── */}
+          {recordSavePhase !== null && <RecordingSaveOverlay phase={recordSavePhase} />}
+
+          {/* Remote Control approval dialog — rendered at top level to avoid overflow clipping */}
+          {remoteControlRequest && screenShareActive && (
+            <RemoteControlApprovalDialog
+              request={remoteControlRequest}
+              onDeny={handleDenyRcRequest}
+              onApprove={handleApproveRcRequest}
+            />
+          )}
+
+          {/* ── Screen Share Takeover Dialog ── */}
+          {showShareTakeoverDialog && (
+            <ShareTakeoverDialog
+              presenter={
+                screenShareTracks[0]?.participant?.name ||
+                screenShareTracks[0]?.participant?.identity
+              }
+              onCancel={() => setShowShareTakeoverDialog(false)}
+              onConfirm={handleConfirmShareTakeover}
+            />
+          )}
+
+          {/* View content area */}
           <div
-            style={
-              liveDocMirrorOverlay
-                ? {
-                    position: 'absolute',
-                    inset: 0,
-                    zIndex: 50,
-                    display: 'flex',
-                    overflow: 'hidden',
-                    background: 'var(--km-stage)',
-                  }
-                : {
-                    display: shouldDisplayLiveDoc ? 'flex' : 'none',
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                  }
-            }
+            className={`main-meeting-area${
+              isToolbarMobile &&
+              ((activeView === 'webcam' && !hasScreenShare) ||
+                showLiveDocStage ||
+                shouldDisplayDesign)
+                ? ' kloud-mobile-webcam-view'
+                : ''
+            }${isToolbarMobile && hasScreenShare && !showLiveDocDuringOwnShare ? ' kloud-mobile-share-view' : ''}`}
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom:
+                isToolbarMobile &&
+                ((activeView === 'webcam' && !hasScreenShare) ||
+                  showLiveDocStage ||
+                  shouldDisplayDesign)
+                  ? 'var(--kloud-mobile-toolbar-height)'
+                  : 0,
+              overflow: 'hidden',
+              display: 'flex',
+              background: 'var(--km-stage)',
+            }}
           >
-            <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
-              {shouldMountLiveDoc && (
-                <LiveDocView
-                  meetingRoomName={meetingRoomName}
-                  participantName={props.userChoices.username}
-                  livedocInstanceId={livedocInstanceId}
-                  hostInitError={livedocInitError}
-                  hostInitInProgress={livedocInitInProgress}
-                  isHost={isHost}
-                  livedocRole={livedocEmbedRole}
-                />
-              )}
-            </div>
+            {/* Standalone LiveDoc mounts only after first activation, then stays mounted to avoid iframe reloads. */}
+            <div
+              style={
+                liveDocMirrorOverlay
+                  ? {
+                      position: 'absolute',
+                      inset: 0,
+                      zIndex: 50,
+                      display: 'flex',
+                      overflow: 'hidden',
+                      background: 'var(--km-stage)',
+                    }
+                  : {
+                      display: showLiveDocStage ? 'flex' : 'none',
+                      flex: 1,
+                      minWidth: 0,
+                      overflow: 'hidden',
+                    }
+              }
+            >
+              <div style={{ flex: 1, position: 'relative', overflow: 'auto' }}>
+                {shouldMountLiveDoc && (
+                  <LiveDocView
+                    meetingRoomName={meetingRoomName}
+                    participantName={props.userChoices.username}
+                    livedocInstanceId={livedocInstanceId}
+                    hostInitError={livedocInitError}
+                    hostInitInProgress={livedocInitInProgress}
+                    isHost={isHost}
+                    livedocRole={livedocEmbedRole}
+                  />
+                )}
+              </div>
               {/* Right webcam sidebar — triggered by postMessage Kloud-ShowWebcamView */}
-              {showWebcamSidebar && (() => {
-                const allP = [
-                  { id: 'local' as string, name: props.userChoices.username || 'You', participant: room.localParticipant },
-                  ...shownRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
-                    id: p.identity,
-                    name: p.name || p.identity || '??',
-                    participant: p as any,
-                  })),
-                ];
+              {showWebcamSidebar &&
+                (() => {
+                  const allP = [
+                    {
+                      id: 'local' as string,
+                      name: props.userChoices.username || 'You',
+                      participant: room.localParticipant,
+                    },
+                    ...shownRemoteParticipants(room.remoteParticipants.values()).map((p) => ({
+                      id: p.identity,
+                      name: p.name || p.identity || '??',
+                      participant: p as any,
+                    })),
+                  ];
 
-                const switchToFloating = () => {
-                  setShowWebcamSidebar(false);
-                };
+                  const switchToFloating = () => {
+                    setShowWebcamSidebar(false);
+                  };
 
-                const handleFileClick = () => {
-                  // Switch to floating mode
-                  setShowWebcamSidebar(false);
-                  // Send message to iframe
-                  const iframe = document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-                  if (iframe?.contentWindow) {
-                    iframe.contentWindow.postMessage({ type: 'Kloud-ShowFilePanel', Show: 1 }, '*');
-                  }
-                };
+                  const handleFileClick = () => {
+                    // Switch to floating mode
+                    setShowWebcamSidebar(false);
+                    // Send message to iframe
+                    const iframe =
+                      document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+                    if (iframe?.contentWindow) {
+                      iframe.contentWindow.postMessage(
+                        { type: 'Kloud-ShowFilePanel', Show: 1 },
+                        '*',
+                      );
+                    }
+                  };
 
-                return (
-                  <div className="webcam-sidebar-panel">
-                    {/* Header: settings (left) + file icon (right) */}
-                    <div className="webcam-sidebar-header">
-                      <div style={{ position: 'relative' }}>
+                  return (
+                    <div className="webcam-sidebar-panel">
+                      {/* Header: settings (left) + file icon (right) */}
+                      <div className="webcam-sidebar-header">
+                        <div style={{ position: 'relative' }}>
+                          <button
+                            className="webcam-sidebar-icon-btn"
+                            onClick={() => setWebcamSidebarSettingsOpen(!webcamSidebarSettingsOpen)}
+                            title="Settings"
+                          >
+                            {/* Gear icon */}
+                            <svg
+                              viewBox="0 0 24 24"
+                              width="18"
+                              height="18"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.8"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="3" />
+                              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                            </svg>
+                          </button>
+                          {webcamSidebarSettingsOpen && (
+                            <div className="webcam-sidebar-dropdown">
+                              <button
+                                className="webcam-sidebar-dropdown-item active"
+                                onClick={() => setWebcamSidebarSettingsOpen(false)}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  width="14"
+                                  height="14"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <rect x="3" y="3" width="7" height="18" rx="1" />
+                                  <rect x="14" y="3" width="7" height="18" rx="1" />
+                                </svg>
+                                Sidebar
+                              </button>
+                              <button
+                                className="webcam-sidebar-dropdown-item"
+                                onClick={() => {
+                                  setWebcamSidebarSettingsOpen(false);
+                                  switchToFloating();
+                                  handleFileClick();
+                                }}
+                              >
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  width="14"
+                                  height="14"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                >
+                                  <rect x="2" y="2" width="20" height="20" rx="3" />
+                                  <rect x="10" y="4" width="10" height="10" rx="2" />
+                                </svg>
+                                Floating
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <button
-                          className="webcam-sidebar-icon-btn"
-                          onClick={() => setWebcamSidebarSettingsOpen(!webcamSidebarSettingsOpen)}
-                          title="Settings"
+                          className="webcam-sidebar-icon-btn file-btn"
+                          onClick={handleFileClick}
+                          title="Show file panel"
                         >
-                          {/* Gear icon */}
-                          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <circle cx="12" cy="12" r="3" />
-                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                          {/* File/document icon */}
+                          <svg
+                            viewBox="0 0 24 24"
+                            width="18"
+                            height="18"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                            <polyline points="10 9 9 9 8 9" />
                           </svg>
                         </button>
-                        {webcamSidebarSettingsOpen && (
-                          <div className="webcam-sidebar-dropdown">
-                            <button
-                              className="webcam-sidebar-dropdown-item active"
-                              onClick={() => setWebcamSidebarSettingsOpen(false)}
-                            >
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="18" rx="1" /><rect x="14" y="3" width="7" height="18" rx="1" /></svg>
-                              Sidebar
-                            </button>
-                            <button
-                              className="webcam-sidebar-dropdown-item"
-                              onClick={() => { setWebcamSidebarSettingsOpen(false); switchToFloating(); handleFileClick() }}
-                            >
-                              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="3" /><rect x="10" y="4" width="10" height="10" rx="2" /></svg>
-                              Floating
-                            </button>
-                          </div>
-                        )}
                       </div>
-                      <button
-                        className="webcam-sidebar-icon-btn file-btn"
-                        onClick={handleFileClick}
-                        title="Show file panel"
-                      >
-                        {/* File/document icon */}
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                          <line x1="16" y1="13" x2="8" y2="13" />
-                          <line x1="16" y1="17" x2="8" y2="17" />
-                          <polyline points="10 9 9 9 8 9" />
-                        </svg>
-                      </button>
+                      <div className="webcam-sidebar-tiles">
+                        {allP.map((p) => (
+                          <LiveDocWebcamSidebarTile
+                            key={p.id}
+                            participant={p.participant}
+                            name={p.name}
+                            mediaRestrictions={floatingMediaRestrictions}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="webcam-sidebar-tiles">
-                      {allP.map((p) => (
-                        <LiveDocWebcamSidebarTile
-                          key={p.id}
-                          participant={p.participant}
-                          name={p.name}
-                          mediaRestrictions={floatingMediaRestrictions}
-                        />
-                      ))}
+                  );
+                })()}
+            </div>
+
+            {/* VideoConference: always visible when not in pure LiveDoc mode */}
+            <div
+              className={`sky-meet-video-wrapper ${hasScreenShare ? 'has-screen-share' : ''} ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
+              style={{
+                flex: 1,
+                position: 'relative',
+                display: showLiveDocStage || shouldDisplayDesign ? 'none' : 'flex',
+                flexDirection: 'column',
+                minHeight: 0,
+                height: '100%',
+                overflow: 'hidden',
+              }}
+            >
+              {isToolbarMobile &&
+              activeView === 'webcam' &&
+              !hasScreenShare &&
+              webcamLayoutMode === 'tile' ? (
+                <MobileVideoLayout />
+              ) : isToolbarMobile && !hasScreenShare && webcamLayoutMode === 'tile' ? (
+                <KloudConnectionStateToast />
+              ) : (
+                <VideoConferenceErrorBoundary>
+                  <KloudVideoConference
+                    webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
+                    ignoreScreenShare={botMode === 'gallery'}
+                    galleryPrefs={galleryPrefs}
+                    chatMessageFormatter={formatChatMessageLinks}
+                    SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
+                  />
+                </VideoConferenceErrorBoundary>
+              )}
+
+              {/* Safe preview badge (hidden during remote control for clear view) */}
+              {hasScreenShare &&
+                activeView === 'shareScreen' &&
+                !isMirrorBlocked &&
+                !ownShareHidden &&
+                !isRemoteControlMode && (
+                  <div className="screenshare-overlay-container">
+                    <div className="screenshare-overlay-badge">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                        <line x1="8" y1="21" x2="16" y2="21" />
+                        <line x1="12" y1="17" x2="12" y2="21" />
+                      </svg>
+                      <span className="badge-text">
+                        {(() => {
+                          if (screenShareActive) return t('toolbar.previewAnotherTab');
+                          const sharing = Array.from(room.remoteParticipants.values()).find(
+                            (p) => p.isScreenShareEnabled,
+                          );
+                          const name = sharing?.name || sharing?.identity || 'Attendee';
+                          return t('toolbar.viewingAttendeeScreen', { name });
+                        })()}
+                      </span>
                     </div>
                   </div>
-                );
-              })()}
-          </div>
+                )}
 
-          {/* Design mode: the shared link (Figma, web page) */}
-          {shouldDisplayDesign && designLink && (
-            <div style={{ display: 'flex', flex: 1, minWidth: 0, position: 'relative' }}>
-              <DesignStage
-                link={designLink}
-                presenterName={designStored?.setByName}
-                isDriver={isDesignDriver}
-                canControl={canSwitchViews}
-                sync={designSync}
-                embedBlocked={designStored?.embed === 'blocked'}
-                onChangeLink={canAddDesignLink ? openDesignDialog : undefined}
-                onStop={stopDesign}
-              />
-            </div>
-          )}
-
-          {/* VideoConference: always visible when not in pure LiveDoc mode */}
-          <div
-            className={`sky-meet-video-wrapper ${hasScreenShare ? 'has-screen-share' : ''} ${isWebcamSidebarCollapsed ? 'sidebar-collapsed' : ''} ${screenShareActive ? 'presenter-sharing' : ''} ${isMirrorBlocked ? 'mirror-blocked' : ''} ${isRecorderBot ? 'recorder-bot-view' : ''} ${!hasScreenShare && activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? 'webcam-spotlight' : ''}`}
-            style={{
-              flex: 1,
-              position: 'relative',
-              display: shouldDisplayLiveDoc || shouldDisplayDesign ? 'none' : 'flex',
-              flexDirection: 'column',
-              minHeight: 0,
-              height: '100%',
-              overflow: 'hidden',
-            }}
-          >
-            {isToolbarMobile && activeView === 'webcam' && !hasScreenShare && webcamLayoutMode === 'tile' ? (
-              <MobileVideoLayout />
-            ) : isToolbarMobile && !hasScreenShare && webcamLayoutMode === 'tile' ? (
-              <KloudConnectionStateToast />
-            ) : (
-              <VideoConferenceErrorBoundary>
-                <KloudVideoConference
-                  webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
-                  ignoreScreenShare={botMode === 'gallery'}
-                  galleryPrefs={galleryPrefs}
-                  chatMessageFormatter={formatChatMessageLinks}
-                  SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}
-                />
-              </VideoConferenceErrorBoundary>
-            )}
-
-            {/* Safe preview badge (hidden during remote control for clear view) */}
-            {hasScreenShare && activeView === 'shareScreen' && !isMirrorBlocked && !ownShareHidden && !isRemoteControlMode && (
-              <div className="screenshare-overlay-container">
-                <div className="screenshare-overlay-badge">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-                    <line x1="8" y1="21" x2="16" y2="21" />
-                    <line x1="12" y1="17" x2="12" y2="21" />
-                  </svg>
-                  <span className="badge-text">
-                    {(() => {
-                      if (screenShareActive) return t('toolbar.previewAnotherTab');
-                      const sharing = Array.from(room.remoteParticipants.values()).find(p => p.isScreenShareEnabled);
-                      const name = sharing?.name || sharing?.identity || 'Attendee';
-                      return t('toolbar.viewingAttendeeScreen', { name });
-                    })()}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* 微信/手机浏览器「点击播放」按钮 —— 自动播放被拒绝时显示 */}
-            {needsPlayTap && hasScreenShare && !screenShareActive && isToolbarMobile && (
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  zIndex: 12000,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'rgba(0,0,0,0.55)',
-                  backdropFilter: 'blur(4px)',
-                  WebkitBackdropFilter: 'blur(4px)',
-                }}
-              >
-                <button
-                  onClick={() => {
-                    // 强制 play 页面上所有视频 + 解锁远程音频（需在用户手势内）
-                    document.querySelectorAll('video').forEach((v) => {
-                      v.play().catch(() => null);
-                    });
-                    void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
-                    setNeedsPlayTap(false);
-                  }}
+              {/* 微信/手机浏览器「点击播放」按钮 —— 自动播放被拒绝时显示 */}
+              {needsPlayTap && hasScreenShare && !screenShareActive && isToolbarMobile && (
+                <div
                   style={{
+                    position: 'absolute',
+                    inset: 0,
+                    zIndex: 12000,
                     display: 'flex',
                     flexDirection: 'column',
                     alignItems: 'center',
-                    gap: 14,
-                    background: 'rgba(255,255,255,0.12)',
-                    border: '2px solid rgba(255,255,255,0.55)',
-                    borderRadius: 20,
-                    padding: '28px 40px',
-                    cursor: 'pointer',
-                    WebkitTapHighlightColor: 'transparent',
-                    backdropFilter: 'blur(8px)',
-                    touchAction: 'manipulation',
+                    justifyContent: 'center',
+                    background: 'rgba(0,0,0,0.55)',
+                    backdropFilter: 'blur(4px)',
+                    WebkitBackdropFilter: 'blur(4px)',
                   }}
                 >
-                  {/* 播放图标 */}
-                  <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
-                    <circle cx="12" cy="12" r="11" stroke="white" strokeWidth="1.5" fill="rgba(255,255,255,0.15)" />
-                    <polygon points="10,8 18,12 10,16" fill="white" />
-                  </svg>
-                  <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
-                    {t('toolbar.clickToPlay')}
-                  </span>
-                  <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
-                    {t('toolbar.clickToWatch')}
-                  </span>
-                </button>
-              </div>
-            )}
+                  <button
+                    onClick={() => {
+                      // 强制 play 页面上所有视频 + 解锁远程音频（需在用户手势内）
+                      document.querySelectorAll('video').forEach((v) => {
+                        v.play().catch(() => null);
+                      });
+                      void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+                      setNeedsPlayTap(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 14,
+                      background: 'rgba(255,255,255,0.12)',
+                      border: '2px solid rgba(255,255,255,0.55)',
+                      borderRadius: 20,
+                      padding: '28px 40px',
+                      cursor: 'pointer',
+                      WebkitTapHighlightColor: 'transparent',
+                      backdropFilter: 'blur(8px)',
+                      touchAction: 'manipulation',
+                    }}
+                  >
+                    {/* 播放图标 */}
+                    <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="11"
+                        stroke="white"
+                        strokeWidth="1.5"
+                        fill="rgba(255,255,255,0.15)"
+                      />
+                      <polygon points="10,8 18,12 10,16" fill="white" />
+                    </svg>
+                    <span
+                      style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}
+                    >
+                      {t('toolbar.clickToPlay')}
+                    </span>
+                    <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12 }}>
+                      {t('toolbar.clickToWatch')}
+                    </span>
+                  </button>
+                </div>
+              )}
 
-            {/*
+              {/*
               Desktop: keep annotation/RC bridges mounted whenever a share exists so the
               presenter (forced onto LiveDoc) still forwards DataChannel → Electron IPC.
               Interactive UI only when viewing shareScreen.
               Web: same mount is harmless (no electronAPI); interactive only on shareScreen.
             */}
-            {hasScreenShare && (
-              <>
-                <AnnotationCanvas
-                  isDrawingMode={isDrawingMode && activeView === 'shareScreen'}
-                  bridgeOnly={activeView !== 'shareScreen'}
-                  forwardToOverlay={screenShareActive}
-                />
-                <RemoteControlOverlay
-                  isActive={isRemoteControlMode && activeView === 'shareScreen'}
-                  isPresenter={screenShareActive}
-                  controllerIdentity={screenShareActive ? approvedControllerIdentity : null}
-                  onPresenterStop={() => {
-                    setIsRemoteControlMode(false);
-                    handleRevokeRc(approvedControllerIdentityRef.current);
+              {hasScreenShare && (
+                <>
+                  <AnnotationCanvas
+                    isDrawingMode={isDrawingMode && activeView === 'shareScreen'}
+                    bridgeOnly={activeView !== 'shareScreen'}
+                    forwardToOverlay={screenShareActive}
+                  />
+                  <RemoteControlOverlay
+                    isActive={isRemoteControlMode && activeView === 'shareScreen'}
+                    isPresenter={screenShareActive}
+                    controllerIdentity={screenShareActive ? approvedControllerIdentity : null}
+                    onPresenterStop={() => {
+                      setIsRemoteControlMode(false);
+                      handleRevokeRc(approvedControllerIdentityRef.current);
+                    }}
+                    onStopControl={() => {
+                      setIsRemoteControlMode(false);
+                      sendMeetingMsg({
+                        type: 'RC_STOP',
+                        requesterIdentity: room.localParticipant.identity,
+                        requesterName: room.localParticipant.name || room.localParticipant.identity,
+                      });
+                    }}
+                  />
+                </>
+              )}
+
+              {/* Attendee sidebar collapse button (hidden during remote control for unobstructed view) */}
+              {hasScreenShare && !screenShareActive && !isRemoteControlMode && !isRecorderBot && (
+                <button
+                  className="webcam-collapse-toggle"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
                   }}
-                  onStopControl={() => {
-                    setIsRemoteControlMode(false);
-                    sendMeetingMsg({
-                      type: 'RC_STOP',
-                      requesterIdentity: room.localParticipant.identity,
-                      requesterName: room.localParticipant.name || room.localParticipant.identity,
-                    });
-                  }}
-                />
-              </>
+                  aria-label={
+                    isWebcamSidebarCollapsed
+                      ? t('toolbar.expandWebcams')
+                      : t('toolbar.collapseWebcams')
+                  }
+                  aria-expanded={!isWebcamSidebarCollapsed}
+                  style={
+                    isToolbarMobile
+                      ? {
+                          position: 'fixed',
+                          // below the top-left recording dot, also with the phone on its side
+                          top: 'max(60px, calc(env(safe-area-inset-top, 0px) + 48px), 7vh)',
+                          left: 'max(10px, env(safe-area-inset-left, 0px))',
+                          right: 'auto',
+                          transform: 'none',
+                          zIndex: 15000,
+                          background: 'rgba(43, 44, 50, 0.96)',
+                          color: 'var(--km-stage-text)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '12px',
+                          width: '36px',
+                          height: '50px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                          boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
+                          WebkitTapHighlightColor: 'transparent',
+                          touchAction: 'manipulation',
+                        }
+                      : {
+                          position: 'absolute',
+                          top: '50%',
+                          left: isWebcamSidebarCollapsed ? 0 : 148,
+                          right: 'auto',
+                          transform: 'translateY(-50%)',
+                          zIndex: 2000,
+                          background: 'rgba(43, 44, 50, 0.95)',
+                          color: 'var(--km-stage-text)',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderLeft: 'none',
+                          borderRadius: '0 8px 8px 0',
+                          width: '28px',
+                          height: '64px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition:
+                            'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease',
+                          boxShadow: '4px 0 12px rgba(0,0,0,0.4)',
+                        }
+                  }
+                  title={
+                    isWebcamSidebarCollapsed
+                      ? t('toolbar.expandWebcams')
+                      : t('toolbar.collapseWebcams')
+                  }
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    style={{ width: 16, height: 16 }}
+                  >
+                    {isWebcamSidebarCollapsed ? (
+                      <polyline points="9 18 15 12 9 6" />
+                    ) : (
+                      <polyline points="15 18 9 12 15 6" />
+                    )}
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            {/* Chat / Attendees：移动端沿用侧栏浮层；桌面端由 KloudMeetToolbar 锚点气泡承载 */}
+            {chatOpen && isToolbarMobile && (
+              <div className="chat-overlay-panel">
+                <div className="chat-overlay-header">
+                  <span>{t('toolbar.chat')}</span>
+                  <button
+                    type="button"
+                    className="chat-overlay-close"
+                    onClick={() => setChatOpen(false)}
+                    aria-label={t('common.close')}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="chat-overlay-body">{chatPanelNode}</div>
+              </div>
             )}
 
-            {/* Attendee sidebar collapse button (hidden during remote control for unobstructed view) */}
-            {hasScreenShare && !screenShareActive && !isRemoteControlMode && !isRecorderBot && (
-              <button
-                className="webcam-collapse-toggle"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIsWebcamSidebarCollapsed(!isWebcamSidebarCollapsed);
-                }}
-                aria-label={isWebcamSidebarCollapsed ? t('toolbar.expandWebcams') : t('toolbar.collapseWebcams')}
-                aria-expanded={!isWebcamSidebarCollapsed}
-                style={
-                  isToolbarMobile
-                    ? {
-                      position: 'fixed',
-                      // below the top-left recording dot, also with the phone on its side
-                      top: 'max(60px, calc(env(safe-area-inset-top, 0px) + 48px), 7vh)',
-                      left: 'max(10px, env(safe-area-inset-left, 0px))',
-                      right: 'auto',
-                      transform: 'none',
-                      zIndex: 15000,
-                      background: 'rgba(43, 44, 50, 0.96)',
-                      color: 'var(--km-stage-text)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderRadius: '12px',
-                      width: '36px',
-                      height: '50px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                      boxShadow: '0 6px 20px rgba(0,0,0,0.45)',
-                      WebkitTapHighlightColor: 'transparent',
-                      touchAction: 'manipulation',
+            {attendeeOpen && isToolbarMobile && (
+              <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
+                <div className="chat-overlay-header">
+                  <span>{t('toolbar.peopleAttendees')}</span>
+                  <button
+                    type="button"
+                    className="chat-overlay-close"
+                    onClick={() => setAttendeeOpen(false)}
+                    aria-label={t('common.close')}
+                  >
+                    ✕
+                  </button>
+                </div>
+                <div className="chat-overlay-body">
+                  <AttendeePanel
+                    hostIdentity={hostIdentity}
+                    copresenterIdentities={copresenterIdentities}
+                    cohostIdentities={cohostIdentities}
+                    localIdentity={room.localParticipant.identity}
+                    autoPresenterIdentity={autoPresenterIdentity}
+                    canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
+                    muteAllActive={muteAllActive}
+                    onMuteAll={handleMuteAll}
+                    onUnmuteAll={handleUnmuteAll}
+                    onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
+                    onDisableParticipantVideo={
+                      isHost || isCohost ? handleDisableParticipantVideo : undefined
                     }
-                    : {
-                      position: 'absolute',
-                      top: '50%',
-                      left: isWebcamSidebarCollapsed ? 0 : 148,
-                      right: 'auto',
-                      transform: 'translateY(-50%)',
-                      zIndex: 2000,
-                      background: 'rgba(43, 44, 50, 0.95)',
-                      color: 'var(--km-stage-text)',
-                      border: '1px solid rgba(255,255,255,0.1)',
-                      borderLeft: 'none',
-                      borderRadius: '0 8px 8px 0',
-                      width: '28px',
-                      height: '64px',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease',
-                      boxShadow: '4px 0 12px rgba(0,0,0,0.4)',
-                    }
-                }
-                title={isWebcamSidebarCollapsed ? t('toolbar.expandWebcams') : t('toolbar.collapseWebcams')}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  style={{ width: 16, height: 16 }}
-                >
-                  {isWebcamSidebarCollapsed ? (
-                    <polyline points="9 18 15 12 9 6" />
-                  ) : (
-                    <polyline points="15 18 9 12 15 6" />
-                  )}
-                </svg>
-              </button>
+                    hostMutedIdentities={hostMutedIdentities}
+                    hostDisabledVideoIdentities={hostDisabledVideoIdentities}
+                    raisedHands={raisedHands}
+                    canManageHands={canManageHands}
+                    onLowerAllHands={handleLowerAllHands}
+                  />
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Chat / Attendees：移动端沿用侧栏浮层；桌面端由 KloudMeetToolbar 锚点气泡承载 */}
-          {chatOpen && isToolbarMobile && (
-            <div className="chat-overlay-panel">
-              <div className="chat-overlay-header">
-                <span>{t('toolbar.chat')}</span>
-                <button
-                  type="button"
-                  className="chat-overlay-close"
-                  onClick={() => setChatOpen(false)}
-                  aria-label={t('common.close')}
+          {/* Captions overlay — visible to all participants when host enables captions */}
+          <SpeakWhileMutedPrompt
+            visible={speakWhileMutedVisible}
+            onDismiss={dismissSpeakWhileMuted}
+            onUnmute={() => {
+              acceptSpeakWhileMuted();
+              handleToggleMic();
+            }}
+          />
+          {/* 移动端：浏览器拦截远程音频时提示点击开启（Web 端无此层） */}
+          {isToolbarMobile && !canPlaybackAudio && room.state === ConnectionState.Connected && (
+            <div
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 11900,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'rgba(0,0,0,0.45)',
+                backdropFilter: 'blur(4px)',
+                WebkitBackdropFilter: 'blur(4px)',
+                pointerEvents: 'auto',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+                }}
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 14,
+                  background: 'rgba(255,255,255,0.12)',
+                  border: '2px solid rgba(255,255,255,0.55)',
+                  borderRadius: 20,
+                  padding: '28px 40px',
+                  cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                  backdropFilter: 'blur(8px)',
+                  touchAction: 'manipulation',
+                }}
+              >
+                <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
+                  <path
+                    d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"
+                    fill="white"
+                  />
+                </svg>
+                <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
+                  {t('toolbar.clickToEnableAudio')}
+                </span>
+                <span
+                  style={{
+                    color: 'rgba(255,255,255,0.6)',
+                    fontSize: 12,
+                    textAlign: 'center',
+                    maxWidth: 260,
+                  }}
                 >
-                  ✕
-                </button>
-              </div>
-              <div className="chat-overlay-body">
-                {chatPanelNode}
-              </div>
+                  {t('toolbar.clickToHearOthers')}
+                </span>
+              </button>
             </div>
           )}
 
-          {attendeeOpen && isToolbarMobile && (
-            <div className="chat-overlay-panel" style={{ right: chatOpen ? 352 : 16 }}>
-              <div className="chat-overlay-header">
-                <span>{t('toolbar.peopleAttendees')}</span>
-                <button
-                  type="button"
-                  className="chat-overlay-close"
-                  onClick={() => setAttendeeOpen(false)}
-                  aria-label={t('common.close')}
-                >
-                  ✕
-                </button>
-              </div>
-              <div className="chat-overlay-body">
+          <CaptionsOverlay
+            captionsInfo={captionsInfo}
+            bottomOffset={isToolbarMobile ? 110 : 96}
+            readLanguage={captionReadLanguage}
+            roomLanguages={captionRoomLanguages}
+            onChangeLanguage={setCaptionReadLanguage}
+            status={captionStatus}
+            onRetry={retryCaptions}
+            peerIssues={isHost || isCohost ? peerCaptionIssues : undefined}
+          />
+
+          {/* Custom toolbar overlay */}
+          <KloudMeetToolbar
+            meetingTitle={props.meetingTitle}
+            activeView={activeView}
+            onViewChange={handleViewChange}
+            onExit={handleExitFromToolbar}
+            onEndForAll={handleEndForAllFromToolbar}
+            onExitMenuOpenChange={handleExitMenuOpenChange}
+            micEnabled={micEnabled}
+            camEnabled={camEnabled}
+            onToggleMic={handleToggleMic}
+            onToggleCam={handleToggleCam}
+            onShareScreen={handleShareSegment}
+            screenShareActive={screenShareActive}
+            canShareScreen={!hasScreenShare || screenShareActive}
+            isDrawingMode={isDrawingMode}
+            onToggleDrawingMode={() => {
+              if (hasScreenShare) {
+                setIsDrawingMode((prev) => {
+                  const next = !prev;
+                  if (next) setIsRemoteControlMode(false); // mutual exclusion
+                  return next;
+                });
+              }
+            }}
+            isRemoteControlMode={isRemoteControlMode}
+            remoteControlPending={remoteControlPending}
+            onToggleRemoteControlMode={() => {
+              if (!hasScreenShare) return;
+
+              // Presenter: toggle local mode; turning off also revokes active controller
+              if (screenShareActive) {
+                const next = !isRemoteControlMode;
+                if (next) {
+                  setIsDrawingMode(false);
+                  setIsRemoteControlMode(true);
+                } else {
+                  setIsRemoteControlMode(false);
+                  if (approvedControllerIdentity) {
+                    handleRevokeRc(approvedControllerIdentity);
+                  }
+                }
+                return;
+              }
+
+              // Viewer: cancel pending request
+              if (remoteControlPending) {
+                setRemoteControlPending(false);
+                sendMeetingMsg({
+                  type: 'RC_CANCELLED',
+                  requesterIdentity: room.localParticipant.identity,
+                  requesterName: room.localParticipant.name || room.localParticipant.identity,
+                });
+                return;
+              }
+
+              // Viewer: stop active control — notify presenter (RC_STOP)
+              if (isRemoteControlMode) {
+                setIsRemoteControlMode(false);
+                sendMeetingMsg({
+                  type: 'RC_STOP',
+                  requesterIdentity: room.localParticipant.identity,
+                  requesterName: room.localParticipant.name || room.localParticipant.identity,
+                });
+                return;
+              }
+
+              // Viewer: request permission
+              const presenterTrack = screenShareTracks[0];
+              const presenterIdentity = presenterTrack?.participant?.identity;
+              if (presenterIdentity) {
+                setRemoteControlPending(true);
+                setIsDrawingMode(false);
+                sendMeetingMsg({
+                  type: 'RC_REQUEST',
+                  requesterIdentity: room.localParticipant.identity,
+                  requesterName: room.localParticipant.name || room.localParticipant.identity,
+                });
+              }
+            }}
+            hasScreenShare={hasScreenShare}
+            isDesktop={isDesktop}
+            canSwitchViews={canSwitchViews}
+            designItem={designItem}
+            onShowDesign={canSwitchViews ? showDesign : undefined}
+            onAddDesignLink={canAddDesignLink ? openDesignDialog : undefined}
+            webcamLayoutMode={webcamLayoutMode}
+            onWebcamLayoutChange={setWebcamLayoutMode}
+            galleryPrefs={galleryPrefs}
+            onGalleryPrefsChange={handleGalleryPrefsChange}
+            canToggleLiveDocAnnotation={canBroadcastViewChange}
+            canShowOperatorMenus={canBroadcastViewChange}
+            participantLiveDocAi={participantLiveDocAi}
+            onPrepareLiveDoc={() => setLivedocHasBeenActivated(true)}
+            canEndForAll={isHost || isCohost}
+            canRecord={canRecordHere}
+            isRecording={isRecording}
+            onOpenRecordPopup={() => {
+              if (canRecordHere) setShowRecordPopup(true);
+            }}
+            onStopRecording={() => {
+              if (canRecordHere) handleToggleRecording('stop');
+            }}
+            recordingState={recordingState}
+            showCornerStatus={!isRecorderBot}
+            canChangeRecordingPolicy={isHost}
+            onRecordingAction={(action) => void recordingRequest({ action })}
+            onRecordingSettings={(patch) => void recordingRequest({ action: 'settings', ...patch })}
+            onOpenHelp={() => setShowHelp(true)}
+            canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
+            muteAllActive={muteAllActive}
+            onMuteAll={handleMuteAll}
+            onUnmuteAll={handleUnmuteAll}
+            handRaised={handRaised}
+            onToggleHand={handleToggleHand}
+            raisedHandCount={canManageHands ? raisedHands.length : 0}
+            onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
+            isMutedByHost={isLocalMicRestricted}
+            isCamDisabledByHost={isLocalCamRestricted}
+            canToggleCaptions={isHost || isCohost}
+            captionsEnabled={captionsRunning}
+            captionsHealth={peerStateOf(captionStatus)}
+            onToggleCaptions={handleToggleCaptions}
+            captionRoomLanguages={captionRoomLanguages}
+            canDocumentPip={
+              livekitConnected &&
+              (!isDesktop || desktopMiniWindow) &&
+              !isToolbarMobile &&
+              !isRecorderBot &&
+              !meetingEndedByHost &&
+              isMiniWindowEligible()
+            }
+            documentPipEnabled={documentPip.isOpen}
+            onToggleDocumentPip={() => {
+              if (documentPip.isOpen) {
+                documentPip.close();
+                return;
+              }
+              void documentPip.open({ sticky: true });
+            }}
+            livekitToken={props.connectionDetails.participantToken}
+            chatOpen={chatOpen}
+            chatBadgeCount={chatUnread}
+            onToggleChat={() => {
+              setChatOpen((prev) => !prev);
+              setAttendeeOpen(false);
+            }}
+            attendeeOpen={attendeeOpen}
+            onToggleAttendee={() => {
+              setAttendeeOpen((prev) => !prev);
+              setChatOpen(false);
+            }}
+            onOpenSheet={() => {
+              setChatOpen(false);
+              setAttendeeOpen(false);
+            }}
+            chatPanelSlot={isToolbarMobile ? undefined : chatPanelNode}
+            attendeePanelSlot={
+              isToolbarMobile ? undefined : (
                 <AttendeePanel
                   hostIdentity={hostIdentity}
                   copresenterIdentities={copresenterIdentities}
@@ -3947,330 +4439,76 @@ export function VideoConferenceComponent(props: {
                   onMuteAll={handleMuteAll}
                   onUnmuteAll={handleUnmuteAll}
                   onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
-                  onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
+                  onDisableParticipantVideo={
+                    isHost || isCohost ? handleDisableParticipantVideo : undefined
+                  }
                   hostMutedIdentities={hostMutedIdentities}
                   hostDisabledVideoIdentities={hostDisabledVideoIdentities}
                   raisedHands={raisedHands}
                   canManageHands={canManageHands}
                   onLowerAllHands={handleLowerAllHands}
                 />
-              </div>
-            </div>
+              )
+            }
+          />
+
+          {/* --- MODALS --- */}
+          {/* Not over the LiveDoc view: its own page is the first thing people see */}
+          <MeetingPipSuggestPrompt
+            visible={showPipSuggest && activeView !== 'liveDoc'}
+            attendeeCount={1 + shownRemoteParticipants(room.remoteParticipants.values()).length}
+            onEnable={() => {
+              void documentPip.open({ sticky: true });
+            }}
+          />
+          {showMeetingReadyModal && (
+            <MeetingReadyModal
+              isDesktop={isDesktop}
+              onClose={() => setShowMeetingReadyModal(false)}
+            />
           )}
 
-        </div>
-
-        {/* Captions overlay — visible to all participants when host enables captions */}
-        <SpeakWhileMutedPrompt
-          visible={speakWhileMutedVisible}
-          onDismiss={dismissSpeakWhileMuted}
-          onUnmute={() => {
-            acceptSpeakWhileMuted();
-            handleToggleMic();
-          }}
-        />
-        {/* 移动端：浏览器拦截远程音频时提示点击开启（Web 端无此层） */}
-        {isToolbarMobile && !canPlaybackAudio && room.state === ConnectionState.Connected && (
-          <div
-            style={{
-              position: 'fixed',
-              inset: 0,
-              zIndex: 11900,
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(4px)',
-              WebkitBackdropFilter: 'blur(4px)',
-              pointerEvents: 'auto',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => {
-                void unlockMobileRoomAudio(room).then((ok) => setCanPlaybackAudio(ok));
+          {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
+          {showRecordPopup && canRecordHere && (
+            <RecordConsentModal
+              mode={recordingState.mode}
+              onModeChange={(m) => setRecordingState((st) => ({ ...st, mode: m }))}
+              onClose={() => setShowRecordPopup(false)}
+              onStart={() => {
+                setShowRecordPopup(false);
+                handleToggleRecording('start');
               }}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 14,
-                background: 'rgba(255,255,255,0.12)',
-                border: '2px solid rgba(255,255,255,0.55)',
-                borderRadius: 20,
-                padding: '28px 40px',
-                cursor: 'pointer',
-                WebkitTapHighlightColor: 'transparent',
-                backdropFilter: 'blur(8px)',
-                touchAction: 'manipulation',
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="56" height="56" fill="none">
-                <path
-                  d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z"
-                  fill="white"
-                />
-              </svg>
-              <span style={{ color: '#fff', fontSize: 16, fontWeight: 600, letterSpacing: 0.3 }}>
-                {t('toolbar.clickToEnableAudio')}
-              </span>
-              <span style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, textAlign: 'center', maxWidth: 260 }}>
-                {t('toolbar.clickToHearOthers')}
-              </span>
-            </button>
-          </div>
-        )}
+            />
+          )}
 
-        <CaptionsOverlay
-          captionsInfo={captionsInfo}
-          bottomOffset={isToolbarMobile ? 110 : 96}
-          readLanguage={captionReadLanguage}
-          roomLanguages={captionRoomLanguages}
-          onChangeLanguage={setCaptionReadLanguage}
-          status={captionStatus}
-          onRetry={retryCaptions}
-          peerIssues={isHost || isCohost ? peerCaptionIssues : undefined}
-        />
-
-        {/* Custom toolbar overlay */}
-        <KloudMeetToolbar
-          meetingTitle={props.meetingTitle}
-          activeView={activeView}
-          onViewChange={handleViewChange}
-          onExit={handleExitFromToolbar}
-          onEndForAll={handleEndForAllFromToolbar}
-          onExitMenuOpenChange={handleExitMenuOpenChange}
-          micEnabled={micEnabled}
-          camEnabled={camEnabled}
-          onToggleMic={handleToggleMic}
-          onToggleCam={handleToggleCam}
-          onShareScreen={handleShareSegment}
-          screenShareActive={screenShareActive}
-          canShareScreen={!hasScreenShare || screenShareActive}
-          isDrawingMode={isDrawingMode}
-          onToggleDrawingMode={() => {
-            if (hasScreenShare) {
-              setIsDrawingMode((prev) => {
-                const next = !prev;
-                if (next) setIsRemoteControlMode(false); // mutual exclusion
-                return next;
-              });
-            }
-          }}
-          isRemoteControlMode={isRemoteControlMode}
-          remoteControlPending={remoteControlPending}
-          onToggleRemoteControlMode={() => {
-            if (!hasScreenShare) return;
-
-            // Presenter: toggle local mode; turning off also revokes active controller
-            if (screenShareActive) {
-              const next = !isRemoteControlMode;
-              if (next) {
-                setIsDrawingMode(false);
-                setIsRemoteControlMode(true);
-              } else {
-                setIsRemoteControlMode(false);
-                if (approvedControllerIdentity) {
-                  handleRevokeRc(approvedControllerIdentity);
-                }
-              }
-              return;
-            }
-
-            // Viewer: cancel pending request
-            if (remoteControlPending) {
-              setRemoteControlPending(false);
-              sendMeetingMsg({
-                type: 'RC_CANCELLED',
-                requesterIdentity: room.localParticipant.identity,
-                requesterName: room.localParticipant.name || room.localParticipant.identity,
-              });
-              return;
-            }
-
-            // Viewer: stop active control — notify presenter (RC_STOP)
-            if (isRemoteControlMode) {
-              setIsRemoteControlMode(false);
-              sendMeetingMsg({
-                type: 'RC_STOP',
-                requesterIdentity: room.localParticipant.identity,
-                requesterName: room.localParticipant.name || room.localParticipant.identity,
-              });
-              return;
-            }
-
-            // Viewer: request permission
-            const presenterTrack = screenShareTracks[0];
-            const presenterIdentity = presenterTrack?.participant?.identity;
-            if (presenterIdentity) {
-              setRemoteControlPending(true);
-              setIsDrawingMode(false);
-              sendMeetingMsg({
-                type: 'RC_REQUEST',
-                requesterIdentity: room.localParticipant.identity,
-                requesterName: room.localParticipant.name || room.localParticipant.identity,
-              });
-            }
-          }}
-          hasScreenShare={hasScreenShare}
-          isDesktop={isDesktop}
-          canSwitchViews={canSwitchViews}
-          designItem={designItem}
-          onShowDesign={canSwitchViews ? showDesign : undefined}
-          onAddDesignLink={canAddDesignLink ? openDesignDialog : undefined}
-          webcamLayoutMode={webcamLayoutMode}
-          onWebcamLayoutChange={setWebcamLayoutMode}
-          galleryPrefs={galleryPrefs}
-          onGalleryPrefsChange={handleGalleryPrefsChange}
-          canToggleLiveDocAnnotation={canBroadcastViewChange}
-          canShowOperatorMenus={canBroadcastViewChange}
-          participantLiveDocAi={participantLiveDocAi}
-          onPrepareLiveDoc={() => setLivedocHasBeenActivated(true)}
-          canEndForAll={isHost || isCohost}
-          canRecord={canRecordHere}
-          isRecording={isRecording}
-          onOpenRecordPopup={() => {
-            if (canRecordHere) setShowRecordPopup(true);
-          }}
-          onStopRecording={() => {
-            if (canRecordHere) handleToggleRecording('stop');
-          }}
-          recordingState={recordingState}
-          showCornerStatus={!isRecorderBot}
-          canChangeRecordingPolicy={isHost}
-          onRecordingAction={(action) => void recordingRequest({ action })}
-          onRecordingSettings={(patch) => void recordingRequest({ action: 'settings', ...patch })}
-          onOpenHelp={() => setShowHelp(true)}
-          canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
-          muteAllActive={muteAllActive}
-          onMuteAll={handleMuteAll}
-          onUnmuteAll={handleUnmuteAll}
-          handRaised={handRaised}
-          onToggleHand={handleToggleHand}
-          raisedHandCount={canManageHands ? raisedHands.length : 0}
-          onOpenDesktopApp={() => openDesktopEntry('inMeeting')}
-          isMutedByHost={isLocalMicRestricted}
-          isCamDisabledByHost={isLocalCamRestricted}
-          canToggleCaptions={isHost || isCohost}
-          captionsEnabled={captionsRunning}
-          captionsHealth={peerStateOf(captionStatus)}
-          onToggleCaptions={handleToggleCaptions}
-          captionRoomLanguages={captionRoomLanguages}
-          canDocumentPip={
-            livekitConnected &&
-            (!isDesktop || desktopMiniWindow) &&
-            !isToolbarMobile &&
-            !isRecorderBot &&
-            !meetingEndedByHost &&
-            isMiniWindowEligible()
-          }
-          documentPipEnabled={documentPip.isOpen}
-          onToggleDocumentPip={() => {
-            if (documentPip.isOpen) {
-              documentPip.close();
-              return;
-            }
-            void documentPip.open({ sticky: true });
-          }}
-          livekitToken={props.connectionDetails.participantToken}
-          chatOpen={chatOpen}
-          chatBadgeCount={chatUnread}
-          onToggleChat={() => {
-            setChatOpen((prev) => !prev);
-            setAttendeeOpen(false);
-          }}
-          attendeeOpen={attendeeOpen}
-          onToggleAttendee={() => {
-            setAttendeeOpen((prev) => !prev);
-            setChatOpen(false);
-          }}
-          onOpenSheet={() => {
-            setChatOpen(false);
-            setAttendeeOpen(false);
-          }}
-          chatPanelSlot={
-            isToolbarMobile ? undefined : chatPanelNode
-          }
-          attendeePanelSlot={
-            isToolbarMobile ? undefined : (
-              <AttendeePanel
-                hostIdentity={hostIdentity}
-                copresenterIdentities={copresenterIdentities}
-                cohostIdentities={cohostIdentities}
-                localIdentity={room.localParticipant.identity}
-                autoPresenterIdentity={autoPresenterIdentity}
-                canMuteAll={isHost || isCohost || isCopresenter || isAutoPresenter}
-                muteAllActive={muteAllActive}
-                onMuteAll={handleMuteAll}
-                onUnmuteAll={handleUnmuteAll}
-                onMuteParticipant={isHost || isCohost ? handleMuteParticipant : undefined}
-                onDisableParticipantVideo={isHost || isCohost ? handleDisableParticipantVideo : undefined}
-                hostMutedIdentities={hostMutedIdentities}
-                hostDisabledVideoIdentities={hostDisabledVideoIdentities}
-                raisedHands={raisedHands}
-                canManageHands={canManageHands}
-                onLowerAllHands={handleLowerAllHands}
-              />
-            )
-          }
-        />
-
-        {/* --- MODALS --- */}
-        <MeetingPipSuggestPrompt
-          visible={showPipSuggest}
-          attendeeCount={1 + shownRemoteParticipants(room.remoteParticipants.values()).length}
-          onEnable={() => {
-            void documentPip.open({ sticky: true });
-          }}
-        />
-        {showMeetingReadyModal && (
-          <MeetingReadyModal isDesktop={isDesktop} onClose={() => setShowMeetingReadyModal(false)} />
-        )}
-
-        {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
-        {showRecordPopup && canRecordHere && (
-          <RecordConsentModal
-            mode={recordingState.mode}
-            onModeChange={(m) => setRecordingState((st) => ({ ...st, mode: m }))}
-            onClose={() => setShowRecordPopup(false)}
-            onStart={() => {
-              setShowRecordPopup(false);
-              handleToggleRecording('start');
-            }}
-          />
-        )}
-
-
-
-        {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
-        <RecordingIndicator />
-        {!isRecorderBot && acceptsKnocks && (isHost || isCohost) && (
-          <JoinRequestsPrompt
-            room={room}
-            canAdmit
-            acceptsKnocks
-            refreshRef={joinRequestsRefreshRef}
-          />
-        )}
-        {!isRecorderBot && (
-          <MeetingTimeLimitBanner
-            meetingEndsAt={props.connectionDetails.meetingEndsAt}
-            roomName={props.connectionDetails.roomName}
-            isHost={isHost}
-          />
-        )}
-        {desktopLaunchModal}
-        <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
-        {designDialogOpen && canAddDesignLink && (
-          <DesignLinkDialog
-            currentUrl={designLink?.url}
-            appOrigin={typeof window !== 'undefined' ? window.location.origin : ''}
-            onSubmit={submitDesignLink}
-            checkEmbed={checkDesignEmbed}
-            onClose={() => setDesignDialogOpen(false)}
-          />
-        )}
+          {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
+          <RecordingIndicator />
+          {!isRecorderBot && acceptsKnocks && (isHost || isCohost) && (
+            <JoinRequestsPrompt
+              room={room}
+              canAdmit
+              acceptsKnocks
+              refreshRef={joinRequestsRefreshRef}
+            />
+          )}
+          {!isRecorderBot && (
+            <MeetingTimeLimitBanner
+              meetingEndsAt={props.connectionDetails.meetingEndsAt}
+              roomName={props.connectionDetails.roomName}
+              isHost={isHost}
+            />
+          )}
+          {desktopLaunchModal}
+          <HelpModal isOpen={showHelp} onClose={() => setShowHelp(false)} />
+          {designDialogOpen && canAddDesignLink && (
+            <DesignLinkDialog
+              currentUrl={designLink?.url}
+              appOrigin={typeof window !== 'undefined' ? window.location.origin : ''}
+              onSubmit={submitDesignLink}
+              checkEmbed={checkDesignEmbed}
+              onClose={() => setDesignDialogOpen(false)}
+            />
+          )}
         </ParticipantRoleMenuProvider>
       </RoomContext.Provider>
     </div>

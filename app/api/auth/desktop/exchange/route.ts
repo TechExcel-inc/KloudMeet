@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 import { redeemDesktopHandoff } from '@/lib/desktopAuth';
 import { clientIp, rateLimited } from '@/lib/rateLimit';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 /**
  * POST /api/auth/desktop/exchange { code, verifier } — called by the desktop app's main process
@@ -37,6 +38,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
     return NextResponse.json({ token, next: result.next });
   } catch (error) {
     console.error('[desktop exchange]', error);

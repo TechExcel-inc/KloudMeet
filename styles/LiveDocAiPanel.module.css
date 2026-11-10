@@ -137,7 +137,9 @@
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .close:hover {
@@ -149,6 +151,9 @@
 .close:focus-visible,
 .moreButton:focus-visible,
 .addButton:focus-visible,
+.browseButton:focus-visible,
+.smartCamButton:focus-visible,
+.sourceItem:focus-visible,
 .sourceButton:focus-visible,
 .primaryButton:focus-visible,
 .documentRow:focus-visible,
@@ -223,48 +228,209 @@
   background: rgba(242, 139, 130, 0.12);
 }
 
-/* No documents yet: say what to do, with every source one click away */
+/* No documents yet: "What do you want to present?" with drop zone + source list */
 .emptyStart {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 26px 8px 8px;
+  align-items: stretch;
+  padding: 16px 12px 10px;
   text-align: center;
+  border-radius: 12px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.emptyTitle {
-  margin-top: 12px;
+.emptyStartDrag {
+  background: rgba(124, 121, 255, 0.06);
+}
+
+.heroSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.heroTitle {
   color: var(--km-stage-text, #e8eaed);
-  font-size: 15px;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.heroSubtitle {
+  margin-top: 2px;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.dropZone {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px dashed rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.emptyStartDrag .dropZone {
+  border-color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.08);
+}
+
+.dropZoneIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.1);
+}
+
+.dropZonePrompt {
+  color: var(--km-stage-text, #e8eaed);
+  font-size: 12.5px;
   font-weight: 600;
 }
 
-.emptyHint {
-  max-width: 380px;
+.dropZoneText {
+  max-width: 300px;
   text-wrap: balance;
-  margin-top: 4px;
   color: var(--km-stage-muted, #9aa0a6);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-/* Three to a row; a short last row sits in the middle */
-/* Empty state: one row of compact source buttons; White Board is the main action */
-.sourceRow {
-  width: 100%;
-  margin-top: 18px;
+.browseButton {
+  height: 28px;
+  margin-top: 2px;
+  padding: 0 14px;
+  display: inline-flex;
+  align-items: center;
+  color: #1f1d6b;
+  background: var(--km-on-dark-accent, #c9c8ff);
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.browseButton:hover:not(:disabled) {
+  background: #d8d7ff;
+}
+
+.browseButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceList {
+  margin-top: 12px;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.sourceList .menuAnchor {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
+  min-width: 0;
 }
 
-.sourceButton {
-  height: 36px;
-  padding: 0 11px;
+.sourceItem {
+  width: 100%;
+  min-height: 108px;
+  height: auto;
+  padding: 12px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: center;
+  color: var(--km-stage-text, #e8eaed);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.sourceItemIcon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--km-on-dark-accent, #c9c8ff);
+  background: rgba(124, 121, 255, 0.12);
+  border-radius: 8px;
+}
+
+.sourceItem svg {
+  flex: none;
+  color: inherit;
+}
+
+.sourceItem:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.sourceItem:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sourceItemText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sourceItemTitle {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.sourceItemHint {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--km-stage-muted, #9aa0a6);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.smartCamButton {
+  height: 32px;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   color: var(--km-stage-text, #e8eaed);
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -274,35 +440,22 @@
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
-.sourceButton svg {
+.smartCamButton svg {
   flex: none;
   color: var(--km-on-dark-accent, #c9c8ff);
 }
 
-.sourceButton:hover:not(:disabled) {
+.smartCamButton:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.16);
 }
 
-.sourceButtonPrimary {
-  color: #1f1d6b;
-  background: var(--km-on-dark-accent, #c9c8ff);
-  border-color: transparent;
-}
-
-.sourceButtonPrimary svg {
-  color: currentColor;
-}
-
-.sourceButtonPrimary:hover:not(:disabled) {
-  background: #d8d7ff;
-  border-color: transparent;
-}
-
-.sourceButton:disabled {
+.smartCamButton:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -411,7 +564,9 @@
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 10px;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
 }
 
 .searchBox:focus-within {
@@ -598,7 +753,9 @@
   border: 0;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .moreButton:hover,
@@ -688,7 +845,7 @@
   background: rgba(242, 139, 130, 0.1);
 }
 
-/* Footer: the annotation switch on the left, Add on the right */
+/* Footer: annotation and SmartCam on the left, Add on the right */
 /* Over the site-wide footer look (globals.css): same surface as the panel */
 .documentFooter {
   width: auto;
@@ -781,7 +938,9 @@
   border: 0;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .uploadIssuesDismiss:hover {
@@ -850,6 +1009,14 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.footerStart {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  min-width: 0;
 }
 
 .footerEnd {
@@ -964,7 +1131,9 @@
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .pickerFooter > button:hover:not(:disabled) {
@@ -1101,12 +1270,30 @@
   font-weight: 700;
 }
 
-.tone0 { background: #353a65; color: #c3c1ff; }
-.tone1 { background: #22474e; color: #8fe0cd; }
-.tone2 { background: #4e4234; color: #f2cc8a; }
-.tone3 { background: #4e354a; color: #f4b2c3; }
-.tone4 { background: #264360; color: #a8d4f2; }
-.tone5 { background: #3c3861; color: #d3bff5; }
+.tone0 {
+  background: #353a65;
+  color: #c3c1ff;
+}
+.tone1 {
+  background: #22474e;
+  color: #8fe0cd;
+}
+.tone2 {
+  background: #4e4234;
+  color: #f2cc8a;
+}
+.tone3 {
+  background: #4e354a;
+  color: #f4b2c3;
+}
+.tone4 {
+  background: #264360;
+  color: #a8d4f2;
+}
+.tone5 {
+  background: #3c3861;
+  color: #d3bff5;
+}
 
 .speakerLabel {
   color: var(--km-stage-text, #e8eaed);
@@ -1474,7 +1661,10 @@
   font-size: 13px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background 0.15s ease;
 }
 
 .pickerSelectTrigger:hover {

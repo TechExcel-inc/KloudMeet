@@ -104,51 +104,35 @@
   margin-left: 0;
 }
 
-.pillShareTile {
-  position: relative;
-  width: 50px;
-  height: 28px;
-  margin-left: 2px;
-  border-radius: 7px;
+/* Last circle paints over the one before it, so its share ring stays whole */
+.stack .pillSharePerson {
+  z-index: 7;
+}
+
+/* Screen share is the last circle in the pill, the same size as a person */
+.pillShareFace {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
   overflow: hidden;
   background: #0b0c0e;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 2px solid #ea580c;
   box-sizing: border-box;
   cursor: pointer;
   padding: 0;
-  flex-shrink: 0;
-  /* With four people in the pill the tile sits under the hover strip beside the chevron */
-  z-index: 6;
 }
 
-.pillShareTile:hover {
-  border-color: rgba(255, 255, 255, 0.5);
+.pillShareFace:hover {
+  border-color: #fb923c;
 }
 
-/* Your own share: a chip that says so (the picture would be the mini window filming itself) */
-.pillShareTileSelf {
-  width: auto;
-  padding: 0 9px;
-  background: rgba(124, 121, 255, 0.2);
-  border-color: rgba(124, 121, 255, 0.42);
-}
-
-.pillShareTileIcon {
-  width: 30px;
-  padding: 0;
-}
-
-.pillShareTileSelf:hover {
-  border-color: rgba(124, 121, 255, 0.7);
-}
-
-.pillShareTile :global(div),
-.pillShareTile :global(video) {
+.pillShareFace :global(div),
+.pillShareFace :global(video) {
   width: 100%;
   height: 100%;
 }
 
-.pillShareTile :global(video) {
+.pillShareFace :global(video) {
   object-fit: cover;
   display: block;
 }
@@ -211,7 +195,7 @@
   font-size: 10px;
   color: rgba(255, 255, 255, 0.8);
   border-color: rgba(255, 255, 255, 0.2);
-  z-index: 0;
+  z-index: 1;
   padding: 0;
   cursor: pointer;
 }
@@ -569,6 +553,16 @@
   cursor: pointer;
 }
 
+.shareTile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 2px #ea580c;
+  pointer-events: none;
+  z-index: 2;
+}
+
 /* Same shape as the people next to it */
 .heroCell .shareTile {
   border-radius: 12px;
@@ -582,84 +576,11 @@
   display: block;
 }
 
-/* Your own share: a thumbnail card instead of the picture (the mini window would film itself) */
-.sharePresenting {
+.compactCell .shareTile {
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 2px;
-  padding: 2px;
-  box-sizing: border-box;
-  overflow: hidden;
-  background: rgba(124, 121, 255, 0.16);
-  color: #c9c8ff;
-  font: 600 9.5px/1.2 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
-  text-align: center;
-  white-space: nowrap;
-}
-
-.sharePresenting svg {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.pillSharePresenting {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  color: #c9c8ff;
-  font: 600 11px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
-  white-space: nowrap;
-}
-
-.pillSharePresenting svg {
-  width: 12px;
-  height: 12px;
-  flex-shrink: 0;
-}
-
-/* Someone else's share leads at full width, above the people */
-.shareLead {
-  margin-bottom: var(--pip-hero-gap, 6px);
-}
-
-.shareLead .shareTile {
   aspect-ratio: 16 / 9;
-  border-radius: 12px;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
-}
-
-.presentingStrip {
-  height: 30px;
-  margin-bottom: var(--pip-hero-gap, 6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  box-sizing: border-box;
   border-radius: 10px;
-  border: 1px solid rgba(124, 121, 255, 0.3);
-  background: rgba(124, 121, 255, 0.16);
-  color: #c9c8ff;
-  font: 600 12px/1 var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.presentingStrip:hover {
-  background: rgba(124, 121, 255, 0.24);
-}
-
-.presentingStrip svg {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
 }
 
 /* Who is sharing: a small icon in the corner, so it never covers the person's initials */

@@ -1,7 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import styles from '../../styles/MyProfileModal.module.css';
 import { useI18n } from '../i18n';
 import { KLOUD_SIGN_IN_ENABLED } from '../googleSignInHref';
+import { useKloudCompany } from './useKloudCompany';
 
 export type SignInMethodsState = {
   email: string | null;
@@ -12,11 +13,6 @@ export type SignInMethodsState = {
 
 type Provider = 'google' | 'kloud';
 
-type KloudCompanyState = {
-  account: { id: number; accountName: string; kloudCompanyId: string | null; kloudCompanyName: string | null } | null;
-  canLink: boolean;
-  candidates: Array<{ id: string; name: string; mappedElsewhere: boolean }> | null;
-};
 
 const GoogleMark = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
@@ -164,51 +160,10 @@ export function SignInMethods({
 
 function KloudCompanyRow({ token, toast }: { token: string; toast?: { show: (m: string) => void } }) {
   const { t } = useI18n();
-  const [state, setState] = useState<KloudCompanyState | null>(null);
-  const [choice, setChoice] = useState('');
-  const [busy, setBusy] = useState(false);
+  const { state, choice, setChoice, busy, error, send, linkedName } = useKloudCompany(token, (m) => toast?.show(m));
   const [confirmUnlink, setConfirmUnlink] = useState(false);
-  const [error, setError] = useState('');
-
-  const load = useCallback(async () => {
-    const res = await fetch('/api/account/kloud-company', { headers: { Authorization: `Bearer ${token}` } });
-    if (!res.ok) return;
-    const data = (await res.json()) as KloudCompanyState;
-    setState(data);
-    const first = data.candidates?.find((c) => !c.mappedElsewhere);
-    setChoice((prev) => prev || first?.id || '');
-  }, [token]);
-
-  useEffect(() => {
-    void load().catch(() => undefined);
-  }, [load]);
-
-  const send = async (method: 'POST' | 'DELETE') => {
-    setBusy(true);
-    setError('');
-    try {
-      const res = await fetch('/api/account/kloud-company', {
-        method,
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: method === 'POST' ? JSON.stringify({ kloudCompanyId: choice }) : undefined,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || t('profile.actionFailed'));
-        return;
-      }
-      setConfirmUnlink(false);
-      toast?.show(method === 'POST' ? t('profile.kloudCompanyLinkedToast') : t('profile.kloudCompanyUnlinkedToast'));
-      await load();
-    } catch {
-      setError(t('profile.networkError'));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   if (!state) return null;
-  const linkedName = state.account?.kloudCompanyId ? state.account.kloudCompanyName || state.account.kloudCompanyId : null;
 
   let body: React.ReactNode;
   if (linkedName) {
@@ -216,7 +171,7 @@ function KloudCompanyRow({ token, toast }: { token: string; toast?: { show: (m: 
       <div className={styles.confirmBox}>
         <div className={styles.formNote}>{t('profile.unlinkQuestion', { company: linkedName })}</div>
         <div className={styles.passwordActions}>
-          <button type="button" className={styles.btnDanger} onClick={() => void send('DELETE')} disabled={busy}>
+          <button type="button" className={styles.btnDanger} onClick={() => void send('DELETE').then((ok) => ok && setConfirmUnlink(false))} disabled={busy}>
             {t('profile.unlink')}
           </button>
           <button type="button" className={styles.btnCancelPassword} onClick={() => setConfirmUnlink(false)}>

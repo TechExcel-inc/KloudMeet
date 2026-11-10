@@ -297,7 +297,6 @@ export function AnonymousView({
     }
   };
 
-  const hasCode = code.trim().length > 0;
   const scheduledDiffMs = scheduledModalData
     ? new Date(scheduledModalData.scheduledFor).getTime() - Date.now()
     : 0;
@@ -309,19 +308,12 @@ export function AnonymousView({
         onSignUp={onSignUp}
         onOpenHelp={onOpenHelp}
         hideAvatar={true}
-        showClock
       />
 
       <div className={styles.anonContainer}>
         {/* ── Left: headline + join ── */}
         <section className={styles.anonHero}>
-          <h1 className={styles.anonTitle}>
-            {tx('anon.heroTitle', 'Meet on the document.')}
-            <br />
-            <span className={styles.anonTitleAccent}>
-              {tx('anon.heroAccent', 'Replay it anytime.')}
-            </span>
-          </h1>
+          <h1 className={styles.anonTitle}>{tx('anon.heroTitle', 'Meet on the document.')}</h1>
           <p className={styles.anonSubtitle}>
             {tx(
               'anon.heroSubtitle',
@@ -329,7 +321,8 @@ export function AnonymousView({
             )}
           </p>
 
-          <div className={styles.anonJoinGroup}>
+          <div className={styles.anonJoin}>
+            <div className={styles.anonJoinGroup}>
             <label
               className={`${styles.codeField}${warningMessage ? ` ${styles.codeFieldError}` : ''}`}
             >
@@ -363,7 +356,7 @@ export function AnonymousView({
             </label>
             <button
               type="button"
-              className={`${styles.btn} ${hasCode ? styles.btnFill : styles.btnTonal} ${styles.anonJoinBtn}`}
+              className={`${styles.btn} ${styles.btnFill} ${styles.anonJoinBtn}`}
               onClick={handleJoin}
               disabled={isJoining}
               aria-busy={isJoining}
@@ -385,6 +378,7 @@ export function AnonymousView({
               )}
               {isJoining ? t('common.joining') : t('anon.joinMeeting')}
             </button>
+            </div>
           </div>
 
           {/* Join errors — inline instead of a blocking dialog */}
@@ -515,7 +509,9 @@ export function AnonymousView({
 
           {/* Download Desktop App - hidden on mobile */}
           <div className={`${styles.downloadRow} ${styles.mobileHidden}`}>
-            <span className={styles.anonFootText}>{t('nav.downloadDesktop')}</span>
+            <a href="/download" className={`${styles.anonFootText} ${styles.downloadRowLink}`}>
+              {t('nav.downloadDesktop')}
+            </a>
             <a
               href="/api/download?os=win"
               className={styles.downloadBtn}
@@ -551,7 +547,7 @@ export function AnonymousView({
 
             {MAC_APP_AVAILABLE && (
               <a
-                href="/api/download?os=mac"
+                href="/download"
                 className={styles.downloadBtn}
                 id="download-desktop-app-mac-btn"
                 title="Download Kloud Meet for Mac"

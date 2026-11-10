@@ -5,7 +5,7 @@ import styles from '@/styles/DesktopAppLaunchModal.module.css';
 import { useI18n } from '@/lib/i18n';
 
 type LaunchEntry = 'inMeeting' | 'outsideMeeting' | 'prejoin';
-type LaunchStep = 'prelaunch' | 'launching' | 'fallback' | 'download';
+type LaunchStep = 'prelaunch' | 'launching' | 'fallback';
 
 interface LaunchState {
   entry: LaunchEntry;
@@ -27,13 +27,6 @@ function getEntrySubtitleKey(entry: LaunchEntry): string {
   if (entry === 'inMeeting') return 'toolbar.openDesktop.subtitleInMeeting';
   if (entry === 'prejoin') return 'toolbar.openDesktop.subtitlePrejoin';
   return 'toolbar.openDesktop.subtitleOutsideMeeting';
-}
-
-function getDownloadUrls() {
-  return {
-    mac: process.env.NEXT_PUBLIC_KLOUDMEET_DESKTOP_DOWNLOAD_MAC || '',
-    windows: process.env.NEXT_PUBLIC_KLOUDMEET_DESKTOP_DOWNLOAD_WINDOWS || '',
-  };
 }
 
 export function useDesktopAppLaunch() {
@@ -112,21 +105,9 @@ export function useDesktopAppLaunch() {
     }
   }, [clearLaunchWatchers, state?.deepLink]);
 
-  const openDownloadStep = React.useCallback(() => {
-    clearLaunchWatchers();
-    setState((prev) => (prev ? { ...prev, step: 'download' } : prev));
-  }, [clearLaunchWatchers]);
-
-  const goBack = React.useCallback(() => {
-    clearLaunchWatchers();
-    setState((prev) => (prev ? { ...prev, step: 'prelaunch' } : prev));
-  }, [clearLaunchWatchers]);
-
-  const download = React.useCallback((platform: 'mac' | 'windows') => {
-    const { mac, windows } = getDownloadUrls();
-    const target = platform === 'mac' ? mac : windows;
-    if (!target) return;
-    window.open(target, '_blank', 'noopener,noreferrer');
+  // A new tab, so this one keeps its meeting and "Try again" for after installing
+  const openDownloadPage = React.useCallback(() => {
+    window.open('/download', '_blank', 'noopener,noreferrer');
   }, []);
 
   const modal = !state ? null : (
@@ -140,7 +121,7 @@ export function useDesktopAppLaunch() {
               <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={attemptLaunch}>
                 {t('toolbar.openDesktop.openButton')}
               </button>
-              <button type="button" className={styles.btn} onClick={openDownloadStep}>
+              <button type="button" className={styles.btn} onClick={openDownloadPage}>
                 {t('toolbar.openDesktop.downloadButton')}
               </button>
               <button type="button" className={`${styles.btn} ${styles.close}`} onClick={closeModal}>
@@ -158,7 +139,7 @@ export function useDesktopAppLaunch() {
             </p>
             <div className={styles.statusBox}>{t('toolbar.openDesktop.launchingStatus')}</div>
             <div className={styles.actions}>
-              <button type="button" className={styles.btn} onClick={openDownloadStep}>
+              <button type="button" className={styles.btn} onClick={openDownloadPage}>
                 {t('toolbar.openDesktop.downloadButton')}
               </button>
               <button type="button" className={`${styles.btn} ${styles.close}`} onClick={closeModal}>
@@ -178,33 +159,10 @@ export function useDesktopAppLaunch() {
               <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={attemptLaunch}>
                 {t('toolbar.openDesktop.tryAgain')}
               </button>
-              <button type="button" className={styles.btn} onClick={openDownloadStep}>
+              <button type="button" className={styles.btn} onClick={openDownloadPage}>
                 {t('toolbar.openDesktop.downloadButton')}
               </button>
               <button type="button" className={`${styles.btn} ${styles.close}`} onClick={closeModal}>
-                {t('common.close')}
-              </button>
-            </div>
-          </>
-        )}
-
-        {state.step === 'download' && (
-          <>
-            <h3 className={styles.title}>{t('toolbar.openDesktop.downloadTitle')}</h3>
-            <p className={styles.subtitle}>
-              {t('toolbar.openDesktop.downloadSubtitle')}
-            </p>
-            <div className={styles.actions}>
-              <button type="button" className={`${styles.btn} ${styles.btnPrimary}`} onClick={() => download('mac')}>
-                {t('toolbar.openDesktop.downloadMac')}
-              </button>
-              <button type="button" className={styles.btn} onClick={() => download('windows')}>
-                {t('toolbar.openDesktop.downloadWindows')}
-              </button>
-              <button type="button" className={styles.btn} onClick={goBack}>
-                {t('common.back')}
-              </button>
-              <button type="button" className={`${styles.btn} ${styles.close} ${styles.btnDanger}`} onClick={closeModal}>
                 {t('common.close')}
               </button>
             </div>

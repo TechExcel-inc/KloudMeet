@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { clientIp, rateLimited } from '@/lib/rateLimit';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
 
     return NextResponse.json({
       token,

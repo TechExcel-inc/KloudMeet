@@ -3,7 +3,7 @@ import { RoomEvent, type Room } from 'livekit-client';
 import {
   bindLivedocToMeeting,
   createLivedocInstance,
-  createOrUpdateInstantAccount,
+  getLiveDocStageAccount,
   keepLivedocInstanceActive,
   syncLivedocLessonMember,
 } from '@/lib/livedoc/client';
@@ -178,7 +178,7 @@ export function useLiveDocSession({
       boot.setLivedocInitInProgress(true);
       boot.setLivedocInitError(null);
       try {
-        const userToken = await createOrUpdateInstantAccount(boot.username);
+        const { token: userToken } = await getLiveDocStageAccount(boot.username, boot.meetingRoomName);
         const id = await createLivedocInstance({
           userToken,
           jitsiInstanceId: boot.jitsiInstanceId,
@@ -212,7 +212,7 @@ export function useLiveDocSession({
     let cancelled = false;
     (async () => {
       try {
-        const userToken = await createOrUpdateInstantAccount(username);
+        const { token: userToken } = await getLiveDocStageAccount(username, meetingRoomName);
         if (cancelled) return;
         await syncLivedocLessonMember({ userToken, livedocInstanceId });
         if (!cancelled) {
@@ -225,7 +225,7 @@ export function useLiveDocSession({
     return () => {
       cancelled = true;
     };
-  }, [livekitConnected, meetingEndedByHost, livedocInstanceId, username]);
+  }, [livekitConnected, meetingEndedByHost, livedocInstanceId, username, meetingRoomName]);
 
   React.useEffect(() => {
     if (!livekitConnected || meetingEndedByHost || !livedocInstanceId) return;
@@ -238,7 +238,7 @@ export function useLiveDocSession({
       inFlight = true;
       const boot = bootRef.current;
       try {
-        const userToken = await createOrUpdateInstantAccount(boot.username);
+        const { token: userToken } = await getLiveDocStageAccount(boot.username, boot.meetingRoomName);
         const id = await keepLivedocInstanceActive({
           userToken,
           jitsiInstanceId: boot.jitsiInstanceId,

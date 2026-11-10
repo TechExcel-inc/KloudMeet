@@ -38,7 +38,6 @@ type ChatBubbleInteraction = {
   startRect: ChatBubbleRect;
 };
 
-
 /** Earpiece / Bluetooth / speaker switching on phones is not wired to real audio output yet. */
 const MOBILE_AUDIO_ROUTE_SUPPORTED = false;
 const CHAT_BUBBLE_MIN_WIDTH = 300;
@@ -151,7 +150,11 @@ interface KloudMeetToolbarProps {
   /** The host may change who can record and sync transcript */
   canChangeRecordingPolicy?: boolean;
   onRecordingAction?: (action: 'pause' | 'resume') => void;
-  onRecordingSettings?: (patch: { mode?: RecordingMode; hostOnly?: boolean; syncTranscript?: boolean }) => void;
+  onRecordingSettings?: (patch: {
+    mode?: RecordingMode;
+    hostOnly?: boolean;
+    syncTranscript?: boolean;
+  }) => void;
   /** Opens the Help modal */
   onOpenHelp?: () => void;
   /** Whether local user can mute/unmute all participants */
@@ -201,71 +204,144 @@ const ICON_STROKE = {
   'aria-hidden': true,
 };
 const IconMicOn = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5 11a7 7 0 0014 0M12 18v3" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="9" y="3" width="6" height="11" rx="3" />
+    <path d="M5 11a7 7 0 0014 0M12 18v3" />
+  </svg>
 );
 const IconMicOff = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M9 9v2a3 3 0 005 2.2M15 9.3V6a3 3 0 00-5.6-1.5M5 11a7 7 0 0011.5 5.4M19 11a7 7 0 01-.6 2.8M12 18v3" /><path className={styles.offSlash} d="M3 3l18 18" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M9 9v2a3 3 0 005 2.2M15 9.3V6a3 3 0 00-5.6-1.5M5 11a7 7 0 0011.5 5.4M19 11a7 7 0 01-.6 2.8M12 18v3" />
+    <path className={styles.offSlash} d="M3 3l18 18" />
+  </svg>
 );
 const IconCamOn = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="6" width="12" height="12" rx="3" /><path d="M15 10l6-3v10l-6-3z" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="6" width="12" height="12" rx="3" />
+    <path d="M15 10l6-3v10l-6-3z" />
+  </svg>
 );
 const IconCamOff = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M15 10l6-3v10l-6-3M15 13.5V16a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h2M11 6h2a2 2 0 012 2v2" /><path className={styles.offSlash} d="M3 3l18 18" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M15 10l6-3v10l-6-3M15 13.5V16a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h2M11 6h2a2 2 0 012 2v2" />
+    <path className={styles.offSlash} d="M3 3l18 18" />
+  </svg>
 );
 const IconSpeaker = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M11 5L6 9H3v6h3l5 4z" /><path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M11 5L6 9H3v6h3l5 4z" />
+    <path d="M15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" />
+  </svg>
 );
 const IconChevronUp = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE} strokeWidth={2.4}><path d="M18 15l-6-6-6 6" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE} strokeWidth={2.4}>
+    <path d="M18 15l-6-6-6 6" />
+  </svg>
 );
 const IconDoc = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2V9z" />
+    <path d="M14 3v6h6M8 13h8M8 17h5" />
+  </svg>
 );
 const IconTile = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="3" width="7" height="7" rx="2" /><rect x="14" y="3" width="7" height="7" rx="2" /><rect x="3" y="14" width="7" height="7" rx="2" /><rect x="14" y="14" width="7" height="7" rx="2" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="3" width="7" height="7" rx="2" />
+    <rect x="14" y="3" width="7" height="7" rx="2" />
+    <rect x="3" y="14" width="7" height="7" rx="2" />
+    <rect x="14" y="14" width="7" height="7" rx="2" />
+  </svg>
 );
 const IconSpotlight = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="5" width="12" height="14" rx="2" /><rect x="17" y="5" width="4" height="3.5" rx="0.8" /><rect x="17" y="10.25" width="4" height="3.5" rx="0.8" /><rect x="17" y="15.5" width="4" height="3.5" rx="0.8" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="5" width="12" height="14" rx="2" />
+    <rect x="17" y="5" width="4" height="3.5" rx="0.8" />
+    <rect x="17" y="10.25" width="4" height="3.5" rx="0.8" />
+    <rect x="17" y="15.5" width="4" height="3.5" rx="0.8" />
+  </svg>
 );
 const IconShareScreen = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="4" width="18" height="13" rx="3" /><path d="M8 21h8M12 17v4M12 7v6M9 10l3-3 3 3" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="4" width="18" height="13" rx="3" />
+    <path d="M8 21h8M12 17v4M12 7v6M9 10l3-3 3 3" />
+  </svg>
 );
 const IconHand = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M8 13V5.5a1.5 1.5 0 013 0V11M11 10V4.5a1.5 1.5 0 013 0V11M14 10.5V6a1.5 1.5 0 013 0v7.5a7 7 0 01-7 7h-.5A6.5 6.5 0 013 14l-.5-1.2a1.5 1.5 0 012.6-1.5L8 15" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M8 13V5.5a1.5 1.5 0 013 0V11M11 10V4.5a1.5 1.5 0 013 0V11M14 10.5V6a1.5 1.5 0 013 0v7.5a7 7 0 01-7 7h-.5A6.5 6.5 0 013 14l-.5-1.2a1.5 1.5 0 012.6-1.5L8 15" />
+  </svg>
 );
 const IconDots = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="12" cy="19" r="1.9" /></svg>
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="12" cy="5" r="1.9" />
+    <circle cx="12" cy="12" r="1.9" />
+    <circle cx="12" cy="19" r="1.9" />
+  </svg>
 );
 const IconHangUp = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.73-1.68-1.36-2.66-1.85a1 1 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" /></svg>
+  <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08a.996.996 0 010-1.41C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.39.39.39 1.02 0 1.41l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.73-1.68-1.36-2.66-1.85a1 1 0 01-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
+  </svg>
 );
 /** Leave (desktop bar): door-and-arrow, as in the design; the phone glyph stays on mobile */
 const IconLeave = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+  <svg
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+    <polyline points="16 17 21 12 16 7" />
+    <line x1="21" x2="9" y1="12" y2="12" />
+  </svg>
 );
 const IconDocAi = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h5M14 3v6h6v2" /><path d="M17 14l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1z" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h5M14 3v6h6v2" />
+    <path d="M17 14l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1z" />
+  </svg>
 );
 const IconCaptions = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M10 10.5a2 2 0 100 3M16 10.5a2 2 0 100 3" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="5" width="18" height="14" rx="3" />
+    <path d="M10 10.5a2 2 0 100 3M16 10.5a2 2 0 100 3" />
+  </svg>
 );
 const IconPeople = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6.5 6.5 0 013.5 6" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <circle cx="9" cy="8" r="3.5" />
+    <path d="M2.5 20a6.5 6.5 0 0113 0M16 4.5a3.5 3.5 0 010 7M18 14a6.5 6.5 0 013.5 6" />
+  </svg>
 );
 const IconChat = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M21 12a8 8 0 01-11.6 7.1L4 20l1-4.6A8 8 0 1121 12z" />
+  </svg>
 );
 const IconLink = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M10 14a4 4 0 005.7 0l3-3a4 4 0 00-5.7-5.7l-1 1M14 10a4 4 0 00-5.7 0l-3 3a4 4 0 005.7 5.7l1-1" />
+  </svg>
 );
 const IconSmartCam = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><rect x="3" y="5" width="18" height="14" rx="3" /><rect x="12" y="11" width="7" height="6" rx="1.5" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <rect x="3" y="5" width="18" height="14" rx="3" />
+    <rect x="12" y="11" width="7" height="6" rx="1.5" />
+  </svg>
 );
 const IconPen = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M16.86 4.49l1.69-1.69a1.88 1.88 0 112.65 2.65L6.83 19.82a4.5 4.5 0 01-1.9 1.13l-2.68.8.8-2.68a4.5 4.5 0 011.13-1.9L16.86 4.49z" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M16.86 4.49l1.69-1.69a1.88 1.88 0 112.65 2.65L6.83 19.82a4.5 4.5 0 01-1.9 1.13l-2.68.8.8-2.68a4.5 4.5 0 011.13-1.9L16.86 4.49z" />
+  </svg>
 );
 const IconCursor = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}><path d="M15.04 21.67L13.68 16.6m0 0l-2.51 2.23.57-9.47 5.23 7.92-3.29-.67zM7.52 15.32A8.25 8.25 0 1120.25 10.5M8.29 14.21A5.25 5.25 0 1117.25 10.5" /></svg>
+  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
+    <path d="M15.04 21.67L13.68 16.6m0 0l-2.51 2.23.57-9.47 5.23 7.92-3.29-.67zM7.52 15.32A8.25 8.25 0 1120.25 10.5M8.29 14.21A5.25 5.25 0 1117.25 10.5" />
+  </svg>
 );
 
 export function KloudMeetToolbar({
@@ -373,7 +449,11 @@ export function KloudMeetToolbar({
     const el = toolbarRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const root = document.documentElement;
-    const apply = () => root.style.setProperty('--km-toolbar-h', `${Math.round(el.getBoundingClientRect().height)}px`);
+    const apply = () =>
+      root.style.setProperty(
+        '--km-toolbar-h',
+        `${Math.round(el.getBoundingClientRect().height)}px`,
+      );
     apply();
     const observer = new ResizeObserver(apply);
     observer.observe(el);
@@ -452,17 +532,29 @@ export function KloudMeetToolbar({
   const clampChatBubbleRect = React.useCallback((rect: ChatBubbleRect): ChatBubbleRect => {
     if (typeof window === 'undefined') return rect;
 
-    const maxWidth = Math.max(CHAT_BUBBLE_MIN_WIDTH, window.innerWidth - CHAT_BUBBLE_VIEWPORT_MARGIN * 2);
-    const maxHeight = Math.max(CHAT_BUBBLE_MIN_HEIGHT, window.innerHeight - CHAT_BUBBLE_VIEWPORT_MARGIN * 2);
+    const maxWidth = Math.max(
+      CHAT_BUBBLE_MIN_WIDTH,
+      window.innerWidth - CHAT_BUBBLE_VIEWPORT_MARGIN * 2,
+    );
+    const maxHeight = Math.max(
+      CHAT_BUBBLE_MIN_HEIGHT,
+      window.innerHeight - CHAT_BUBBLE_VIEWPORT_MARGIN * 2,
+    );
     const width = Math.min(maxWidth, Math.max(CHAT_BUBBLE_MIN_WIDTH, rect.width));
     const height = Math.min(maxHeight, Math.max(CHAT_BUBBLE_MIN_HEIGHT, rect.height));
     const left = Math.min(
       Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, rect.left),
-      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, window.innerWidth - width - CHAT_BUBBLE_VIEWPORT_MARGIN),
+      Math.max(
+        CHAT_BUBBLE_VIEWPORT_MARGIN,
+        window.innerWidth - width - CHAT_BUBBLE_VIEWPORT_MARGIN,
+      ),
     );
     const top = Math.min(
       Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, rect.top),
-      Math.max(CHAT_BUBBLE_VIEWPORT_MARGIN, window.innerHeight - height - CHAT_BUBBLE_VIEWPORT_MARGIN),
+      Math.max(
+        CHAT_BUBBLE_VIEWPORT_MARGIN,
+        window.innerHeight - height - CHAT_BUBBLE_VIEWPORT_MARGIN,
+      ),
     );
 
     return { top, left, width, height };
@@ -665,7 +757,6 @@ export function KloudMeetToolbar({
   const closeInviteMenu = () => setInviteMenuOpen(false);
   const closeViewModeMenu = () => setViewModeMenuOpen(false);
 
-
   /* 桌面：Esc 关闭底栏自身的菜单（More / Exit / Recording / 邀请 / 摄像头布局 / 共享工具） */
   useEffect(() => {
     if (isMobile) return;
@@ -682,7 +773,14 @@ export function KloudMeetToolbar({
   }, [isMobile, inviteMenuOpen, viewModeMenuOpen, shareToolsOpen, activeSheet]);
 
   // The share tools menu goes with the share: never reopen by itself at the next one.
-  const shareToolsAvailable = canSwitchViews && isDesktop && hasScreenShare;
+  // The chevron stays in the desktop app so people can find Annotate and Remote control; the
+  // items work while a screen is shared, and the menu says why when they don't.
+  const shareToolsAvailable = isDesktop;
+  const shareToolsBlockedReason = !canSwitchViews
+    ? tr('toolbar.shareToolsNeedRole', 'Hosts and presenters can annotate or take control')
+    : !hasScreenShare
+      ? tr('toolbar.shareToolsNeedShare', 'Available once someone shares a screen')
+      : null;
   useEffect(() => {
     if (!shareToolsAvailable || !visible) setShareToolsOpen(false);
   }, [shareToolsAvailable, visible]);
@@ -801,25 +899,25 @@ export function KloudMeetToolbar({
     typeof navigator !== 'undefined' &&
     !!window.isSecureContext &&
     !!navigator.mediaDevices?.getUserMedia;
-  const canEnumerateDevices =
-    canUseMediaDevices && !!navigator.mediaDevices?.enumerateDevices;
-  const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>('speaker');
+  const canEnumerateDevices = canUseMediaDevices && !!navigator.mediaDevices?.enumerateDevices;
+  const [mobileAudioState, setMobileAudioState] = useState<'earpiece' | 'bluetooth' | 'speaker'>(
+    'speaker',
+  );
 
   type DesktopAnchorKind = 'more' | 'exit' | 'chat' | 'attendee' | 'recording';
-  const desktopAnchorBubbleKind: DesktopAnchorKind | null =
-    !isMobile
-      ? activeSheet === 'recording'
-        ? 'recording'
-        : activeSheet === 'more'
-          ? 'more'
-          : activeSheet === 'exit'
-            ? 'exit'
-            : chatOpen && chatPanelSlot
-              ? 'chat'
-              : attendeeOpen && attendeePanelSlot
-                ? 'attendee'
-                : null
-      : null;
+  const desktopAnchorBubbleKind: DesktopAnchorKind | null = !isMobile
+    ? activeSheet === 'recording'
+      ? 'recording'
+      : activeSheet === 'more'
+        ? 'more'
+        : activeSheet === 'exit'
+          ? 'exit'
+          : chatOpen && chatPanelSlot
+            ? 'chat'
+            : attendeeOpen && attendeePanelSlot
+              ? 'attendee'
+              : null
+    : null;
 
   useEffect(() => {
     if (!isMobile) return;
@@ -845,23 +943,23 @@ export function KloudMeetToolbar({
       clearTimeout(hideTimer);
     }
 
-    const isChromeTarget = (target: Element) => !!(
-      toolbarRef.current?.contains(target) ||
-      target.closest?.('#mobileTopRightBtn') ||
-      target.closest?.('[data-meeting-corner]') ||
-      target.closest?.('.lk-device-menu') ||
-      target.closest?.('.lk-menu') ||
-      target.closest?.('.chat-overlay-panel') ||
-      target.closest?.(`.${styles.actionSheetOverlay}`) ||
-      target.closest?.(`.${styles.actionSheet}`) ||
-      target.closest?.('.kloud-modal')
-    );
+    const isChromeTarget = (target: Element) =>
+      !!(
+        toolbarRef.current?.contains(target) ||
+        target.closest?.('#mobileTopRightBtn') ||
+        target.closest?.('[data-meeting-corner]') ||
+        target.closest?.('.lk-device-menu') ||
+        target.closest?.('.lk-menu') ||
+        target.closest?.('.chat-overlay-panel') ||
+        target.closest?.(`.${styles.actionSheetOverlay}`) ||
+        target.closest?.(`.${styles.actionSheet}`) ||
+        target.closest?.('.kloud-modal')
+      );
 
-    const isInteractiveVideoTarget = (target: Element) => !!(
-      target.closest?.(
+    const isInteractiveVideoTarget = (target: Element) =>
+      !!target.closest?.(
         'button, a, input, select, textarea, .kloud-custom-mic-indicator, .kloud-custom-cam-indicator',
-      )
-    );
+      );
 
     const hideMobileChrome = () => {
       if (attendeeOpenRef.current) handleToggleAttendee();
@@ -912,10 +1010,7 @@ export function KloudMeetToolbar({
 
     const handleBlankTapEvent = (e: Event) => {
       const detail = (e as CustomEvent<{ target?: Element; clientY?: number }>).detail;
-      handleMobileBlankTap(
-        detail?.target ?? (document.body as Element),
-        detail?.clientY,
-      );
+      handleMobileBlankTap(detail?.target ?? (document.body as Element), detail?.clientY);
     };
 
     const attachVideoWrapper = () => {
@@ -946,7 +1041,18 @@ export function KloudMeetToolbar({
       document.removeEventListener('touchstart', handleBodyClick, { capture: true });
       document.removeEventListener('pointerdown', handleBodyClick, { capture: true });
     };
-  }, [isMobile, activeView, visible, chatOpen, attendeeOpen, activeSheet, inviteMenuOpen, isClientYInBottomNavZone, isLandscape, hasScreenShare]);
+  }, [
+    isMobile,
+    activeView,
+    visible,
+    chatOpen,
+    attendeeOpen,
+    activeSheet,
+    inviteMenuOpen,
+    isClientYInBottomNavZone,
+    isLandscape,
+    hasScreenShare,
+  ]);
 
   // LiveDoc iframe click toggles toolbar (desktop + mobile when in iframe).
   useEffect(() => {
@@ -1058,8 +1164,8 @@ export function KloudMeetToolbar({
     setLiveDocMenuVisible(false);
     if (!liveDocActionDialogVisible) return;
     const iframe =
-      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
-      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null) ??
+      document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
     iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
     setLiveDocActionDialogVisible(false);
   }, [canOpenLiveDocAi, liveDocActionDialogVisible]);
@@ -1130,7 +1236,10 @@ export function KloudMeetToolbar({
       const r = anchorEl.getBoundingClientRect();
       // Anchors in the top half (the recording chip in the top-left corner) open downwards
       const below = r.top < window.innerHeight / 2;
-      const availableHeight = Math.max(240, below ? window.innerHeight - r.bottom - 24 : r.top - 24);
+      const availableHeight = Math.max(
+        240,
+        below ? window.innerHeight - r.bottom - 24 : r.top - 24,
+      );
       // more/exit/recording：用满按钮上方可用高度，内容够则不出现滚动条
       const preferredMaxHeight =
         desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
@@ -1154,7 +1263,15 @@ export function KloudMeetToolbar({
     };
 
     layout();
-  }, [desktopAnchorBubbleKind, isMobile, visible, chatOpen, attendeeOpen, inviteMenuOpen, activeView]);
+  }, [
+    desktopAnchorBubbleKind,
+    isMobile,
+    visible,
+    chatOpen,
+    attendeeOpen,
+    inviteMenuOpen,
+    activeView,
+  ]);
 
   useEffect(() => {
     if (!desktopAnchorBubbleKind || isMobile) return;
@@ -1177,7 +1294,10 @@ export function KloudMeetToolbar({
       const r = anchorEl.getBoundingClientRect();
       // Anchors in the top half (the recording chip in the top-left corner) open downwards
       const below = r.top < window.innerHeight / 2;
-      const availableHeight = Math.max(240, below ? window.innerHeight - r.bottom - 24 : r.top - 24);
+      const availableHeight = Math.max(
+        240,
+        below ? window.innerHeight - r.bottom - 24 : r.top - 24,
+      );
       const preferredMaxHeight =
         desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
           ? 500
@@ -1217,15 +1337,15 @@ export function KloudMeetToolbar({
       const next =
         interaction.mode === 'move'
           ? {
-            ...interaction.startRect,
-            left: interaction.startRect.left + dx,
-            top: interaction.startRect.top + dy,
-          }
+              ...interaction.startRect,
+              left: interaction.startRect.left + dx,
+              top: interaction.startRect.top + dy,
+            }
           : {
-            ...interaction.startRect,
-            width: interaction.startRect.width + dx,
-            height: interaction.startRect.height + dy,
-          };
+              ...interaction.startRect,
+              width: interaction.startRect.width + dx,
+              height: interaction.startRect.height + dy,
+            };
 
       setChatBubbleRect(clampChatBubbleRect(next));
     };
@@ -1293,14 +1413,17 @@ export function KloudMeetToolbar({
     setInviteMenuOpen(false);
     // 原生气泡打开时收起 iframe 内旧弹框，避免切回 LiveDoc 后出现双层菜单。
     const iframe =
-      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
-      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null) ??
+      document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
     iframe?.contentWindow?.postMessage({ type: 'Kloud-ToggleDocPopup', show: 0 }, '*');
     setLiveDocActionDialogVisible(false);
   };
 
   /** Recording sheet → Live transcript: the Doc AI panel's transcript tab (captions start first) */
-  const [liveDocRequestedTab, setLiveDocRequestedTab] = useState<{ tab: LiveDocAiTab; nonce: number } | null>(null);
+  const [liveDocRequestedTab, setLiveDocRequestedTab] = useState<{
+    tab: LiveDocAiTab;
+    nonce: number;
+  } | null>(null);
   const openLiveTranscript = () => {
     if (!captionsEnabled) {
       if (canToggleCaptions) {
@@ -1337,13 +1460,10 @@ export function KloudMeetToolbar({
   const postSetLiveDocAnnotation = (enabled: boolean) => {
     setLiveDocAnnotationEnabled(enabled);
     const iframe =
-      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null)
-      ?? document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
+      (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null) ??
+      document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
     if (!iframe?.contentWindow) return;
-    iframe.contentWindow.postMessage(
-      { type: 'showAnnotationPanel', status: enabled ? 1 : 0 },
-      '*',
-    );
+    iframe.contentWindow.postMessage({ type: 'showAnnotationPanel', status: enabled ? 1 : 0 }, '*');
   };
 
   const handleLiveDocAnnotationBadgeClick = (e: React.MouseEvent) => {
@@ -1379,16 +1499,15 @@ export function KloudMeetToolbar({
     setWebcamLayoutMode(webcamLayoutMode === 'tile' ? 'spotlight' : 'tile');
   };
 
-  const viewModeButtonLabel =
-    screenShareActive
-      ? t('toolbar.shareScreen')
-      : activeView === 'liveDoc'
-        ? t('toolbar.liveDoc')
-        : activeView === 'design'
-          ? tr('toolbar.design', 'Design')
-          : activeView === 'webcam'
-            ? t('toolbar.webcam')
-            : t('toolbar.shareScreen');
+  const viewModeButtonLabel = screenShareActive
+    ? t('toolbar.shareScreen')
+    : activeView === 'liveDoc'
+      ? t('toolbar.liveDoc')
+      : activeView === 'design'
+        ? tr('toolbar.design', 'Design')
+        : activeView === 'webcam'
+          ? t('toolbar.webcam')
+          : t('toolbar.shareScreen');
 
   const viewModeButtonIcon =
     screenShareActive || activeView === 'shareScreen' ? (
@@ -1402,24 +1521,48 @@ export function KloudMeetToolbar({
         <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
       </svg>
     ) : activeView === 'liveDoc' ? (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
         <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
       </svg>
     ) : activeView === 'design' ? (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
         <rect x="3" y="4" width="18" height="16" rx="2" />
         <path d="M3 9h18M8 9v11" />
         <circle cx="14.5" cy="14.5" r="2" />
       </svg>
     ) : activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
         <rect x="3" y="5" width="12" height="14" rx="1.5" />
         <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
         <rect x="17" y="10.25" width="4" height="3.5" rx="0.5" />
         <rect x="17" y="15.5" width="4" height="3.5" rx="0.5" />
       </svg>
     ) : (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        aria-hidden="true"
+      >
         <rect x="3" y="3" width="8" height="8" rx="1" />
         <rect x="13" y="3" width="8" height="8" rx="1" />
         <rect x="3" y="13" width="8" height="8" rx="1" />
@@ -1436,7 +1579,13 @@ export function KloudMeetToolbar({
         className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'tile' ? styles.viewModeMenuItemActive : ''}`}
         onClick={() => handleWebcamLayoutSelect('tile')}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
           <rect x="3" y="3" width="8" height="8" rx="1" />
           <rect x="13" y="3" width="8" height="8" rx="1" />
           <rect x="3" y="13" width="8" height="8" rx="1" />
@@ -1444,7 +1593,14 @@ export function KloudMeetToolbar({
         </svg>
         <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcamTile')}</span>
         {activeView === 'webcam' && webcamLayoutMode === 'tile' && (
-          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <svg
+            className={styles.viewModeMenuCheck}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            aria-hidden="true"
+          >
             <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
@@ -1457,7 +1613,13 @@ export function KloudMeetToolbar({
         className={`${styles.viewModeMenuItem} ${activeView === 'webcam' && webcamLayoutMode === 'spotlight' ? styles.viewModeMenuItemActive : ''}`}
         onClick={() => handleWebcamLayoutSelect('spotlight')}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
           <rect x="3" y="5" width="12" height="14" rx="1.5" />
           <rect x="17" y="5" width="4" height="3.5" rx="0.5" />
           <rect x="17" y="10.25" width="4" height="3.5" rx="0.5" />
@@ -1465,7 +1627,14 @@ export function KloudMeetToolbar({
         </svg>
         <span className={styles.viewModeMenuItemLabel}>{t('toolbar.webcamSpotlight')}</span>
         {activeView === 'webcam' && webcamLayoutMode === 'spotlight' && (
-          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <svg
+            className={styles.viewModeMenuCheck}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            aria-hidden="true"
+          >
             <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
@@ -1476,7 +1645,8 @@ export function KloudMeetToolbar({
   /** Video menu, everyone: tiles per page, video first, hide people without video (own view only) */
   const renderGalleryMenuItems = () => {
     if (!galleryPrefs || !onGalleryPrefsChange) return null;
-    const set = (patch: Partial<GalleryPrefs>) => onGalleryPrefsChange({ ...galleryPrefs, ...patch });
+    const set = (patch: Partial<GalleryPrefs>) =>
+      onGalleryPrefsChange({ ...galleryPrefs, ...patch });
     const toggle = (key: 'videoFirst' | 'hideNoVideo', label: string, hint: string) => (
       <button
         type="button"
@@ -1489,13 +1659,20 @@ export function KloudMeetToolbar({
           <span className={styles.viewModeMenuItemLabel}>{label}</span>
           <span className={styles.viewModeMenuItemSub}>{hint}</span>
         </span>
-        <span className={`${styles.switch} ${galleryPrefs[key] ? styles.switchOn : ''}`} aria-hidden="true" />
+        <span
+          className={`${styles.switch} ${galleryPrefs[key] ? styles.switchOn : ''}`}
+          aria-hidden="true"
+        />
       </button>
     );
     return (
       <div className={styles.gallerySection}>
         <div className={styles.galleryLabel}>{t('toolbar.gallery.tilesPerPage')}</div>
-        <div className={styles.gallerySegments} role="radiogroup" aria-label={t('toolbar.gallery.tilesPerPage')}>
+        <div
+          className={styles.gallerySegments}
+          role="radiogroup"
+          aria-label={t('toolbar.gallery.tilesPerPage')}
+        >
           {TILES_PER_PAGE_OPTIONS.map((opt) => (
             <button
               key={opt}
@@ -1510,7 +1687,11 @@ export function KloudMeetToolbar({
           ))}
         </div>
         {toggle('videoFirst', t('toolbar.gallery.videoFirst'), t('toolbar.gallery.videoFirstHint'))}
-        {toggle('hideNoVideo', t('toolbar.gallery.hideNoVideo'), t('toolbar.gallery.hideNoVideoHint'))}
+        {toggle(
+          'hideNoVideo',
+          t('toolbar.gallery.hideNoVideo'),
+          t('toolbar.gallery.hideNoVideoHint'),
+        )}
       </div>
     );
   };
@@ -1528,12 +1709,25 @@ export function KloudMeetToolbar({
           closeViewModeMenu();
         }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
           <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
         </svg>
         <span className={styles.viewModeMenuItemLabel}>{t('toolbar.liveDocView')}</span>
         {activeView === 'liveDoc' && (
-          <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+          <svg
+            className={styles.viewModeMenuCheck}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            aria-hidden="true"
+          >
             <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
@@ -1547,7 +1741,13 @@ export function KloudMeetToolbar({
           role="menuitem"
           aria-label={`${t('toolbar.shareScreen')}, ${t('toolbar.sharing')}`}
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden="true"
+          >
             <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
           <span className={styles.viewModeMenuItemText}>
@@ -1601,10 +1801,7 @@ export function KloudMeetToolbar({
   /** 手机端合并视图按钮（Web 已拆分，勿用于 desktop） */
   const renderViewModeControl = () => {
     return (
-      <div
-        className={styles.viewModeBtnWrap}
-        data-view-mode-menu-anchor="true"
-      >
+      <div className={styles.viewModeBtnWrap} data-view-mode-menu-anchor="true">
         <button
           type="button"
           className={`${styles.mobileBtn} ${styles.active}`}
@@ -1662,8 +1859,16 @@ export function KloudMeetToolbar({
             handleLiveDocTabClick();
           }}
           aria-pressed={activeView === 'liveDoc'}
-          aria-label={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${ownViewTip}`}
-          data-tip={showOperatorSegments ? t('toolbar.liveDocView') : `${t('toolbar.liveDoc')} · ${ownViewTip}`}
+          aria-label={
+            showOperatorSegments
+              ? t('toolbar.liveDocView')
+              : `${t('toolbar.liveDoc')} · ${ownViewTip}`
+          }
+          data-tip={
+            showOperatorSegments
+              ? t('toolbar.liveDocView')
+              : `${t('toolbar.liveDoc')} · ${ownViewTip}`
+          }
         >
           <IconDoc />
           <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
@@ -1684,7 +1889,7 @@ export function KloudMeetToolbar({
             {webcamLayoutMode === 'spotlight' ? <IconSpotlight /> : <IconTile />}
             <span className={styles.segLabel}>{t('toolbar.webcam')}</span>
           </button>
-          {(
+          {
             <button
               type="button"
               className={styles.segChevron}
@@ -1700,7 +1905,7 @@ export function KloudMeetToolbar({
             >
               <IconChevronUp />
             </button>
-          )}
+          }
           {viewModeMenuOpen && (
             <div
               className={`${styles.viewModeMenu} ${styles.webcamLayoutMenu}`}
@@ -1740,7 +1945,9 @@ export function KloudMeetToolbar({
       >
         {shareConflict && <span className={styles.segConflictDot} aria-hidden="true" />}
         {screenShareActive && (
-          <span className={styles.segCheck} aria-hidden="true">✓</span>
+          <span className={styles.segCheck} aria-hidden="true">
+            ✓
+          </span>
         )}
         <IconShareScreen />
         <span className={styles.segLabel}>{t('toolbar.shareScreen')}</span>
@@ -1775,7 +1982,11 @@ export function KloudMeetToolbar({
           {toolOn && <span className={styles.segToolDot} aria-hidden="true" />}
         </button>
         {shareToolsOpen && (
-          <div className={`${styles.viewModeMenu} ${styles.shareToolsMenu}`} role="menu" aria-label={toolsLabel}>
+          <div
+            className={`${styles.viewModeMenu} ${styles.shareToolsMenu}`}
+            role="menu"
+            aria-label={toolsLabel}
+          >
             {renderShareToolsMenuItems()}
           </div>
         )}
@@ -1783,8 +1994,9 @@ export function KloudMeetToolbar({
     );
   };
 
-  /** Annotate / remote control: Electron desktop app + a share in progress + canSwitchViews, as before */
+  /** Annotate / remote control: always listed in the desktop app; usable with a share in progress + canSwitchViews */
   const renderShareToolsMenuItems = () => {
+    const blocked = !!shareToolsBlockedReason;
     const controlLabel = remoteControlPending
       ? t('toolbar.cancelRequest')
       : isRemoteControlMode
@@ -1792,10 +2004,16 @@ export function KloudMeetToolbar({
         : t('toolbar.requestControl');
     return (
       <>
+        {blocked && (
+          <div className={styles.shareToolsNote} role="note">
+            {shareToolsBlockedReason}
+          </div>
+        )}
         <button
           type="button"
           role="menuitemcheckbox"
           aria-checked={isDrawingMode}
+          disabled={blocked}
           className={`${styles.viewModeMenuItem} ${isDrawingMode ? styles.viewModeMenuItemActive : ''}`}
           onClick={() => {
             setShareToolsOpen(false);
@@ -1806,7 +2024,14 @@ export function KloudMeetToolbar({
           <IconPen />
           <span className={styles.viewModeMenuItemLabel}>{t('toolbar.annotate')}</span>
           {isDrawingMode && (
-            <svg className={styles.viewModeMenuCheck} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
+            <svg
+              className={styles.viewModeMenuCheck}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              aria-hidden="true"
+            >
               <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           )}
@@ -1814,6 +2039,7 @@ export function KloudMeetToolbar({
         <button
           type="button"
           role="menuitem"
+          disabled={blocked}
           className={`${styles.viewModeMenuItem} ${isRemoteControlMode || remoteControlPending ? styles.viewModeMenuItemActive : ''}`}
           onClick={() => {
             setShareToolsOpen(false);
@@ -1821,14 +2047,23 @@ export function KloudMeetToolbar({
           }}
         >
           {remoteControlPending ? (
-            <svg className={styles.spin} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg
+              className={styles.spin}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
             </svg>
           ) : (
             <IconCursor />
           )}
           <span className={styles.viewModeMenuItemLabel}>{controlLabel}</span>
-          {remoteControlPending && <span className={styles.viewModeMenuItemHint}>{t('toolbar.requesting')}</span>}
+          {remoteControlPending && (
+            <span className={styles.viewModeMenuItemHint}>{t('toolbar.requesting')}</span>
+          )}
         </button>
       </>
     );
@@ -1851,27 +2086,37 @@ export function KloudMeetToolbar({
         aria-pressed={isActive}
       >
         <span className={styles.actIcon}>
-        <IconDocAi />
-        {canToggleLiveDocAnnotation && (
-          <span
-            role="button"
-            tabIndex={0}
-            className={`${styles.annotationToggle} ${liveDocAnnotationEnabled ? styles.annotationToggleOn : styles.annotationToggleOff}`}
-            onClick={handleLiveDocAnnotationBadgeClick}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
-              }
-            }}
-            title={annotationLabel}
-            aria-label={annotationLabel}
-            aria-pressed={liveDocAnnotationEnabled}
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" aria-hidden="true">
-              {liveDocAnnotationEnabled ? <path d="M18 15l-6-6-6 6" /> : <path d="M6 9l6 6 6-6" />}
-            </svg>
-          </span>
-        )}
+          <IconDocAi />
+          {canToggleLiveDocAnnotation && (
+            <span
+              role="button"
+              tabIndex={0}
+              className={`${styles.annotationToggle} ${liveDocAnnotationEnabled ? styles.annotationToggleOn : styles.annotationToggleOff}`}
+              onClick={handleLiveDocAnnotationBadgeClick}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
+                }
+              }}
+              title={annotationLabel}
+              aria-label={annotationLabel}
+              aria-pressed={liveDocAnnotationEnabled}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="4"
+                aria-hidden="true"
+              >
+                {liveDocAnnotationEnabled ? (
+                  <path d="M18 15l-6-6-6 6" />
+                ) : (
+                  <path d="M6 9l6 6 6-6" />
+                )}
+              </svg>
+            </span>
+          )}
         </span>
         <span className={styles.actLabel}>{t('toolbar.liveDocMenu')}</span>
       </button>
@@ -1912,10 +2157,18 @@ export function KloudMeetToolbar({
         aria-pressed={isActive}
       >
         <span className={styles.liveDocAiIconWrap}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            aria-hidden="true"
+          >
             <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
           </svg>
-          <span className={styles.liveDocAiBadge} aria-hidden="true">AI</span>
+          <span className={styles.liveDocAiBadge} aria-hidden="true">
+            AI
+          </span>
         </span>
         {canToggleLiveDocAnnotation && (
           <span
@@ -1933,11 +2186,7 @@ export function KloudMeetToolbar({
             aria-pressed={liveDocAnnotationEnabled}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="4">
-              {liveDocAnnotationEnabled ? (
-                <path d="M18 15l-6-6-6 6" />
-              ) : (
-                <path d="M6 9l6 6 6-6" />
-              )}
+              {liveDocAnnotationEnabled ? <path d="M18 15l-6-6-6 6" /> : <path d="M6 9l6 6 6-6" />}
             </svg>
           </span>
         )}
@@ -1962,7 +2211,13 @@ export function KloudMeetToolbar({
         aria-label={label}
         aria-pressed={documentPipEnabled}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
           <rect x="3" y="5" width="12" height="10" rx="1.5" />
           <path d="M15 9h4a1 1 0 011 1v8a1 1 0 01-1 1H9a1 1 0 01-1-1v-3" strokeLinecap="round" />
         </svg>
@@ -1973,29 +2228,29 @@ export function KloudMeetToolbar({
 
   const desktopBubbleStyle = desktopBubblePos
     ? ({
-      top:
-        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
-          ? chatBubbleRect.top
-          : desktopBubblePos.top,
-      left:
-        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
-          ? chatBubbleRect.left
-          : desktopBubblePos.left,
-      width:
-        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
-          ? chatBubbleRect.width
-          : desktopBubblePos.width,
-      maxHeight:
-        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
-          ? `calc(100vh - ${CHAT_BUBBLE_VIEWPORT_MARGIN * 2}px)`
-          : desktopBubblePos.maxHeight,
-      height:
-        desktopAnchorBubbleKind === 'chat' && chatBubbleRect
-          ? chatBubbleRect.height
-          : desktopBubblePos.height,
-      ['--toolbar-bubble-arrow' as string]: `${desktopBubblePos.arrowLeft}px`,
-      visibility: 'visible',
-    } as React.CSSProperties)
+        top:
+          desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+            ? chatBubbleRect.top
+            : desktopBubblePos.top,
+        left:
+          desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+            ? chatBubbleRect.left
+            : desktopBubblePos.left,
+        width:
+          desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+            ? chatBubbleRect.width
+            : desktopBubblePos.width,
+        maxHeight:
+          desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+            ? `calc(100vh - ${CHAT_BUBBLE_VIEWPORT_MARGIN * 2}px)`
+            : desktopBubblePos.maxHeight,
+        height:
+          desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+            ? chatBubbleRect.height
+            : desktopBubblePos.height,
+        ['--toolbar-bubble-arrow' as string]: `${desktopBubblePos.arrowLeft}px`,
+        visibility: 'visible',
+      } as React.CSSProperties)
     : ({ visibility: 'hidden', pointerEvents: 'none' } as React.CSSProperties);
 
   return (
@@ -2028,6 +2283,7 @@ export function KloudMeetToolbar({
               }
             : undefined
         }
+        onToggleSmartCam={onToggleDocumentPip}
       />
 
       {!visible && !syncPlayerActive && (
@@ -2035,10 +2291,7 @@ export function KloudMeetToolbar({
           {/* 底部导航栏占位：吞掉点击，避免误点唤出；桌面仅中间图标附近悬停唤出 */}
           <div className={styles.bottomNavCatchZone} aria-hidden />
           {/* 桌面悬停中间向上图标附近唤出底栏 */}
-          <div
-            className={styles.hoverZone}
-            onMouseEnter={revealToolbar}
-          />
+          <div className={styles.hoverZone} onMouseEnter={revealToolbar} />
           <button
             type="button"
             className={styles.chevronHandle}
@@ -2079,18 +2332,41 @@ export function KloudMeetToolbar({
                     <>
                       <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2zm-5 9a1 1 0 01-1-1v-1.08A7.007 7.007 0 015 11H3a9.009 9.009 0 008 8.93V21a1 1 0 102 0v-1.07A9.009 9.009 0 0021 11h-2a7.007 7.007 0 01-6 6.92V19a1 1 0 01-1 1z" />
                       {/* 自己关麦：斜线跟 icon 同色，不用红色 */}
-                      <line x1="4" y1="4" x2="20" y2="20" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+                      <line
+                        x1="4"
+                        y1="4"
+                        x2="20"
+                        y2="20"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                      />
                     </>
                   )}
                 </svg>
               </button>
               {canEnumerateDevices ? (
-                <MediaDeviceMenu kind="audioinput" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.micSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
+                <MediaDeviceMenu
+                  kind="audioinput"
+                  className={styles.chevron}
+                  style={{ color: '#fff' }}
+                  title={t('toolbar.micSettings')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
                 </MediaDeviceMenu>
               ) : (
-                <button type="button" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.micSettings')} disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
+                <button
+                  type="button"
+                  className={styles.chevron}
+                  style={{ color: '#fff' }}
+                  title={t('toolbar.micSettings')}
+                  disabled
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
                 </button>
               )}
             </div>
@@ -2124,12 +2400,27 @@ export function KloudMeetToolbar({
                 </svg>
               </button>
               {canEnumerateDevices ? (
-                <MediaDeviceMenu kind="videoinput" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.camSettings')}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
+                <MediaDeviceMenu
+                  kind="videoinput"
+                  className={styles.chevron}
+                  style={{ color: '#fff' }}
+                  title={t('toolbar.camSettings')}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
                 </MediaDeviceMenu>
               ) : (
-                <button type="button" className={styles.chevron} style={{ color: '#fff' }} title={t('toolbar.camSettings')} disabled>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M18 15l-6-6-6 6" /></svg>
+                <button
+                  type="button"
+                  className={styles.chevron}
+                  style={{ color: '#fff' }}
+                  title={t('toolbar.camSettings')}
+                  disabled
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
                 </button>
               )}
             </div>
@@ -2143,9 +2434,15 @@ export function KloudMeetToolbar({
                 className={`${styles.mobileBtn} ${activeView === 'shareScreen' || screenShareActive ? styles.active : ''}`}
                 onClick={handleShareScreenClick}
                 aria-label={t('toolbar.shareScreen')}
-                title={hasScreenShare && !screenShareActive ? t('toolbar.shareConflictTitle') : t('toolbar.shareScreen')}
+                title={
+                  hasScreenShare && !screenShareActive
+                    ? t('toolbar.shareConflictTitle')
+                    : t('toolbar.shareScreen')
+                }
               >
-                <svg viewBox="0 0 24 24" fill="none"
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
                   stroke={hasScreenShare && !screenShareActive ? '#fb923c' : 'currentColor'}
                   strokeWidth="1.5"
                 >
@@ -2168,7 +2465,9 @@ export function KloudMeetToolbar({
               title={t('toolbar.more')}
             >
               <svg viewBox="0 0 24 24" fill="currentColor">
-                <circle cx="12" cy="5" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="12" cy="19" r="2" />
+                <circle cx="12" cy="5" r="2" />
+                <circle cx="12" cy="12" r="2" />
+                <circle cx="12" cy="19" r="2" />
               </svg>
             </button>
           </>
@@ -2176,125 +2475,140 @@ export function KloudMeetToolbar({
           <>
             {/* Left zone: your devices */}
             <div className={styles.zoneLeft}>
-            {(() => {
-              const micLabel = isMutedByHost
-                ? tr('toolbar.mutedByHost', 'Muted by host')
-                : micEnabled
-                  ? t('toolbar.muteMic')
-                  : t('toolbar.unmuteMic');
-              const camLabel = isCamDisabledByHost
-                ? tr('toolbar.camDisabledByHost', 'Camera disabled by host')
-                : camEnabled
-                  ? t('toolbar.turnOffCam')
-                  : t('toolbar.turnOnCam');
-              return (
-                <div className={styles.deviceGroup}>
-                  {/* Mic split */}
-                  <div className={styles.split}>
-                    <button
-                      type="button"
-                      className={`${styles.roundBtn} ${micEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
-                      onClick={onToggleMic}
-                      disabled={!canUseMediaDevices}
-                      aria-label={micLabel}
-                      data-tip={micLabel}
-                    >
-                      {micEnabled ? <IconMicOn /> : <IconMicOff />}
-                    </button>
-                    {canEnumerateDevices ? (
-                      <MediaDeviceMenu
-                        kind="audioinput"
-                        className={styles.splitChevron}
-                        aria-label={t('toolbar.micSettings')}
-                        data-tip={t('toolbar.micSettings')}
+              {(() => {
+                const micLabel = isMutedByHost
+                  ? tr('toolbar.mutedByHost', 'Muted by host')
+                  : micEnabled
+                    ? t('toolbar.muteMic')
+                    : t('toolbar.unmuteMic');
+                const camLabel = isCamDisabledByHost
+                  ? tr('toolbar.camDisabledByHost', 'Camera disabled by host')
+                  : camEnabled
+                    ? t('toolbar.turnOffCam')
+                    : t('toolbar.turnOnCam');
+                return (
+                  <div className={styles.deviceGroup}>
+                    {/* Mic split */}
+                    <div className={styles.split}>
+                      <button
+                        type="button"
+                        className={`${styles.roundBtn} ${micEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isMutedByHost && !micEnabled ? styles.roundBtnByHost : ''}`}
+                        onClick={onToggleMic}
+                        disabled={!canUseMediaDevices}
+                        aria-label={micLabel}
+                        data-tip={micLabel}
                       >
-                        <IconChevronUp />
-                      </MediaDeviceMenu>
-                    ) : (
-                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.micSettings')} disabled>
-                        <IconChevronUp />
+                        {micEnabled ? <IconMicOn /> : <IconMicOff />}
                       </button>
-                    )}
-                  </div>
+                      {canEnumerateDevices ? (
+                        <MediaDeviceMenu
+                          kind="audioinput"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.micSettings')}
+                          data-tip={t('toolbar.micSettings')}
+                        >
+                          <IconChevronUp />
+                        </MediaDeviceMenu>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.micSettings')}
+                          disabled
+                        >
+                          <IconChevronUp />
+                        </button>
+                      )}
+                    </div>
 
-                  {/* Camera split */}
-                  <div className={styles.split}>
-                    <button
-                      type="button"
-                      className={`${styles.roundBtn} ${camEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
-                      onClick={onToggleCam}
-                      disabled={!canUseMediaDevices}
-                      aria-label={camLabel}
-                      data-tip={camLabel}
-                    >
-                      {camEnabled ? <IconCamOn /> : <IconCamOff />}
-                    </button>
-                    {canEnumerateDevices && videoBackground.offered ? (
-                      <CameraDeviceMenu
-                        className={styles.splitChevron}
-                        aria-label={t('toolbar.camSettings')}
-                        data-tip={t('toolbar.camSettings')}
-                        backgroundLabel={t('background.menuItem')}
-                        backgroundValue={backgroundLabel(t, videoBackground.background)}
-                        onOpenBackground={() => setBackgroundDialogOpen(true)}
+                    {/* Camera split */}
+                    <div className={styles.split}>
+                      <button
+                        type="button"
+                        className={`${styles.roundBtn} ${camEnabled ? styles.roundBtnLive : styles.roundBtnOff} ${isCamDisabledByHost && !camEnabled ? styles.roundBtnByHost : ''}`}
+                        onClick={onToggleCam}
+                        disabled={!canUseMediaDevices}
+                        aria-label={camLabel}
+                        data-tip={camLabel}
                       >
-                        <IconChevronUp />
-                      </CameraDeviceMenu>
-                    ) : canEnumerateDevices ? (
-                      <MediaDeviceMenu
-                        kind="videoinput"
-                        className={styles.splitChevron}
-                        aria-label={t('toolbar.camSettings')}
-                        data-tip={t('toolbar.camSettings')}
-                      >
-                        <IconChevronUp />
-                      </MediaDeviceMenu>
-                    ) : (
-                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.camSettings')} disabled>
-                        <IconChevronUp />
+                        {camEnabled ? <IconCamOn /> : <IconCamOff />}
                       </button>
-                    )}
-                  </div>
+                      {canEnumerateDevices && videoBackground.offered ? (
+                        <CameraDeviceMenu
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.camSettings')}
+                          data-tip={t('toolbar.camSettings')}
+                          backgroundLabel={t('background.menuItem')}
+                          backgroundValue={backgroundLabel(t, videoBackground.background)}
+                          onOpenBackground={() => setBackgroundDialogOpen(true)}
+                        >
+                          <IconChevronUp />
+                        </CameraDeviceMenu>
+                      ) : canEnumerateDevices ? (
+                        <MediaDeviceMenu
+                          kind="videoinput"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.camSettings')}
+                          data-tip={t('toolbar.camSettings')}
+                        >
+                          <IconChevronUp />
+                        </MediaDeviceMenu>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.camSettings')}
+                          disabled
+                        >
+                          <IconChevronUp />
+                        </button>
+                      )}
+                    </div>
 
-                  {/* Speaker split: icon and chevron both open the output-device menu */}
-                  <div className={styles.split}>
-                    {canEnumerateDevices ? (
-                      <MediaDeviceMenu
-                        kind="audiooutput"
-                        className={styles.roundBtn}
-                        aria-label={t('toolbar.speakerSettings')}
-                        data-tip={t('toolbar.speakerSettings')}
-                      >
-                        <IconSpeaker />
-                      </MediaDeviceMenu>
-                    ) : (
-                      <span
-                        className={`${styles.roundBtn} ${styles.roundBtnStatic}`}
-                        role="img"
-                        aria-label={t('toolbar.speakerSettings')}
-                        data-tip={t('toolbar.speakerSettings')}
-                      >
-                        <IconSpeaker />
-                      </span>
-                    )}
-                    {canEnumerateDevices ? (
-                      <MediaDeviceMenu
-                        kind="audiooutput"
-                        className={styles.splitChevron}
-                        aria-label={t('toolbar.speakerSettings')}
-                        data-tip={t('toolbar.speakerSettings')}
-                      >
-                        <IconChevronUp />
-                      </MediaDeviceMenu>
-                    ) : (
-                      <button type="button" className={styles.splitChevron} aria-label={t('toolbar.speakerSettings')} disabled>
-                        <IconChevronUp />
-                      </button>
-                    )}
+                    {/* Speaker split: icon and chevron both open the output-device menu */}
+                    <div className={styles.split}>
+                      {canEnumerateDevices ? (
+                        <MediaDeviceMenu
+                          kind="audiooutput"
+                          className={styles.roundBtn}
+                          aria-label={t('toolbar.speakerSettings')}
+                          data-tip={t('toolbar.speakerSettings')}
+                        >
+                          <IconSpeaker />
+                        </MediaDeviceMenu>
+                      ) : (
+                        <span
+                          className={`${styles.roundBtn} ${styles.roundBtnStatic}`}
+                          role="img"
+                          aria-label={t('toolbar.speakerSettings')}
+                          data-tip={t('toolbar.speakerSettings')}
+                        >
+                          <IconSpeaker />
+                        </span>
+                      )}
+                      {canEnumerateDevices ? (
+                        <MediaDeviceMenu
+                          kind="audiooutput"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.speakerSettings')}
+                          data-tip={t('toolbar.speakerSettings')}
+                        >
+                          <IconChevronUp />
+                        </MediaDeviceMenu>
+                      ) : (
+                        <button
+                          type="button"
+                          className={styles.splitChevron}
+                          aria-label={t('toolbar.speakerSettings')}
+                          disabled
+                        >
+                          <IconChevronUp />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
             </div>
 
             {/* Centre zone: what everyone sees (modes) | what you can do (actions) */}
@@ -2341,7 +2655,9 @@ export function KloudMeetToolbar({
                   aria-label={handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}
                 >
                   <IconHand />
-                  <span className={styles.actLabel}>{handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}</span>
+                  <span className={styles.actLabel}>
+                    {handRaised ? t('toolbar.lowerHand') : t('toolbar.raiseHand')}
+                  </span>
                 </button>
                 <button
                   ref={attendeeMenuBtnRef}
@@ -2349,7 +2665,11 @@ export function KloudMeetToolbar({
                   className={`${styles.actBtn} ${attendeeOpen ? styles.actBtnActive : ''}`}
                   onClick={handleToggleAttendee}
                   aria-pressed={attendeeOpen}
-                  aria-label={raisedHandCount > 0 ? `${t('toolbar.attendees')} (${raisedHandCount})` : t('toolbar.attendees')}
+                  aria-label={
+                    raisedHandCount > 0
+                      ? `${t('toolbar.attendees')} (${raisedHandCount})`
+                      : t('toolbar.attendees')
+                  }
                 >
                   <span className={styles.actIcon}>
                     <IconPeople />
@@ -2363,7 +2683,11 @@ export function KloudMeetToolbar({
                   className={`${styles.actBtn} ${chatOpen ? styles.actBtnActive : ''}`}
                   onClick={handleToggleChat}
                   aria-pressed={chatOpen}
-                  aria-label={chatBadgeCount > 0 ? `${t('toolbar.chats')} (${chatBadgeCount})` : t('toolbar.chats')}
+                  aria-label={
+                    chatBadgeCount > 0
+                      ? `${t('toolbar.chats')} (${chatBadgeCount})`
+                      : t('toolbar.chats')
+                  }
                 >
                   <span className={styles.actIcon}>
                     <IconChat />
@@ -2390,13 +2714,18 @@ export function KloudMeetToolbar({
                     <span className={styles.actLabel}>{t('toolbar.invite')}</span>
                   </button>
                   {inviteMenuOpen && (
-                    <div className={`${styles.inviteDropdown} ${styles.inviteDropdownEnd}`} role="menu">
+                    <div
+                      className={`${styles.inviteDropdown} ${styles.inviteDropdownEnd}`}
+                      role="menu"
+                    >
                       <button
                         type="button"
                         className={styles.inviteDropdownItem}
                         role="menuitem"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(buildInviteLinkForClipboard(isDesktop));
+                          void navigator.clipboard?.writeText(
+                            buildInviteLinkForClipboard(isDesktop),
+                          );
                           showInviteToast(t('toolbar.inviteCopied'));
                           closeInviteMenu();
                         }}
@@ -2408,7 +2737,9 @@ export function KloudMeetToolbar({
                         className={styles.inviteDropdownItem}
                         role="menuitem"
                         onClick={() => {
-                          void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                          void navigator.clipboard?.writeText(
+                            buildInMeetingInviteClipboardText(isDesktop),
+                          );
                           showInviteToast(t('schedule.inviteCopied'));
                           closeInviteMenu();
                         }}
@@ -2457,7 +2788,10 @@ export function KloudMeetToolbar({
       {/* Action Sheets / Popups */}
       {activeSheet && isMobile && (
         <>
-          <div className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`} onClick={() => setActiveSheet(null)} />
+          <div
+            className={`${styles.actionSheetOverlay} ${activeSheet ? styles.open : ''}`}
+            onClick={() => setActiveSheet(null)}
+          />
           <div className={`${styles.actionSheet} ${activeSheet ? styles.open : ''}`}>
             <div className={styles.actionSheetHeader}>
               <span className={styles.actionSheetTitle}>
@@ -2471,7 +2805,13 @@ export function KloudMeetToolbar({
                         ? t('toolbar.speakerSettings')
                         : t('toolbar.moreOptions')}
               </span>
-              <button type="button" className={styles.actionSheetClose} onClick={() => setActiveSheet(null)}>✕</button>
+              <button
+                type="button"
+                className={styles.actionSheetClose}
+                onClick={() => setActiveSheet(null)}
+              >
+                ✕
+              </button>
             </div>
             <div className={styles.actionSheetList}>
               <ActiveSheetContent
@@ -2521,7 +2861,13 @@ export function KloudMeetToolbar({
         <div className={styles.desktopPopupMenu}>
           <div className={styles.desktopPopupMenuHeader}>
             <span className={styles.desktopPopupMenuTitle}>{t('toolbar.selectViewLayout')}</span>
-            <button type="button" className={styles.desktopPopupMenuClose} onClick={() => setActiveSheet(null)}>✕</button>
+            <button
+              type="button"
+              className={styles.desktopPopupMenuClose}
+              onClick={() => setActiveSheet(null)}
+            >
+              ✕
+            </button>
           </div>
           <div className={styles.desktopPopupMenuList}>
             <ActiveSheetContent
@@ -2575,146 +2921,162 @@ export function KloudMeetToolbar({
         !isMobile &&
         (typeof document !== 'undefined'
           ? createPortal(
-            <>
-              {desktopAnchorBubbleKind !== 'chat' && (
-                <div
-                  role="presentation"
-                  className={styles.toolbarBubbleDismiss}
-                  onMouseDown={() => {
-                    if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
-                      setActiveSheet(null);
-                    } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
-                      onToggleAttendee();
-                    }
-                  }}
-                />
-              )}
-              <div
-                ref={desktopBubbleRef}
-                className={`${styles.toolbarBubble} ${desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee' ? styles.toolbarBubblePanel : ''
-                  } ${desktopAnchorBubbleKind === 'chat' ? styles.toolbarBubbleDraggable : ''
-                  } ${desktopAnchorBubbleKind === 'chat' && chatBubbleRect ? styles.toolbarBubbleFree : ''
-                  } ${isChatBubbleInteracting ? styles.toolbarBubbleInteracting : ''}`}
-                style={desktopBubbleStyle}
-                onMouseDown={(e) => e.stopPropagation()}
-              >
-                <div className={styles.toolbarBubbleArrow} aria-hidden />
-                <div
-                  className={`${styles.toolbarBubbleHeader}${desktopAnchorBubbleKind === 'chat' ? ` ${styles.toolbarBubbleDragHandle}` : ''}`}
-                  onPointerDown={
-                    desktopAnchorBubbleKind === 'chat'
-                      ? (e) => {
-                          const target = e.target as HTMLElement;
-                          if (target.closest('button')) return;
-                          beginChatBubbleInteraction(e, 'move');
-                        }
-                      : undefined
-                  }
-                >
-                  {desktopAnchorBubbleKind === 'chat' && (
-                    <div
-                      className={styles.toolbarBubbleDragIcon}
-                      aria-hidden
-                    >
-                      <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden>
-                        <circle cx="8" cy="6" r="2" />
-                        <circle cx="8" cy="12" r="2" />
-                        <circle cx="8" cy="18" r="2" />
-                        <circle cx="14" cy="6" r="2" />
-                        <circle cx="14" cy="12" r="2" />
-                        <circle cx="14" cy="18" r="2" />
-                      </svg>
-                    </div>
-                  )}
-                  <span className={styles.toolbarBubbleTitle}>
-                    {desktopAnchorBubbleKind === 'exit'
-                      ? t('toolbar.leaveMeeting')
-                      : desktopAnchorBubbleKind === 'recording'
-                        ? t('toolbar.recordingControls')
-                        : desktopAnchorBubbleKind === 'chat'
-                          ? t('toolbar.chats')
-                          : desktopAnchorBubbleKind === 'attendee'
-                            ? t('toolbar.participants')
-                            : t('toolbar.moreOptions')}
-                  </span>
-                  <button
-                    type="button"
-                    className={styles.toolbarBubbleClose}
-                    onClick={() => {
-                      if (desktopAnchorBubbleKind === 'more' || desktopAnchorBubbleKind === 'exit' || desktopAnchorBubbleKind === 'recording') {
+              <>
+                {desktopAnchorBubbleKind !== 'chat' && (
+                  <div
+                    role="presentation"
+                    className={styles.toolbarBubbleDismiss}
+                    onMouseDown={() => {
+                      if (
+                        desktopAnchorBubbleKind === 'more' ||
+                        desktopAnchorBubbleKind === 'exit' ||
+                        desktopAnchorBubbleKind === 'recording'
+                      ) {
                         setActiveSheet(null);
-                      } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
-                        onToggleChat();
                       } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
                         onToggleAttendee();
                       }
                     }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                {desktopAnchorBubbleKind === 'chat' && chatPanelSlot ? (
-                  <div className={styles.toolbarBubblePanelBody}>{chatPanelSlot}</div>
-                ) : desktopAnchorBubbleKind === 'attendee' && attendeePanelSlot ? (
-                  <div className={styles.toolbarBubblePanelBody}>{attendeePanelSlot}</div>
-                ) : (
-                  <div className={styles.toolbarBubbleList}>
-                    <ActiveSheetContent
-                      activeSheet={activeSheet}
-                      activeView={activeView}
-                      onViewChange={onViewChange}
-                      handleShareScreenClick={handleShareScreenClick}
-                      canShareScreen={canShareScreen}
-                      attendeeOpen={attendeeOpen}
-                      handleToggleAttendee={handleToggleAttendee}
-                      toastMsg={toastMsg}
-                      setToastMsg={setToastMsg}
-                      toastTimerRef={toastTimerRef}
-                      setActiveSheet={setActiveSheet}
-                      onExit={onExit}
-                      onEndForAll={onEndForAll}
-                      isDesktop={isDesktop}
-                      canEndForAll={canEndForAll}
-                      canRecord={canRecord}
-                      isRecording={isRecording}
-                      recordingControls={recordingControls}
-                      onOpenRecordPopup={onOpenRecordPopup}
-                      onStopRecording={onStopRecording}
-                      onOpenHelp={onOpenHelp}
-                      canMuteAll={canMuteAll}
-                      muteAllActive={muteAllActive}
-                      onMuteAll={onMuteAll}
-                      onUnmuteAll={onUnmuteAll}
-                      canToggleCaptions={canToggleCaptions}
-                      captionsEnabled={captionsEnabled}
-                      onToggleCaptions={onToggleCaptions}
-                      mobileAudioState={mobileAudioState}
-                      setMobileAudioState={setMobileAudioState}
-                      handleToggleChat={handleToggleChat}
-                      onOpenCaptionSettings={() => setShowSTTSettings(true)}
-                      localSubtitleVisible={localSubtitleVisible}
-                      onOpenDesktopApp={onOpenDesktopApp}
-                      isMobile={false}
-                      canShowOperatorMenus={canShowOperatorMenus}
-                      canDocumentPip={canDocumentPip}
-                      documentPipEnabled={documentPipEnabled}
-                      onToggleDocumentPip={onToggleDocumentPip}
-                    />
-                  </div>
-                )}
-                {desktopAnchorBubbleKind === 'chat' && (
-                  <button
-                    type="button"
-                    className={styles.toolbarBubbleResizeHandle}
-                    onPointerDown={(e) => beginChatBubbleInteraction(e, 'resize')}
-                    aria-label="Resize chat"
-                    title="Resize chat"
                   />
                 )}
-              </div>
-            </>,
-            document.body,
-          )
+                <div
+                  ref={desktopBubbleRef}
+                  className={`${styles.toolbarBubble} ${
+                    desktopAnchorBubbleKind === 'chat' || desktopAnchorBubbleKind === 'attendee'
+                      ? styles.toolbarBubblePanel
+                      : ''
+                  } ${desktopAnchorBubbleKind === 'chat' ? styles.toolbarBubbleDraggable : ''} ${
+                    desktopAnchorBubbleKind === 'chat' && chatBubbleRect
+                      ? styles.toolbarBubbleFree
+                      : ''
+                  } ${isChatBubbleInteracting ? styles.toolbarBubbleInteracting : ''}`}
+                  style={desktopBubbleStyle}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <div className={styles.toolbarBubbleArrow} aria-hidden />
+                  <div
+                    className={`${styles.toolbarBubbleHeader}${desktopAnchorBubbleKind === 'chat' ? ` ${styles.toolbarBubbleDragHandle}` : ''}`}
+                    onPointerDown={
+                      desktopAnchorBubbleKind === 'chat'
+                        ? (e) => {
+                            const target = e.target as HTMLElement;
+                            if (target.closest('button')) return;
+                            beginChatBubbleInteraction(e, 'move');
+                          }
+                        : undefined
+                    }
+                  >
+                    {desktopAnchorBubbleKind === 'chat' && (
+                      <div className={styles.toolbarBubbleDragIcon} aria-hidden>
+                        <svg
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                          width="18"
+                          height="18"
+                          aria-hidden
+                        >
+                          <circle cx="8" cy="6" r="2" />
+                          <circle cx="8" cy="12" r="2" />
+                          <circle cx="8" cy="18" r="2" />
+                          <circle cx="14" cy="6" r="2" />
+                          <circle cx="14" cy="12" r="2" />
+                          <circle cx="14" cy="18" r="2" />
+                        </svg>
+                      </div>
+                    )}
+                    <span className={styles.toolbarBubbleTitle}>
+                      {desktopAnchorBubbleKind === 'exit'
+                        ? t('toolbar.leaveMeeting')
+                        : desktopAnchorBubbleKind === 'recording'
+                          ? t('toolbar.recordingControls')
+                          : desktopAnchorBubbleKind === 'chat'
+                            ? t('toolbar.chats')
+                            : desktopAnchorBubbleKind === 'attendee'
+                              ? t('toolbar.participants')
+                              : t('toolbar.moreOptions')}
+                    </span>
+                    <button
+                      type="button"
+                      className={styles.toolbarBubbleClose}
+                      onClick={() => {
+                        if (
+                          desktopAnchorBubbleKind === 'more' ||
+                          desktopAnchorBubbleKind === 'exit' ||
+                          desktopAnchorBubbleKind === 'recording'
+                        ) {
+                          setActiveSheet(null);
+                        } else if (desktopAnchorBubbleKind === 'chat' && chatOpen) {
+                          onToggleChat();
+                        } else if (desktopAnchorBubbleKind === 'attendee' && attendeeOpen) {
+                          onToggleAttendee();
+                        }
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {desktopAnchorBubbleKind === 'chat' && chatPanelSlot ? (
+                    <div className={styles.toolbarBubblePanelBody}>{chatPanelSlot}</div>
+                  ) : desktopAnchorBubbleKind === 'attendee' && attendeePanelSlot ? (
+                    <div className={styles.toolbarBubblePanelBody}>{attendeePanelSlot}</div>
+                  ) : (
+                    <div className={styles.toolbarBubbleList}>
+                      <ActiveSheetContent
+                        activeSheet={activeSheet}
+                        activeView={activeView}
+                        onViewChange={onViewChange}
+                        handleShareScreenClick={handleShareScreenClick}
+                        canShareScreen={canShareScreen}
+                        attendeeOpen={attendeeOpen}
+                        handleToggleAttendee={handleToggleAttendee}
+                        toastMsg={toastMsg}
+                        setToastMsg={setToastMsg}
+                        toastTimerRef={toastTimerRef}
+                        setActiveSheet={setActiveSheet}
+                        onExit={onExit}
+                        onEndForAll={onEndForAll}
+                        isDesktop={isDesktop}
+                        canEndForAll={canEndForAll}
+                        canRecord={canRecord}
+                        isRecording={isRecording}
+                        recordingControls={recordingControls}
+                        onOpenRecordPopup={onOpenRecordPopup}
+                        onStopRecording={onStopRecording}
+                        onOpenHelp={onOpenHelp}
+                        canMuteAll={canMuteAll}
+                        muteAllActive={muteAllActive}
+                        onMuteAll={onMuteAll}
+                        onUnmuteAll={onUnmuteAll}
+                        canToggleCaptions={canToggleCaptions}
+                        captionsEnabled={captionsEnabled}
+                        onToggleCaptions={onToggleCaptions}
+                        mobileAudioState={mobileAudioState}
+                        setMobileAudioState={setMobileAudioState}
+                        handleToggleChat={handleToggleChat}
+                        onOpenCaptionSettings={() => setShowSTTSettings(true)}
+                        localSubtitleVisible={localSubtitleVisible}
+                        onOpenDesktopApp={onOpenDesktopApp}
+                        isMobile={false}
+                        canShowOperatorMenus={canShowOperatorMenus}
+                        canDocumentPip={canDocumentPip}
+                        documentPipEnabled={documentPipEnabled}
+                        onToggleDocumentPip={onToggleDocumentPip}
+                      />
+                    </div>
+                  )}
+                  {desktopAnchorBubbleKind === 'chat' && (
+                    <button
+                      type="button"
+                      className={styles.toolbarBubbleResizeHandle}
+                      onPointerDown={(e) => beginChatBubbleInteraction(e, 'resize')}
+                      aria-label="Resize chat"
+                      title="Resize chat"
+                    />
+                  )}
+                </div>
+              </>,
+              document.body,
+            )
           : null)}
 
       {isMobile && (
@@ -2744,7 +3106,10 @@ export function KloudMeetToolbar({
               </svg>
             </button>
             {inviteMenuOpen && (
-              <div className={`${styles.inviteDropdown} ${styles.inviteDropdownFromTop}`} role="menu">
+              <div
+                className={`${styles.inviteDropdown} ${styles.inviteDropdownFromTop}`}
+                role="menu"
+              >
                 <button
                   type="button"
                   className={styles.inviteDropdownItem}
@@ -2764,7 +3129,9 @@ export function KloudMeetToolbar({
                   role="menuitem"
                   onClick={(e) => {
                     e.stopPropagation();
-                    void navigator.clipboard?.writeText(buildInMeetingInviteClipboardText(isDesktop));
+                    void navigator.clipboard?.writeText(
+                      buildInMeetingInviteClipboardText(isDesktop),
+                    );
                     showInviteToast(t('schedule.inviteCopied'));
                     closeInviteMenu();
                   }}
@@ -2779,8 +3146,13 @@ export function KloudMeetToolbar({
           <button
             type="button"
             className={`${styles.mobileTopBtn} ${styles.mobileTopBtnBadged} ${chatOpen ? styles.mobileTopBtnChatActive : ''}`}
-            onClick={(e) => { e.stopPropagation(); handleToggleChat(); }}
-            aria-label={chatBadgeCount > 0 ? `${t('toolbar.chats')} (${chatBadgeCount})` : t('toolbar.chats')}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleChat();
+            }}
+            aria-label={
+              chatBadgeCount > 0 ? `${t('toolbar.chats')} (${chatBadgeCount})` : t('toolbar.chats')
+            }
             title={t('toolbar.chats') || 'Chat'}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
@@ -2812,17 +3184,24 @@ export function KloudMeetToolbar({
           <button
             type="button"
             className={`${styles.mobileTopBtn} ${styles.mobileTopBtnExit}`}
-            onClick={(e) => { e.stopPropagation(); openSheet('exit'); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              openSheet('exit');
+            }}
             aria-label={t('toolbar.exit') || 'Exit'}
             title={t('toolbar.exit') || 'Exit'}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+              />
             </svg>
           </button>
         </div>
       )}
-      
+
       {videoBackground.offered && (
         <VideoBackgroundDialog
           isOpen={backgroundDialogOpen}
@@ -2915,10 +3294,7 @@ function ActiveSheetContent({
     const openLeft = rect.left >= flyoutWidth + gap + 8;
     setLangFlyoutStyle({
       position: 'fixed',
-      top: Math.min(
-        Math.max(8, rect.top + rect.height / 2),
-        window.innerHeight - 8,
-      ),
+      top: Math.min(Math.max(8, rect.top + rect.height / 2), window.innerHeight - 8),
       ...(openLeft
         ? { right: window.innerWidth - rect.left + gap, left: 'auto' }
         : { left: Math.min(rect.right + gap, window.innerWidth - flyoutWidth - 8), right: 'auto' }),
@@ -2964,16 +3340,57 @@ function ActiveSheetContent({
     <>
       {activeSheet === 'speaker' && (
         <>
-          <button className={`${styles.actionSheetItem} ${mobileAudioState === 'earpiece' ? styles.active : ''}`} onClick={() => { setMobileAudioState('earpiece'); setActiveSheet(null); setToastMsg(t('toolbar.earpieceEnabled') || 'Switched to earpiece'); if (toastTimerRef.current) clearTimeout(toastTimerRef.current); toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>
+          <button
+            className={`${styles.actionSheetItem} ${mobileAudioState === 'earpiece' ? styles.active : ''}`}
+            onClick={() => {
+              setMobileAudioState('earpiece');
+              setActiveSheet(null);
+              setToastMsg(t('toolbar.earpieceEnabled') || 'Switched to earpiece');
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z"
+              />
+            </svg>
             {t('toolbar.earpiece') || 'Earpiece'}
           </button>
-          <button className={`${styles.actionSheetItem} ${mobileAudioState === 'bluetooth' ? styles.active : ''}`} onClick={() => { setMobileAudioState('bluetooth'); setActiveSheet(null); setToastMsg(t('toolbar.bluetoothEnabled') || 'Switched to Bluetooth'); if (toastTimerRef.current) clearTimeout(toastTimerRef.current); toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>
+          <button
+            className={`${styles.actionSheetItem} ${mobileAudioState === 'bluetooth' ? styles.active : ''}`}
+            onClick={() => {
+              setMobileAudioState('bluetooth');
+              setActiveSheet(null);
+              setToastMsg(t('toolbar.bluetoothEnabled') || 'Switched to Bluetooth');
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9"
+              />
+            </svg>
             {t('toolbar.bluetooth') || 'Bluetooth'}
           </button>
-          <button className={`${styles.actionSheetItem} ${mobileAudioState === 'speaker' ? styles.active : ''}`} onClick={() => { setMobileAudioState('speaker'); setActiveSheet(null); setToastMsg(t('toolbar.speakerEnabled') || 'Switched to speaker'); if (toastTimerRef.current) clearTimeout(toastTimerRef.current); toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000); }}>
-            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+          <button
+            className={`${styles.actionSheetItem} ${mobileAudioState === 'speaker' ? styles.active : ''}`}
+            onClick={() => {
+              setMobileAudioState('speaker');
+              setActiveSheet(null);
+              setToastMsg(t('toolbar.speakerEnabled') || 'Switched to speaker');
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToastMsg(null), 2000);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+            </svg>
             {t('toolbar.loudspeaker') || 'Speaker'}
           </button>
         </>
@@ -2981,23 +3398,44 @@ function ActiveSheetContent({
 
       {activeSheet === 'views' && (
         <>
-          {(
-            <button className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`} onClick={() => { onViewChange('liveDoc'); setActiveSheet(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+          {
+            <button
+              className={`${styles.actionSheetItem} ${activeView === 'liveDoc' ? styles.active : ''}`}
+              onClick={() => {
+                onViewChange('liveDoc');
+                setActiveSheet(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
               {t('toolbar.liveDocCanvas')}
             </button>
-          )}
-          {(
-            <button className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`} onClick={() => { onViewChange('webcam'); setActiveSheet(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+          }
+          {
+            <button
+              className={`${styles.actionSheetItem} ${activeView === 'webcam' ? styles.active : ''}`}
+              onClick={() => {
+                onViewChange('webcam');
+                setActiveSheet(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+              </svg>
               {t('toolbar.webcamGrid')}
             </button>
-          )}
+          }
           <button
             className={`${styles.actionSheetItem} ${activeView === 'shareScreen' ? styles.active : ''}`}
-            onClick={() => { handleShareScreenClick(); setActiveSheet(null); }}
+            onClick={() => {
+              handleShareScreenClick();
+              setActiveSheet(null);
+            }}
           >
-            <svg viewBox="0 0 24 24" fill="none"
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
               stroke={canShareScreen ? 'currentColor' : '#fb923c'}
               strokeWidth="1.5"
             >
@@ -3006,7 +3444,9 @@ function ActiveSheetContent({
             <span style={canShareScreen ? undefined : { color: '#fb923c' }}>
               {t('toolbar.screenShareLayout')}
               {!canShareScreen && (
-                <span style={{ fontSize: '11px', marginLeft: '6px', color: '#fb923c', fontWeight: 400 }}>
+                <span
+                  style={{ fontSize: '11px', marginLeft: '6px', color: '#fb923c', fontWeight: 400 }}
+                >
                   ({t('toolbar.shareConflictTitle')})
                 </span>
               )}
@@ -3025,11 +3465,25 @@ function ActiveSheetContent({
               onClick={() => setActiveSheet('speaker')}
             >
               {mobileAudioState === 'earpiece' ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3 18v-6a9 9 0 0118 0v6M3 18a3 3 0 003 3h1a2 2 0 002-2v-4a2 2 0 00-2-2H4a2 2 0 00-2 2zM21 18a3 3 0 01-3 3h-1a2 2 0 01-2-2v-4a2 2 0 012-2h3a2 2 0 012 2z"
+                  />
+                </svg>
               ) : mobileAudioState === 'bluetooth' ? (
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6.5 7.5l11 9L12 22V2l5.5 5.5-11 9"
+                  />
+                </svg>
               ) : (
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
+                </svg>
               )}
               {t('toolbar.speakerSettings')}
             </button>
@@ -3042,7 +3496,10 @@ function ActiveSheetContent({
                 const iframe =
                   (document.getElementById('sharedIframePlayer') as HTMLIFrameElement | null) ??
                   document.querySelector<HTMLIFrameElement>('iframe[title="LiveDoc"]');
-                iframe?.contentWindow?.postMessage({ type: 'Kloud-ShowAiPresentThink', show: 1 }, '*');
+                iframe?.contentWindow?.postMessage(
+                  { type: 'Kloud-ShowAiPresentThink', show: 1 },
+                  '*',
+                );
                 setActiveSheet(null);
               }}
             >
@@ -3064,7 +3521,10 @@ function ActiveSheetContent({
                 setActiveSheet(null);
               }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="6" fill={isRecording ? "#ef4444" : "none"} /><circle cx="12" cy="12" r="10" /></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <circle cx="12" cy="12" r="6" fill={isRecording ? '#ef4444' : 'none'} />
+                <circle cx="12" cy="12" r="10" />
+              </svg>
               <span className={styles.actionSheetItemLabel}>
                 {isRecording ? t('toolbar.stopRecording') : t('toolbar.record')}
               </span>
@@ -3079,7 +3539,10 @@ function ActiveSheetContent({
           {canMuteAll && (
             <button
               className={`${styles.actionSheetItem} ${muteAllActive ? styles.active : ''}`}
-              onClick={() => { muteAllActive ? onUnmuteAll?.() : onMuteAll?.(); setActiveSheet(null); }}
+              onClick={() => {
+                muteAllActive ? onUnmuteAll?.() : onMuteAll?.();
+                setActiveSheet(null);
+              }}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                 {muteAllActive ? (
@@ -3106,9 +3569,20 @@ function ActiveSheetContent({
           {(canToggleCaptions || captionsEnabled) && (
             <button
               className={styles.actionSheetItem}
-              onClick={() => { onOpenCaptionSettings?.(); setActiveSheet(null); }}
+              onClick={() => {
+                onOpenCaptionSettings?.();
+                setActiveSheet(null);
+              }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="2.5" y="5" width="19" height="14" rx="3" />
                 <path d="M10.5 10.2a2.4 2.4 0 1 0 0 3.6M17 10.2a2.4 2.4 0 1 0 0 3.6" />
               </svg>
@@ -3123,9 +3597,20 @@ function ActiveSheetContent({
           {captionsEnabled && (
             <button
               className={styles.actionSheetItem}
-              onClick={() => { saveCaptionSettings({ subtitleVisible: !localSubtitleVisible }); setActiveSheet(null); }}
+              onClick={() => {
+                saveCaptionSettings({ subtitleVisible: !localSubtitleVisible });
+                setActiveSheet(null);
+              }}
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <rect x="2.5" y="5" width="19" height="14" rx="3" />
                 {localSubtitleVisible ? (
                   <path d="M3 3l18 18" />
@@ -3152,17 +3637,26 @@ function ActiveSheetContent({
               {t('toolbar.documentPip')}
             </button>
           )}
-          <button className={styles.actionSheetItem} onClick={() => {
-            if (onOpenDesktopApp) {
-              onOpenDesktopApp();
-            } else {
-              const currentUrl = new URL(window.location.href);
-              const rn = currentUrl.pathname.split('/').filter(Boolean).pop() || '';
-              window.location.href = `kloudmeet://join/${encodeURIComponent(rn)}${currentUrl.search}`;
-            }
-            setActiveSheet(null);
-          }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => {
+              if (onOpenDesktopApp) {
+                onOpenDesktopApp();
+              } else {
+                const currentUrl = new URL(window.location.href);
+                const rn = currentUrl.pathname.split('/').filter(Boolean).pop() || '';
+                window.location.href = `kloudmeet://join/${encodeURIComponent(rn)}${currentUrl.search}`;
+              }
+              setActiveSheet(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+              />
+            </svg>
             {t('toolbar.openDesktop.menuItem')}
           </button>
 
@@ -3234,7 +3728,15 @@ function ActiveSheetContent({
                         <span>{opt.label}</span>
                         <span className={styles.langFlyoutItemMeta}>
                           {selected && (
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" width="14" height="14" aria-hidden>
+                            <svg
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              width="14"
+                              height="14"
+                              aria-hidden
+                            >
                               <polyline points="20 6 9 17 4 12" />
                             </svg>
                           )}
@@ -3248,104 +3750,235 @@ function ActiveSheetContent({
               )}
           </div>
 
-          <button className={styles.actionSheetItem} onClick={() => { onOpenHelp?.(); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => {
+              onOpenHelp?.();
+              setActiveSheet(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z"
+              />
+            </svg>
             {t('toolbar.help')}
           </button>
         </>
       )}
 
-      {canRecord && activeSheet === 'recording' && (() => {
-        const rec: RecordingState | undefined = recordingControls?.state;
-        const paused = !!rec?.paused;
-        const mode: RecordingMode = rec?.mode ?? 'follow';
-        const policyTitle = recordingControls?.canChangePolicy ? undefined : t('toolbar.recordingHostSetting');
-        return (
-        <>
-          <button
-            className={styles.actionSheetItem}
-            onClick={() => { recordingControls?.onAction?.(paused ? 'resume' : 'pause'); setActiveSheet(null); }}
-          >
-            {paused ? (
-              <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z" /></svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="4" width="4" height="16" /><rect x="14" y="4" width="4" height="16" /></svg>
-            )}
-            {paused ? t('toolbar.resumeRecording') : t('toolbar.pauseRecording')}
-          </button>
-          <button className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`} onClick={() => { onStopRecording?.(); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-            {t('toolbar.stopRecording')}
-          </button>
-
-          <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }} />
-
-          <button className={styles.actionSheetItem} onClick={() => { recordingControls?.onOpenLiveTranscript?.(); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" /></svg>
-            {t('toolbar.liveTranscript')}
-          </button>
-
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.cloudRecordingMode')}</div>
-          <div role="radiogroup" aria-label={t('toolbar.cloudRecordingMode')}>
-            {RECORDING_MODES.map((m) => (
+      {canRecord &&
+        activeSheet === 'recording' &&
+        (() => {
+          const rec: RecordingState | undefined = recordingControls?.state;
+          const paused = !!rec?.paused;
+          const mode: RecordingMode = rec?.mode ?? 'follow';
+          const policyTitle = recordingControls?.canChangePolicy
+            ? undefined
+            : t('toolbar.recordingHostSetting');
+          return (
+            <>
               <button
-                key={m}
-                type="button"
-                role="radio"
-                aria-checked={mode === m}
-                className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
-                onClick={() => recordingControls?.onSettings?.({ mode: m })}
+                className={styles.actionSheetItem}
+                onClick={() => {
+                  recordingControls?.onAction?.(paused ? 'resume' : 'pause');
+                  setActiveSheet(null);
+                }}
               >
-                <span style={{ width: 16, flex: 'none', display: 'inline-flex', justifyContent: 'center' }} aria-hidden="true">{mode === m ? '✓' : ''}</span>
-                <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
-                  <span>{t(`toolbar.recordingMode.${m}`)}</span>
-                  <span style={{ fontSize: 11, opacity: 0.6 }}>{t(`toolbar.recordingMode.${m}Hint`)}</span>
-                </span>
+                {paused ? (
+                  <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </svg>
+                )}
+                {paused ? t('toolbar.resumeRecording') : t('toolbar.pauseRecording')}
               </button>
-            ))}
-          </div>
+              <button
+                className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`}
+                onClick={() => {
+                  onStopRecording?.();
+                  setActiveSheet(null);
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
+                {t('toolbar.stopRecording')}
+              </button>
 
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default' }} title={policyTitle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" /><polyline points="14 2 14 8 20 8" /></svg>
-              {t('toolbar.syncTranscript')}
-            </div>
-            <input
-              type="checkbox"
-              checked={rec?.syncTranscript ?? true}
-              disabled={!recordingControls?.canChangePolicy}
-              onChange={(e) => recordingControls?.onSettings?.({ syncTranscript: e.target.checked })}
-              style={{ accentColor: '#7c79ff' }}
-            />
-          </label>
+              <div
+                style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }}
+              />
 
-          <div style={{ padding: '8px 16px', fontSize: '11px', fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '4px' }}>{t('toolbar.localPermissions')}</div>
+              <button
+                className={styles.actionSheetItem}
+                onClick={() => {
+                  recordingControls?.onOpenLiveTranscript?.();
+                }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z" />
+                </svg>
+                {t('toolbar.liveTranscript')}
+              </button>
 
-          <label className={styles.actionSheetItem} style={{ justifyContent: 'space-between', cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default' }} title={policyTitle}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              {t('toolbar.onlyHostRecord')}
-            </div>
-            <input
-              type="checkbox"
-              checked={rec?.hostOnly ?? true}
-              disabled={!recordingControls?.canChangePolicy}
-              onChange={(e) => recordingControls?.onSettings?.({ hostOnly: e.target.checked })}
-              style={{ accentColor: '#7c79ff' }}
-            />
-          </label>
-        </>
-        );
-      })()}
+              <div
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#9ca3af',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginTop: '4px',
+                }}
+              >
+                {t('toolbar.cloudRecordingMode')}
+              </div>
+              <div role="radiogroup" aria-label={t('toolbar.cloudRecordingMode')}>
+                {RECORDING_MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
+                    onClick={() => recordingControls?.onSettings?.({ mode: m })}
+                  >
+                    <span
+                      style={{
+                        width: 16,
+                        flex: 'none',
+                        display: 'inline-flex',
+                        justifyContent: 'center',
+                      }}
+                      aria-hidden="true"
+                    >
+                      {mode === m ? '✓' : ''}
+                    </span>
+                    <span
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 2,
+                      }}
+                    >
+                      <span>{t(`toolbar.recordingMode.${m}`)}</span>
+                      <span style={{ fontSize: 11, opacity: 0.6 }}>
+                        {t(`toolbar.recordingMode.${m}Hint`)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <label
+                className={styles.actionSheetItem}
+                style={{
+                  justifyContent: 'space-between',
+                  cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default',
+                }}
+                title={policyTitle}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    width="16"
+                    height="16"
+                  >
+                    <path d="M14.5 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V7.5L14.5 2z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  {t('toolbar.syncTranscript')}
+                </div>
+                <input
+                  type="checkbox"
+                  checked={rec?.syncTranscript ?? true}
+                  disabled={!recordingControls?.canChangePolicy}
+                  onChange={(e) =>
+                    recordingControls?.onSettings?.({ syncTranscript: e.target.checked })
+                  }
+                  style={{ accentColor: '#7c79ff' }}
+                />
+              </label>
+
+              <div
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#9ca3af',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  marginTop: '4px',
+                }}
+              >
+                {t('toolbar.localPermissions')}
+              </div>
+
+              <label
+                className={styles.actionSheetItem}
+                style={{
+                  justifyContent: 'space-between',
+                  cursor: recordingControls?.canChangePolicy ? 'pointer' : 'default',
+                }}
+                title={policyTitle}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {t('toolbar.onlyHostRecord')}
+                </div>
+                <input
+                  type="checkbox"
+                  checked={rec?.hostOnly ?? true}
+                  disabled={!recordingControls?.canChangePolicy}
+                  onChange={(e) => recordingControls?.onSettings?.({ hostOnly: e.target.checked })}
+                  style={{ accentColor: '#7c79ff' }}
+                />
+              </label>
+            </>
+          );
+        })()}
 
       {activeSheet === 'exit' && (
         <>
-          <button className={styles.actionSheetItem} onClick={() => { onExit(); setActiveSheet(null); }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+          <button
+            className={styles.actionSheetItem}
+            onClick={() => {
+              onExit();
+              setActiveSheet(null);
+            }}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
             {t('toolbar.leaveTheMeeting')}
           </button>
           {canEndForAll && (
-            <button className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`} onClick={() => { if (onEndForAll) onEndForAll(); else onExit(); setActiveSheet(null); }}>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+            <button
+              className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`}
+              onClick={() => {
+                if (onEndForAll) onEndForAll();
+                else onExit();
+                setActiveSheet(null);
+              }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
               {t('toolbar.endForEveryone')}
             </button>
           )}

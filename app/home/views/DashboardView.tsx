@@ -1,10 +1,12 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { generateRoomId } from '@/lib/client-utils';
 import { ScheduleMeetingModal } from '@/lib/ScheduleMeetingModal';
-import { SystemSettingsModal } from '@/lib/SystemSettingsModal';
+import { SystemSettingsModal, type AccountSettingsTab } from '@/lib/SystemSettingsModal';
+import { REOPEN_ACCOUNT_SETTINGS_KEY } from '@/lib/settings/KloudIntegrationPanel';
 import { MyProfileModal } from '@/lib/MyProfileModal';
 import { useI18n } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
@@ -41,6 +43,27 @@ import { useTx } from '../components/ui';
 import { MeetingDatePicker, fromYmd, toYmd, type Ymd } from '../components/MeetingDatePicker';
 import type { ToastAction } from '../components/useToast';
 
+/** Put the row menu on the viewport. Open upward when the list below would cover it. */
+function placeRowMenu(anchor: HTMLElement, menu: HTMLElement): void {
+  const rect = anchor.getBoundingClientRect();
+  const gap = 4;
+  const margin = 8;
+  menu.style.maxHeight = '';
+  const height = menu.scrollHeight;
+  const width = menu.offsetWidth;
+  const spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+  const spaceAbove = rect.top - gap - margin;
+  const openUp = spaceBelow < height && spaceAbove > spaceBelow;
+  const room = Math.max(0, openUp ? spaceAbove : spaceBelow);
+  const cap = Math.min(height, room > 0 ? room : height, window.innerHeight - margin * 2);
+  menu.style.maxHeight = `${cap}px`;
+  const used = Math.min(height, cap);
+  const top = openUp ? Math.max(margin, rect.top - gap - used) : rect.bottom + gap;
+  const left = Math.min(Math.max(margin, rect.right - width), window.innerWidth - width - margin);
+  menu.style.top = `${top}px`;
+  menu.style.left = `${left}px`;
+}
+
 /** How many recent meetings the home page looks at for "Up next" and "Recent replays". */
 
 type MeetingListScope = 'all' | 'hosted';
@@ -51,6 +74,28 @@ function jumpBefore(day: Ymd | null): string | null {
   const next = fromYmd(day);
   next.setDate(next.getDate() + 1);
   return next.toISOString();
+}
+
+/** When this meeting happened. A reused personal room is dated by its latest recording, not the day the row was created. */
+function meetingWhen(m: {
+  scheduledFor?: string | null;
+  createdAt?: string | null;
+  actualStartedAt?: string | null;
+  endedAt?: string | null;
+  recordings?: Array<{ createdAt?: string | null }>;
+}): number {
+  if (m.scheduledFor) {
+    const scheduled = new Date(m.scheduledFor).getTime();
+    if (!Number.isNaN(scheduled)) return scheduled;
+  }
+  let latest = 0;
+  const stamps = [m.createdAt, m.actualStartedAt, m.endedAt, ...(m.recordings ?? []).map((r) => r.createdAt)];
+  for (const stamp of stamps) {
+    if (!stamp) continue;
+    const time = new Date(stamp).getTime();
+    if (!Number.isNaN(time) && time > latest) latest = time;
+  }
+  return latest;
 }
 
 function meetingsQuery(page: number, size: number, search: string, scope: MeetingListScope, jumpDay: Ymd | null = null): string {
@@ -90,6 +135,22 @@ export function DashboardView({
   const [joinCode, setJoinCode] = useState('');
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<AccountSettingsTab | undefined>(undefined);
+
+  // Back from connecting Kloud in Account Settings → Kloud Integration: open it again on that tab.
+  useEffect(() => {
+    let reopen: string | null = null;
+    try {
+      reopen = sessionStorage.getItem(REOPEN_ACCOUNT_SETTINGS_KEY);
+      if (reopen) sessionStorage.removeItem(REOPEN_ACCOUNT_SETTINGS_KEY);
+    } catch {
+      // Storage blocked: nothing to reopen.
+    }
+    if (reopen === 'kloud') {
+      setSettingsTab('kloud');
+      setShowSettingsModal(true);
+    }
+  }, []);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<any>(null);
   const [personalRoomId, setPersonalRoomId] = useState<string | null>(null);
@@ -152,16 +213,50 @@ export function DashboardView({
     return () => clearInterval(timer);
   }, []);
 
+  const menuAnchorRef = useRef<HTMLDivElement | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!inviteMenuRoomName) return;
     const onDocMouseDown = (event: MouseEvent) => {
       const target = event.target as HTMLElement | null;
-      if (!target?.closest('[data-invite-menu-anchor="true"]')) {
+      if (!target?.closest('[data-invite-menu-anchor="true"], [data-invite-menu="true"]')) {
         setInviteMenuRoomName(null);
       }
     };
     document.addEventListener('mousedown', onDocMouseDown);
     return () => document.removeEventListener('mousedown', onDocMouseDown);
+  }, [inviteMenuRoomName]);
+
+  useLayoutEffect(() => {
+    if (!inviteMenuRoomName) return;
+    const anchor = menuAnchorRef.current;
+    const menu = menuRef.current;
+    if (!anchor || !menu) return;
+    const place = () => {
+      if (!anchor.isConnected) return;
+      placeRowMenu(anchor, menu);
+    };
+    place();
+    const scroller = meetingListScrollRef.current;
+    const onScroll = () => {
+      if (!anchor.isConnected) return;
+      if (scroller) {
+        const row = anchor.getBoundingClientRect();
+        const box = scroller.getBoundingClientRect();
+        if (row.bottom <= box.top + 4 || row.top >= box.bottom - 4) {
+          setInviteMenuRoomName(null);
+          return;
+        }
+      }
+      place();
+    };
+    scroller?.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', place);
+    return () => {
+      scroller?.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', place);
+    };
   }, [inviteMenuRoomName]);
 
   // Fetch personal room ID from profile
@@ -207,11 +302,7 @@ export function DashboardView({
       .then(data => {
         if (gen !== meetingsFetchGenRef.current) return;
         if (data.meetings) {
-          const sorted = data.meetings.sort((a: any, b: any) => {
-            const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-            const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-            return tB - tA;
-          });
+          const sorted = data.meetings.sort((a: any, b: any) => meetingWhen(b) - meetingWhen(a));
           setDbMeetings(sorted);
           setTotalMeetings(data.total || 0);
         }
@@ -303,11 +394,7 @@ export function DashboardView({
               .then(res => res.json())
               .then(d => {
                 if (d.meetings) {
-                  const sorted = d.meetings.sort((a: any, b: any) => {
-                    const tA = a.scheduledFor ? new Date(a.scheduledFor).getTime() : new Date(a.createdAt).getTime();
-                    const tB = b.scheduledFor ? new Date(b.scheduledFor).getTime() : new Date(b.createdAt).getTime();
-                    return tB - tA;
-                  });
+                  const sorted = d.meetings.sort((a: any, b: any) => meetingWhen(b) - meetingWhen(a));
                   setDbMeetings(sorted);
                   setTotalMeetings(d.total || 0);
                 }
@@ -746,7 +833,7 @@ export function DashboardView({
     date.toLocaleDateString('en-CA', { timeZone: userTZ }); // produces YYYY-MM-DD
 
   const getDisplayDate = (m: any) => {
-    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+    const d = new Date(meetingWhen(m) || Date.now());
     const dateStr = toLocalDateStr(d);
     const todayStr = toLocalDateStr(new Date());
     const tomorrowDate = new Date(); tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -952,8 +1039,14 @@ export function DashboardView({
     m: any,
     opts: { chat: boolean; edit: boolean; remove: boolean; invite: boolean },
   ) =>
-    inviteMenuRoomName === m.roomName ? (
-      <div className={`${styles.dropdownMenu} ${styles.inviteMenu}`} role="menu">
+    inviteMenuRoomName === m.roomName && typeof document !== 'undefined' ? (
+      createPortal(
+      <div
+        ref={menuRef}
+        data-invite-menu="true"
+        className={`${styles.dropdownMenu} ${styles.inviteMenu} ${styles.inviteMenuFloating}`}
+        role="menu"
+      >
         <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
           {t('schedule.copyLink')}
         </button>
@@ -1027,7 +1120,9 @@ export function DashboardView({
             {t('dash.deleteMeeting')}
           </button>
         )}
-      </div>
+      </div>,
+      document.body,
+      )
     ) : null;
 
   /** Personal-room sessions are archived as "<id>_<meetingId>"; show the room ID people type. */
@@ -1037,7 +1132,7 @@ export function DashboardView({
   };
 
   const renderMeetingRow = (m: any, i: number, upcoming: boolean) => {
-    const d = m.scheduledFor ? new Date(m.scheduledFor) : new Date(m.createdAt);
+    const d = new Date(meetingWhen(m) || Date.now());
     const recording = m.recordings?.find((r: any) => r.status === 'READY');
     const processingRecording =
       !recording && m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
@@ -1087,8 +1182,7 @@ export function DashboardView({
           cls: styles.statusScheduled,
           text: d.toLocaleDateString(locale, { month: 'short', day: 'numeric', weekday: 'short', timeZone: userTZ }),
         };
-    } else if (notHeld) chip = { cls: styles.statusFinished, text: tx('dash.statusNotHeld', 'Not held') };
-    else if (finished && recording)
+    } else if (recording)
       chip = {
         cls: styles.statusFinished,
         rec: true,
@@ -1096,7 +1190,8 @@ export function DashboardView({
           recording.visibility === 'PUBLIC' ? t('dash.recordingPublic') : t('dash.recordingPrivate')
         }`,
       };
-    else if (finished && processingRecording) chip = { cls: styles.statusFinished, rec: true, text: t('common.processing') };
+    else if (processingRecording) chip = { cls: styles.statusFinished, rec: true, text: t('common.processing') };
+    else if (notHeld) chip = { cls: styles.statusFinished, text: tx('dash.statusNotHeld', 'Not held') };
 
     const hostLabel = m.createdByMember?.fullName || m.createdByMember?.username || '';
     const instant = !m.title && !m.scheduledFor;
@@ -1106,6 +1201,8 @@ export function DashboardView({
     // The one main action; everything else is in the ⋯ menu
     let primary: { label: string; icon: React.ReactNode; fill?: boolean; onClick: () => void; title?: string } | null = null;
     if (isLive) primary = { label: t('common.join'), icon: videoIcon(15), fill: true, onClick: () => router.push(`/rooms/${m.roomName}`) };
+    else if (recording && !upcoming) primary = { label: replayLabel, icon: playIcon(12), onClick: () => openRecording(recording), title: t('dash.replayTitle') };
+    else if (processingRecording && !upcoming) primary = { label: t('common.processing'), icon: playIcon(12), onClick: () => openFinishedMeeting(m) };
     else if ((upcoming || notHeld) && !canceled) {
       if (isHost) primary = { label: t('common.start'), icon: playIcon(12), onClick: () => handleStartMeetingClick(m) };
       else if (upcoming) primary = { label: t('common.join'), icon: videoIcon(14), onClick: () => router.push(`/rooms/${m.roomName}`) };
@@ -1190,7 +1287,11 @@ export function DashboardView({
             <span className={styles.rowActionSpacer} aria-hidden="true" />
           )}
           {m.roomName && (
-            <div data-invite-menu-anchor="true" className={styles.anchor}>
+            <div
+              data-invite-menu-anchor="true"
+              className={styles.anchor}
+              ref={cardMenuOpen ? menuAnchorRef : undefined}
+            >
               <button
                 type="button"
                 title={tx('dash.moreActions', 'More actions')}
@@ -1491,7 +1592,7 @@ export function DashboardView({
               )}
               {Object.entries(groupedMeetings).map(([dateLabel, meetings]) => {
                 const first = (meetings as any[])[0];
-                const d = new Date(first?.scheduledFor || first?.createdAt || Date.now());
+                const d = new Date((first ? meetingWhen(first) : 0) || Date.now());
                 const full = d.toLocaleDateString(locale, { month: 'long', day: 'numeric', timeZone: userTZ });
                 const day = toYmd(d);
                 const open = datePicker?.day === day && datePicker.anchor.dataset.jumpChip !== 'true';
@@ -1759,7 +1860,12 @@ export function DashboardView({
 
       {showSettingsModal && (
         <SystemSettingsModal 
-          onClose={() => setShowSettingsModal(false)}
+          initialTab={settingsTab}
+          onNotice={(message) => toast.show(message)}
+          onClose={() => {
+            setShowSettingsModal(false);
+            setSettingsTab(undefined);
+          }}
           onSave={() => {
             setShowSettingsModal(false);
             toast.show(t('dash.settingsSaved'));

@@ -2,16 +2,32 @@ import React, { useState, useEffect } from 'react';
 import styles from '../styles/SystemSettingsModal.module.css';
 import { useI18n } from './i18n';
 import { authFetch, authHeaders } from '@/lib/kloudSession';
+import { KloudIntegrationPanel } from './settings/KloudIntegrationPanel';
+
+export type AccountSettingsTab = 'general' | 'kloud' | 'aws' | 'livekit' | 'telnyx';
 
 interface SystemSettingsModalProps {
   onClose: () => void;
   onSave: () => void;
+  /** Tab to open on (e.g. 'kloud' when coming back from connecting Kloud). */
+  initialTab?: AccountSettingsTab;
+  /** Messages from the Kloud Integration tab (linked, unlinked). */
+  onNotice?: (message: string) => void;
+  /** Opened inside a meeting: connecting Kloud would leave the meeting, so it is offered from the home page. */
+  inMeeting?: boolean;
 }
 
-type TabType = 'general' | 'aws' | 'livekit' | 'telnyx';
+type TabType = AccountSettingsTab;
 
-export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('general');
+/**
+ * Account Settings. Kloud Integration is open to every signed-in person (the link has its own
+ * owner/admin checks). General, AWS S3, LiveKit and Telnyx are the site's own keys: the server lets
+ * only SiMeet staff read or change them, until per-account System Admins exist.
+ */
+export function SystemSettingsModal({ onClose, onSave, initialTab, onNotice, inMeeting }: SystemSettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab ?? 'general');
+  /** null while loading; false when the server says these settings are staff-only. */
+  const [canEditPlatform, setCanEditPlatform] = useState<boolean | null>(null);
   const { t } = useI18n();
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,7 +55,16 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
   useEffect(() => {
     setIsLoading(true);
     authFetch('/api/settings')
-      .then((res) => res.json())
+      .then((res) => {
+        const allowed = res.ok;
+        setCanEditPlatform(allowed);
+        if (!allowed) {
+          // Not staff: open on the tab this person can use.
+          if (!initialTab) setActiveTab('kloud');
+          return null;
+        }
+        return res.json();
+      })
       .then((data) => {
         if (data && typeof data === 'object' && !data.error) {
           setOrgName(data.org_name || '');
@@ -63,9 +88,12 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
           setTelnyxAppKey(data.telnyx_app_key || '');
         }
       })
-      .catch((err) => console.error('Failed to load settings:', err))
+      .catch((err) => {
+        console.error('Failed to load settings:', err);
+        setCanEditPlatform(false);
+      })
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [initialTab]);
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -136,6 +164,12 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
             >
               {t('settings.general')}
             </button>
+            <button
+              className={activeTab === 'kloud' ? styles.tabActive : styles.tab}
+              onClick={() => setActiveTab('kloud')}
+            >
+              {t('settings.kloudIntegration')}
+            </button>
             <button 
               className={activeTab === 'aws' ? styles.tabActive : styles.tab} 
               onClick={() => setActiveTab('aws')}
@@ -158,10 +192,14 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
 
           {/* Main Content Area */}
           <div className={styles.contentArea}>
-            {isLoading ? (
+            {activeTab === 'kloud' ? (
+              <KloudIntegrationPanel onNotice={onNotice} inMeeting={inMeeting} />
+            ) : isLoading ? (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '3rem', color: '#9ca3af' }}>
                 {t('settings.loadingSettings')}
               </div>
+            ) : canEditPlatform === false ? (
+              <div className={styles.staffNote}>{t('settings.staffOnly')}</div>
             ) : (
               <>
                 {activeTab === 'general' && (
@@ -171,6 +209,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.orgName')}</label>
                       <input 
                         type="text" 
+                        autoComplete="off" 
                         className={styles.input} 
                         value={orgName} 
                         onChange={e => setOrgName(e.target.value)} 
@@ -226,6 +265,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.awsAccessKey')}</label>
                       <input 
                         type="text" 
+                        autoComplete="off" 
                         className={styles.input} 
                         value={awsAccessKey} 
                         onChange={e => setAwsAccessKey(e.target.value)} 
@@ -236,6 +276,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.awsSecretKey')}</label>
                       <input 
                         type="password" 
+                        autoComplete="new-password" 
                         className={styles.input} 
                         value={awsSecretKey} 
                         onChange={e => setAwsSecretKey(e.target.value)} 
@@ -247,6 +288,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                         <label className={styles.label}>{t('settings.awsRegion')}</label>
                         <input 
                           type="text" 
+                          autoComplete="off" 
                           className={styles.input} 
                           value={awsRegion} 
                           onChange={e => setAwsRegion(e.target.value)} 
@@ -257,6 +299,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                         <label className={styles.label}>{t('settings.s3Bucket')}</label>
                         <input 
                           type="text" 
+                          autoComplete="off" 
                           className={styles.input} 
                           value={awsBucket} 
                           onChange={e => setAwsBucket(e.target.value)} 
@@ -276,6 +319,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.livekitUrl')}</label>
                       <input 
                         type="text" 
+                        autoComplete="off" 
                         className={styles.input} 
                         value={livekitUrl} 
                         onChange={e => setLivekitUrl(e.target.value)} 
@@ -286,6 +330,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.apiKey')}</label>
                       <input 
                         type="text" 
+                        autoComplete="off" 
                         className={styles.input} 
                         value={livekitApiKey} 
                         onChange={e => setLivekitApiKey(e.target.value)} 
@@ -296,6 +341,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.apiSecret')}</label>
                       <input 
                         type="password" 
+                        autoComplete="new-password" 
                         className={styles.input} 
                         value={livekitApiSecret} 
                         onChange={e => setLivekitApiSecret(e.target.value)} 
@@ -314,6 +360,7 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
                       <label className={styles.label}>{t('settings.telnyxAppKey')}</label>
                       <input 
                         type="password" 
+                        autoComplete="new-password" 
                         className={styles.input} 
                         value={telnyxAppKey} 
                         onChange={e => setTelnyxAppKey(e.target.value)} 
@@ -329,12 +376,21 @@ export function SystemSettingsModal({ onClose, onSave }: SystemSettingsModalProp
 
         {/* Footer */}
         <div className={styles.footer}>
-          <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>
-            {t('common.cancel')}
-          </button>
-          <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving || isLoading}>
-            {isSaving ? t('common.saving') : t('settings.saveSettings')}
-          </button>
+          {activeTab === 'kloud' || canEditPlatform === false ? (
+            // Kloud Integration acts at once; there is nothing to save here.
+            <button className={styles.btnOutline} onClick={onClose}>
+              {t('settings.close')}
+            </button>
+          ) : (
+            <>
+              <button className={styles.btnOutline} onClick={onClose} disabled={isSaving}>
+                {t('common.cancel')}
+              </button>
+              <button className={styles.btnSolid} onClick={handleSave} disabled={isSaving || isLoading}>
+                {isSaving ? t('common.saving') : t('settings.saveSettings')}
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

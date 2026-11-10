@@ -3,6 +3,9 @@ import {
   ensureHostBypassesProxy,
 } from '@/lib/peertimeUpstream';
 import type { NextRequest } from 'next/server';
+import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
+import { fetchKloudUserId } from '@/lib/kloudAuth';
+import { ensureKloudMembership, kloudSubsystemConfig } from '@/lib/kloudSubsystem.server';
 
 const DEFAULT_FALLBACK_COMPANY_ID = 3255;
 
@@ -19,7 +22,8 @@ function parsePositiveInt(value: unknown): number | null {
 
 /**
  * Resolve PeerTime companyId (SchoolID) for LiveDoc / meeting_document tenancy.
- * Order: explicit body value → UserToken profile → SSO cookie profile → env fallback.
+ * Order: explicit body value → the SiMeet SubSystem (when the token is the signed-in member's
+ * subsystem login) → UserToken profile → SSO cookie profile → env fallback.
  */
 export async function resolvePeerTimeCompanyId(options: {
   request: NextRequest;
@@ -28,6 +32,9 @@ export async function resolvePeerTimeCompanyId(options: {
 }): Promise<number> {
   const explicit = parsePositiveInt(options.explicitCompanyId);
   if (explicit) return explicit;
+
+  const subsystemId = await subsystemCompanyFor(options.request, options.userToken);
+  if (subsystemId) return subsystemId;
 
   const tokens: string[] = [];
   if (options.userToken) tokens.push(options.userToken);
@@ -114,4 +121,26 @@ export async function resolveMemberAccountId(teamMemberId: number): Promise<numb
     orderBy: { id: 'asc' },
   });
   return membership?.accountId ?? null;
+}
+
+/**
+ * The SiMeet SubSystem's company ID when `userToken` belongs to the signed-in member's subsystem
+ * Kloud user, so their meetings and documents live in the subsystem; otherwise null. Compares Kloud
+ * user IDs rather than tokens, so a token issued before a server restart still counts.
+ */
+async function subsystemCompanyFor(request: NextRequest, userToken?: string | null): Promise<number | null> {
+  const config = kloudSubsystemConfig();
+  if (!config || !userToken) return null;
+  try {
+    const member = await getSessionTeamMember(request);
+    if (!member) return null;
+    const membership = await ensureKloudMembership(member);
+    if (!membership) return null;
+    if (membership.token === userToken) return config.id;
+    const tokenUserId = await fetchKloudUserId(userToken);
+    return tokenUserId && tokenUserId === membership.kloudUserId ? config.id : null;
+  } catch (error) {
+    console.error('[peerTimeCompany] subsystem check failed', error);
+    return null;
+  }
 }

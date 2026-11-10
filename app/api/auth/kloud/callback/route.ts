@@ -10,6 +10,7 @@ import {
   kloudStateCookieOptions,
   recordKloudCompanies,
 } from '@/lib/kloudAuth';
+import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
 
 const TOKEN_RE = /^[A-Za-z0-9._~+/=-]{8,512}$/;
 
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get('user-agent') || null,
       },
     });
+    joinKloudSubsystemInBackground(member);
 
     const params = new URLSearchParams({ sso_token: sessionToken, via: 'kloud' });
     if (saved.next) params.set('next', saved.next);
