@@ -46,6 +46,7 @@ export function LiveDocReplayStage({
   speaker,
   fill = false,
   fillClass,
+  children,
 }: {
   info: LiveDocReplayInfo;
   mediaRef: React.RefObject<HTMLVideoElement | null>;
@@ -55,6 +56,8 @@ export function LiveDocReplayStage({
   fill?: boolean;
   /** fill 时的布局类（桌面限高、窄屏改回 16:9） */
   fillClass?: string;
+  /** 叠在舞台上的回放浮层（参会人） */
+  children?: React.ReactNode;
 }) {
   const { t, locale } = useI18n();
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
@@ -191,6 +194,7 @@ export function LiveDocReplayStage({
           <span style={{ fontSize: 13, fontWeight: 500 }}>{speaker.name}</span>
         </div>
       )}
+      {children}
     </div>
   );
 }

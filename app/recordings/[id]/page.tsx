@@ -12,6 +12,8 @@ import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
+import { ReplayPeople } from '@/lib/ReplayPeople';
+import type { PresenceEvent } from '@/lib/livedoc/presence';
 import {
   RecordingAccessBlocked,
   RecordingRequestsBar,
@@ -113,6 +115,8 @@ interface ReplayData {
     transcribe?: TranscribeState;
     /** LiveDoc Full Recording: replay LiveDoc, screen shares and SmartCam on the voice's clock */
     livedoc?: LiveDocReplayInfo | null;
+    /** LiveDoc Full: join, leave, microphone and camera, on the LiveDoc clock */
+    presence?: PresenceEvent[];
   };
   meeting: {
     id: number;
@@ -1515,10 +1519,18 @@ export default function ReplayPage() {
                 info={livedoc}
                 mediaRef={videoRef}
                 viewerName={userInfo?.displayName || ''}
-                speaker={replaySpeaker}
+                speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
                 fill={!hasTranscripts}
                 fillClass={s.livedocFill}
-              />
+              >
+                {recording.presence && recording.presence.length > 0 && (
+                  <ReplayPeople
+                    events={recording.presence}
+                    atMs={currentTime * 1000 + livedoc.offsetMs}
+                    speaking={replaySpeaker?.name ?? ''}
+                  />
+                )}
+              </LiveDocReplayStage>
             )}
             <video
               ref={videoRef}

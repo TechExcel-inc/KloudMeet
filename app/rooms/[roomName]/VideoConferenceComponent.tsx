@@ -95,6 +95,7 @@ import { useSetupE2EE } from '@/lib/useSetupE2EE';
 import { useLowCPUOptimizer } from '@/lib/usePerfomanceOptimiser';
 import { AttendeePanel } from '@/lib/ChatAndAttendeePanel';
 import { useLivedocRecordingBridge } from '@/lib/useLivedocRecordingBridge';
+import { useLivedocPresence } from '@/lib/useLivedocPresence';
 import {
   ParticipantRoleMenuProvider,
   type ParticipantRoleActionsConfig,
@@ -531,6 +532,12 @@ export function VideoConferenceComponent(props: {
     screenShareOn: activeView === 'shareScreen',
     room,
   });
+  useLivedocPresence(
+    room,
+    recordingState,
+    props.connectionDetails.roomName,
+    props.connectionDetails.participantToken,
+  );
 
   // LiveDoc Full: the page that started the recording reports each screen share that starts, so it is
   // recorded even when LiveKit's webhook doesn't reach the server.

@@ -361,6 +361,7 @@ model Recording {
   accessRequests     RecordingAccessRequest[]
   speakIntervals     RecordingSpeakInterval[]
   sections           RecordingSection[]
+  presence           RecordingPresence[]
 
   @@index([meetingId], map: "Recording_meetingId_fkey")
   @@index([teamMemberId], map: "Recording_teamMemberId_fkey")
@@ -405,6 +406,24 @@ model RecordingSpeakInterval {
 
   @@index([recordingId, startedAt], map: "RecordingSpeakInterval_recordingId_startedAt_idx")
   @@map("RecordingSpeakInterval")
+}
+
+/// One presence change during a LiveDoc Full recording: in the room, microphone, or camera.
+model RecordingPresence {
+  id          Int       @id @default(autoincrement())
+  recordingId Int
+  identity    String
+  name        String    @default("")
+  /// room | mic | cam
+  kind        String
+  on          Boolean
+  /// Milliseconds from Recording.livedocStartedAt
+  atMs        Int
+  createdAt   DateTime  @default(now())
+  recording   Recording @relation(fields: [recordingId], references: [id], map: "RecordingPresence_recordingId_fkey")
+
+  @@index([recordingId, atMs], map: "RecordingPresence_recordingId_atMs_idx")
+  @@map("RecordingPresence")
 }
 
 model RecordingAccessRequest {

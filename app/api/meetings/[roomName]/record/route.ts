@@ -8,6 +8,7 @@ import { checkReplayQuota } from '@/lib/billing/limits';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 import { endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
 import { startScreenSectionsForRoom, stopScreenSections } from '@/lib/livedoc/screenSections';
+import { snapshotPresence } from '@/lib/livedoc/presenceRecord';
 import {
   closePause,
   isRecordingMode,
@@ -363,6 +364,9 @@ export async function POST(
     if (livedocFull) {
       await startScreenSectionsForRoom(recording, roomName).catch((e) =>
         console.error('[meetings record] screen sections failed to start', e),
+      );
+      await snapshotPresence(roomName).catch((e) =>
+        console.error('[meetings record] presence snapshot failed', e),
       );
     }
     if (meeting.recordingMode !== mode) {

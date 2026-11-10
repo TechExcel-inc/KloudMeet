@@ -7,6 +7,7 @@ import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import { parsePauseSpans, pauseRangesInMedia } from '@/lib/recordingControls';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
+import { isPresenceKind, type PresenceEvent } from '@/lib/livedoc/presence';
 import { isInternalMember } from '@/lib/internalStaff.server';
 import {
   authorizeRecordingView,
@@ -170,6 +171,7 @@ export async function GET(
         recordedBy: recording.teamMember,
         transcribe: transcribeStateOf(recording),
         livedoc,
+        presence: await loadPresence(recording.id, recording.kind),
       },
       meeting: recording.meeting
         ? {
@@ -203,6 +205,26 @@ export async function GET(
   } catch (err) {
     console.error('[replay summary GET]', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
+/** LiveDoc Full presence. Missing table (SQL not applied yet) leaves the replay without the people window. */
+async function loadPresence(recordingId: number, kind: string): Promise<PresenceEvent[]> {
+  if (kind !== 'livedoc_full') return [];
+  try {
+    const rows = await prisma.recordingPresence.findMany({
+      where: { recordingId },
+      orderBy: [{ atMs: 'asc' }, { id: 'asc' }],
+      select: { identity: true, name: true, kind: true, on: true, atMs: true },
+    });
+    return rows.flatMap((row): PresenceEvent[] =>
+      isPresenceKind(row.kind)
+        ? [{ identity: row.identity, name: row.name, kind: row.kind, on: row.on, atMs: row.atMs }]
+        : [],
+    );
+  } catch (err) {
+    console.error('[replay summary] presence failed', err);
+    return [];
   }
 }
 

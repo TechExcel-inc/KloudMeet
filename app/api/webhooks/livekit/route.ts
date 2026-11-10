@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { WebhookReceiver } from 'livekit-server-sdk';
+import { TrackSource, WebhookReceiver } from 'livekit-server-sdk';
 import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import {
@@ -15,6 +15,7 @@ import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
 import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
 import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
 import { onSectionEgressEnded, onTrackPublished } from '@/lib/livedoc/screenSections';
+import { appendPresence, isPresenceRecorder, type PresenceInput } from '@/lib/livedoc/presenceRecord';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import {
   closeOpenParticipants,
@@ -138,6 +139,37 @@ export async function POST(request: NextRequest) {
       await onTrackPublished(event.room.name, event.track, event.participant.identity).catch((err) =>
         console.error('[webhooks livekit] screen section failed to start', err),
       );
+    }
+
+    // LiveDoc Full: join, leave, and a microphone or camera published or removed.
+    // Mute toggles are not webhook events; each person's page reports those.
+    if (
+      event.room &&
+      event.participant &&
+      !isPresenceRecorder(event.participant.metadata) &&
+      (event.event === 'participant_joined' ||
+        event.event === 'participant_left' ||
+        event.event === 'track_published' ||
+        event.event === 'track_unpublished')
+    ) {
+      const name = event.participant.name || event.participant.identity;
+      const identity = event.participant.identity;
+      const source = event.track?.source;
+      const device =
+        source === TrackSource.MICROPHONE ? 'mic' : source === TrackSource.CAMERA ? 'cam' : null;
+      const events: PresenceInput[] =
+        event.event === 'participant_joined'
+          ? [{ identity, name, kind: 'room', on: true }]
+          : event.event === 'participant_left'
+            ? [{ identity, name, kind: 'room', on: false }]
+            : device
+              ? [{ identity, name, kind: device, on: event.event === 'track_published' && event.track?.muted !== true }]
+              : [];
+      if (events.length) {
+        await appendPresence(event.room.name, events).catch((err) =>
+          console.error('[webhooks livekit] presence failed', err),
+        );
+      }
     }
 
     // 参会记录：只在真正连上房间时写入（拿到入会票不算），并记下在场时间窗
