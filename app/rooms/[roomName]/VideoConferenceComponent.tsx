@@ -3145,6 +3145,47 @@ export function VideoConferenceComponent(props: {
     updateCustomMicsRef.current?.();
   }, [hostMutedIdentities, hostDisabledVideoIdentities, muteAllActive, hasScreenShare, activeView]);
 
+  // Desktop share bar uses the same stop / mic / annotate actions as the toolbar.
+  const shareBarHandlers = React.useRef({
+    stop: handleShareScreen,
+    mic: handleToggleMic,
+    sharing: screenShareActive,
+  });
+  shareBarHandlers.current.stop = handleShareScreen;
+  shareBarHandlers.current.mic = handleToggleMic;
+  shareBarHandlers.current.sharing = screenShareActive;
+
+  React.useEffect(() => {
+    if (!screenShareActive) return;
+    window.electronAPI?.setShareBarState?.({ micOn: micEnabled, annotating: isDrawingMode });
+  }, [screenShareActive, micEnabled, isDrawingMode]);
+
+  React.useEffect(() => {
+    const api = window.electronAPI;
+    if (!api?.onShareBarAction) return;
+    return api.onShareBarAction((action) => {
+      if (!shareBarHandlers.current.sharing) return;
+      if (action === 'stop') {
+        shareBarHandlers.current.stop();
+        return;
+      }
+      if (action === 'mic') {
+        shareBarHandlers.current.mic();
+        return;
+      }
+      if (action !== 'annotate') return;
+      setIsDrawingMode((prev) => {
+        const next = !prev;
+        if (next) {
+          setIsRemoteControlMode(false);
+          // Drawing happens on the meeting stage, so bring that window forward.
+          window.electronAPI?.miniWindow?.focusMain?.();
+        }
+        return next;
+      });
+    });
+  }, []);
+
   // Our own share ended while someone else's goes on: the desktop app stops floating its overlay.
   const prevScreenShareActiveRef = React.useRef(false);
   React.useEffect(() => {

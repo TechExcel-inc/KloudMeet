@@ -297,6 +297,8 @@
   "meeting.screenShareReason.inactive": "ページが前面にありません。会議に戻ってから再試行してください",
   "meeting.screenShareReason.disconnected": "会議から切断されています。再接続してから試してください",
   "meeting.screenShareReason.unknownFallback": "しばらくしてから再試行してください",
+  "update.downloading": "新しいバージョン {version} をダウンロード中",
+  "update.downloadingPlain": "新しいバージョンをダウンロード中",
   "meeting.speakWhileMutedMessage": "話しているようです。マイクをオンにしますか？",
   "meeting.speakWhileMutedUnmute": "マイクをオン",
   "meeting.speakWhileMutedDismiss": "閉じる",

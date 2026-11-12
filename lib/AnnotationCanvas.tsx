@@ -26,6 +26,11 @@ declare global {
       sendRemoteControlMessage?: (data: any) => void;
       getShareTargetBounds?: () => Promise<ShareTargetBounds | null>;
       clearShareTarget?: () => Promise<void>;
+      /** Desktop share bar: current mic and annotate state. */
+      setShareBarState?: (state: { micOn: boolean; annotating: boolean }) => void;
+      /** Stop, microphone, or annotate clicked on that bar. */
+      onShareBarAction?: (callback: (action: 'stop' | 'mic' | 'annotate') => void) => () => void;
+      miniWindow?: { focusMain: () => void };
       /** Desktop builds with wheel/keyboard support list them here. */
       remoteControlCaps?: string[];
       /** Tells the desktop app a control session started or ended (shows its banner, arms the stop shortcut). */

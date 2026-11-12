@@ -297,6 +297,8 @@
   "meeting.screenShareReason.inactive": "页面不在前台，请切回会议后再试",
   "meeting.screenShareReason.disconnected": "会议连接已断开，请等重连完成后再试",
   "meeting.screenShareReason.unknownFallback": "请稍后重试",
+  "update.downloading": "正在下载新版本 {version}",
+  "update.downloadingPlain": "正在下载新版本",
   "meeting.speakWhileMutedMessage": "检测到你可能在说话，要打开麦克风吗？",
   "meeting.speakWhileMutedUnmute": "打开麦克风",
   "meeting.speakWhileMutedDismiss": "关闭",

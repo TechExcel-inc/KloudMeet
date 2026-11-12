@@ -4,6 +4,7 @@ import '@livekit/components-styles';
 import '@livekit/components-styles/prefabs';
 import type { Metadata, Viewport } from 'next';
 import { Toaster } from 'react-hot-toast';
+import { DesktopUpdateBanner } from '@/lib/DesktopUpdateBanner';
 import { I18nProvider } from '@/lib/i18n';
 
 /** Shown in search results and link previews (WeChat, Slack, etc.). */
@@ -42,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body data-lk-theme="default" suppressHydrationWarning>
         <I18nProvider>
+          <DesktopUpdateBanner />
           <Toaster />
           {children}
         </I18nProvider>

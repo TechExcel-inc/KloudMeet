@@ -25,6 +25,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   getShareTargetBounds: () => ipcRenderer.invoke('get-share-target-bounds'),
   clearShareTarget: () => ipcRenderer.invoke('clear-share-target'),
+  /** Mic and annotate state for the floating share bar. */
+  setShareBarState: (state) => ipcRenderer.send('share-bar-state', state),
+  /** Download percent for the in-page update banner. Null when the download ends. */
+  getAppUpdateProgress: () => ipcRenderer.invoke('app-update-progress-current'),
+  onAppUpdateProgress: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const handler = (_event, payload) => callback(payload);
+    ipcRenderer.on('app-update-progress', handler);
+    return () => ipcRenderer.removeListener('app-update-progress', handler);
+  },
+  /** Stop, mic, or annotate from that bar. Returns an unsubscribe. */
+  onShareBarAction: (callback) => {
+    if (typeof callback !== 'function') return () => {};
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on('share-bar-action', handler);
+    return () => ipcRenderer.removeListener('share-bar-action', handler);
+  },
   /** Google sign-in opens the system browser and returns via kloudmeet://auth. */
   googleSignInInBrowser: true,
   /**

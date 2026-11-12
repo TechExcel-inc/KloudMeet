@@ -91,6 +91,16 @@ function showFatal(title, detail) {
 
 let mainWindow;
 let overlayWindow;
+/** Green outline of the shared screen or window. Hidden from the capture. */
+let shareFrameWindow = null;
+/** Floating "you're sharing" bar. Hidden from the capture. */
+let shareBarWindow = null;
+/** True while a share should show the frame and the bar. */
+let shareChromeWanted = false;
+/** The bar grows while the pointer is over it. */
+let shareBarOpen = false;
+let shareBarMicOn = true;
+let shareBarAnnotating = false;
 /** 主窗口顶部居中的更新下载进度（仅打包环境使用） */
 let updateProgressWindow;
 /** 更新下载完成后的「立即重启」模态窗 */
@@ -169,9 +179,19 @@ function floatOnAllSpaces(win) {
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
 }
 
+/** Keep the bar on every Space without turning the app into a UI element (that hides the Dock). */
+function placeUpdateProgressOnSpaces(win) {
+  if (!win || win.isDestroyed()) return;
+  try {
+    floatOnAllSpaces(win);
+  } catch {
+    /* ignore */
+  }
+}
+
 /** Electron hides the Dock before setting full-screen behaviour; do the same once hidden. */
 function refloatWindows() {
-  for (const win of [overlayWindow, rcBarWindow, updateProgressWindow, miniWindow]) {
+  for (const win of [overlayWindow, rcBarWindow, miniWindow, shareFrameWindow, shareBarWindow]) {
     if (!win || win.isDestroyed()) continue;
     try {
       floatOnAllSpaces(win);
@@ -227,14 +247,19 @@ function layoutUpdateProgressWindow() {
   if (!updateProgressWindow || updateProgressWindow.isDestroyed() || !mainWindow || mainWindow.isDestroyed()) {
     return;
   }
+  const { screen } = require('electron');
   const cb = mainWindow.getContentBounds();
   const width = Math.min(UPDATE_PROGRESS_W, Math.max(260, cb.width - 24));
-  updateProgressWindow.setBounds({
-    x: Math.round(cb.x + (cb.width - width) / 2),
-    y: cb.y + UPDATE_PROGRESS_TOP_INSET,
-    width,
-    height: UPDATE_PROGRESS_H,
-  });
+  const area = screen.getDisplayMatching(cb).workArea;
+  let x = Math.round(cb.x + (cb.width - width) / 2);
+  let y = cb.y + UPDATE_PROGRESS_TOP_INSET;
+  const maxX = area.x + area.width - width;
+  const maxY = area.y + area.height - UPDATE_PROGRESS_H;
+  if (x < area.x) x = area.x;
+  if (x > maxX) x = maxX;
+  if (y < area.y) y = area.y;
+  if (y > maxY) y = maxY;
+  updateProgressWindow.setBounds({ x, y, width, height: UPDATE_PROGRESS_H });
 }
 
 function stopUpdateProgressRaiseLoop() {
@@ -259,14 +284,20 @@ function pinUpdateProgressAbove() {
     stopUpdateProgressRaiseLoop();
     return;
   }
-  try {
-    if (!w.isVisible()) w.showInactive();
-  } catch {
+  if (!w.isVisible()) {
     try {
-      w.show();
+      w.showInactive();
     } catch {
       /* ignore */
     }
+    if (!w.isVisible()) {
+      try {
+        w.show();
+      } catch (e) {
+        appendStartupLog(`[updater] progress show: ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    placeUpdateProgressOnSpaces(w);
   }
   raiseUpdateProgressWindow();
 }
@@ -290,13 +321,16 @@ function destroyUpdateProgressWindow() {
   pendingUpdateProgressPayload = null;
   lastUpdaterProgressRounded = -1;
   releaseOverlayHide('update-progress');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app-update-progress', null);
+  }
 }
 
 function raiseUpdateProgressWindow() {
   const w = updateProgressWindow;
   if (!w || w.isDestroyed()) return;
   try {
-    w.setAlwaysOnTop(true, 'screen-saver', 1);
+    w.setAlwaysOnTop(true, 'screen-saver', 5);
   } catch {
     try {
       w.setAlwaysOnTop(true, 'pop-up-menu', 2);
@@ -319,32 +353,18 @@ function broadcastUpdateDownloadProgress(payload) {
   const rounded = Math.round(payload.percent);
   if (rounded === lastUpdaterProgressRounded) return;
   lastUpdaterProgressRounded = rounded;
-  pendingUpdateProgressPayload = payload;
+  const full = {
+    percent: payload.percent,
+    version: payload.version || updateAnnouncedVersion || '',
+    zh: /^zh/i.test(app.getLocale() || ''),
+  };
+  pendingUpdateProgressPayload = full;
   const w = updateProgressWindow;
-  if (!w || w.isDestroyed()) return;
-  if (!w.webContents.isLoading()) {
-    w.webContents.send('update-download-progress', payload);
+  if (w && !w.isDestroyed() && !w.webContents.isLoading()) {
+    w.webContents.send('update-download-progress', full);
   }
-}
-
-/**
- * 全屏 alwaysOnTop 的 overlay 会把挂在主窗口上的原生对话框挡在下面；先隐藏 overlay，并用无宿主窗口调用保证提示在最前。
- */
-async function showUpdaterMessageBox(options) {
-  acquireOverlayHide('update-msgbox');
-  try {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-      try {
-        mainWindow.moveTop();
-      } catch {
-        /* ignore */
-      }
-    }
-    return await dialog.showMessageBox(null, options);
-  } finally {
-    releaseOverlayHide('update-msgbox');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('app-update-progress', full);
   }
 }
 
@@ -490,8 +510,8 @@ function ensureUpdateProgressWindow() {
     hasShadow: true,
     focusable: false,
     alwaysOnTop: true,
-    // Windows 上挂到主窗口，会议页 focus / moveTop 也盖不住进度条
-    parent: process.platform === 'win32' ? mainWindow : undefined,
+    // panel 才能盖住 Mac 全屏会议。不要 parent：子窗口的坐标会偏到屏幕外，进度条等于没出现。
+    ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'update-progress-preload.js'),
       contextIsolation: true,
@@ -499,27 +519,14 @@ function ensureUpdateProgressWindow() {
     },
   });
 
-  try {
-    floatOnAllSpaces(updateProgressWindow);
-  } catch {
-    /* ignore */
-  }
+  placeUpdateProgressOnSpaces(updateProgressWindow);
   raiseUpdateProgressWindow();
   startUpdateProgressRaiseLoop();
 
   updateProgressWindow.webContents.once('did-finish-load', () => {
     if (!updateProgressWindow || updateProgressWindow.isDestroyed()) return;
-    layoutUpdateProgressWindow();
-    try {
-      updateProgressWindow.showInactive();
-    } catch {
-      try {
-        updateProgressWindow.show();
-      } catch {
-        /* ignore */
-      }
-    }
-    raiseUpdateProgressWindow();
+    keepUpdateProgressVisible();
+    placeUpdateProgressOnSpaces(updateProgressWindow);
     if (pendingUpdateProgressPayload) {
       updateProgressWindow.webContents.send('update-download-progress', pendingUpdateProgressPayload);
     }
@@ -527,6 +534,8 @@ function ensureUpdateProgressWindow() {
 
   updateProgressWindow.on('closed', () => {
     updateProgressWindow = null;
+    // 下载还在进行时，页面里的进度条仍要露在标注层上面。
+    if (updatePhase === 'downloading') return;
     releaseOverlayHide('update-progress');
   });
 
@@ -540,7 +549,7 @@ function ensureUpdateProgressWindow() {
       /* ignore */
     }
     updateProgressWindow = null;
-    releaseOverlayHide('update-progress');
+    if (updatePhase !== 'downloading') releaseOverlayHide('update-progress');
   });
   layoutUpdateProgressWindow();
   return updateProgressWindow;
@@ -691,22 +700,13 @@ function setupAutoUpdater() {
       lastUpdaterProgressRounded = -1;
     }
     ensureUpdateProgressWindow();
-    broadcastUpdateDownloadProgress({ percent: 0 });
+    if (firstAnnounce) broadcastUpdateDownloadProgress({ percent: 0, version });
     appendStartupLog(`[updater] update-available ${version}`);
-    if (!firstAnnounce) return;
-    showUpdaterMessageBox({
-      type: 'info',
-      title: '发现新版本',
-      message: `Kloud Meet ${version} 已发布，正在后台下载。进度在窗口顶部。`,
-      buttons: ['好的'],
-    })
-      .catch(() => {})
-      .finally(() => {
-        if (updatePhase === 'downloading') ensureUpdateProgressWindow();
-      });
   });
 
   autoUpdater.on('download-progress', (p) => {
+    // 安装确认已经弹出后，迟到的 100% 不能把进度条再拉出来。
+    if (updatePhase === 'ready') return;
     updatePhase = 'downloading';
     ensureUpdateProgressWindow();
     broadcastUpdateDownloadProgress({ percent: pctFromUpdaterProgress(p) });
@@ -1115,15 +1115,21 @@ function watchSharedWindow() {
     if (rect.x === t.x && rect.y === t.y && rect.width === t.width && rect.height === t.height) return;
     Object.assign(t, rect);
     applyOverlayToShareTarget(t);
+    placeShareChrome();
   }, 400);
 }
 
 function setCurrentShareTarget(source) {
   currentShareTarget = resolveShareTargetFromSource(source);
   watchSharedWindow();
-  // Before the capture starts, or macOS lets viewers see the bar (see ensureRcBarWindow)
+  // Before the capture starts, or macOS lets viewers see these windows (content protection
+  // only applies to windows that already exist when the capture begins).
   ensureRcBarWindow();
+  ensureShareChrome();
   applyOverlayToShareTarget(currentShareTarget);
+  shareChromeWanted = true;
+  shareBarOpen = false;
+  presentShareChrome();
   setFloatingReason('share', true);
   appendStartupLog(`[share] start ${currentShareTarget.kind} ${currentShareTarget.width}x${currentShareTarget.height}`);
   return currentShareTarget;
@@ -1132,8 +1138,11 @@ function setCurrentShareTarget(source) {
 function clearCurrentShareTarget() {
   if (currentShareTarget) appendStartupLog('[share] stop');
   currentShareTarget = null;
+  shareChromeWanted = false;
+  shareBarOpen = false;
   watchSharedWindow();
   applyOverlayToShareTarget(primaryDisplayBoundsFallback());
+  hideShareChrome();
   setFloatingReason('share', false);
 }
 
@@ -1148,7 +1157,18 @@ function watchShareInterruptions() {
   };
   screen.on('display-added', () => note('display added'));
   screen.on('display-removed', () => note('display removed'));
-  screen.on('display-metrics-changed', (_e, _display, changed) => note(`display changed: ${changed.join(',')}`));
+  screen.on('display-metrics-changed', (_e, display, changed) => {
+    note(`display changed: ${changed.join(',')}`);
+    const t = currentShareTarget;
+    if (!t || t.kind !== 'screen' || !display || t.displayId !== display.id) return;
+    t.x = display.bounds.x;
+    t.y = display.bounds.y;
+    t.width = display.bounds.width;
+    t.height = display.bounds.height;
+    t.scaleFactor = display.scaleFactor || 1;
+    applyOverlayToShareTarget(t);
+    placeShareChrome();
+  });
   for (const event of ['suspend', 'resume', 'lock-screen', 'unlock-screen']) {
     powerMonitor.on(event, () => note(event));
   }
@@ -1264,9 +1284,30 @@ async function showPermissionHelp(kind, ctx = {}) {
   };
   acquireOverlayHide(`permission-${kind}`);
   try {
-    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
-    const { response } = win ? await dialog.showMessageBox(win, options) : await dialog.showMessageBox(options);
-    await buttons[response].run?.();
+    // A dialog parented to a full-screen window opens on another Space and never gets seen.
+    await leaveFullScreen();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      try {
+        mainWindow.moveTop();
+      } catch {
+        /* ignore */
+      }
+      mainWindow.focus();
+    }
+    if (process.platform === 'darwin') {
+      try {
+        app.focus({ steal: true });
+      } catch {
+        /* ignore */
+      }
+    }
+    const { response } = await dialog.showMessageBox(options);
+    const picked = buttons[response];
+    if (picked && picked.run) await picked.run();
+  } catch (err) {
+    appendStartupLog(`[share] permission dialog: ${err instanceof Error ? err.message : String(err)}`);
   } finally {
     releaseOverlayHide(`permission-${kind}`);
     permissionHelpOpen.delete(kind);
@@ -1290,20 +1331,125 @@ async function shareSources() {
   const own = new Set(BrowserWindow.getAllWindows().map((win) => win.getMediaSourceId()));
   const sources = await desktopCapturer.getSources({
     types: ['screen', 'window'],
-    thumbnailSize: { width: 464, height: 290 },
+    // A bit above 2× the card, so the preview stays sharp instead of a soft jpeg.
+    thumbnailSize: { width: 560, height: 350 },
     fetchWindowIcons: true,
   });
   return sources.filter((source) => source.name && !own.has(source.id));
 }
 
+/** Physical pixels, the size a person expects to read under a screen thumbnail. */
+function screenResolution(source) {
+  const { screen } = require('electron');
+  const displays = screen.getAllDisplays();
+  const raw = source.display_id;
+  const displayId = raw !== undefined && raw !== null && raw !== '' ? Number(raw) : undefined;
+  let matched =
+    displayId !== undefined && !Number.isNaN(displayId) ? displays.find((d) => d.id === displayId) : null;
+  if (!matched) {
+    const m = /^screen:(\d+)/.exec(String(source.id));
+    const idx = m ? Number(m[1]) : NaN;
+    if (!Number.isNaN(idx) && displays[idx]) matched = displays[idx];
+  }
+  if (!matched && displays.length === 1) matched = displays[0];
+  if (!matched) return '';
+  const scale = matched.scaleFactor || 1;
+  const w = Math.round(matched.bounds.width * scale);
+  const h = Math.round(matched.bounds.height * scale);
+  return `${w} × ${h}`;
+}
+
+/** The trailing "Document - App" segment, when the title has one. */
+function titleApp(name) {
+  const parts = String(name || '').split(/\s[-–—|]\s/);
+  return parts.length > 1 ? parts[parts.length - 1].trim() : '';
+}
+
+const iconKeyCache = new Map();
+
+/** Same icon means the same application, which is how windows get grouped. */
+function iconKey(image, id) {
+  if (iconKeyCache.has(id)) return iconKeyCache.get(id);
+  let key = '';
+  if (image && !image.isEmpty()) {
+    try {
+      const png = image.resize({ width: 8, height: 8 }).toPNG();
+      let h = 2166136261;
+      for (let i = 0; i < png.length; i += 1) {
+        h ^= png[i];
+        h = Math.imul(h, 16777619);
+      }
+      key = (h >>> 0).toString(16);
+    } catch {
+      key = '';
+    }
+  }
+  iconKeyCache.set(id, key);
+  return key;
+}
+
+/** Application name for each window: shared icon, then the common title suffix. */
+function appNames(sources) {
+  const buckets = new Map();
+  for (const source of sources) {
+    if (String(source.id).startsWith('screen')) continue;
+    const icon = iconKey(source.appIcon, source.id);
+    const tail = titleApp(source.name);
+    const key = icon ? `icon:${icon}` : tail ? `name:${tail.toLowerCase()}` : `id:${source.id}`;
+    const list = buckets.get(key);
+    if (list) list.push(source);
+    else buckets.set(key, [source]);
+  }
+  const names = new Map();
+  for (const list of buckets.values()) {
+    const counts = new Map();
+    for (const source of list) {
+      const tail = titleApp(source.name);
+      if (tail) counts.set(tail, (counts.get(tail) || 0) + 1);
+    }
+    let label = '';
+    let best = 0;
+    for (const [tail, n] of counts) {
+      if (n > best) {
+        best = n;
+        label = tail;
+      }
+    }
+    if (!label) {
+      label = list.map((source) => source.name).sort((a, b) => a.length - b.length)[0] || 'App';
+    }
+    for (const source of list) names.set(source.id, label);
+  }
+  return names;
+}
+
 function shareItems(sources) {
-  return sources.map((source) => ({
-    id: source.id,
-    kind: source.id.startsWith('screen') ? 'screen' : 'window',
-    name: source.name,
-    shot: source.thumbnail.isEmpty() ? '' : `data:image/jpeg;base64,${source.thumbnail.toJPEG(70).toString('base64')}`,
-    icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : '',
-  }));
+  const apps = appNames(sources);
+  return sources.map((source) => {
+    const screen = String(source.id).startsWith('screen');
+    return {
+      id: source.id,
+      kind: screen ? 'screen' : 'window',
+      name: source.name,
+      shot: source.thumbnail.isEmpty()
+        ? ''
+        : `data:image/jpeg;base64,${source.thumbnail.toJPEG(86).toString('base64')}`,
+      icon: source.appIcon && !source.appIcon.isEmpty() ? source.appIcon.toDataURL() : '',
+      resolution: screen ? screenResolution(source) : '',
+      app: screen ? '' : apps.get(source.id) || source.name,
+    };
+  });
+}
+
+/**
+ * A grant for an older signature still reads as "granted", while every screen thumbnail is blank.
+ * Asking for sources in that state must not open an empty picker with no explanation.
+ */
+function macScreenCaptureBlocked(sources) {
+  if (process.platform !== 'darwin') return false;
+  const screens = sources.filter((source) => String(source.id).startsWith('screen:'));
+  if (screens.length === 0) return true;
+  return screens.every((source) => !source.thumbnail || source.thumbnail.isEmpty());
 }
 
 /** Shows the share picker. Resolves to { source, sound }, or null when nothing was picked. */
@@ -1314,10 +1460,23 @@ async function pickShareSource() {
     sharePicker.focus();
     return null;
   }
-  const sources = { list: await shareSources() };
+  let list;
+  try {
+    list = await shareSources();
+  } catch (err) {
+    appendStartupLog(`[share] sources failed: ${err instanceof Error ? err.message : String(err)}`);
+    if (process.platform === 'darwin') showPermissionHelp('screen');
+    return null;
+  }
+  if (macScreenCaptureBlocked(list)) {
+    appendStartupLog('[share] Screen Recording looks on, but this build cannot capture');
+    showPermissionHelp('screen');
+    return null;
+  }
+  const sources = { list };
   const area = mainWindow.getBounds();
-  const width = Math.min(860, Math.max(560, area.width - 80));
-  const height = Math.min(620, Math.max(420, area.height - 80));
+  const width = Math.min(980, Math.max(640, area.width - 48));
+  const height = Math.min(720, Math.max(480, area.height - 48));
 
   acquireOverlayHide('share-picker');
   return new Promise((resolve) => {
@@ -1410,14 +1569,18 @@ function installSessionAndIpcOnce() {
         }
         setCurrentShareTarget(choice.source);
         callback(choice.sound ? { video: choice.source, audio: 'loopback' } : { video: choice.source });
-        // Starting a share hides the Dock icon, which sends the app behind others: bring it back.
-        setTimeout(focusMainWindow, 400);
+        // Leave the person on the shared screen. The floating bar is how they stop it.
       })
       .catch((err) => {
         console.error(err);
         clearCurrentShareTarget();
         callback();
       });
+  });
+
+  ipcMain.handle('app-update-progress-current', () => {
+    if (updatePhase !== 'downloading') return null;
+    return pendingUpdateProgressPayload;
   });
 
   ipcMain.handle('get-share-target-bounds', () => {
@@ -1427,6 +1590,24 @@ function installSessionAndIpcOnce() {
   ipcMain.handle('clear-share-target', () => {
     clearCurrentShareTarget();
     return true;
+  });
+
+  ipcMain.on('share-bar-action', (event, action) => {
+    if (!shareBarWindow || shareBarWindow.isDestroyed() || event.sender !== shareBarWindow.webContents) return;
+    if (action !== 'stop' && action !== 'mic' && action !== 'annotate') return;
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('share-bar-action', action);
+  });
+
+  ipcMain.on('share-bar-state', (event, state) => {
+    if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+    shareBarMicOn = !!(state && state.micOn);
+    shareBarAnnotating = !!(state && state.annotating);
+    sendShareBarState();
+  });
+
+  ipcMain.on('share-bar-hover', (event, open) => {
+    if (!shareBarWindow || shareBarWindow.isDestroyed() || event.sender !== shareBarWindow.webContents) return;
+    setShareBarOpen(open === true);
   });
 
   ipcMain.on('draw-message', (event, data) => {
@@ -1757,7 +1938,7 @@ function rcBarBounds() {
   const bounds = currentShareTarget || primaryDisplayBoundsFallback();
   return {
     x: Math.round(bounds.x + (bounds.width - RC_BAR_WIDTH) / 2),
-    y: Math.round(bounds.y + 14),
+    y: Math.round(bounds.y + 14 + shareBarStackHeight()),
     width: RC_BAR_WIDTH,
     height: RC_BAR_HEIGHT,
   };
@@ -1820,6 +2001,197 @@ function showRcBar() {
 
 function hideRcBar() {
   if (rcBarWindow && !rcBarWindow.isDestroyed()) rcBarWindow.hide();
+}
+
+/*
+ * Share chrome on the shared screen: a green frame around what is being shared, and a bar at the
+ * top that collapses to "You're sharing" until the pointer is over it. Both stay out of the
+ * capture. Created before the capture starts (see setCurrentShareTarget).
+ */
+const SHARE_BAR_COLLAPSED = { width: 176, height: 48 };
+const SHARE_BAR_EXPANDED = { width: 560, height: 56 };
+
+function shareBarSize() {
+  return shareBarOpen ? SHARE_BAR_EXPANDED : SHARE_BAR_COLLAPSED;
+}
+
+/** How far the remote-control bar sits below this one, so the two don't cover each other. */
+function shareBarStackHeight() {
+  if (!shareChromeWanted || !shareBarWindow || shareBarWindow.isDestroyed() || !shareBarWindow.isVisible()) return 0;
+  return shareBarSize().height + 6;
+}
+
+function sendShareBarState() {
+  if (!shareBarWindow || shareBarWindow.isDestroyed()) return;
+  shareBarWindow.webContents.send('share-bar-state', {
+    zh: /^zh/i.test(app.getLocale() || ''),
+    open: shareBarOpen,
+    micOn: shareBarMicOn,
+    annotating: shareBarAnnotating,
+  });
+}
+
+function placeShareFrame() {
+  const t = currentShareTarget;
+  if (!t || !shareFrameWindow || shareFrameWindow.isDestroyed()) return;
+  if (!(t.width > 0) || !(t.height > 0)) return;
+  shareFrameWindow.setBounds({
+    x: Math.round(t.x),
+    y: Math.round(t.y),
+    width: Math.max(1, Math.round(t.width)),
+    height: Math.max(1, Math.round(t.height)),
+  });
+}
+
+function placeShareBar() {
+  const t = currentShareTarget;
+  if (!t || !shareBarWindow || shareBarWindow.isDestroyed()) return;
+  const size = shareBarSize();
+  const width = Math.min(size.width, Math.max(140, Math.round(t.width) - 16));
+  const height = size.height;
+  shareBarWindow.setBounds({
+    x: Math.round(t.x + (t.width - width) / 2),
+    y: Math.round(t.y + 12),
+    width,
+    height,
+  });
+}
+
+function placeShareChrome() {
+  placeShareFrame();
+  placeShareBar();
+  if (rcBarWindow && !rcBarWindow.isDestroyed() && rcBarWindow.isVisible()) {
+    rcBarWindow.setBounds(rcBarBounds());
+  }
+}
+
+function showShareWin(win) {
+  if (!win || win.isDestroyed()) return;
+  // Still loading: ready-to-show will show it. A second share finds it already loaded.
+  if (win.webContents.isLoading()) return;
+  if (!win.isVisible()) win.showInactive();
+}
+
+function presentShareChrome() {
+  if (!shareChromeWanted || !currentShareTarget) return;
+  showShareWin(shareFrameWindow);
+  showShareWin(shareBarWindow);
+  // Place after the show, so the remote-control bar can sit below a bar that is actually visible.
+  placeShareChrome();
+  if (shareBarWindow && !shareBarWindow.isDestroyed() && shareBarWindow.isVisible()) shareBarWindow.moveTop();
+  sendShareBarState();
+}
+
+function hideShareChrome() {
+  for (const win of [shareFrameWindow, shareBarWindow]) {
+    if (win && !win.isDestroyed() && win.isVisible()) win.hide();
+  }
+  if (rcBarWindow && !rcBarWindow.isDestroyed() && rcBarWindow.isVisible()) {
+    rcBarWindow.setBounds(rcBarBounds());
+  }
+}
+
+function chromeWindowOptions(bounds) {
+  return {
+    ...bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
+    acceptFirstMouse: true,
+    alwaysOnTop: true,
+    show: false,
+    enableLargerThanScreen: true,
+    roundedCorners: false,
+  };
+}
+
+function ensureShareChrome() {
+  const t = currentShareTarget || primaryDisplayBoundsFallback();
+  if (!shareFrameWindow || shareFrameWindow.isDestroyed()) {
+    shareFrameWindow = new BrowserWindow({
+      ...chromeWindowOptions({ x: t.x, y: t.y, width: t.width, height: t.height }),
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    });
+    shareFrameWindow.setContentProtection(true);
+    shareFrameWindow.setIgnoreMouseEvents(true, { forward: true });
+    // Under the annotation overlay (pop-up-menu 1) so strokes sit on top of the border.
+    shareFrameWindow.setAlwaysOnTop(true, 'pop-up-menu', 0);
+    floatOnAllSpaces(shareFrameWindow);
+    shareFrameWindow.on('closed', () => {
+      shareFrameWindow = null;
+    });
+    shareFrameWindow.once('ready-to-show', () => {
+      if (!shareChromeWanted || !shareFrameWindow || shareFrameWindow.isDestroyed()) return;
+      placeShareFrame();
+      if (!shareFrameWindow.isVisible()) shareFrameWindow.showInactive();
+    });
+    shareFrameWindow.loadFile(path.join(__dirname, 'share-frame.html')).catch((e) => {
+      console.warn('share-frame load failed:', e);
+    });
+  }
+  if (!shareBarWindow || shareBarWindow.isDestroyed()) {
+    const size = SHARE_BAR_COLLAPSED;
+    shareBarWindow = new BrowserWindow({
+      ...chromeWindowOptions({
+        x: Math.round(t.x + (t.width - size.width) / 2),
+        y: Math.round(t.y + 12),
+        width: size.width,
+        height: size.height,
+      }),
+      webPreferences: {
+        preload: path.join(__dirname, 'share-bar-preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
+    });
+    shareBarWindow.setContentProtection(true);
+    shareBarWindow.setAlwaysOnTop(true, 'screen-saver', 3);
+    floatOnAllSpaces(shareBarWindow);
+    shareBarWindow.on('closed', () => {
+      shareBarWindow = null;
+    });
+    shareBarWindow.webContents.on('did-finish-load', sendShareBarState);
+    shareBarWindow.once('ready-to-show', () => {
+      if (!shareChromeWanted || !shareBarWindow || shareBarWindow.isDestroyed()) return;
+      if (!shareBarWindow.isVisible()) shareBarWindow.showInactive();
+      placeShareChrome();
+      shareBarWindow.moveTop();
+      sendShareBarState();
+    });
+    shareBarWindow.loadFile(path.join(__dirname, 'share-bar.html')).catch((e) => {
+      console.warn('share-bar load failed:', e);
+    });
+  }
+}
+
+function setShareBarOpen(open) {
+  const next = open === true;
+  if (shareBarOpen === next) return;
+  shareBarOpen = next;
+  placeShareChrome();
+  sendShareBarState();
+}
+
+function destroyShareChrome() {
+  shareChromeWanted = false;
+  for (const win of [shareFrameWindow, shareBarWindow]) {
+    if (!win || win.isDestroyed()) continue;
+    try {
+      win.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
+  shareFrameWindow = null;
+  shareBarWindow = null;
 }
 
 /*
@@ -2081,13 +2453,21 @@ function createWindows() {
   overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
   const syncUpdateProgressLayout = () => {
-    layoutUpdateProgressWindow();
-    raiseUpdateProgressWindow();
+    if (updatePhase !== 'downloading') return;
+    keepUpdateProgressVisible();
   };
   mainWindow.on('move', syncUpdateProgressLayout);
   mainWindow.on('resize', syncUpdateProgressLayout);
-  mainWindow.on('focus', syncUpdateProgressLayout);
+  mainWindow.on('focus', () => {
+    if (updatePhase === 'downloading') pinUpdateProgressAbove();
+  });
   mainWindow.on('restore', syncUpdateProgressLayout);
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (updatePhase !== 'downloading' || !pendingUpdateProgressPayload) return;
+    mainWindow.webContents.send('app-update-progress', pendingUpdateProgressPayload);
+  });
 
   mainWindow.on('close', () => {
     // 关主窗口 = 退出应用：清掉所有附属窗 + 本地 Next，避免 KloudMeet.exe 残留占 3201
@@ -2164,6 +2544,7 @@ function destroyAllAuxiliaryWindows() {
     }
   }
   rcBarWindow = null;
+  destroyShareChrome();
   destroyMiniWindow();
   if (overlayWindow && !overlayWindow.isDestroyed()) {
     try {

@@ -297,6 +297,8 @@
   "meeting.screenShareReason.inactive": "페이지가 앞에 있지 않습니다. 회의로 돌아온 뒤 다시 시도해 주세요",
   "meeting.screenShareReason.disconnected": "회의 연결이 끊어졌습니다. 다시 연결된 뒤 시도해 주세요",
   "meeting.screenShareReason.unknownFallback": "잠시 후 다시 시도해 주세요",
+  "update.downloading": "새 버전 {version} 다운로드 중",
+  "update.downloadingPlain": "새 버전 다운로드 중",
   "meeting.speakWhileMutedMessage": "말하는 중인 것 같습니다. 마이크를 켤까요?",
   "meeting.speakWhileMutedUnmute": "마이크 켜기",
   "meeting.speakWhileMutedDismiss": "닫기",

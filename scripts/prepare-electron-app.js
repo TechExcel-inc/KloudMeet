@@ -38,6 +38,9 @@ const SHELL_FILES = [
   'update-ready-preload.js',
   'share-picker.html',
   'share-picker-preload.js',
+  'share-bar.html',
+  'share-bar-preload.js',
+  'share-frame.html',
 ];
 
 function packageJsonPath(name) {

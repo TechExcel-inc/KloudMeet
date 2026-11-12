@@ -305,6 +305,8 @@
   "meeting.screenShareReason.inactive": "This tab is not in the foreground. Come back to the meeting and try again",
   "meeting.screenShareReason.disconnected": "The meeting is disconnected. Wait until you are reconnected",
   "meeting.screenShareReason.unknownFallback": "Please try again",
+  "update.downloading": "Downloading {version}",
+  "update.downloadingPlain": "Downloading update",
   "meeting.speakWhileMutedMessage": "You seem to be speaking. Unmute your microphone?",
   "meeting.speakWhileMutedUnmute": "Unmute",
   "meeting.speakWhileMutedDismiss": "Dismiss",
