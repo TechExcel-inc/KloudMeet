@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Key } from '@nut-tree-fork/shared';
-import { WheelAccumulator, decideKey, wheelPixels, type KeyLike } from './remoteControlInput';
+import { WheelAccumulator, decideKey, sendLatest, wheelPixels, type KeyLike } from './remoteControlInput';
 import {
   acceptRemoteInput,
+  createInputPump,
   createRateLimiter,
   isAllowedKey,
   limiterFor,
@@ -158,11 +159,12 @@ describe('desktop session gate (main.js)', () => {
 
 describe('sanitizeControlMessage (presenter page)', () => {
   it('passes valid input and drops absolute positions', () => {
-    expect(sanitizeControlMessage({ type: 'mousedown', x: 0.5, y: 0.5, button: 2, absX: 10, absY: 10 })).toEqual({
+    expect(sanitizeControlMessage({ type: 'mousedown', x: 0.5, y: 0.5, button: 2, absX: 10, absY: 10, seq: 3 })).toEqual({
       type: 'mousedown',
       x: 0.5,
       y: 0.5,
       button: 2,
+      seq: 3,
     });
     expect(sanitizeControlMessage({ type: 'wheel', x: 0.1, y: 0.2, dx: 0, dy: 99999 })).toMatchObject({ dy: 2000 });
     expect(sanitizeControlMessage({ type: 'key', key: 'c', mods: ['primary'] })).toMatchObject({ key: 'c' });
@@ -223,5 +225,101 @@ describe('wheel input (controller)', () => {
     expect(timers).toHaveLength(1);
     timers[0]();
     expect(sent).toEqual([{ x: 0.5, y: 0.5, dx: 0, dy: 50 }]);
+  });
+});
+
+describe('mouse move scheduling', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('sends the first move at once and the newest one after the interval', () => {
+    vi.useFakeTimers();
+    const sent: number[] = [];
+    const push = sendLatest((n: number) => sent.push(n), 16);
+    push(1);
+    push(2);
+    push(3);
+    expect(sent).toEqual([1]);
+    vi.advanceTimersByTime(16);
+    expect(sent).toEqual([1, 3]);
+  });
+
+  it('flushes the waiting move before a click and does not send it again', () => {
+    vi.useFakeTimers();
+    const sent: number[] = [];
+    const push = sendLatest((n: number) => sent.push(n), 16);
+    push(1);
+    push(2);
+    push.flush();
+    expect(sent).toEqual([1, 2]);
+    vi.advanceTimersByTime(16);
+    expect(sent).toEqual([1, 2]);
+  });
+});
+
+describe('input pump (presenter)', () => {
+  it('keeps the newest move, runs a click before a later move', async () => {
+    const seen: Array<number | string> = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    let started = 0;
+    const pump = createInputPump(async (data) => {
+      started += 1;
+      if (started === 1) await gate;
+      seen.push(data.type === 'mousemove' ? (data.seq ?? 0) : (data.type ?? ''));
+    });
+    pump.push({ type: 'mousemove', seq: 1 });
+    await Promise.resolve();
+    pump.push({ type: 'mousemove', seq: 2 });
+    pump.push({ type: 'mousemove', seq: 3 });
+    pump.push({ type: 'mousedown', seq: 4 });
+    pump.push({ type: 'mousemove', seq: 5 });
+    release();
+    await vi.waitFor(() => expect(seen).toEqual([1, 'mousedown', 5]));
+  });
+
+  it('drops a move older than a click already accepted', async () => {
+    const seen: number[] = [];
+    const pump = createInputPump(async (data) => {
+      if (typeof data.seq === 'number') seen.push(data.seq);
+    });
+    pump.push({ type: 'mousedown', seq: 4 });
+    pump.push({ type: 'mousemove', seq: 3 });
+    await vi.waitFor(() => expect(seen).toEqual([4]));
+  });
+
+  it('puts the cursor back when a click arrives after a newer move', async () => {
+    const seen: string[] = [];
+    const pump = createInputPump(async (data) => {
+      seen.push(data.type === 'mousemove' ? `m${data.seq}` : `c${data.seq}`);
+    });
+    pump.push({ type: 'mousemove', seq: 5 });
+    await vi.waitFor(() => expect(seen).toEqual(['m5']));
+    pump.push({ type: 'mousedown', seq: 4 });
+    await vi.waitFor(() => expect(seen).toEqual(['m5', 'c4', 'm5']));
+  });
+
+  it('reset drops queued moves and lets the one in flight finish', async () => {
+    const seen: number[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const pump = createInputPump(async (data) => {
+      if (data.seq === 1) await gate;
+      if (typeof data.seq === 'number') seen.push(data.seq);
+    });
+    pump.push({ type: 'mousemove', seq: 1 });
+    await Promise.resolve();
+    pump.push({ type: 'mousemove', seq: 2 });
+    const flying = pump.reset();
+    release();
+    await flying;
+    expect(seen).toEqual([1]);
+    pump.push({ type: 'mousemove', seq: 3 });
+    await vi.waitFor(() => expect(seen).toEqual([1, 3]));
   });
 });

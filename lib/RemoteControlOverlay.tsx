@@ -12,6 +12,7 @@ import {
   WheelAccumulator,
   decideKey,
   isMacPlatform,
+  sendLatest,
   wheelPixels,
   type RcMod,
 } from '@/lib/remoteControlInput';
@@ -33,6 +34,8 @@ export type RemoteControlMessage = {
   key?: string;
   mods?: RcMod[];
   text?: string;
+  /** Monotonic order. A late mouse move must not pull the cursor backwards. */
+  seq?: number;
   // For screen-info broadcast (from presenter to controllers):
   screenW?: number;
   screenH?: number;
@@ -75,18 +78,6 @@ const RC_TOPIC = 'remote-control';
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-/** Simple throttle */
-function throttle<T extends (...args: any[]) => void>(fn: T, ms: number): T {
-  let last = 0;
-  return ((...args: Parameters<T>) => {
-    const now = Date.now();
-    if (now - last >= ms) {
-      last = now;
-      fn(...args);
-    }
-  }) as T;
-}
-
 const POINTER_TYPES = new Set(['mousemove', 'mousedown', 'mouseup', 'dblclick']);
 const isUnit = (v: unknown) => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1;
 const isFiniteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -98,12 +89,12 @@ export function sanitizeControlMessage(raw: unknown): RemoteControlMessage | nul
   const type = m.type as RemoteControlMessage['type'];
   if (POINTER_TYPES.has(type)) {
     if (!isUnit(m.x) || !isUnit(m.y)) return null;
-    return { type, x: m.x as number, y: m.y as number, button: m.button === 2 ? 2 : 0 };
+    return withSeq({ type, x: m.x as number, y: m.y as number, button: m.button === 2 ? 2 : 0 }, m);
   }
   if (type === 'wheel') {
     if (!isUnit(m.x) || !isUnit(m.y) || !isFiniteNum(m.dx) || !isFiniteNum(m.dy)) return null;
     const clamp = (v: number) => Math.max(-2000, Math.min(2000, v));
-    return { type, x: m.x as number, y: m.y as number, dx: clamp(m.dx), dy: clamp(m.dy) };
+    return withSeq({ type, x: m.x as number, y: m.y as number, dx: clamp(m.dx), dy: clamp(m.dy) }, m);
   }
   if (type === 'key') {
     const combo = { key: String(m.key ?? ''), mods: Array.isArray(m.mods) ? (m.mods as RcMod[]) : [] };
@@ -116,6 +107,11 @@ export function sanitizeControlMessage(raw: unknown): RemoteControlMessage | nul
   return null;
 }
 
+function withSeq(msg: RemoteControlMessage, raw: Record<string, unknown>): RemoteControlMessage {
+  if (typeof raw.seq === 'number' && Number.isFinite(raw.seq)) msg.seq = raw.seq;
+  return msg;
+}
+
 function useLiveKitRcTransport(room: Room | undefined): RemoteControlTransport | null {
   return useMemo(() => {
     if (!room) return null;
@@ -125,8 +121,12 @@ function useLiveKitRcTransport(room: Room | undefined): RemoteControlTransport |
       },
       send: (msg) => {
         const data = encoder.encode(JSON.stringify(msg));
-        room.localParticipant.publishData(data, { reliable: true, topic: RC_TOPIC }).catch(() => {
-          room.localParticipant.publishData(data, { topic: RC_TOPIC }).catch(console.error);
+        // Mouse moves are disposable: a reliable channel would hold the next click behind a
+        // dropped packet. Clicks, keys and text stay ordered.
+        const lossy = msg.type === 'mousemove';
+        room.localParticipant.publishData(data, { reliable: !lossy, topic: RC_TOPIC }).catch(() => {
+          if (lossy) return;
+          room.localParticipant.publishData(data, { reliable: true, topic: RC_TOPIC }).catch(console.error);
         });
       },
       subscribe: (handler) => {
@@ -187,7 +187,11 @@ export function RemoteControlLayer({
   executeInput,
 }: RemoteControlLayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLDivElement>(null);
   const keyboardRef = useRef<HTMLTextAreaElement>(null);
+  const moveSeqRef = useRef(0);
+  /** Button held right now. State lags a fast click, and a missed mouseup leaves the remote button down. */
+  const heldButtonRef = useRef<number | null>(null);
   const { t } = useI18n();
   const [isControlling, setIsControlling] = useState(false);
   const [presenter, setPresenter] = useState<PresenterInfo | null>(null);
@@ -376,13 +380,39 @@ export function RemoteControlLayer({
     [toContent],
   );
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sendMove = useCallback(
-    throttle((msg: RemoteControlMessage) => {
-      transport.send(msg);
-    }, 16),
+  const sendMove = useMemo(
+    () => sendLatest((msg: RemoteControlMessage) => transport.send(msg), 16),
     [transport],
   );
+  useEffect(() => () => sendMove.cancel(), [sendMove]);
+
+  const stamp = (msg: RemoteControlMessage): RemoteControlMessage => {
+    moveSeqRef.current += 1;
+    return { ...msg, seq: moveSeqRef.current };
+  };
+
+  /** Local arrow at the pointer. The shared video's cursor arrives later; this one does not. */
+  const placeCursor = (clientX: number, clientY: number, inside: boolean) => {
+    const host = containerRef.current;
+    const el = cursorRef.current;
+    if (!host || !el) return;
+    if (!inside) {
+      el.style.opacity = '0';
+      host.style.cursor = 'default';
+      return;
+    }
+    const box = host.getBoundingClientRect();
+    el.style.transform = `translate(${clientX - box.left}px, ${clientY - box.top}px)`;
+    el.style.opacity = '1';
+    host.style.cursor = 'none';
+  };
+
+  const hideCursor = () => {
+    const host = containerRef.current;
+    const el = cursorRef.current;
+    if (host) host.style.cursor = 'default';
+    if (el) el.style.opacity = '0';
+  };
 
   const showHint = useCallback((text: string) => {
     setHint(text);
@@ -401,7 +431,10 @@ export function RemoteControlLayer({
   useEffect(() => {
     const el = containerRef.current;
     if (!isController || !canWheel || !el) return;
-    const acc = new WheelAccumulator((m) => transport.send({ type: 'wheel', ...m }));
+    const acc = new WheelAccumulator((m) => {
+      moveSeqRef.current += 1;
+      transport.send({ type: 'wheel', ...m, seq: moveSeqRef.current });
+    });
     const onWheel = (e: WheelEvent) => {
       const pos = toContent(e.clientX, e.clientY);
       if (!pos.inside) return;
@@ -460,43 +493,60 @@ export function RemoteControlLayer({
   };
 
   useEffect(() => {
-    if (!isController) setKeyboardOn(false);
+    if (!isController) {
+      heldButtonRef.current = null;
+      setKeyboardOn(false);
+    }
   }, [isController]);
 
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isActive || isPresenter) return;
-    if (!toContent(e.clientX, e.clientY).inside) {
+    const pos = toContent(e.clientX, e.clientY);
+    placeCursor(e.clientX, e.clientY, pos.inside);
+    if (!pos.inside) {
       keyboardRef.current?.blur();
       return;
     }
     e.preventDefault();
-    (e.target as HTMLDivElement).setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
+    heldButtonRef.current = e.button;
     setIsControlling(true);
-    transport.send(buildMsg('mousedown', e, e.button));
+    sendMove.flush();
+    transport.send(stamp(buildMsg('mousedown', e, e.button)));
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (!isActive || !isControlling || isPresenter) return;
+    if (!isActive || isPresenter) return;
+    const pos = toContent(e.clientX, e.clientY);
+    placeCursor(e.clientX, e.clientY, pos.inside);
+    // A drag keeps going to the edge of the picture. A hover outside does not move the remote cursor.
+    if (!pos.inside && heldButtonRef.current === null) return;
     e.preventDefault();
-    sendMove(buildMsg('mousemove', e, 0));
+    sendMove(stamp(buildMsg('mousemove', e, 0)));
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isActive || isPresenter) return;
+    const button = heldButtonRef.current;
+    if (button === null) return;
+    heldButtonRef.current = null;
     e.preventDefault();
-    if (isControlling) {
-      (e.target as HTMLDivElement).releasePointerCapture(e.pointerId);
-      setIsControlling(false);
-      transport.send(buildMsg('mouseup', e, e.button));
-      focusKeyboard();
-    }
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    setIsControlling(false);
+    sendMove.flush();
+    transport.send(stamp(buildMsg('mouseup', e, button)));
+    focusKeyboard();
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<HTMLDivElement>) => {
+    hideCursor();
+    handlePointerUp(e);
   };
 
   const handleDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isActive || isPresenter) return;
-    if (!toContent(e.clientX, e.clientY).inside) return;
+    // The pointer already sent the two clicks. Another double-click gesture would land as extra clicks.
     e.preventDefault();
-    transport.send(buildMsg('dblclick', e, 0));
   };
 
   const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -542,7 +592,7 @@ export function RemoteControlLayer({
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
+      onPointerLeave={handlePointerLeave}
       onDoubleClick={handleDoubleClick}
       onContextMenu={handleContextMenu}
       style={{
@@ -553,7 +603,7 @@ export function RemoteControlLayer({
         height: '100%',
         zIndex: 1000,
         pointerEvents: 'auto',
-        cursor: isControlling ? 'grabbing' : 'crosshair',
+        cursor: 'default',
         borderRadius: 'inherit',
         touchAction: 'none',
       }}
@@ -565,6 +615,26 @@ export function RemoteControlLayer({
         @keyframes kmRcHintIn { from { opacity: 0; transform: translate(-50%, -4px); } to { opacity: 1; transform: translate(-50%, 0); } }
         @media (prefers-reduced-motion: reduce) { .km-rc-hint { animation: none !important; } }
       `}</style>
+
+      <div
+        ref={cursorRef}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: 18,
+          height: 22,
+          opacity: 0,
+          pointerEvents: 'none',
+          zIndex: 1001,
+          filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.45))',
+        }}
+      >
+        <svg viewBox="0 0 18 22" width="18" height="22">
+          <path d="M0 0 L0 16.2 L4.4 12.2 L7.2 19.4 L9.8 18.2 L7 11.2 L12.4 11.2 Z" fill="#fff" stroke="#111" strokeWidth="1.2" strokeLinejoin="round" />
+        </svg>
+      </div>
 
       {box && (
         <>
@@ -586,7 +656,12 @@ export function RemoteControlLayer({
           <div
             className="km-rc-chip"
             role="status"
+            data-rc-chip=""
             onPointerDown={(e) => e.stopPropagation()}
+            onPointerMove={(e) => {
+              e.stopPropagation();
+              hideCursor();
+            }}
             onPointerUp={(e) => e.stopPropagation()}
             onDoubleClick={(e) => e.stopPropagation()}
             style={{

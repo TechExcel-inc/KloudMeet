@@ -100,7 +100,46 @@ const PILL_GAP = 6;
 const CHEVRON_SIZE = 24;
 const PREVIEW_GAP = 8;
 const PREVIEW_PAD = 6;
-const MINI_HOVER_W = 60;
+
+const pipStroke = {
+  fill: 'none' as const,
+  stroke: 'currentColor',
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true as const,
+};
+
+/** 关闭：保留开启图标，斜线先压一条底色缝，再画红色 */
+function PipOffSlash() {
+  return (
+    <>
+      <path className={styles.offSlashGap} d="M4.5 4.5 19.5 19.5" />
+      <path className={styles.offSlash} d="M4.5 4.5 19.5 19.5" />
+    </>
+  );
+}
+
+function PipMicIcon({ off, size }: { off: boolean; size: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...pipStroke}>
+      <rect x="9" y="3" width="6" height="11" rx="3" />
+      <path d="M5 11a7 7 0 0 0 14 0" />
+      <path d="M12 18v3" />
+      {off ? <PipOffSlash /> : null}
+    </svg>
+  );
+}
+
+function PipCamIcon({ off, size }: { off: boolean; size: number }) {
+  return (
+    <svg viewBox="0 0 24 24" width={size} height={size} {...pipStroke}>
+      <rect x="3" y="6" width="12" height="12" rx="3" />
+      <path d="M15 10.2 21 7v10l-6-3.2z" />
+      {off ? <PipOffSlash /> : null}
+    </svg>
+  );
+}
 
 type RosterRow = {
   id: string;
@@ -728,39 +767,21 @@ export function MeetingDocumentPipPanel({
       <>
         <button
           type="button"
-          className={`${styles.controlBtn} ${micEnabled ? '' : styles.controlOff}`}
+          className={styles.controlBtn}
           onClick={onToggleMic}
           aria-label={micEnabled ? labels.muteMic : labels.unmuteMic}
           title={micEnabled ? labels.muteMic : labels.unmuteMic}
         >
-          {micEnabled ? (
-            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
-              <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
-              <path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 0014 0h-2z" />
-              <path d="M4 4l16 16" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-            </svg>
-          )}
+          <PipMicIcon off={!micEnabled} size={icon} />
         </button>
         <button
           type="button"
-          className={`${styles.controlBtn} ${camEnabled ? '' : styles.controlOff}`}
+          className={styles.controlBtn}
           onClick={onToggleCam}
           aria-label={camEnabled ? labels.turnOffCam : labels.turnOnCam}
           title={camEnabled ? labels.turnOffCam : labels.turnOnCam}
         >
-          {camEnabled ? (
-            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
-              <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
-            </svg>
-          ) : (
-            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="currentColor">
-              <path d="M17 10.5V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-3.5l4 4v-11l-4 4z" />
-              <path d="M3 3l18 18" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" />
-            </svg>
-          )}
+          <PipCamIcon off={!camEnabled} size={icon} />
         </button>
         <button
           type="button"
@@ -773,24 +794,22 @@ export function MeetingDocumentPipPanel({
             <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
           </svg>
         </button>
-        {compact ? null : (
-          <div ref={shareWrapRef} className={styles.shareWrap}>
-            <button
-              type="button"
-              className={`${styles.controlBtn}${
-                shareActive ? ` ${styles.shareBtnOn}` : shareConflict ? ` ${styles.shareBtnConflict}` : ''
-              }`}
-              onClick={handleShareClick}
-              aria-label={shareLabel}
-              title={shareLabel}
-            >
-              {shareConflict ? <span className={styles.shareConflictDot} /> : null}
-              <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
-                <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </button>
-          </div>
-        )}
+        <div ref={shareWrapRef} className={styles.shareWrap}>
+          <button
+            type="button"
+            className={`${styles.controlBtn}${
+              shareActive ? ` ${styles.shareBtnOn}` : shareConflict ? ` ${styles.shareBtnConflict}` : ''
+            }`}
+            onClick={handleShareClick}
+            aria-label={shareLabel}
+            title={shareLabel}
+          >
+            {shareConflict ? <span className={styles.shareConflictDot} /> : null}
+            <svg viewBox="0 0 24 24" width={icon} height={icon} fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
         <button
           type="button"
           className={styles.controlBtn}
@@ -955,38 +974,23 @@ export function MeetingDocumentPipPanel({
               />
             ) : null}
             <div className={styles.hoverCluster}>
-              {/* The controls are out already: no hover area or settings button over them */}
-              {minimizeLocked ? null : (
-                <>
-                  <div
-                    className={styles.hoverHit}
-                    style={{ width: MINI_HOVER_W }}
-                    onClick={hidePreview}
-                  />
-                  <button
-                    type="button"
-                    className={styles.miniSettings}
-                    onMouseEnter={() => setMiniControls(true)}
-                    aria-label={labels.settings}
-                    title={labels.settings}
-                  >
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="14"
-                      height="14"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="12" cy="12" r="3" />
-                      <path d="M19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.04 1.56V20.3h-3v-.08a1.7 1.7 0 00-1.04-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 15a1.7 1.7 0 00-1.56-1.04H5.3v-3h.14A1.7 1.7 0 007 9a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06A1.7 1.7 0 0010.66 5a1.7 1.7 0 001.04-1.56V3.3h3v.14A1.7 1.7 0 0015.74 5a1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019.4 9a1.7 1.7 0 001.56 1.04h.04v3h-.04A1.7 1.7 0 0019.4 15z" />
-                    </svg>
-                  </button>
-                </>
+              {showMiniControls ? null : (
+                <button
+                  type="button"
+                  className={styles.pillMic}
+                  onClick={onToggleMic}
+                  aria-label={micEnabled ? labels.muteMic : labels.unmuteMic}
+                  title={micEnabled ? labels.muteMic : labels.unmuteMic}
+                >
+                  <PipMicIcon off={!micEnabled} size={14} />
+                </button>
               )}
               <button
                 type="button"
                 className={styles.chevron}
+                onMouseEnter={() => {
+                  if (!minimizeLocked) setMiniControls(true);
+                }}
                 onClick={handleMinimize}
                 disabled={minimizeLocked}
                 aria-label={minimizeLocked ? labels.restoreLocked : labels.restore}

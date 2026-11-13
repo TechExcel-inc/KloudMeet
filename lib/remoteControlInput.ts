@@ -145,3 +145,68 @@ export class WheelAccumulator {
 
 export const isMacPlatform = () =>
   typeof navigator !== 'undefined' && /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || '');
+
+export type LatestSender<T> = {
+  (value: T): void;
+  /** Send a waiting event now, ahead of a click that must not be overtaken by it. */
+  flush: () => void;
+  cancel: () => void;
+};
+
+/**
+ * sendLatest — 鼠标移动最多每 intervalMs 发一次，并且窗口里最新的那次一定会发出去。
+ */
+export function sendLatest<T>(send: (value: T) => void, intervalMs: number): LatestSender<T> {
+  let last = -intervalMs;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: T | undefined;
+  let has = false;
+
+  const emit = (value: T) => {
+    last = Date.now();
+    send(value);
+  };
+
+  const flush = () => {
+    timer = null;
+    if (!has) return;
+    has = false;
+    emit(pending as T);
+  };
+
+  const push = ((value: T) => {
+    const wait = intervalMs - (Date.now() - last);
+    if (wait <= 0) {
+      has = false;
+      pending = undefined;
+      if (timer !== null) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      emit(value);
+      return;
+    }
+    pending = value;
+    has = true;
+    if (timer === null) timer = setTimeout(flush, wait);
+  }) as LatestSender<T>;
+
+  push.flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (!has) return;
+    has = false;
+    emit(pending as T);
+  };
+
+  push.cancel = () => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    has = false;
+    pending = undefined;
+  };
+
+  return push;
+}

@@ -51,11 +51,22 @@ let isAppQuitting = false;
 let nutApi;
 function getNutTree() {
   if (!nutApi) {
-    const { mouse, keyboard, Point, Button, Key } = require('@nut-tree-fork/nut-js');
+    const { mouse, keyboard, Point, Button, Key, providerRegistry } = require('@nut-tree-fork/nut-js');
     mouse.config.autoDelayMs = 0;
     mouse.config.mouseSpeed = 3000;
     keyboard.config.autoDelayMs = 0;
-    nutApi = { mouse, keyboard, Point, Button, Key };
+    // The keyboard provider is constructed with a 300ms native delay. Writing
+    // config.autoDelayMs afterwards does not change it, so every key would wait 300ms.
+    if (providerRegistry.hasKeyboard()) providerRegistry.getKeyboard().setKeyboardDelay(0);
+    if (providerRegistry.hasMouse()) providerRegistry.getMouse().setMouseDelay(0);
+    nutApi = {
+      mouse,
+      keyboard,
+      Point,
+      Button,
+      Key,
+      typeText: providerRegistry.hasKeyboard() ? (text) => providerRegistry.getKeyboard().type(text) : null,
+    };
   }
   return nutApi;
 }
@@ -1643,21 +1654,14 @@ function installSessionAndIpcOnce() {
     stopRemoteControlFromPresenter('bar');
   });
 
-  ipcMain.on('remote-control-message', async (event, data) => {
+  ipcMain.on('remote-control-message', (event, data) => {
     if (!mainWindow || event.sender !== mainWindow.webContents) return;
     // Only while control is granted (older pages: mouse only, as before), and not while the
     // presenter is using their own mouse.
     if (!remoteInput.acceptRemoteInput(rcSession, data, Date.now())) return;
     const limiter = rcLimiters[remoteInput.limiterFor(data.type)];
     if (!limiter || !limiter()) return;
-
-    // Events still queued when control stops are dropped, not executed.
-    const generation = rcGeneration;
-    rcQueue = rcQueue
-      .then(() => (generation === rcGeneration ? executeRemoteInput(data) : undefined))
-      .catch((err) => {
-        console.error('Remote control error:', err);
-      });
+    rcPump.push(data);
   });
 
 }
@@ -1674,11 +1678,17 @@ const rcLimiters = {
   key: remoteInput.createRateLimiter(30, 1000),
   text: remoteInput.createRateLimiter(20, 1000),
 };
-/** Execute one event at a time, in order. */
-let rcQueue = Promise.resolve();
-/** Bumped whenever control ends, so queued events from the old session are skipped. */
-let rcGeneration = 0;
+/** One event at a time. Mouse moves collapse so the cursor does not lag a queue of old points. */
+const rcPump = remoteInput.createInputPump(async (data) => {
+  try {
+    await executeRemoteInput(data);
+  } catch (err) {
+    console.error('Remote control error:', err);
+  }
+});
 const rcPressedButtons = new Set();
+/** When the last real click was injected. A following dblclick from an older page is the same gesture. */
+let rcLastButtonAt = 0;
 let rcLastInjected = null;
 let rcLastInjectAt = 0;
 let rcLocalWatch = null;
@@ -1718,18 +1728,20 @@ async function rcMoveTo(mouse, Point, target) {
 }
 
 async function executeRemoteInput(data) {
-  const { mouse, keyboard, Point, Button, Key } = getNutTree();
+  const { mouse, keyboard, Point, Button, Key, typeText } = getNutTree();
 
   if (data.type === 'key') {
     const keys = remoteInput.toNutKeys({ key: data.key, mods: data.mods }, process.platform, Key);
     if (!keys) return;
-    await keyboard.pressKey(...keys);
-    await keyboard.releaseKey(...keys.slice().reverse());
+    // One tap with its modifiers. press-then-release adds a timer gap on each edge.
+    await keyboard.type(...keys);
     return;
   }
   if (data.type === 'text') {
     const text = remoteInput.sanitizeText(data.text);
-    if (text) await keyboard.type(text);
+    if (!text) return;
+    if (typeText) await typeText(text);
+    else await keyboard.type(text);
     return;
   }
 
@@ -1746,13 +1758,12 @@ async function executeRemoteInput(data) {
     await rcMoveTo(mouse, Point, target);
     await mouse.releaseButton(btn);
     rcPressedButtons.delete(btn);
+    rcLastButtonAt = Date.now();
   } else if (data.type === 'dblclick') {
+    // The two clicks already landed. Running this too would click twice more.
+    if (Date.now() - rcLastButtonAt < 500) return;
     await rcMoveTo(mouse, Point, target);
-    await mouse.pressButton(Button.LEFT);
-    await mouse.releaseButton(Button.LEFT);
-    await new Promise((r) => setTimeout(r, 30));
-    await mouse.pressButton(Button.LEFT);
-    await mouse.releaseButton(Button.LEFT);
+    await mouse.doubleClick(Button.LEFT);
   } else if (data.type === 'wheel') {
     const { down, right } = remoteInput.wheelSteps(data.dx, data.dy, process.platform);
     if (!down && !right) return;
@@ -1832,7 +1843,8 @@ function setRemoteControlSession(session) {
 
 /** Release anything the controller left pressed and drop the banner + shortcut. */
 function endRemoteControlLocally() {
-  rcGeneration += 1;
+  rcLastButtonAt = 0;
+  const flying = rcPump ? rcPump.reset() : Promise.resolve();
   rcSession.active = false;
   stopAccessibilityPoll();
   rcSession.controllerName = '';
@@ -1846,7 +1858,7 @@ function endRemoteControlLocally() {
   else hideRcBar();
   setFloatingReason('remote-control', false);
   // Runs after an event that is mid-execution, so a button it just pressed is released too.
-  rcQueue = rcQueue
+  flying
     .then(async () => {
       const pressed = Array.from(rcPressedButtons);
       rcPressedButtons.clear();

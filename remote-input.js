@@ -177,6 +177,81 @@ function limiterFor(type) {
   return POINTER_TYPES.includes(type) ? 'pointer' : type;
 }
 
+/** Pointer actions that carry their own coordinates, so a pending hover is not also applied first. */
+const POINT_EVENTS = new Set(['mousedown', 'mouseup', 'dblclick', 'wheel']);
+
+/**
+ * Runs remote events one at a time. Mouse moves collapse to the newest point, so a slow
+ * cursor update cannot leave a trail of stale positions behind the pointer. A click, release
+ * or scroll is applied before that newest point, then the cursor is put back if a later move
+ * had already been accepted. `reset` drops anything not yet started and resolves when the
+ * event already in flight finishes.
+ * @param {(data: { type?: string, seq?: number }) => Promise<void> | void} run
+ */
+function createInputPump(run) {
+  /** @type {{ type?: string, seq?: number } | null} */
+  let move = null;
+  /** @type {{ type?: string, seq?: number } | null} */
+  let latestMove = null;
+  let moveSeq = -Infinity;
+  /** @type {{ type?: string, seq?: number }[]} */
+  const rest = [];
+  /** @type {Promise<void> | null} */
+  let active = null;
+  let generation = 0;
+
+  const newer = (seq) => typeof seq === 'number' && Number.isFinite(seq) && seq > moveSeq;
+
+  function kick(gen) {
+    if (active || gen !== generation) return;
+    const item = rest.length ? rest.shift() : move;
+    if (item === move) move = null;
+    if (!item) return;
+    active = Promise.resolve()
+      .then(async () => {
+        if (gen !== generation) return;
+        await run(item);
+        if (gen !== generation || !POINT_EVENTS.has(item.type) || !latestMove) return;
+        if (typeof item.seq === 'number' && typeof latestMove.seq === 'number' && latestMove.seq > item.seq) {
+          move = latestMove;
+        }
+      })
+      .catch(() => {})
+      .then(() => {
+        active = null;
+        if (gen === generation) kick(gen);
+      });
+  }
+
+  return {
+    /** @param {{ type?: string, seq?: number }} data */
+    push(data) {
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'mousemove') {
+        const seq = data.seq;
+        if (typeof seq === 'number' && Number.isFinite(seq) && seq < moveSeq) return;
+        if (newer(seq)) moveSeq = seq;
+        move = data;
+        latestMove = data;
+      } else {
+        if (newer(data.seq)) moveSeq = data.seq;
+        const ahead = typeof data.seq === 'number' && move && typeof move.seq === 'number' && move.seq > data.seq;
+        if (POINT_EVENTS.has(data.type) && !ahead) move = null;
+        rest.push(data);
+      }
+      kick(generation);
+    },
+    reset() {
+      generation += 1;
+      move = null;
+      latestMove = null;
+      rest.length = 0;
+      moveSeq = -Infinity;
+      return active || Promise.resolve();
+    },
+  };
+}
+
 /**
  * 0–1 position within the shared picture → a pixel of the shared screen or window, always
  * inside it (x = 1 must not land on the next monitor). Absolute positions are only honoured
@@ -209,4 +284,5 @@ module.exports = {
   acceptRemoteInput,
   limiterFor,
   toScreenPoint,
+  createInputPump,
 };
