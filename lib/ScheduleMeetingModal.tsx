@@ -497,8 +497,6 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const scheduledForIso = zonedDateTimeToUtcIso(date, time, timezone);
-
       if (recording?.shareKey && recording.visibility !== recordingVisibility) {
         const visibilityRes = await authFetch(
           `/api/recordings/${encodeURIComponent(recording.shareKey)}`,
@@ -516,10 +514,25 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
       }
 
       if (isReadOnly) {
+        if (isFinished && existingMeeting?.roomName) {
+          const changes = {
+            ...(title !== (existingMeeting.title || `${user?.displayName || 'User'}'s Meeting`) ? { title } : {}),
+            ...(description !== (existingMeeting.description || '') ? { description } : {}),
+          };
+          if (Object.keys(changes).length > 0) {
+            const res = await authFetch(`/api/meetings/${encodeURIComponent(existingMeeting.roomName)}`, {
+              method: 'PUT',
+              headers: authHeaders({ 'Content-Type': 'application/json' }),
+              body: JSON.stringify(changes),
+            });
+            if (!res.ok) throw new Error(`Update failed (${res.status})`);
+          }
+        }
         onSave();
         return;
       }
 
+      const scheduledForIso = zonedDateTimeToUtcIso(date, time, timezone);
       let saved: any = null;
       if (existingMeeting?.roomName) {
         const res = await authFetch(`/api/meetings/${existingMeeting.roomName}`, {
@@ -707,6 +720,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                 placeholder={t('schedule.titlePlaceholder')}
                 aria-label={t('schedule.title')}
                 value={title}
+                disabled={isCanceled}
                 onChange={(e) => setTitle(e.target.value)}
               />
 
@@ -1023,6 +1037,7 @@ export function ScheduleMeetingModal({ user, existingMeeting, onClose, onSave }:
                   aria-label={t('schedule.description')}
                   rows={2}
                   value={description}
+                  disabled={isCanceled}
                   onChange={(e) => setDescription(e.target.value)}
                 />
               </div>

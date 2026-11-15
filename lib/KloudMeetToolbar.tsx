@@ -1846,7 +1846,7 @@ export function KloudMeetToolbar({
       : screenShareActive
         ? `${t('toolbar.shareScreen')} · ${t('toolbar.sharing')}`
         : t('toolbar.shareScreen');
-    const webcamLayoutLabel = tr('toolbar.webcamLayout', 'Webcam layout');
+    const webcamLayoutLabel = tr('toolbar.webcamLayout', 'WebCam layout');
     return (
       <div className={styles.viewSwitch} role="group" aria-label={t('toolbar.selectViewLayout')}>
         {/* Everyone sees LiveDoc and Webcam. Host / co-host / presenter switch what everyone sees;

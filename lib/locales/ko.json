@@ -1296,6 +1296,8 @@
   "dash.codeCopied": "회의 코드를 복사했습니다",
   "dash.copyCode": "회의 코드 복사",
   "dash.invite": "초대",
+  "dash.inviteToViewFinished": "종료된 회의 보기 초대",
+  "dash.finishedInviteText": "종료된 회의 보기에 초대합니다: {title}\n{link}",
   "dash.upNext": "다음 일정",
   "dash.seeAllMeetings": "모두 보기",
   "dash.now": "지금",

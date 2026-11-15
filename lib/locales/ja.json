@@ -1296,6 +1296,8 @@
   "dash.codeCopied": "会議コードをコピーしました",
   "dash.copyCode": "会議コードをコピー",
   "dash.invite": "招待",
+  "dash.inviteToViewFinished": "終了した会議の閲覧に招待",
+  "dash.finishedInviteText": "終了した会議の閲覧にご招待します：{title}\n{link}",
   "dash.upNext": "次の予定",
   "dash.seeAllMeetings": "すべて表示",
   "dash.now": "今",

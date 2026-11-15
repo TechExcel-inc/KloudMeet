@@ -1281,6 +1281,8 @@
   "dash.codeCopied": "会议码已复制",
   "dash.copyCode": "复制会议码",
   "dash.invite": "邀请",
+  "dash.inviteToViewFinished": "邀请查看已结束的会议",
+  "dash.finishedInviteText": "邀请你查看已结束的会议：{title}\n{link}",
   "dash.upNext": "接下来",
   "dash.seeAllMeetings": "查看全部",
   "dash.now": "现在",

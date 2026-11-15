@@ -15,7 +15,6 @@ import { handleKloudSessionExpired } from '@/lib/handleKloudSessionExpired';
 import { authFetch, authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import {
-  calendarMenuItems,
   inviteCalendarLines,
   isCalendarEligible,
   toCalendarMeetingFromClient,
@@ -27,7 +26,7 @@ import {
   type ActiveMeetingInfo,
   type MeetingStartIntent,
 } from '@/lib/meetingStartGuard';
-import { CalendarDays, CalendarPlus, ChevronDown, Copy, Hash, Keyboard, Video, X } from 'lucide-react';
+import { CalendarDays, CalendarPlus, ChevronDown, Copy, Hash, Keyboard, Pencil, Video, X } from 'lucide-react';
 import { PersonalRoomIdDialog } from '@/lib/PersonalRoomIdDialog';
 import {
   isPersonalIdPromptVisible,
@@ -549,15 +548,15 @@ export function DashboardView({
     });
   };
 
-  const copyMeetingLink = (meeting: any) => {
-    const link = `${window.location.origin}/?code=${meeting.roomName}`;
+  const copyMeetingLink = (meeting: any, finishedPath?: string) => {
+    const link = new URL(finishedPath ?? `/?code=${encodeURIComponent(meeting.roomName)}`, window.location.origin).href;
     navigator.clipboard?.writeText(link);
     toast.show(t('schedule.linkCopied'));
     setInviteMenuRoomName(null);
   };
 
   const copyMeetingInvite = (meeting: any) => {
-    const link = `${window.location.origin}/?code=${meeting.roomName}`;
+    const link = `${window.location.origin}/?code=${encodeURIComponent(meeting.roomName)}`;
     const hostName =
       meeting?.createdByMember?.fullName ||
       meeting?.createdByMember?.username ||
@@ -589,6 +588,13 @@ export function DashboardView({
       .filter(Boolean)
       .join('\n');
     navigator.clipboard?.writeText(inviteText);
+    toast.show(t('schedule.inviteCopied'));
+    setInviteMenuRoomName(null);
+  };
+
+  const copyFinishedInvite = (title: string, path: string) => {
+    const link = new URL(path, window.location.origin).href;
+    navigator.clipboard?.writeText(t('dash.finishedInviteText', { title, link }));
     toast.show(t('schedule.inviteCopied'));
     setInviteMenuRoomName(null);
   };
@@ -853,6 +859,7 @@ export function DashboardView({
   const isUpcomingMeeting = (m: any) =>
     !!m.isActive ||
     (m.status !== 'ENDED' &&
+      m.status !== 'FINISHED' &&
       m.status !== 'CANCELED' &&
       !!m.scheduledFor &&
       new Date(m.scheduledFor).getTime() >= currentTime - 60 * 60 * 1000);
@@ -879,34 +886,6 @@ export function DashboardView({
     ? selectedMeetingId
     : orderedMeetings[0]?.id;
 
-  /** Finished meeting: its recording when there is one, else the chat history. */
-  const openFinishedMeeting = (m: any) => {
-    const rec =
-      m.recordings?.find((r: any) => r.status === 'READY') ??
-      m.recordings?.find((r: any) => ['PROCESSING', 'UPLOADING'].includes(r.status));
-    if (rec) {
-      const key = rec.shareKey as string | undefined;
-      window.open(key ? recordingReplayPath(key) : `/recordings/${rec.id}`, '_blank');
-    } else {
-      router.push(`/meeting/${m.id}/chat`);
-    }
-  };
-
-  // Open (finished) / Start (host) / Join (guest or live)
-  const runPrimaryAction = (m: any) => {
-    if (m.isActive) {
-      router.push(`/rooms/${m.roomName}`);
-    } else if (m.status === 'ENDED') {
-      openFinishedMeeting(m);
-    } else if (m.status === 'CANCELED') {
-      return;
-    } else if (m.createdByMemberId === user.id) {
-      handleStartMeetingClick(m);
-    } else {
-      router.push(`/rooms/${m.roomName}`);
-    }
-  };
-
   const selectMeetingAt = (index: number) => {
     const m = orderedMeetings[Math.max(0, Math.min(index, orderedMeetings.length - 1))];
     if (!m) return;
@@ -920,7 +899,7 @@ export function DashboardView({
     else selectMeetingAt(idx + delta);
   };
 
-  const handleMeetingCardKeyDown = (e: React.KeyboardEvent<HTMLElement>, m: any) => {
+  const handleMeetingCardKeyDown = (e: React.KeyboardEvent<HTMLElement>, open?: () => void) => {
     // Keys on the buttons inside the row keep their own behaviour
     if (e.target !== e.currentTarget) return;
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -929,9 +908,9 @@ export function DashboardView({
     } else if (e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
       selectMeetingAt(e.key === 'Home' ? 0 : orderedMeetings.length - 1);
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' && open) {
       e.preventDefault();
-      runPrimaryAction(m);
+      open();
     }
   };
 
@@ -993,14 +972,9 @@ export function DashboardView({
     ...(liveCount > 0 ? [{ key: 'live', text: tx('dash.summaryLive', '{n} in progress', { n: liveCount }) }] : []),
     ...(soonCount > 0 ? [{ key: 'soon', text: tx('dash.summarySoon', '{n} starting soon', { n: soonCount }) }] : []),
   ];
-  const replayLabel = t('dash.replay').replace(/^[^\p{L}\p{N}]+/u, '').trim() || t('dash.replay');
   const hasJoinCode = joinCode.trim().length > 0;
   const totalPages = Math.ceil(totalMeetings / pageSize) || 1;
 
-
-  const openRecording = (recording: { id: number | string; shareKey?: string | null }) => {
-    window.open(recording.shareKey ? recordingReplayPath(recording.shareKey) : `/recordings/${recording.id}`, '_blank');
-  };
 
   const copyIcon = (size: number) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
@@ -1028,102 +1002,61 @@ export function DashboardView({
       <circle cx="12" cy="12" r="3" fill="currentColor" />
     </svg>
   );
-  const chatIcon = (size: number) => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width={size} height={size} aria-hidden="true">
-      <path d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" strokeLinecap="round" strokeLinejoin="round"/>
-    </svg>
-  );
-
-  /** The row's ⋯ menu: link and invite, add to calendar, then chat history, edit and delete. */
   const renderRowMenu = (
     m: any,
-    opts: { chat: boolean; edit: boolean; remove: boolean; invite: boolean },
-  ) =>
-    inviteMenuRoomName === m.roomName && typeof document !== 'undefined' ? (
+    opts: { invite: boolean; edit: boolean; remove: boolean; finishedPath?: string; openFinished?: () => void },
+  ) => {
+    const { finishedPath } = opts;
+    return inviteMenuRoomName === m.roomName && typeof document !== 'undefined' ? (
       createPortal(
-      <div
-        ref={menuRef}
-        data-invite-menu="true"
-        className={`${styles.dropdownMenu} ${styles.inviteMenu} ${styles.inviteMenuFloating}`}
-        role="menu"
-      >
-        <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m)}>
-          {t('schedule.copyLink')}
-        </button>
-        {opts.invite && (
-          <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
-            {t('dash.copyInvite')}
+        <div
+          ref={menuRef}
+          data-invite-menu="true"
+          className={`${styles.dropdownMenu} ${styles.inviteMenu} ${styles.inviteMenuFloating}`}
+          role="menu"
+        >
+          <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingLink(m, opts.finishedPath)}>
+            {t('schedule.copyLink')}
           </button>
-        )}
-        {opts.invite && isCalendarEligible(m) && (
-          <>
-            <div className={styles.dropdownSeparator} role="separator" />
-            <div className={styles.dropdownSectionLabel}>{t('calendar.addToCalendar')}</div>
-            {calendarMenuItems(
-              toCalendarMeetingFromClient(m, {
-                hostName:
-                  m?.createdByMember?.fullName || m?.createdByMember?.username || user?.displayName || null,
-              }),
-              window.location.origin,
-              t,
-            ).map((item) => (
-              <a
-                key={item.key}
-                role="menuitem"
-                className={styles.dropdownItem}
-                href={item.href}
-                {...(item.download ? { download: true } : { target: '_blank', rel: 'noopener noreferrer' })}
-                onClick={() => setInviteMenuRoomName(null)}
-              >
-                {item.label}
-              </a>
-            ))}
-          </>
-        )}
-        {(opts.chat || opts.edit || opts.remove) && <div className={styles.dropdownSeparator} role="separator" />}
-        {opts.chat && (
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.dropdownItem}
-            onClick={() => {
-              setInviteMenuRoomName(null);
-              router.push(`/meeting/${m.id}/chat`);
-            }}
-          >
-            {t('chatHistory.open')}
-          </button>
-        )}
-        {opts.edit && (
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.dropdownItem}
-            onClick={() => {
+          {finishedPath ? (
+            <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyFinishedInvite(m.title || m.roomName, finishedPath)}>
+              {t('dash.inviteToViewFinished')}
+            </button>
+          ) : opts.invite && (
+            <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => copyMeetingInvite(m)}>
+              {t('dash.invite')}
+            </button>
+          )}
+          {(opts.edit || opts.remove || opts.openFinished) && <div className={styles.dropdownSeparator} role="separator" />}
+          {opts.edit && (
+            <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => {
               setInviteMenuRoomName(null);
               setEditingMeeting(m);
-            }}
-          >
-            {t('dash.editMeeting')}
-          </button>
-        )}
-        {opts.remove && (
-          <button
-            type="button"
-            role="menuitem"
-            className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`}
-            onClick={() => {
+            }}>
+              {t('dash.editMeeting')}
+            </button>
+          )}
+          {opts.remove && (
+            <button type="button" role="menuitem" className={`${styles.dropdownItem} ${styles.dropdownItemDanger}`} onClick={() => {
               setInviteMenuRoomName(null);
               setDeletingMeeting(m);
-            }}
-          >
-            {t('dash.deleteMeeting')}
-          </button>
-        )}
-      </div>,
-      document.body,
+            }}>
+              {t('dash.deleteMeeting')}
+            </button>
+          )}
+          {opts.openFinished && (
+            <button type="button" role="menuitem" className={styles.dropdownItem} onClick={() => {
+              setInviteMenuRoomName(null);
+              opts.openFinished?.();
+            }}>
+              {t('dash.open')}
+            </button>
+          )}
+        </div>,
+        document.body,
       )
     ) : null;
+  };
 
   /** Personal-room sessions are archived as "<id>_<meetingId>"; show the room ID people type. */
   const displayRoomCode = (m: any): string => {
@@ -1139,7 +1072,13 @@ export function DashboardView({
     const isHost = m.createdByMemberId === user.id;
     const isLive = !!m.isActive;
     const canceled = m.status === 'CANCELED';
-    const happened = m.status === 'ENDED' || !!m.actualStartedAt || (m._count?.participants ?? 0) > 0;
+    const happened =
+      m.status === 'ENDED' ||
+      m.status === 'FINISHED' ||
+      !!m.actualStartedAt ||
+      (m._count?.participants ?? 0) > 0 ||
+      !!recording ||
+      !!processingRecording;
     // A past meeting that took place reads as finished, even if nobody closed it
     const finished = !isLive && !upcoming && !canceled && happened;
     const notHeld = !isLive && !upcoming && !canceled && !happened;
@@ -1198,19 +1137,36 @@ export function DashboardView({
     const displayTitle = m.title || (instant ? tx('dash.instantMeeting', 'Instant meeting') : m.roomName || t('dash.untitledMeeting'));
     const showCode = (upcoming || isLive) && !!m.roomName;
 
-    // The one main action; everything else is in the ⋯ menu
+    const replay = recording ?? processingRecording;
+    const finishedPath = finished
+      ? replay
+        ? replay.shareKey
+          ? recordingReplayPath(replay.shareKey)
+          : `/recordings/${encodeURIComponent(replay.id)}`
+        : `/meeting/${m.id}/chat`
+      : undefined;
+    const openFinished = finishedPath
+      ? () => {
+          if (replay) window.open(finishedPath, '_blank', 'noopener,noreferrer');
+          else router.push(finishedPath);
+        }
+      : undefined;
+    const openScheduled = !isLive && !finished && !canceled && !!m.scheduledFor;
+    const showEdit = isHost && (openScheduled || (finished && !!recording));
     let primary: { label: string; icon: React.ReactNode; fill?: boolean; onClick: () => void; title?: string } | null = null;
     if (isLive) primary = { label: t('common.join'), icon: videoIcon(15), fill: true, onClick: () => router.push(`/rooms/${m.roomName}`) };
-    else if (recording && !upcoming) primary = { label: replayLabel, icon: playIcon(12), onClick: () => openRecording(recording), title: t('dash.replayTitle') };
-    else if (processingRecording && !upcoming) primary = { label: t('common.processing'), icon: playIcon(12), onClick: () => openFinishedMeeting(m) };
-    else if ((upcoming || notHeld) && !canceled) {
-      if (isHost) primary = { label: t('common.start'), icon: playIcon(12), onClick: () => handleStartMeetingClick(m) };
-      else if (upcoming) primary = { label: t('common.join'), icon: videoIcon(14), onClick: () => router.push(`/rooms/${m.roomName}`) };
-    } else if (finished) {
-      primary = recording
-        ? { label: replayLabel, icon: playIcon(12), onClick: () => openRecording(recording), title: t('dash.replayTitle') }
-        : { label: tx('dash.chatRecord', 'Chat'), icon: chatIcon(14), onClick: () => openFinishedMeeting(m), title: t('chatHistory.open') };
-    }
+    else if (openFinished && replay) primary = {
+      label: recording ? t('common.play') : t('common.processing'),
+      icon: playIcon(12),
+      onClick: openFinished,
+      title: t('dash.replayTitle'),
+    };
+    else if (openScheduled) primary = {
+      label: t('dash.open'),
+      icon: videoIcon(14),
+      onClick: () => isHost ? handleStartMeetingClick(m) : router.push(`/rooms/${m.roomName}`),
+    };
+    else if (notHeld && isHost) primary = { label: t('common.start'), icon: playIcon(12), onClick: () => handleStartMeetingClick(m) };
 
     return (
       <article
@@ -1226,7 +1182,7 @@ export function DashboardView({
         }${cardMenuOpen ? ` ${styles.meetingCardInviteMenuOpen}` : ''}`}
         onClick={() => setSelectedMeetingId(m.id)}
         onFocus={() => setSelectedMeetingId(m.id)}
-        onKeyDown={(e) => handleMeetingCardKeyDown(e, m)}
+        onKeyDown={(e) => handleMeetingCardKeyDown(e, primary?.onClick ?? openFinished)}
         onDoubleClick={() => {
           if (isHost) setEditingMeeting(m);
         }}
@@ -1273,6 +1229,17 @@ export function DashboardView({
         </div>
 
         <div className={styles.meetingCardActions}>
+          {showEdit && (
+            <button
+              type="button"
+              className={`${styles.rowAction} ${styles.rowEditAction}`}
+              onClick={() => setEditingMeeting(m)}
+              title={t('dash.editMeeting')}
+            >
+              <Pencil size={13} aria-hidden="true" />
+              {t('common.edit')}
+            </button>
+          )}
           {primary ? (
             <button
               type="button"
@@ -1304,8 +1271,9 @@ export function DashboardView({
                 {dotsIcon(18)}
               </button>
               {renderRowMenu(m, {
-                invite: upcoming || isLive,
-                chat: finished && !!recording,
+                invite: !canceled,
+                finishedPath,
+                openFinished,
                 edit: isHost,
                 remove: isHost && !isLive,
               })}

@@ -2890,7 +2890,7 @@ a.dropdownItem:focus-visible {
   100% { box-shadow: 0 0 0 0 rgba(15, 166, 116, 0); }
 }
 
-/* One main action per row, always the same size; the rest live in the ⋯ menu */
+/* Keep the primary action aligned; the optional Edit action sits before it. */
 .rowAction {
   display: inline-flex;
   align-items: center;
@@ -2949,6 +2949,10 @@ a.dropdownItem:focus-visible {
   width: 88px;
   min-width: 0;
   padding: 0 10px;
+}
+
+.meetingCardActions > .rowEditAction {
+  width: auto;
 }
 
 .rowActionSpacer {
