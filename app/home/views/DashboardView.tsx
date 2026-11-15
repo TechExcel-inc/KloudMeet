@@ -26,7 +26,7 @@ import {
   type ActiveMeetingInfo,
   type MeetingStartIntent,
 } from '@/lib/meetingStartGuard';
-import { CalendarDays, CalendarPlus, ChevronDown, Copy, Hash, Keyboard, Pencil, Video, X } from 'lucide-react';
+import { CalendarDays, CalendarPlus, ChevronDown, Copy, Hash, Keyboard, MessageSquare, Pencil, Video, X } from 'lucide-react';
 import { PersonalRoomIdDialog } from '@/lib/PersonalRoomIdDialog';
 import {
   isPersonalIdPromptVisible,
@@ -1152,7 +1152,7 @@ export function DashboardView({
         }
       : undefined;
     const openScheduled = !isLive && !finished && !canceled && !!m.scheduledFor;
-    const showEdit = isHost && (openScheduled || (finished && !!recording));
+    const showEdit = isHost && (openScheduled || finished);
     let primary: { label: string; icon: React.ReactNode; fill?: boolean; onClick: () => void; title?: string } | null = null;
     if (isLive) primary = { label: t('common.join'), icon: videoIcon(15), fill: true, onClick: () => router.push(`/rooms/${m.roomName}`) };
     else if (openFinished && replay) primary = {
@@ -1160,6 +1160,11 @@ export function DashboardView({
       icon: playIcon(12),
       onClick: openFinished,
       title: t('dash.replayTitle'),
+    };
+    else if (openFinished) primary = {
+      label: t('dash.open'),
+      icon: <MessageSquare size={14} aria-hidden="true" />,
+      onClick: openFinished,
     };
     else if (openScheduled) primary = {
       label: t('dash.open'),
