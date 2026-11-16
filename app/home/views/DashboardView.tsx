@@ -1130,7 +1130,7 @@ export function DashboardView({
         }`,
       };
     else if (processingRecording) chip = { cls: styles.statusFinished, rec: true, text: t('common.processing') };
-    else if (notHeld) chip = { cls: styles.statusFinished, text: tx('dash.statusNotHeld', 'Not held') };
+    else if (notHeld) chip = { cls: styles.statusPastDue, text: t('dash.statusPastDue') };
 
     const hostLabel = m.createdByMember?.fullName || m.createdByMember?.username || '';
     const instant = !m.title && !m.scheduledFor;
@@ -1151,8 +1151,8 @@ export function DashboardView({
           else router.push(finishedPath);
         }
       : undefined;
-    const openScheduled = !isLive && !finished && !canceled && !!m.scheduledFor;
-    const showEdit = isHost && (openScheduled || finished);
+    const canOpenRoom = notHeld || (!isLive && !finished && !canceled && !!m.scheduledFor);
+    const showEdit = isHost && (canOpenRoom || finished);
     let primary: { label: string; icon: React.ReactNode; fill?: boolean; onClick: () => void; title?: string } | null = null;
     if (isLive) primary = { label: t('common.join'), icon: videoIcon(15), fill: true, onClick: () => router.push(`/rooms/${m.roomName}`) };
     else if (openFinished && replay) primary = {
@@ -1166,12 +1166,11 @@ export function DashboardView({
       icon: <MessageSquare size={14} aria-hidden="true" />,
       onClick: openFinished,
     };
-    else if (openScheduled) primary = {
+    else if (canOpenRoom) primary = {
       label: t('dash.open'),
       icon: videoIcon(14),
       onClick: () => isHost ? handleStartMeetingClick(m) : router.push(`/rooms/${m.roomName}`),
     };
-    else if (notHeld && isHost) primary = { label: t('common.start'), icon: playIcon(12), onClick: () => handleStartMeetingClick(m) };
 
     return (
       <article
