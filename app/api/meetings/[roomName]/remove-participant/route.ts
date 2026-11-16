@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import {
   forbidden,
@@ -8,6 +8,7 @@ import {
 import { getRoomServiceClient, removeParticipantFromRoom } from '@/lib/livekitRooms';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { findPersonalRoomOwner, resolveCanonicalRoomName } from '@/lib/personalRoom';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * Meeting owner: remove a participant from the LiveKit room.
@@ -19,6 +20,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -26,19 +28,19 @@ export async function POST(
     const resolvedParams = await params;
     const roomNameParam = resolvedParams?.roomName;
     if (!roomNameParam) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     let body: { identity?: string };
     try {
       body = (await request.json()) as typeof body;
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON body' }, { status: 400 });
     }
 
     const targetIdentity = typeof body.identity === 'string' ? body.identity.trim() : '';
     if (!targetIdentity) {
-      return NextResponse.json({ error: 'identity is required' }, { status: 400 });
+      return apiJson({ error: 'identity is required' }, { status: 400 });
     }
 
     const livekitRoomName = await resolveCanonicalRoomName(roomNameParam);
@@ -46,19 +48,19 @@ export async function POST(
     const personalOwner = meeting ? null : await findPersonalRoomOwner(livekitRoomName);
 
     if (!meeting && !personalOwner) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const client = getRoomServiceClient();
     if (!client) {
-      return NextResponse.json({ error: 'LiveKit not configured' }, { status: 503 });
+      return apiJson({ error: 'LiveKit not configured' }, { status: 503 });
     }
 
     let participants;
     try {
       participants = await client.listParticipants(livekitRoomName);
     } catch {
-      return NextResponse.json({ error: 'Room not active' }, { status: 404 });
+      return apiJson({ error: 'Room not active' }, { status: 404 });
     }
 
     const caller = participants.find(
@@ -74,7 +76,7 @@ export async function POST(
 
     const target = participants.find((p) => p.identity === targetIdentity);
     if (!target) {
-      return NextResponse.json({ error: 'Participant not found in room' }, { status: 404 });
+      return apiJson({ error: 'Participant not found in room' }, { status: 404 });
     }
 
     const ownerMemberId = meeting?.createdByMemberId ?? personalOwner?.id ?? null;
@@ -84,12 +86,14 @@ export async function POST(
 
     const ok = await removeParticipantFromRoom(livekitRoomName, targetIdentity);
     if (!ok) {
-      return NextResponse.json({ error: 'Failed to remove participant' }, { status: 500 });
+      return apiJson({ error: 'Failed to remove participant' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true });
+    return apiJson({ success: true });
   } catch (e) {
     console.error('[remove-participant]', e);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
+    return apiJson({ error: 'Internal error' }, { status: 500 });
   }
+
+  });
 }

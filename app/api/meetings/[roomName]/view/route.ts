@@ -4,6 +4,7 @@ import {
   parseMeetingRoomView,
   setMeetingRoomCurrentView,
 } from '@/lib/meetingRoomView';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 function getBearerToken(request: NextRequest): string {
   const authorization = request.headers.get('authorization');
@@ -38,37 +39,40 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const allowed = await verifyRoomParticipant(request, roomName);
     if (!allowed) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let payload: { view?: unknown };
     try {
       payload = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     const view = parseMeetingRoomView(payload.view);
     if (!view) {
-      return NextResponse.json({ error: 'Invalid view' }, { status: 400 });
+      return apiJson({ error: 'Invalid view' }, { status: 400 });
     }
 
     const ok = await setMeetingRoomCurrentView(roomName, view);
     if (!ok) {
-      return NextResponse.json({ error: 'Failed to update room view' }, { status: 502 });
+      return apiJson({ error: 'Failed to update room view' }, { status: 502 });
     }
 
-    return NextResponse.json({ view });
+    return apiJson({ view });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/view]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

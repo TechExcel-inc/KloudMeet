@@ -5,18 +5,20 @@
  * 完整 session 配置（model / language / VAD）一次性写在这里，
  * 浏览器拿到 ek_xxx 直接连 WS 即可，无需再发 session.update。
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { checkCaptionQuotaForRoom } from '@/lib/billing/limits';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 
 export async function GET(req: NextRequest) {
+  return runWithLocale(req, async () => {
   if (!(await verifyParticipant(req, { publish: true }))) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return apiJson({ error: 'Unauthorized' }, { status: 401 });
   }
   if (!OPENAI_API_KEY) {
-    return NextResponse.json(
+    return apiJson(
       { error: 'OpenAI API key not configured' },
       { status: 500 }
     );
@@ -67,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     if (!res.ok) {
       const text = await res.text();
-      return NextResponse.json(
+      return apiJson(
         { error: `OpenAI returned ${res.status}: ${text}` },
         { status: 502 }
       );
@@ -76,11 +78,13 @@ export async function GET(req: NextRequest) {
     const data = await res.json();
     const token: string = data?.value ?? '';
     if (!token) {
-      return NextResponse.json({ error: 'No client secret returned' }, { status: 502 });
+      return apiJson({ error: 'No client secret returned' }, { status: 502 });
     }
-    return NextResponse.json({ token });
+    return apiJson({ token });
   } catch (err) {
     console.error('[transcripts/realtime-token]', err);
-    return NextResponse.json({ error: 'Failed to get token' }, { status: 500 });
+    return apiJson({ error: 'Failed to get token' }, { status: 500 });
   }
+
+  });
 }

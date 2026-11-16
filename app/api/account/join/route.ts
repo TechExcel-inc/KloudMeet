@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 async function getSessionMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -16,10 +17,11 @@ async function getSessionMember(request: NextRequest) {
 
 // POST /api/account/join — Join by code or email domain
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
         where: { joinTeamCode: joinCode.trim(), status: 1 },
       });
       if (!account) {
-        return NextResponse.json({ error: 'Invalid join code' }, { status: 400 });
+        return apiJson({ error: 'Invalid join code' }, { status: 400 });
       }
 
       // Check if already a member
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
         where: { accountId: account.id, teamMemberId: member.id },
       });
       if (existing) {
-        return NextResponse.json({
+        return apiJson({
           id: account.id,
           accountCode: account.accountCode,
           accountName: account.accountName,
@@ -58,7 +60,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({
+      return apiJson({
         id: account.id,
         accountCode: account.accountCode,
         accountName: account.accountName,
@@ -72,15 +74,15 @@ export async function POST(request: NextRequest) {
         where: { id: accountId, status: 1 },
       });
       if (!account) {
-        return NextResponse.json({ error: 'Account not found' }, { status: 400 });
+        return apiJson({ error: 'Account not found' }, { status: 400 });
       }
 
       // Verify email domain match (only a verified address proves the domain)
       if (!member.email || !member.email.includes('@')) {
-        return NextResponse.json({ error: 'Email required for domain-based join' }, { status: 400 });
+        return apiJson({ error: 'Email required for domain-based join' }, { status: 400 });
       }
       if (!member.emailVerified) {
-        return NextResponse.json(
+        return apiJson(
           { error: 'Verify your email address in My Profile first.', code: 'EMAIL_NOT_VERIFIED' },
           { status: 400 },
         );
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
       const allowedDomains = (account.emailDomains || '').split(',').map((d) => d.trim().toLowerCase());
 
       if (!account.enableAutoJoinViaEmail || !allowedDomains.includes(domain)) {
-        return NextResponse.json({ error: 'Your email domain does not match this account' }, { status: 400 });
+        return apiJson({ error: 'Your email domain does not match this account' }, { status: 400 });
       }
 
       // Check if already a member
@@ -97,7 +99,7 @@ export async function POST(request: NextRequest) {
         where: { accountId: account.id, teamMemberId: member.id },
       });
       if (existing) {
-        return NextResponse.json({
+        return apiJson({
           id: account.id,
           accountCode: account.accountCode,
           accountName: account.accountName,
@@ -116,7 +118,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({
+      return apiJson({
         id: account.id,
         accountCode: account.accountCode,
         accountName: account.accountName,
@@ -124,19 +126,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: 'Join code or account ID required' }, { status: 400 });
+    return apiJson({ error: 'Join code or account ID required' }, { status: 400 });
   } catch (error) {
     console.error('[account join]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 // GET /api/account/join — Find joinable accounts for current user
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     // Get existing memberships
@@ -184,12 +189,14 @@ export async function GET(request: NextRequest) {
         }));
     }
 
-    return NextResponse.json({
+    return apiJson({
       existingAccounts,
       suggestedAccounts,
     });
   } catch (error) {
     console.error('[account join GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

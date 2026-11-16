@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
@@ -18,6 +18,7 @@ import {
   parsePauseSpans,
   type RecordingState,
 } from '@/lib/recordingControls';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const API_KEY = process.env.LIVEKIT_API_KEY;
@@ -71,16 +72,19 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ) {
+  return runWithLocale(request, async () => {
   const roomName = (await params)?.roomName;
-  if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+  if (!roomName) return apiJson({ error: 'Room name not provided' }, { status: 400 });
   const participant = await verifyParticipant(request);
   if (!participant || participant.room !== roomName) {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
   }
   const meeting = await prisma.meeting.findUnique({ where: { roomName } });
-  if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
-  return NextResponse.json({ state: stateOf(meeting, await findActiveRecording(meeting.id)) });
+  if (!meeting) return apiJson({ error: 'Meeting not found' }, { status: 404 });
+  return apiJson({ state: stateOf(meeting, await findActiveRecording(meeting.id)) });
+
+  });
 }
 
 /** Hosts the recorder may load: this request's own host plus the configured public app host. */
@@ -101,6 +105,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
 ) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -108,7 +113,7 @@ export async function POST(
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const body = await request.json();
@@ -119,18 +124,18 @@ export async function POST(
 
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
     const roles = parseMeetingRoles(meeting.meetingRoles);
 
     // The current host's client keeps the server's view of who is host / co-host / presenter.
     if (action === 'roles') {
       if (!memberMayReportRoles({ memberId: teamMemberId, creatorId: meeting.createdByMemberId, roles })) {
-        return NextResponse.json({ error: 'Only the host can update roles' }, { status: 403 });
+        return apiJson({ error: 'Only the host can update roles' }, { status: 403 });
       }
       const next = parseMeetingRoles(body.roles);
       await prisma.meeting.update({ where: { id: meeting.id }, data: { meetingRoles: { ...next } } });
-      return NextResponse.json({ success: true });
+      return apiJson({ success: true });
     }
 
     // Recording settings: host-only and sync transcript belong to the host; the layout to
@@ -145,41 +150,41 @@ export async function POST(
       });
       const data: { recordingHostOnly?: boolean; recordingSyncTranscript?: boolean; recordingMode?: string } = {};
       if (typeof body.hostOnly === 'boolean' || typeof body.syncTranscript === 'boolean') {
-        if (!isHostLike) return NextResponse.json({ error: 'Only the host can change this' }, { status: 403 });
+        if (!isHostLike) return apiJson({ error: 'Only the host can change this' }, { status: 403 });
         if (typeof body.hostOnly === 'boolean') data.recordingHostOnly = body.hostOnly;
         if (typeof body.syncTranscript === 'boolean') data.recordingSyncTranscript = body.syncTranscript;
       }
       const active = await findActiveRecording(meeting.id);
       if (body.mode !== undefined) {
-        if (!isRecordingMode(body.mode)) return NextResponse.json({ error: 'Unknown recording mode' }, { status: 400 });
-        if (!mayRecord) return NextResponse.json({ error: 'You cannot change the recording' }, { status: 403 });
+        if (!isRecordingMode(body.mode)) return apiJson({ error: 'Unknown recording mode' }, { status: 400 });
+        if (!mayRecord) return apiJson({ error: 'You cannot change the recording' }, { status: 403 });
         // Audio-only is a different kind of file: switching to or from it needs a new recording.
         if (active && active.kind !== 'livedoc_full' && (active.mode === 'audio') !== (body.mode === 'audio')) {
-          return NextResponse.json({ error: 'Stop the recording to switch to or from audio only', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
+          return apiJson({ error: 'Stop the recording to switch to or from audio only', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
         }
         data.recordingMode = body.mode;
         if (active) await prisma.recording.update({ where: { id: active.id }, data: { mode: body.mode } });
       }
       const updated = await prisma.meeting.update({ where: { id: meeting.id }, data });
-      return NextResponse.json({ success: true, state: stateOf(updated, await findActiveRecording(meeting.id)) });
+      return apiJson({ success: true, state: stateOf(updated, await findActiveRecording(meeting.id)) });
     }
 
     // Start / stop / pause / resume: the creator, host and co-hosts — and presenters when the
     // meeting isn't host-only.
     if (!memberMayRecord({ memberId: teamMemberId, creatorId: meeting.createdByMemberId, roles, hostOnly: meeting.recordingHostOnly })) {
-      return NextResponse.json({ error: 'Only the host can record this meeting', code: 'RECORDING_NOT_ALLOWED' }, { status: 403 });
+      return apiJson({ error: 'Only the host can record this meeting', code: 'RECORDING_NOT_ALLOWED' }, { status: 403 });
     }
 
     // The recording page saw a screen share start: record it (also without LiveKit's webhook).
     if (action === 'screen') {
       const active = await findActiveRecording(meeting.id);
       if (active?.kind === 'livedoc_full') await startScreenSectionsForRoom(active, roomName);
-      return NextResponse.json({ success: true });
+      return apiJson({ success: true });
     }
 
     if (action === 'pause' || action === 'resume') {
       const active = await findActiveRecording(meeting.id);
-      if (!active) return NextResponse.json({ error: 'No active recording found' }, { status: 404 });
+      if (!active) return apiJson({ error: 'No active recording found' }, { status: 404 });
       const now = new Date();
       if (action === 'pause' && !active.pausedAt) {
         await prisma.recording.update({ where: { id: active.id }, data: { pausedAt: now } });
@@ -190,11 +195,11 @@ export async function POST(
           data: { pausedAt: null, pauseSpans: spans as unknown as object[] },
         });
       }
-      return NextResponse.json({ success: true, state: stateOf(meeting, await findActiveRecording(meeting.id)) });
+      return apiJson({ success: true, state: stateOf(meeting, await findActiveRecording(meeting.id)) });
     }
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
-      return NextResponse.json({ error: 'LiveKit configuration missing' }, { status: 500 });
+      return apiJson({ error: 'LiveKit configuration missing' }, { status: 500 });
     }
 
     const egressClient = new EgressClient(LIVEKIT_URL, API_KEY, API_SECRET);
@@ -204,7 +209,7 @@ export async function POST(
         where: { meetingId: meeting.id, status: 'PROCESSING' }
       });
       if (activeRecordings.length === 0) {
-        return NextResponse.json({ error: 'No active recording found' }, { status: 404 });
+        return apiJson({ error: 'No active recording found' }, { status: 404 });
       }
       
       // Stop all active egresses for this meeting (a pause still open ends here)
@@ -228,7 +233,7 @@ export async function POST(
         }
       }
       
-      return NextResponse.json({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
+      return apiJson({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
     }
 
     // Otherwise, START recording
@@ -238,7 +243,7 @@ export async function POST(
 
     if (!S3_ACCESS_KEY || !S3_SECRET || !S3_REGION || !S3_BUCKET) {
       console.error('S3 configuration is missing in .env');
-      return NextResponse.json({ error: 'Cloud storage (S3/OSS) configuration is missing in environment variables. LiveKit Cloud requires a cloud storage destination for recordings.' }, { status: 500 });
+      return apiJson({ error: 'Cloud storage (S3/OSS) configuration is missing in environment variables. LiveKit Cloud requires a cloud storage destination for recordings.' }, { status: 500 });
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -280,14 +285,14 @@ export async function POST(
     }
 
     if (!pageUrl) {
-      return NextResponse.json({ error: 'pageUrl is required for Web Egress' }, { status: 400 });
+      return apiJson({ error: 'pageUrl is required for Web Egress' }, { status: 400 });
     }
 
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(pageUrl);
     } catch {
-      return NextResponse.json({ error: 'Invalid pageUrl' }, { status: 400 });
+      return apiJson({ error: 'Invalid pageUrl' }, { status: 400 });
     }
     // The egress browser must only load this app's own meeting page, never an arbitrary URL.
     if (
@@ -295,7 +300,7 @@ export async function POST(
       !allowedPageHosts(request).has(parsedUrl.host) ||
       !parsedUrl.pathname.startsWith('/rooms/')
     ) {
-      return NextResponse.json({ error: 'pageUrl must be this meeting page' }, { status: 400 });
+      return apiJson({ error: 'pageUrl must be this meeting page' }, { status: 400 });
     }
 
     // LiveDoc Full Recording: Kloud saves the LiveDoc actions; the media is the meeting's voice,
@@ -308,7 +313,7 @@ export async function POST(
         livedocRecordingId = await startKloudRecording(meeting.kloudMeetingId, livedocToken);
       } catch (e) {
         console.error('[meetings record] Kloud start_recording failed', e);
-        return NextResponse.json({ error: 'LiveDoc recording could not start', code: 'LIVEDOC_RECORDING_FAILED' }, { status: 502 });
+        return apiJson({ error: 'LiveDoc recording could not start', code: 'LIVEDOC_RECORDING_FAILED' }, { status: 502 });
       }
       livedocStartedAt = new Date();
     }
@@ -373,7 +378,7 @@ export async function POST(
       await prisma.meeting.update({ where: { id: meeting.id }, data: { recordingMode: mode } });
     }
 
-    return NextResponse.json({
+    return apiJson({
       success: true,
       recording,
       egressId: info.egressId,
@@ -381,6 +386,8 @@ export async function POST(
     });
   } catch (error: any) {
     console.error('[meetings record POST]', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    return apiJson({ error: error.message || 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import {
   canManageMeeting,
@@ -12,11 +12,13 @@ import {
   findPersonalRoomOwner,
 } from '@/lib/personalRoom';
 import { MEETING_END_REASON, MEETING_STATUS } from '@/lib/meetingRejoin';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -24,17 +26,17 @@ export async function POST(
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     let meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
       const owner = await findPersonalRoomOwner(roomName);
       if (!owner || !canManageMeeting(member.id, { createdByMemberId: owner.id })) {
-        return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+        return apiJson({ error: 'Meeting not found' }, { status: 404 });
       }
       await deleteLiveKitRoom(roomName);
-      return NextResponse.json({
+      return apiJson({
         success: true,
         meeting: { roomName, status: 'ENDED', isPersonalRoom: true },
       });
@@ -47,7 +49,7 @@ export async function POST(
       await deleteLiveKitRoom(roomName);
       await archivePersonalRoomMeeting(meeting);
       const archived = await prisma.meeting.findUnique({ where: { id: meeting.id } });
-      return NextResponse.json({ success: true, meeting: archived ?? meeting });
+      return apiJson({ success: true, meeting: archived ?? meeting });
     }
 
     const endedAt = new Date();
@@ -80,9 +82,11 @@ export async function POST(
       where: { id: updated.id },
     });
 
-    return NextResponse.json({ success: true, meeting: finalMeeting ?? updated });
+    return apiJson({ success: true, meeting: finalMeeting ?? updated });
   } catch (error) {
     console.error('[meetings end POST]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

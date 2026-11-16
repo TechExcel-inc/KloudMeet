@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { forbidden, unauthorized } from '@/lib/apiAuth';
 import { ROOM_TOKEN_HEADER } from '@/lib/roomAuth';
+import { apiJson } from '@/lib/apiMsg';
 
 export type RoomTokenClaims = { room: string; identity: string };
 
@@ -54,7 +55,7 @@ export async function requireMeetingAccess(
     where: { id: meetingId },
     select: { id: true, roomName: true, createdByMemberId: true },
   });
-  if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+  if (!meeting) return apiJson({ error: 'Meeting not found' }, { status: 404 });
 
   const roomClaims = await verifyRoomTokenHeader(request);
   // Room lookups elsewhere are case-insensitive (see roomNameVariants), so compare the same way.
@@ -85,7 +86,7 @@ export async function requireMeetingHost(
     where: { id: meetingId },
     select: { id: true, roomName: true, createdByMemberId: true },
   });
-  if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+  if (!meeting) return apiJson({ error: 'Meeting not found' }, { status: 404 });
   if (meeting.createdByMemberId !== member.id) return forbidden('Host access required');
   return { meeting, memberId: member.id };
 }

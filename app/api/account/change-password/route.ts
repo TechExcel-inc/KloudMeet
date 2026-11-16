@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 async function getAuthMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -15,30 +16,31 @@ async function getAuthMember(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getAuthMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json();
     const { currentPassword, newPassword } = body;
 
     if (!currentPassword || !newPassword) {
-      return NextResponse.json({ error: 'Current and new password are required' }, { status: 400 });
+      return apiJson({ error: 'Current and new password are required' }, { status: 400 });
     }
 
     if (newPassword.length < 8 || newPassword.length > 30) {
-      return NextResponse.json({ error: 'New password must be 8-30 characters' }, { status: 400 });
+      return apiJson({ error: 'New password must be 8-30 characters' }, { status: 400 });
     }
 
     // Check if the password has both letters and numbers
     if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-      return NextResponse.json({ error: 'Password must contain both letters and numbers' }, { status: 400 });
+      return apiJson({ error: 'Password must contain both letters and numbers' }, { status: 400 });
     }
 
     // Verify current password
     const valid = await bcrypt.compare(currentPassword, member.passwordHash);
     if (!valid) {
-      return NextResponse.json({ error: 'Current password is incorrect' }, { status: 400 });
+      return apiJson({ error: 'Current password is incorrect' }, { status: 400 });
     }
 
     // Hash and update new password
@@ -52,9 +54,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ message: 'Password changed successfully' });
+    return apiJson({ message: 'Password changed successfully' });
   } catch (error) {
     console.error('[change-password]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

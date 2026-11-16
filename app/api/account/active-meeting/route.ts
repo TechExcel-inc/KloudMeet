@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { resolveHostActiveMeeting } from '@/lib/hostActiveMeeting';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -13,10 +15,10 @@ export async function GET(request: NextRequest) {
     const meeting = await resolveHostActiveMeeting(member.id, preferredRoomName);
 
     if (!meeting) {
-      return NextResponse.json({ hasActive: false });
+      return apiJson({ hasActive: false });
     }
 
-    return NextResponse.json({
+    return apiJson({
       hasActive: true,
       meeting: {
         ...meeting,
@@ -33,6 +35,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[account active-meeting GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

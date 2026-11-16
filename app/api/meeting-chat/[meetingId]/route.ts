@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { decodeChatContent } from '@/lib/chatProtocol';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const DEFAULT_PAGE_SIZE = 200;
 const MAX_PAGE_SIZE = 500;
@@ -11,11 +12,12 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { meetingId } = await params;
     const parsedMeetingId = Number.parseInt(meetingId, 10);
     if (!Number.isInteger(parsedMeetingId) || parsedMeetingId <= 0) {
-      return NextResponse.json({ error: 'Invalid meeting ID' }, { status: 400 });
+      return apiJson({ error: 'Invalid meeting ID' }, { status: 400 });
     }
 
     const access = await requireMeetingAccess(request, parsedMeetingId);
@@ -43,7 +45,7 @@ export async function GET(
       },
     });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const [total, messages] = await Promise.all([
@@ -65,7 +67,7 @@ export async function GET(
       }),
     ]);
 
-    return NextResponse.json({
+    return apiJson({
       meeting,
       messages: messages.map((message) => {
         const decoded = decodeChatContent(message.content);
@@ -86,6 +88,8 @@ export async function GET(
     });
   } catch (error) {
     console.error('[GET /api/meeting-chat/[meetingId]]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

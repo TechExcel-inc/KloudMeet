@@ -2,8 +2,10 @@ import { EgressClient } from 'livekit-server-sdk';
 import { NextRequest, NextResponse } from 'next/server';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { prisma } from '@/lib/db';
+import { apiText, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(req: NextRequest) {
+  return runWithLocale(req, async () => {
   try {
     const member = await requireSession(req);
     if (isAuthError(member)) return member;
@@ -11,15 +13,15 @@ export async function GET(req: NextRequest) {
     const roomName = req.nextUrl.searchParams.get('roomName');
 
     if (roomName === null) {
-      return new NextResponse('Missing roomName parameter', { status: 403 });
+      return apiText('Missing roomName parameter', { status: 403 });
     }
 
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
-      return new NextResponse('Meeting not found', { status: 404 });
+      return apiText('Meeting not found', { status: 404 });
     }
     if (meeting.createdByMemberId !== member.id) {
-      return new NextResponse('Only the meeting host can stop recording', { status: 403 });
+      return apiText('Only the meeting host can stop recording', { status: 403 });
     }
 
     const { LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_URL } = process.env;
@@ -32,14 +34,16 @@ export async function GET(req: NextRequest) {
       (info) => info.status < 2,
     );
     if (activeEgresses.length === 0) {
-      return new NextResponse('No active recording found', { status: 404 });
+      return apiText('No active recording found', { status: 404 });
     }
     await Promise.all(activeEgresses.map((info) => egressClient.stopEgress(info.egressId)));
 
     return new NextResponse(null, { status: 200 });
   } catch (error) {
     if (error instanceof Error) {
-      return new NextResponse(error.message, { status: 500 });
+      return apiText(error.message, { status: 500 });
     }
   }
+
+  });
 }

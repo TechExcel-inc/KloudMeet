@@ -299,12 +299,6 @@ const IconLeave = () => (
     <line x1="21" x2="9" y1="12" y2="12" />
   </svg>
 );
-const IconDocAi = () => (
-  <svg viewBox="0 0 24 24" {...ICON_STROKE}>
-    <path d="M14 3H6a2 2 0 00-2 2v14a2 2 0 002 2h5M14 3v6h6v2" />
-    <path d="M17 14l1 2.3 2.3 1-2.3 1-1 2.3-1-2.3-2.3-1 2.3-1z" />
-  </svg>
-);
 const IconCaptions = () => (
   <svg viewBox="0 0 24 24" {...ICON_STROKE}>
     <rect x="3" y="5" width="18" height="14" rx="3" />
@@ -1830,6 +1824,8 @@ export function KloudMeetToolbar({
   /**
    * Web：视图切换分段控件「LiveDoc / Webcam / Share Screen」。
    * - LiveDoc / Webcam 段：所有人可见；仅 canSwitchViews && 操作者可点，其他人看到灰色锁定态（与工具栏布局保持一致）
+   * - LiveDoc 段主体点击：切换到协作文档
+   * - LiveDoc 段右侧箭头：打开文档 AI 面板（原底栏「文档 AI」按钮）
    * - Webcam 段主体点击：非 Webcam 时切到 Webcam，已在 Webcam 时切换宫格/焦点（与旧版一致）
    * - Webcam 段右侧箭头：弹出 Tile / Spotlight 子菜单（复用 handleWebcamLayoutSelect）
    * - Share Screen 段：所有人可见
@@ -1851,28 +1847,50 @@ export function KloudMeetToolbar({
       <div className={styles.viewSwitch} role="group" aria-label={t('toolbar.selectViewLayout')}>
         {/* Everyone sees LiveDoc and Webcam. Host / co-host / presenter switch what everyone sees;
             attendees switch only their own screen until the host switches again */}
-        <button
-          type="button"
-          className={`${styles.seg} ${activeView === 'liveDoc' ? styles.segActive : ''}`}
-          onClick={() => {
-            closeViewModeMenu();
-            handleLiveDocTabClick();
-          }}
-          aria-pressed={activeView === 'liveDoc'}
-          aria-label={
-            showOperatorSegments
-              ? t('toolbar.liveDocView')
-              : `${t('toolbar.liveDoc')} · ${ownViewTip}`
-          }
-          data-tip={
-            showOperatorSegments
-              ? t('toolbar.liveDocView')
-              : `${t('toolbar.liveDoc')} · ${ownViewTip}`
-          }
+        <div
+          className={`${styles.segSplit} ${activeView === 'liveDoc' ? styles.segActive : ''}`}
         >
-          <IconDoc />
-          <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
-        </button>
+          <button
+            type="button"
+            className={`${styles.seg} ${styles.segMain}`}
+            onClick={() => {
+              closeViewModeMenu();
+              handleLiveDocTabClick();
+            }}
+            aria-pressed={activeView === 'liveDoc'}
+            aria-label={
+              showOperatorSegments
+                ? t('toolbar.liveDocView')
+                : `${t('toolbar.liveDoc')} · ${ownViewTip}`
+            }
+            data-tip={
+              showOperatorSegments
+                ? t('toolbar.liveDocView')
+                : `${t('toolbar.liveDoc')} · ${ownViewTip}`
+            }
+          >
+            <IconDoc />
+            <span className={styles.segLabel}>{t('toolbar.liveDoc')}</span>
+          </button>
+          {canOpenLiveDocAi && (
+            <button
+              ref={liveDocAiBtnRef}
+              type="button"
+              className={`${styles.segChevron} ${liveDocMenuVisible ? styles.segChevronOn : ''}`}
+              onClick={() => {
+                closeViewModeMenu();
+                setShareToolsOpen(false);
+                handleLiveDocSettingsClick();
+              }}
+              aria-haspopup="dialog"
+              aria-expanded={liveDocMenuVisible}
+              aria-label={t('toolbar.liveDocMenu')}
+              data-tip={t('toolbar.liveDocMenu')}
+            >
+              <IconChevronUp />
+            </button>
+          )}
+        </div>
 
         <div
           className={`${styles.segSplit} ${activeView === 'webcam' ? styles.segActive : ''}`}
@@ -2066,60 +2084,6 @@ export function KloudMeetToolbar({
           )}
         </button>
       </>
-    );
-  };
-
-  /** Web 右侧：LiveDoc AI 图标按钮（保留主持人/演示者的「批注开关」角标） */
-  const renderDesktopLiveDocAiButton = () => {
-    if (!canOpenLiveDocAi) return null;
-    const isActive = liveDocMenuVisible || liveDocActionDialogVisible;
-    const annotationLabel = liveDocAnnotationEnabled
-      ? tr('toolbar.disableAnnotation', 'Disable Annotation')
-      : tr('toolbar.enableAnnotation', 'Enable Annotation');
-    return (
-      <button
-        ref={liveDocAiBtnRef}
-        type="button"
-        className={`${styles.actBtn} ${isActive ? styles.actBtnActive : ''}`}
-        onClick={handleLiveDocSettingsClick}
-        aria-label={t('toolbar.liveDocMenu')}
-        aria-pressed={isActive}
-      >
-        <span className={styles.actIcon}>
-          <IconDocAi />
-          {canToggleLiveDocAnnotation && (
-            <span
-              role="button"
-              tabIndex={0}
-              className={`${styles.annotationToggle} ${liveDocAnnotationEnabled ? styles.annotationToggleOn : styles.annotationToggleOff}`}
-              onClick={handleLiveDocAnnotationBadgeClick}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  handleLiveDocAnnotationBadgeClick(e as unknown as React.MouseEvent);
-                }
-              }}
-              title={annotationLabel}
-              aria-label={annotationLabel}
-              aria-pressed={liveDocAnnotationEnabled}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="4"
-                aria-hidden="true"
-              >
-                {liveDocAnnotationEnabled ? (
-                  <path d="M18 15l-6-6-6 6" />
-                ) : (
-                  <path d="M6 9l6 6 6-6" />
-                )}
-              </svg>
-            </span>
-          )}
-        </span>
-        <span className={styles.actLabel}>{t('toolbar.liveDocMenu')}</span>
-      </button>
     );
   };
 
@@ -2619,7 +2583,6 @@ export function KloudMeetToolbar({
               <span className={styles.zoneSeparator} aria-hidden="true" />
 
               <div className={styles.actionGroup}>
-                {renderDesktopLiveDocAiButton()}
                 {/* Captions: host / co-host set them up; others can open their caption settings once they run */}
                 {(canToggleCaptions || captionsEnabled) && (
                   <button

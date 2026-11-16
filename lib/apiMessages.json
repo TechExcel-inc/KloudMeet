@@ -1,0 +1,1192 @@
+{
+  "A payment for this account is still processing. Please wait for it to clear.": {
+    "zh": "这笔付款还在处理中，请等它完成后再试。",
+    "ja": "このアカウントの支払いはまだ処理中です。完了してからもう一度お試しください。",
+    "ko": "이 계정의 결제가 아직 처리 중입니다. 완료된 뒤 다시 시도해 주세요."
+  },
+  "Account ID required": {
+    "zh": "需要账号 ID",
+    "ja": "アカウント ID が必要です",
+    "ko": "계정 ID가 필요합니다"
+  },
+  "Account code already taken": {
+    "zh": "这个账号代码已被使用",
+    "ja": "このアカウントコードはすでに使われています",
+    "ko": "이 계정 코드는 이미 사용 중입니다"
+  },
+  "Account code and name required": {
+    "zh": "请填写账号代码和名称",
+    "ja": "アカウントコードと名前を入力してください",
+    "ko": "계정 코드와 이름을 입력해 주세요"
+  },
+  "Account is inactive or suspended": {
+    "zh": "账号未激活或已停用",
+    "ja": "アカウントは無効か停止されています",
+    "ko": "계정이 비활성 상태이거나 정지되었습니다"
+  },
+  "Account is suspended": {
+    "zh": "账号已停用",
+    "ja": "アカウントは停止されています",
+    "ko": "계정이 정지되었습니다"
+  },
+  "Account not found": {
+    "zh": "找不到这个账号",
+    "ja": "アカウントが見つかりません",
+    "ko": "계정을 찾을 수 없습니다"
+  },
+  "Admin access required": {
+    "zh": "需要管理员权限",
+    "ja": "管理者権限が必要です",
+    "ko": "관리자 권한이 필요합니다"
+  },
+  "An account with this email already exists. Sign in to your Kloud Meet account, then connect Kloud in My Profile.": {
+    "zh": "这个邮箱已经有账号了。请登录你的 Kloud Meet 账号，然后在「我的资料」里连接 Kloud。",
+    "ja": "このメールアドレスのアカウントはすでにあります。Kloud Meet にログインし、マイプロフィールで Kloud を接続してください。",
+    "ko": "이 이메일로 된 계정이 이미 있습니다. Kloud Meet 계정으로 로그인한 뒤 내 프로필에서 Kloud를 연결해 주세요."
+  },
+  "An account with this email already exists. Sign in with your password, then connect Google in My Profile.": {
+    "zh": "这个邮箱已经有账号了。请用密码登录，然后在「我的资料」里连接 Google。",
+    "ja": "このメールアドレスのアカウントはすでにあります。パスワードでログインし、マイプロフィールで Google を接続してください。",
+    "ko": "이 이메일로 된 계정이 이미 있습니다. 비밀번호로 로그인한 뒤 내 프로필에서 Google을 연결해 주세요."
+  },
+  "Already a member": {
+    "zh": "已经是成员了",
+    "ja": "すでにメンバーです",
+    "ko": "이미 멤버입니다"
+  },
+  "Already connected": {
+    "zh": "已经连接过了",
+    "ja": "すでに接続されています",
+    "ko": "이미 연결되어 있습니다"
+  },
+  "Bad event": {
+    "zh": "无效的事件",
+    "ja": "無効なイベントです",
+    "ko": "잘못된 이벤트입니다"
+  },
+  "Billing is not enabled": {
+    "zh": "账单功能未开启",
+    "ja": "請求機能は有効になっていません",
+    "ko": "결제 기능이 켜져 있지 않습니다"
+  },
+  "Cannot determine S3 object key": {
+    "zh": "无法确定录制文件的位置",
+    "ja": "録画ファイルの場所を特定できません",
+    "ko": "녹화 파일 위치를 확인할 수 없습니다"
+  },
+  "Cannot remove yourself": {
+    "zh": "不能移除你自己",
+    "ja": "自分自身は退出させられません",
+    "ko": "자기 자신은 내보낼 수 없습니다"
+  },
+  "Checkout is unavailable, please try again": {
+    "zh": "暂时无法结账，请再试一次",
+    "ja": "決済を開始できません。もう一度お試しください",
+    "ko": "결제를 시작할 수 없습니다. 다시 시도해 주세요"
+  },
+  "Choose PRO, TEAM or BUSINESS and month or year": {
+    "zh": "请选择 PRO、TEAM 或 BUSINESS，以及按月或按年",
+    "ja": "PRO、TEAM、BUSINESS と、月額か年額を選んでください",
+    "ko": "PRO, TEAM, BUSINESS 중에서 고르고 월간 또는 연간을 선택해 주세요"
+  },
+  "Cloud storage (S3/OSS) configuration is missing in environment variables. LiveKit Cloud requires a cloud storage destination for recordings.": {
+    "zh": "还没有配置云存储，因此无法开始云录制。",
+    "ja": "クラウドストレージが未設定のため、クラウド録画を開始できません。",
+    "ko": "클라우드 저장소가 설정되지 않아 클라우드 녹화를 시작할 수 없습니다."
+  },
+  "Confirm the new email with a code first.": {
+    "zh": "请先用验证码确认新邮箱。",
+    "ja": "先に確認コードで新しいメールアドレスを確認してください。",
+    "ko": "먼저 인증 코드로 새 이메일을 확인해 주세요."
+  },
+  "Connect your Kloud account first.": {
+    "zh": "请先连接 Kloud 账号。",
+    "ja": "先に Kloud アカウントを接続してください。",
+    "ko": "먼저 Kloud 계정을 연결해 주세요."
+  },
+  "Could not read your Google profile. Please try again.": {
+    "zh": "无法读取 Google 资料，请再试一次。",
+    "ja": "Google プロフィールを読み取れませんでした。もう一度お試しください。",
+    "ko": "Google 프로필을 읽지 못했습니다. 다시 시도해 주세요."
+  },
+  "Current and new password are required": {
+    "zh": "请填写当前密码和新密码",
+    "ja": "現在のパスワードと新しいパスワードを入力してください",
+    "ko": "현재 비밀번호와 새 비밀번호를 입력해 주세요"
+  },
+  "Current password is incorrect": {
+    "zh": "当前密码不正确",
+    "ja": "現在のパスワードが正しくありません",
+    "ko": "현재 비밀번호가 올바르지 않습니다"
+  },
+  "Design links are off for this meeting": {
+    "zh": "这场会议没有开设计链接",
+    "ja": "このミーティングではデザインリンクがオフです",
+    "ko": "이 회의에서는 디자인 링크가 꺼져 있습니다"
+  },
+  "Email and code required": {
+    "zh": "请填写邮箱和验证码",
+    "ja": "メールアドレスと確認コードを入力してください",
+    "ko": "이메일과 인증 코드를 입력해 주세요"
+  },
+  "Email required for domain-based join": {
+    "zh": "用域名加入需要填写邮箱",
+    "ja": "ドメインで参加するにはメールアドレスが必要です",
+    "ko": "도메인으로 참여하려면 이메일이 필요합니다"
+  },
+  "Expected a form upload": {
+    "zh": "请用表单上传文件",
+    "ja": "フォームでファイルをアップロードしてください",
+    "ko": "폼으로 파일을 업로드해 주세요"
+  },
+  "Failed to create Fun-ASR token": {
+    "zh": "语音识别令牌创建失败",
+    "ja": "音声認識トークンを作成できませんでした",
+    "ko": "음성 인식 토큰을 만들지 못했습니다"
+  },
+  "Failed to detect region": {
+    "zh": "无法检测所在区域",
+    "ja": "地域を検出できませんでした",
+    "ko": "지역을 확인하지 못했습니다"
+  },
+  "Failed to get token": {
+    "zh": "获取令牌失败",
+    "ja": "トークンを取得できませんでした",
+    "ko": "토큰을 가져오지 못했습니다"
+  },
+  "Failed to load company backgrounds": {
+    "zh": "公司背景加载失败",
+    "ja": "会社の背景を読み込めませんでした",
+    "ko": "회사 배경을 불러오지 못했습니다"
+  },
+  "Failed to load settings": {
+    "zh": "设置加载失败",
+    "ja": "設定を読み込めませんでした",
+    "ko": "설정을 불러오지 못했습니다"
+  },
+  "Failed to remove participant": {
+    "zh": "移除参会者失败",
+    "ja": "参加者を退出させられませんでした",
+    "ko": "참가자를 내보내지 못했습니다"
+  },
+  "Failed to save settings": {
+    "zh": "设置保存失败",
+    "ja": "設定を保存できませんでした",
+    "ko": "설정을 저장하지 못했습니다"
+  },
+  "Failed to update room": {
+    "zh": "更新会议失败",
+    "ja": "ミーティングを更新できませんでした",
+    "ko": "회의를 업데이트하지 못했습니다"
+  },
+  "Failed to update room view": {
+    "zh": "更新视图失败",
+    "ja": "表示を更新できませんでした",
+    "ko": "화면 보기를 업데이트하지 못했습니다"
+  },
+  "Failed to upload avatar": {
+    "zh": "头像上传失败",
+    "ja": "アバターをアップロードできませんでした",
+    "ko": "아바타를 업로드하지 못했습니다"
+  },
+  "File size must be less than 2MB": {
+    "zh": "文件必须小于 2MB",
+    "ja": "ファイルは 2MB 未満にしてください",
+    "ko": "파일 크기는 2MB 미만이어야 합니다"
+  },
+  "Forbidden": {
+    "zh": "没有权限",
+    "ja": "権限がありません",
+    "ko": "권한이 없습니다"
+  },
+  "Fun-ASR is not configured": {
+    "zh": "语音识别尚未配置",
+    "ja": "音声認識が設定されていません",
+    "ko": "음성 인식이 설정되지 않았습니다"
+  },
+  "Google sign-in expired. Please try again.": {
+    "zh": "Google 登录已过期，请再试一次。",
+    "ja": "Google ログインの有効期限が切れました。もう一度お試しください。",
+    "ko": "Google 로그인이 만료되었습니다. 다시 시도해 주세요."
+  },
+  "Google sign-in failed. Please try again.": {
+    "zh": "Google 登录失败，请再试一次。",
+    "ja": "Google ログインに失敗しました。もう一度お試しください。",
+    "ko": "Google 로그인에 실패했습니다. 다시 시도해 주세요."
+  },
+  "Google sign-in failed: {detail}": {
+    "zh": "Google 登录失败：{detail}",
+    "ja": "Google ログインに失敗しました: {detail}",
+    "ko": "Google 로그인에 실패했습니다: {detail}"
+  },
+  "Google sign-in is not available yet": {
+    "zh": "Google 登录暂不可用",
+    "ja": "Google ログインはまだ利用できません",
+    "ko": "Google 로그인은 아직 사용할 수 없습니다"
+  },
+  "Host access required": {
+    "zh": "需要主持人权限",
+    "ja": "ホスト権限が必要です",
+    "ko": "호스트 권한이 필요합니다"
+  },
+  "Hour packs are not available for purchase yet": {
+    "zh": "小时包暂不可购买",
+    "ja": "時間パックはまだ購入できません",
+    "ko": "시간 패키지는 아직 구매할 수 없습니다"
+  },
+  "Identifier and password required": {
+    "zh": "请填写账号和密码",
+    "ja": "アカウントとパスワードを入力してください",
+    "ko": "계정과 비밀번호를 입력해 주세요"
+  },
+  "Image and thumbnail are required": {
+    "zh": "需要图片和缩略图",
+    "ja": "画像とサムネイルが必要です",
+    "ko": "이미지와 썸네일이 필요합니다"
+  },
+  "Incorrect email/login name or password": {
+    "zh": "邮箱、登录名或密码不正确",
+    "ja": "メールアドレス、ログイン名、またはパスワードが正しくありません",
+    "ko": "이메일, 로그인 이름 또는 비밀번호가 올바르지 않습니다"
+  },
+  "Internal Server Error": {
+    "zh": "服务器出错了，请稍后再试",
+    "ja": "サーバーで問題が起きました。しばらくしてからもう一度お試しください",
+    "ko": "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요"
+  },
+  "Internal error": {
+    "zh": "内部错误，请稍后再试",
+    "ja": "内部エラーです。しばらくしてからもう一度お試しください",
+    "ko": "내부 오류입니다. 잠시 후 다시 시도해 주세요"
+  },
+  "Internal server error": {
+    "zh": "服务器出错了，请稍后再试",
+    "ja": "サーバーで問題が起きました。しばらくしてからもう一度お試しください",
+    "ko": "서버 오류가 발생했습니다. 잠시 후 다시 시도해 주세요"
+  },
+  "Invalid Guid or UserName": {
+    "zh": "Guid 或用户名无效",
+    "ja": "Guid またはユーザー名が無効です",
+    "ko": "Guid 또는 사용자 이름이 올바르지 않습니다"
+  },
+  "Invalid JSON": {
+    "zh": "请求格式不正确",
+    "ja": "リクエストの形式が正しくありません",
+    "ko": "요청 형식이 올바르지 않습니다"
+  },
+  "Invalid JSON body": {
+    "zh": "请求内容格式不正确",
+    "ja": "リクエスト本文の形式が正しくありません",
+    "ko": "요청 본문 형식이 올바르지 않습니다"
+  },
+  "Invalid access level": {
+    "zh": "无效的访问级别",
+    "ja": "無効なアクセスレベルです",
+    "ko": "잘못된 접근 수준입니다"
+  },
+  "Invalid body": {
+    "zh": "请求内容无效",
+    "ja": "リクエストの内容が無効です",
+    "ko": "요청 내용이 올바르지 않습니다"
+  },
+  "Invalid client message ID": {
+    "zh": "无效的消息 ID",
+    "ja": "無効なメッセージ ID です",
+    "ko": "잘못된 메시지 ID입니다"
+  },
+  "Invalid design links setting": {
+    "zh": "设计链接设置无效",
+    "ja": "デザインリンクの設定が無効です",
+    "ko": "디자인 링크 설정이 올바르지 않습니다"
+  },
+  "Invalid email format": {
+    "zh": "邮箱格式不正确",
+    "ja": "メールアドレスの形式が正しくありません",
+    "ko": "이메일 형식이 올바르지 않습니다"
+  },
+  "Invalid itemId": {
+    "zh": "无效的项目 ID",
+    "ja": "無効な項目 ID です",
+    "ko": "잘못된 항목 ID입니다"
+  },
+  "Invalid join code": {
+    "zh": "加入码无效",
+    "ja": "参加コードが無効です",
+    "ko": "참여 코드가 올바르지 않습니다"
+  },
+  "Invalid link": {
+    "zh": "链接无效",
+    "ja": "リンクが無効です",
+    "ko": "링크가 올바르지 않습니다"
+  },
+  "Invalid livedocInstanceId": {
+    "zh": "无效的 LiveDoc 实例",
+    "ja": "無効な LiveDoc インスタンスです",
+    "ko": "잘못된 LiveDoc 인스턴스입니다"
+  },
+  "Invalid meeting ID": {
+    "zh": "无效的会议 ID",
+    "ja": "無効なミーティング ID です",
+    "ko": "잘못된 회의 ID입니다"
+  },
+  "Invalid meetingId": {
+    "zh": "无效的会议 ID",
+    "ja": "無効なミーティング ID です",
+    "ko": "잘못된 회의 ID입니다"
+  },
+  "Invalid message": {
+    "zh": "消息无效",
+    "ja": "メッセージが無効です",
+    "ko": "메시지가 올바르지 않습니다"
+  },
+  "Invalid pageUrl": {
+    "zh": "页面地址无效",
+    "ja": "ページ URL が無効です",
+    "ko": "페이지 주소가 올바르지 않습니다"
+  },
+  "Invalid phone format": {
+    "zh": "手机号格式不正确",
+    "ja": "電話番号の形式が正しくありません",
+    "ko": "전화번호 형식이 올바르지 않습니다"
+  },
+  "Invalid region": {
+    "zh": "区域无效",
+    "ja": "リージョンが無効です",
+    "ko": "리전이 올바르지 않습니다"
+  },
+  "Invalid show": {
+    "zh": "无效的显示设置",
+    "ja": "無効な表示設定です",
+    "ko": "잘못된 표시 설정입니다"
+  },
+  "Invalid speak activity batch": {
+    "zh": "发言记录无效",
+    "ja": "発言記録が無効です",
+    "ko": "발언 기록이 올바르지 않습니다"
+  },
+  "Invalid view": {
+    "zh": "无效的视图",
+    "ja": "無効な表示です",
+    "ko": "잘못된 보기입니다"
+  },
+  "Invalid visibility": {
+    "zh": "无效的可见范围",
+    "ja": "無効な公開範囲です",
+    "ko": "잘못된 공개 범위입니다"
+  },
+  "Join code or account ID required": {
+    "zh": "请填写加入码或账号 ID",
+    "ja": "参加コードまたはアカウント ID を入力してください",
+    "ko": "참여 코드 또는 계정 ID를 입력해 주세요"
+  },
+  "Joined successfully": {
+    "zh": "已加入",
+    "ja": "参加しました",
+    "ko": "참여했습니다"
+  },
+  "Keep at least one way to sign in: verify your email or connect another method first.": {
+    "zh": "请至少保留一种登录方式：先验证邮箱，或先连接其他登录方式。",
+    "ja": "ログイン方法を少なくとも一つ残してください。先にメールを確認するか、別の方法を接続してください。",
+    "ko": "로그인 방법을 하나 이상 남겨 주세요. 먼저 이메일을 확인하거나 다른 방법을 연결해 주세요."
+  },
+  "Kloud Meet staff only": {
+    "zh": "仅 Kloud Meet 工作人员可操作",
+    "ja": "Kloud Meet スタッフのみ操作できます",
+    "ko": "Kloud Meet 직원만 사용할 수 있습니다"
+  },
+  "Kloud sign-in expired. Please try again.": {
+    "zh": "Kloud 登录已过期，请再试一次。",
+    "ja": "Kloud ログインの有効期限が切れました。もう一度お試しください。",
+    "ko": "Kloud 로그인이 만료되었습니다. 다시 시도해 주세요."
+  },
+  "Kloud sign-in failed. Please sign in to Kloud and try again.": {
+    "zh": "Kloud 登录失败。请先登录 Kloud，然后再试一次。",
+    "ja": "Kloud ログインに失敗しました。Kloud にログインしてからもう一度お試しください。",
+    "ko": "Kloud 로그인에 실패했습니다. Kloud에 로그인한 뒤 다시 시도해 주세요."
+  },
+  "Kloud sign-in failed. Please try again.": {
+    "zh": "Kloud 登录失败，请再试一次。",
+    "ja": "Kloud ログインに失敗しました。もう一度お試しください。",
+    "ko": "Kloud 로그인에 실패했습니다. 다시 시도해 주세요."
+  },
+  "Kloud sign-in is not available yet": {
+    "zh": "Kloud 登录暂不可用",
+    "ja": "Kloud ログインはまだ利用できません",
+    "ko": "Kloud 로그인은 아직 사용할 수 없습니다"
+  },
+  "LIVEKIT_URL is not defined": {
+    "zh": "会议服务还没有配置好",
+    "ja": "ミーティングサービスがまだ設定されていません",
+    "ko": "회의 서비스가 아직 설정되지 않았습니다"
+  },
+  "LiveDoc keepalive upstream unavailable": {
+    "zh": "LiveDoc 暂时连不上",
+    "ja": "LiveDoc に一時的に接続できません",
+    "ko": "LiveDoc에 일시적으로 연결할 수 없습니다"
+  },
+  "LiveDoc meeting-server upstream unavailable": {
+    "zh": "LiveDoc 会议服务暂时连不上",
+    "ja": "LiveDoc のミーティングサーバーに一時的に接続できません",
+    "ko": "LiveDoc 회의 서버에 일시적으로 연결할 수 없습니다"
+  },
+  "LiveDoc recording could not start": {
+    "zh": "LiveDoc 录制无法开始",
+    "ja": "LiveDoc の録画を開始できませんでした",
+    "ko": "LiveDoc 녹화를 시작하지 못했습니다"
+  },
+  "LiveKit API key/secret is not configured": {
+    "zh": "会议服务还没有配置好",
+    "ja": "ミーティングサービスがまだ設定されていません",
+    "ko": "회의 서비스가 아직 설정되지 않았습니다"
+  },
+  "LiveKit configuration missing": {
+    "zh": "会议服务配置缺失",
+    "ja": "ミーティングサービスの設定がありません",
+    "ko": "회의 서비스 설정이 없습니다"
+  },
+  "LiveKit not configured": {
+    "zh": "会议服务尚未配置",
+    "ja": "ミーティングサービスが設定されていません",
+    "ko": "회의 서비스가 설정되지 않았습니다"
+  },
+  "Livedoc attachment does not belong to this meeting": {
+    "zh": "这个 LiveDoc 附件不属于本场会议",
+    "ja": "この LiveDoc 添付ファイルはこのミーティングのものではありません",
+    "ko": "이 LiveDoc 첨부는 이 회의의 것이 아닙니다"
+  },
+  "Livedoc attachment requires livedocInstanceId": {
+    "zh": "LiveDoc 附件需要实例 ID",
+    "ja": "LiveDoc の添付にはインスタンス ID が必要です",
+    "ko": "LiveDoc 첨부에는 인스턴스 ID가 필요합니다"
+  },
+  "Livedoc message requires attachment": {
+    "zh": "这条 LiveDoc 消息需要附件",
+    "ja": "この LiveDoc メッセージには添付が必要です",
+    "ko": "이 LiveDoc 메시지에는 첨부가 필요합니다"
+  },
+  "Login name: 2-20 letters and numbers, not all digits": {
+    "zh": "登录名需为 2-20 位字母和数字，且不能全是数字",
+    "ja": "ログイン名は 2〜20 文字の英数字で、数字だけにはできません",
+    "ko": "로그인 이름은 영문과 숫자 2–20자이며, 숫자만으로는 안 됩니다"
+  },
+  "Meeting has already ended": {
+    "zh": "会议已经结束",
+    "ja": "ミーティングはすでに終了しています",
+    "ko": "회의가 이미 종료되었습니다"
+  },
+  "Meeting is already being recorded": {
+    "zh": "会议已在录制中",
+    "ja": "ミーティングはすでに録画中です",
+    "ko": "회의가 이미 녹화 중입니다"
+  },
+  "Meeting is not scheduled": {
+    "zh": "这场会议没有排期",
+    "ja": "このミーティングは予約されていません",
+    "ko": "이 회의는 예약되어 있지 않습니다"
+  },
+  "Meeting not found": {
+    "zh": "找不到这场会议",
+    "ja": "ミーティングが見つかりません",
+    "ko": "회의를 찾을 수 없습니다"
+  },
+  "MeetingServer add_members unavailable": {
+    "zh": "暂时无法添加 LiveDoc 成员",
+    "ja": "LiveDoc のメンバーを追加できません",
+    "ko": "LiveDoc 멤버를 추가할 수 없습니다"
+  },
+  "MeetingServer document access unavailable": {
+    "zh": "暂时无法设置文档权限",
+    "ja": "ドキュメントのアクセス権を設定できません",
+    "ko": "문서 접근 권한을 설정할 수 없습니다"
+  },
+  "Missing PeerTime UserToken; sign in via Kloud or rejoin a meeting first": {
+    "zh": "缺少 PeerTime 用户令牌。请通过 Kloud 登录，或重新进入会议。",
+    "ja": "PeerTime のユーザートークンがありません。Kloud でログインするか、ミーティングに入り直してください。",
+    "ko": "PeerTime 사용자 토큰이 없습니다. Kloud로 로그인하거나 회의에 다시 들어가 주세요."
+  },
+  "Missing UserToken header": {
+    "zh": "缺少用户令牌",
+    "ja": "ユーザートークンがありません",
+    "ko": "사용자 토큰이 없습니다"
+  },
+  "Missing jitsiInstanceId": {
+    "zh": "缺少会议实例 ID",
+    "ja": "ミーティングのインスタンス ID がありません",
+    "ko": "회의 인스턴스 ID가 없습니다"
+  },
+  "Missing required fields": {
+    "zh": "缺少必填项",
+    "ja": "必須項目が不足しています",
+    "ko": "필수 항목이 빠졌습니다"
+  },
+  "Missing required query parameter: participantName": {
+    "zh": "缺少参会者姓名",
+    "ja": "参加者名が指定されていません",
+    "ko": "참가자 이름이 없습니다"
+  },
+  "Missing required query parameter: roomName": {
+    "zh": "缺少会议室名称",
+    "ja": "ルーム名が指定されていません",
+    "ko": "회의실 이름이 없습니다"
+  },
+  "Missing roomName parameter": {
+    "zh": "缺少会议室名称",
+    "ja": "ルーム名が指定されていません",
+    "ko": "회의실 이름이 없습니다"
+  },
+  "Name required": {
+    "zh": "请填写名称",
+    "ja": "名前を入力してください",
+    "ko": "이름을 입력해 주세요"
+  },
+  "New password must be 8-30 characters": {
+    "zh": "新密码需要 8-30 个字符",
+    "ja": "新しいパスワードは 8〜30 文字にしてください",
+    "ko": "새 비밀번호는 8–30자여야 합니다"
+  },
+  "No AI API key configured": {
+    "zh": "AI 服务还没有配置好",
+    "ja": "AI サービスがまだ設定されていません",
+    "ko": "AI 서비스가 아직 설정되지 않았습니다"
+  },
+  "No SSO token": {
+    "zh": "没有 SSO 令牌",
+    "ja": "SSO トークンがありません",
+    "ko": "SSO 토큰이 없습니다"
+  },
+  "No active recording found": {
+    "zh": "没有正在进行的录制",
+    "ja": "進行中の録画はありません",
+    "ko": "진행 중인 녹화가 없습니다"
+  },
+  "No billing profile yet. Choose a plan first.": {
+    "zh": "还没有账单资料。请先选择一个方案。",
+    "ja": "請求プロフィールがまだありません。先にプランを選んでください。",
+    "ko": "아직 결제 프로필이 없습니다. 먼저 요금제를 선택해 주세요."
+  },
+  "No client secret returned": {
+    "zh": "支付没有返回客户端密钥",
+    "ja": "決済からクライアントシークレットが返りませんでした",
+    "ko": "결제에서 클라이언트 시크릿이 돌아오지 않았습니다"
+  },
+  "No file provided": {
+    "zh": "没有选择文件",
+    "ja": "ファイルが選択されていません",
+    "ko": "파일이 선택되지 않았습니다"
+  },
+  "No transcript yet, so a summary cannot be generated.": {
+    "zh": "还没有文字记录，无法生成摘要。",
+    "ja": "文字起こしがまだないため、要約を作成できません。",
+    "ko": "아직 기록이 없어 요약을 만들 수 없습니다."
+  },
+  "Not a member of this account": {
+    "zh": "你不是这个账号的成员",
+    "ja": "このアカウントのメンバーではありません",
+    "ko": "이 계정의 멤버가 아닙니다"
+  },
+  "Not found": {
+    "zh": "找不到",
+    "ja": "見つかりません",
+    "ko": "찾을 수 없습니다"
+  },
+  "Not in this meeting": {
+    "zh": "你不在这场会议里",
+    "ja": "このミーティングに参加していません",
+    "ko": "이 회의에 참여하고 있지 않습니다"
+  },
+  "Only a company owner or admin can do this": {
+    "zh": "只有公司所有者或管理员可以执行此操作",
+    "ja": "会社のオーナーまたは管理者だけが実行できます",
+    "ko": "회사 소유자 또는 관리자만 할 수 있습니다"
+  },
+  "Only an account owner or admin can manage billing": {
+    "zh": "只有账号所有者或管理员可以管理账单",
+    "ja": "アカウントのオーナーまたは管理者だけが請求を管理できます",
+    "ko": "계정 소유자 또는 관리자만 결제를 관리할 수 있습니다"
+  },
+  "Only an owner or admin of that Kloud company can link it.": {
+    "zh": "只有该公司的所有者或管理员才能关联它。",
+    "ja": "その Kloud 会社のオーナーまたは管理者だけがリンクできます。",
+    "ko": "해당 Kloud 회사의 소유자 또는 관리자만 연결할 수 있습니다."
+  },
+  "Only attendees can watch this recording": {
+    "zh": "只有参会者可以观看这段录制",
+    "ja": "参加者だけがこの録画を視聴できます",
+    "ko": "참가자만 이 녹화를 볼 수 있습니다"
+  },
+  "Only image files are allowed": {
+    "zh": "只能上传图片",
+    "ja": "画像ファイルのみアップロードできます",
+    "ko": "이미지 파일만 업로드할 수 있습니다"
+  },
+  "Only people who attended this meeting can watch it": {
+    "zh": "只有参加过这场会议的人可以观看",
+    "ja": "このミーティングに参加した人だけが視聴できます",
+    "ko": "이 회의에 참석한 사람만 볼 수 있습니다"
+  },
+  "Only the host can answer requests": {
+    "zh": "只有主持人可以处理申请",
+    "ja": "ホストだけがリクエストに回答できます",
+    "ko": "호스트만 요청을 처리할 수 있습니다"
+  },
+  "Only the host can change this": {
+    "zh": "只有主持人可以更改此项",
+    "ja": "ホストだけがこれを変更できます",
+    "ko": "호스트만 이것을 변경할 수 있습니다"
+  },
+  "Only the host can record this meeting": {
+    "zh": "只有主持人可以录制这场会议",
+    "ja": "ホストだけがこのミーティングを録画できます",
+    "ko": "호스트만 이 회의를 녹화할 수 있습니다"
+  },
+  "Only the host can see requests": {
+    "zh": "只有主持人可以查看申请",
+    "ja": "ホストだけがリクエストを見られます",
+    "ko": "호스트만 요청을 볼 수 있습니다"
+  },
+  "Only the host can update roles": {
+    "zh": "只有主持人可以更改角色",
+    "ja": "ホストだけが役割を変更できます",
+    "ko": "호스트만 역할을 변경할 수 있습니다"
+  },
+  "Only the host or a co-host can admit people": {
+    "zh": "只有主持人或联席主持人可以允许入会",
+    "ja": "ホストまたは共同ホストだけが参加を許可できます",
+    "ko": "호스트 또는 공동 호스트만 입장을 허용할 수 있습니다"
+  },
+  "Only the host or a co-host can see who is waiting": {
+    "zh": "只有主持人或联席主持人可以查看等候的人",
+    "ja": "ホストまたは共同ホストだけが待機中の人を見られます",
+    "ko": "호스트 또는 공동 호스트만 대기 중인 사람을 볼 수 있습니다"
+  },
+  "Only the meeting host can delete this meeting": {
+    "zh": "只有会议主持人可以删除这场会议",
+    "ja": "ホストだけがこのミーティングを削除できます",
+    "ko": "회의 호스트만 이 회의를 삭제할 수 있습니다"
+  },
+  "Only the meeting host can end this meeting": {
+    "zh": "只有会议主持人可以结束这场会议",
+    "ja": "ホストだけがこのミーティングを終了できます",
+    "ko": "회의 호스트만 이 회의를 종료할 수 있습니다"
+  },
+  "Only the meeting host can manage attendees": {
+    "zh": "只有会议主持人可以管理参会者",
+    "ja": "ホストだけが参加者を管理できます",
+    "ko": "회의 호스트만 참석자를 관리할 수 있습니다"
+  },
+  "Only the meeting host can remove participants": {
+    "zh": "只有会议主持人可以移除参会者",
+    "ja": "ホストだけが参加者を退出させられます",
+    "ko": "회의 호스트만 참가자를 내보낼 수 있습니다"
+  },
+  "Only the meeting host can start recording": {
+    "zh": "只有会议主持人可以开始录制",
+    "ja": "ホストだけが録画を開始できます",
+    "ko": "회의 호스트만 녹화를 시작할 수 있습니다"
+  },
+  "Only the meeting host can stop recording": {
+    "zh": "只有会议主持人可以停止录制",
+    "ja": "ホストだけが録画を停止できます",
+    "ko": "회의 호스트만 녹화를 중지할 수 있습니다"
+  },
+  "Only the meeting host can update this meeting": {
+    "zh": "只有会议主持人可以修改这场会议",
+    "ja": "ホストだけがこのミーティングを変更できます",
+    "ko": "회의 호스트만 이 회의를 수정할 수 있습니다"
+  },
+  "Only the owner of your Kloud Meet company can link it.": {
+    "zh": "只有你们 Kloud Meet 公司的所有者可以关联它。",
+    "ja": "Kloud Meet 会社のオーナーだけがリンクできます。",
+    "ko": "Kloud Meet 회사의 소유자만 연결할 수 있습니다."
+  },
+  "OpenAI API key not configured": {
+    "zh": "AI 服务还没有配置好",
+    "ja": "AI サービスがまだ設定されていません",
+    "ko": "AI 서비스가 아직 설정되지 않았습니다"
+  },
+  "OpenAI returned {status}: {detail}": {
+    "zh": "AI 服务返回了错误（{status}）：{detail}",
+    "ja": "AI サービスがエラーを返しました（{status}）: {detail}",
+    "ko": "AI 서비스가 오류를 반환했습니다({status}): {detail}"
+  },
+  "Participant not found in room": {
+    "zh": "会议室里找不到这位参会者",
+    "ja": "ルームにその参加者が見つかりません",
+    "ko": "회의실에서 해당 참가자를 찾을 수 없습니다"
+  },
+  "Password changed successfully": {
+    "zh": "密码已修改",
+    "ja": "パスワードを変更しました",
+    "ko": "비밀번호를 변경했습니다"
+  },
+  "Password must contain both letters and numbers": {
+    "zh": "密码必须同时包含字母和数字",
+    "ja": "パスワードには英字と数字の両方を含めてください",
+    "ko": "비밀번호에는 영문과 숫자를 모두 포함해야 합니다"
+  },
+  "Password reset successfully": {
+    "zh": "密码已重置",
+    "ja": "パスワードをリセットしました",
+    "ko": "비밀번호를 재설정했습니다"
+  },
+  "Password: 8-64 characters with at least one letter and one number": {
+    "zh": "密码需为 8-64 个字符，且至少包含一个字母和一个数字",
+    "ja": "パスワードは 8〜64 文字で、英字と数字をそれぞれ一つ以上含めてください",
+    "ko": "비밀번호는 8–64자이며 영문과 숫자를 각각 하나 이상 포함해야 합니다"
+  },
+  "Payment provider error, please try again": {
+    "zh": "支付服务出错了，请再试一次",
+    "ja": "決済サービスで問題が起きました。もう一度お試しください",
+    "ko": "결제 서비스에 문제가 생겼습니다. 다시 시도해 주세요"
+  },
+  "Payments are not configured yet": {
+    "zh": "支付功能还没有配置好",
+    "ja": "決済はまだ設定されていません",
+    "ko": "결제가 아직 설정되지 않았습니다"
+  },
+  "PeerTime instant-account upstream unavailable": {
+    "zh": "PeerTime 账号服务暂时连不上",
+    "ja": "PeerTime のアカウントサービスに一時的に接続できません",
+    "ko": "PeerTime 계정 서비스에 일시적으로 연결할 수 없습니다"
+  },
+  "Phone already registered": {
+    "zh": "这个手机号已经注册过了",
+    "ja": "この電話番号はすでに登録されています",
+    "ko": "이 전화번호는 이미 등록되어 있습니다"
+  },
+  "Phone reset is not available yet. Please use your email address.": {
+    "zh": "手机号重置暂不可用，请使用邮箱。",
+    "ja": "電話番号でのリセットはまだ利用できません。メールアドレスを使ってください。",
+    "ko": "전화번호 재설정은 아직 사용할 수 없습니다. 이메일을 사용해 주세요."
+  },
+  "Phone sign-in is not available yet. Please use your email address.": {
+    "zh": "手机号登录暂不可用，请使用邮箱。",
+    "ja": "電話番号でのログインはまだ利用できません。メールアドレスを使ってください。",
+    "ko": "전화번호 로그인은 아직 사용할 수 없습니다. 이메일을 사용해 주세요."
+  },
+  "Phone sign-up is not available yet. Please use your email address.": {
+    "zh": "手机号注册暂不可用，请使用邮箱。",
+    "ja": "電話番号での登録はまだ利用できません。メールアドレスを使ってください。",
+    "ko": "전화번호 가입은 아직 사용할 수 없습니다. 이메일을 사용해 주세요."
+  },
+  "Please enter a valid email address": {
+    "zh": "请输入有效的邮箱地址",
+    "ja": "有効なメールアドレスを入力してください",
+    "ko": "유효한 이메일 주소를 입력해 주세요"
+  },
+  "Please enter your email address": {
+    "zh": "请输入邮箱地址",
+    "ja": "メールアドレスを入力してください",
+    "ko": "이메일 주소를 입력해 주세요"
+  },
+  "Please verify your Google email address first": {
+    "zh": "请先验证你的 Google 邮箱",
+    "ja": "先に Google のメールアドレスを確認してください",
+    "ko": "먼저 Google 이메일을 확인해 주세요"
+  },
+  "Private meetings need a company account": {
+    "zh": "私密会议需要公司账号",
+    "ja": "非公開ミーティングには会社アカウントが必要です",
+    "ko": "비공개 회의에는 회사 계정이 필요합니다"
+  },
+  "Public replay links are available on Pro and Team plans.": {
+    "zh": "公开回放链接仅在 Pro 和 Team 方案中提供。",
+    "ja": "公開リプレイリンクは Pro と Team プランで利用できます。",
+    "ko": "공개 다시보기 링크는 Pro와 Team 요금제에서 사용할 수 있습니다."
+  },
+  "Recording is not ready yet": {
+    "zh": "录制还没准备好",
+    "ja": "録画はまだ準備できていません",
+    "ko": "녹화가 아직 준비되지 않았습니다"
+  },
+  "Recording is not ready yet (status: {status})": {
+    "zh": "录制还没准备好（状态：{status}）",
+    "ja": "録画はまだ準備できていません（状態: {status}）",
+    "ko": "녹화가 아직 준비되지 않았습니다(상태: {status})"
+  },
+  "Recording not found": {
+    "zh": "找不到这段录制",
+    "ja": "録画が見つかりません",
+    "ko": "녹화를 찾을 수 없습니다"
+  },
+  "Room ID must be 3-12 letters and digits with at least one letter": {
+    "zh": "房间 ID 需为 3-12 位字母和数字，且至少包含一个字母",
+    "ja": "ルーム ID は 3〜12 文字の英数字で、英字を一つ以上含めてください",
+    "ko": "회의실 ID는 영문과 숫자 3–12자이며 영문을 하나 이상 포함해야 합니다"
+  },
+  "Room id not provided": {
+    "zh": "没有提供房间 ID",
+    "ja": "ルーム ID が指定されていません",
+    "ko": "회의실 ID가 없습니다"
+  },
+  "Room name not provided": {
+    "zh": "没有提供会议室名称",
+    "ja": "ルーム名が指定されていません",
+    "ko": "회의실 이름이 없습니다"
+  },
+  "Room not active": {
+    "zh": "会议室不在进行中",
+    "ja": "ルームは進行中ではありません",
+    "ko": "회의실이 진행 중이 아닙니다"
+  },
+  "SSO token invalid or expired": {
+    "zh": "SSO 令牌无效或已过期",
+    "ja": "SSO トークンが無効か、有効期限が切れています",
+    "ko": "SSO 토큰이 유효하지 않거나 만료되었습니다"
+  },
+  "Session expired or invalid": {
+    "zh": "登录已过期或无效",
+    "ja": "セッションの有効期限が切れているか、無効です",
+    "ko": "세션이 만료되었거나 유효하지 않습니다"
+  },
+  "Sign in to show a link to everyone": {
+    "zh": "登录后才能把链接展示给所有人",
+    "ja": "全員にリンクを表示するにはログインしてください",
+    "ko": "모든 사람에게 링크를 보여 주려면 로그인해 주세요"
+  },
+  "Sign in to your existing Kloud Meet account to connect Kloud.": {
+    "zh": "请登录已有的 Kloud Meet 账号来连接 Kloud。",
+    "ja": "Kloud を接続するには、既存の Kloud Meet アカウントにログインしてください。",
+    "ko": "Kloud를 연결하려면 기존 Kloud Meet 계정으로 로그인해 주세요."
+  },
+  "Sign in with Kloud again to refresh your companies.": {
+    "zh": "请重新用 Kloud 登录，以刷新你的公司列表。",
+    "ja": "会社一覧を更新するには、Kloud でもう一度ログインしてください。",
+    "ko": "회사 목록을 새로고치려면 Kloud로 다시 로그인해 주세요."
+  },
+  "Sign-in link expired. Please sign in again.": {
+    "zh": "登录链接已过期，请重新登录。",
+    "ja": "ログインリンクの有効期限が切れました。もう一度ログインしてください。",
+    "ko": "로그인 링크가 만료되었습니다. 다시 로그인해 주세요."
+  },
+  "Stop the recording to switch to or from audio only": {
+    "zh": "切换到仅音频或从仅音频切换时，请先停止录制",
+    "ja": "音声のみへの切り替え、または音声のみからの切り替えは、録画を停止してから行ってください",
+    "ko": "오디오만으로 전환하거나 오디오만에서 나오려면 먼저 녹화를 중지하세요"
+  },
+  "Stopping recording": {
+    "zh": "正在停止录制",
+    "ja": "録画を停止しています",
+    "ko": "녹화를 중지하는 중입니다"
+  },
+  "That Kloud company is already linked to another Kloud Meet company.": {
+    "zh": "该公司已经关联到另一家 Kloud Meet 公司。",
+    "ja": "その Kloud 会社は別の Kloud Meet 会社にすでにリンクされています。",
+    "ko": "해당 Kloud 회사는 이미 다른 Kloud Meet 회사에 연결되어 있습니다."
+  },
+  "The AI service failed. Please try again.": {
+    "zh": "AI 服务失败了，请再试一次。",
+    "ja": "AI サービスが失敗しました。もう一度お試しください。",
+    "ko": "AI 서비스가 실패했습니다. 다시 시도해 주세요."
+  },
+  "The AI service returned no usable summary. Please try again.": {
+    "zh": "AI 没有返回可用的摘要，请再试一次。",
+    "ja": "AI が使える要約を返しませんでした。もう一度お試しください。",
+    "ko": "AI가 사용할 수 있는 요약을 반환하지 않았습니다. 다시 시도해 주세요."
+  },
+  "The Free plan includes {n} AI summaries per month. Upgrade for unlimited summaries.": {
+    "zh": "免费方案每月包含 {n} 次 AI 摘要。升级后可无限使用。",
+    "ja": "無料プランの AI 要約は月 {n} 回までです。アップグレードすると無制限になります。",
+    "ko": "무료 요금제는 한 달에 AI 요약 {n}회입니다. 업그레이드하면 무제한으로 사용할 수 있습니다."
+  },
+  "The SiMeet SubSystem is not configured.": {
+    "zh": "SiMeet 子系统尚未配置。",
+    "ja": "SiMeet サブシステムが設定されていません。",
+    "ko": "SiMeet 하위 시스템이 설정되지 않았습니다."
+  },
+  "The host hasn’t started this meeting yet": {
+    "zh": "主持人还没有开始这场会议",
+    "ja": "ホストはまだこのミーティングを開始していません",
+    "ko": "호스트가 아직 이 회의를 시작하지 않았습니다"
+  },
+  "The host's replay hours for this period are used up, so captions can't start.": {
+    "zh": "主持人本期的回放时长已用完，因此无法开启字幕。",
+    "ja": "ホストの今期のリプレイ時間が尽きたため、字幕を開始できません。",
+    "ko": "호스트의 이번 기간 다시보기 시간을 모두 사용해 자막을 켤 수 없습니다."
+  },
+  "This Google account is already connected to another Kloud Meet account.": {
+    "zh": "这个 Google 账号已经连接到另一个 Kloud Meet 账号。",
+    "ja": "この Google アカウントは別の Kloud Meet アカウントにすでに接続されています。",
+    "ko": "이 Google 계정은 이미 다른 Kloud Meet 계정에 연결되어 있습니다."
+  },
+  "This Kloud account is already connected to another Kloud Meet account.": {
+    "zh": "这个 Kloud 账号已经连接到另一个 Kloud Meet 账号。",
+    "ja": "この Kloud アカウントは別の Kloud Meet アカウントにすでに接続されています。",
+    "ko": "이 Kloud 계정은 이미 다른 Kloud Meet 계정에 연결되어 있습니다."
+  },
+  "This Room ID is already taken.": {
+    "zh": "这个房间 ID 已被使用。",
+    "ja": "このルーム ID はすでに使われています。",
+    "ko": "이 회의실 ID는 이미 사용 중입니다."
+  },
+  "This account already has a plan. Use “Manage billing” to change it.": {
+    "zh": "这个账号已经有方案了。请用「管理账单」来更改。",
+    "ja": "このアカウントにはすでにプランがあります。「請求を管理」から変更してください。",
+    "ko": "이 계정에는 이미 요금제가 있습니다. 「결제 관리」에서 변경해 주세요."
+  },
+  "This account uses Google sign-in. Continue with Google, or reset your password to add one.": {
+    "zh": "这个账号使用 Google 登录。请继续用 Google，或重置密码来设置密码。",
+    "ja": "このアカウントは Google ログインです。Google で続けるか、パスワードをリセットして追加してください。",
+    "ko": "이 계정은 Google 로그인을 사용합니다. Google로 계속하거나 비밀번호를 재설정해 추가해 주세요."
+  },
+  "This email is already in use.": {
+    "zh": "这个邮箱已被使用。",
+    "ja": "このメールアドレスはすでに使われています。",
+    "ko": "이 이메일은 이미 사용 중입니다."
+  },
+  "This email is already linked to a different Google account": {
+    "zh": "这个邮箱已经关联了另一个 Google 账号",
+    "ja": "このメールアドレスは別の Google アカウントにリンクされています",
+    "ko": "이 이메일은 다른 Google 계정에 이미 연결되어 있습니다"
+  },
+  "This email is already registered. Sign in or reset your password.": {
+    "zh": "这个邮箱已经注册。请登录或重置密码。",
+    "ja": "このメールアドレスはすでに登録されています。ログインするか、パスワードをリセットしてください。",
+    "ko": "이 이메일은 이미 등록되어 있습니다. 로그인하거나 비밀번호를 재설정해 주세요."
+  },
+  "This email is already verified": {
+    "zh": "这个邮箱已经验证过了",
+    "ja": "このメールアドレスはすでに確認済みです",
+    "ko": "이 이메일은 이미 인증되었습니다"
+  },
+  "This email or username was just taken. Please try another.": {
+    "zh": "这个邮箱或用户名刚被占用，请换一个。",
+    "ja": "このメールアドレスまたはユーザー名はちょうど使われました。別のものをお試しください。",
+    "ko": "이 이메일 또는 사용자 이름은 방금 사용되었습니다. 다른 것으로 시도해 주세요."
+  },
+  "This link has expired. Open My Profile and choose Connect again.": {
+    "zh": "这个链接已过期。请打开「我的资料」，重新选择连接。",
+    "ja": "このリンクは期限切れです。マイプロフィールを開いて、もう一度接続を選んでください。",
+    "ko": "이 링크는 만료되었습니다. 내 프로필에서 연결을 다시 선택해 주세요."
+  },
+  "This meeting is full": {
+    "zh": "这场会议已满员",
+    "ja": "このミーティングは定員に達しています",
+    "ko": "이 회의는 정원이 찼습니다"
+  },
+  "This meeting is invite-only": {
+    "zh": "这场会议仅限受邀者",
+    "ja": "このミーティングは招待された人だけが参加できます",
+    "ko": "이 회의는 초대받은 사람만 참여할 수 있습니다"
+  },
+  "This meeting reached the time limit of the host’s plan": {
+    "zh": "这场会议已达到主持人方案的时长上限",
+    "ja": "このミーティングはホストのプランの時間上限に達しました",
+    "ko": "이 회의는 호스트 요금제의 시간 제한에 도달했습니다"
+  },
+  "This plan is not available for purchase yet": {
+    "zh": "这个方案暂不可购买",
+    "ja": "このプランはまだ購入できません",
+    "ko": "이 요금제는 아직 구매할 수 없습니다"
+  },
+  "Too many attempts. Please try again later.": {
+    "zh": "尝试次数过多，请稍后再试。",
+    "ja": "試行回数が多すぎます。しばらくしてからもう一度お試しください。",
+    "ko": "시도 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요."
+  },
+  "Too many checks": {
+    "zh": "检查次数过多",
+    "ja": "確認の回数が多すぎます",
+    "ko": "확인 횟수가 너무 많습니다"
+  },
+  "Too many requests. Please try again later.": {
+    "zh": "请求过于频繁，请稍后再试。",
+    "ja": "リクエストが多すぎます。しばらくしてからもう一度お試しください。",
+    "ko": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."
+  },
+  "Too many sign-in attempts. Please wait a few minutes or reset your password.": {
+    "zh": "登录尝试过多。请等几分钟，或重置密码。",
+    "ja": "ログインの試行が多すぎます。数分待つか、パスワードをリセットしてください。",
+    "ko": "로그인 시도가 너무 많습니다. 몇 분 기다리거나 비밀번호를 재설정해 주세요."
+  },
+  "Transcript already exists": {
+    "zh": "文字记录已存在",
+    "ja": "文字起こしはすでにあります",
+    "ko": "기록이 이미 있습니다"
+  },
+  "Translation is not configured": {
+    "zh": "翻译功能尚未配置",
+    "ja": "翻訳が設定されていません",
+    "ko": "번역이 설정되지 않았습니다"
+  },
+  "Unable to resolve PeerTime user": {
+    "zh": "无法识别 PeerTime 用户",
+    "ja": "PeerTime ユーザーを特定できません",
+    "ko": "PeerTime 사용자를 확인하지 못했습니다"
+  },
+  "Unauthorized": {
+    "zh": "未登录",
+    "ja": "ログインが必要です",
+    "ko": "로그인이 필요합니다"
+  },
+  "Unknown background": {
+    "zh": "未知的背景",
+    "ja": "不明な背景です",
+    "ko": "알 수 없는 배경입니다"
+  },
+  "Unknown recording mode": {
+    "zh": "未知的录制模式",
+    "ja": "不明な録画モードです",
+    "ko": "알 수 없는 녹화 모드입니다"
+  },
+  "Unknown sign-in method": {
+    "zh": "未知的登录方式",
+    "ja": "不明なログイン方法です",
+    "ko": "알 수 없는 로그인 방법입니다"
+  },
+  "Username already taken": {
+    "zh": "这个用户名已被使用",
+    "ja": "このユーザー名はすでに使われています",
+    "ko": "이 사용자 이름은 이미 사용 중입니다"
+  },
+  "Verification code required": {
+    "zh": "请填写验证码",
+    "ja": "確認コードを入力してください",
+    "ko": "인증 코드를 입력해 주세요"
+  },
+  "Verification code sent": {
+    "zh": "验证码已发送",
+    "ja": "確認コードを送信しました",
+    "ko": "인증 코드를 보냈습니다"
+  },
+  "Verify your email address in My Profile first.": {
+    "zh": "请先在「我的资料」中验证邮箱。",
+    "ja": "先にマイプロフィールでメールアドレスを確認してください。",
+    "ko": "먼저 내 프로필에서 이메일을 확인해 주세요."
+  },
+  "We couldn't send the email right now. Please try again in a minute.": {
+    "zh": "邮件暂时发不出去，请过一分钟再试。",
+    "ja": "今はメールを送信できません。1 分ほどしてからもう一度お試しください。",
+    "ko": "지금은 이메일을 보낼 수 없습니다. 1분 후에 다시 시도해 주세요."
+  },
+  "Xunfei API error": {
+    "zh": "语音服务出错了",
+    "ja": "音声サービスでエラーが起きました",
+    "ko": "음성 서비스 오류가 발생했습니다"
+  },
+  "You cannot change the recording": {
+    "zh": "你不能更改这段录制",
+    "ja": "この録画は変更できません",
+    "ko": "이 녹화를 변경할 수 없습니다"
+  },
+  "You cannot change this recording": {
+    "zh": "你不能更改这段录制",
+    "ja": "この録画は変更できません",
+    "ko": "이 녹화를 변경할 수 없습니다"
+  },
+  "You do not have access to this recording": {
+    "zh": "你没有观看这段录制的权限",
+    "ja": "この録画を視聴する権限がありません",
+    "ko": "이 녹화를 볼 권한이 없습니다"
+  },
+  "You have used all replay hours for this billing period. Buy an hour pack or upgrade to keep recording.": {
+    "zh": "本计费周期的回放时长已用完。购买小时包或升级后才能继续录制。",
+    "ja": "今期のリプレイ時間を使い切りました。録画を続けるには時間パックを購入するか、アップグレードしてください。",
+    "ko": "이번 결제 기간의 다시보기 시간을 모두 사용했습니다. 시간 패키지를 구매하거나 업그레이드해야 녹화를 계속할 수 있습니다."
+  },
+  "You have used all replay hours included in the Free plan this month. Upgrade to keep recording.": {
+    "zh": "本月免费方案包含的回放时长已用完。升级后才能继续录制。",
+    "ja": "今月の無料プランに含まれるリプレイ時間を使い切りました。録画を続けるにはアップグレードしてください。",
+    "ko": "이번 달 무료 요금제에 포함된 다시보기 시간을 모두 사용했습니다. 녹화를 계속하려면 업그레이드해 주세요."
+  },
+  "You must be in the meeting to remove participants": {
+    "zh": "你需要在会议中才能移除参会者",
+    "ja": "参加者を退出させるには、ミーティングに参加している必要があります",
+    "ko": "참가자를 내보내려면 회의에 들어가 있어야 합니다"
+  },
+  "You need the host’s permission to join this meeting": {
+    "zh": "加入这场会议需要主持人允许",
+    "ja": "このミーティングに参加するにはホストの許可が必要です",
+    "ko": "이 회의에 참여하려면 호스트의 허가가 필요합니다"
+  },
+  "Your Google account must have an email address": {
+    "zh": "你的 Google 账号必须有邮箱地址",
+    "ja": "Google アカウントにメールアドレスが必要です",
+    "ko": "Google 계정에 이메일 주소가 있어야 합니다"
+  },
+  "Your account has no email address for the answer": {
+    "zh": "你的账号没有可用于接收回复的邮箱",
+    "ja": "返信を受け取るメールアドレスがアカウントにありません",
+    "ko": "답변을 받을 이메일 주소가 계정에 없습니다"
+  },
+  "Your account is already connected to a different Google account. Disconnect it first.": {
+    "zh": "你的账号已经连接了另一个 Google 账号。请先断开。",
+    "ja": "アカウントは別の Google アカウントにすでに接続されています。先に切断してください。",
+    "ko": "계정은 이미 다른 Google 계정에 연결되어 있습니다. 먼저 연결을 해제해 주세요."
+  },
+  "Your account is already connected to a different Kloud account. Disconnect it first.": {
+    "zh": "你的账号已经连接了另一个 Kloud 账号。请先断开。",
+    "ja": "アカウントは別の Kloud アカウントにすでに接続されています。先に切断してください。",
+    "ko": "계정은 이미 다른 Kloud 계정에 연결되어 있습니다. 먼저 연결을 해제해 주세요."
+  },
+  "Your company is already linked to another Kloud company. Unlink it first.": {
+    "zh": "你们的公司已经关联了另一家 Kloud 公司。请先取消关联。",
+    "ja": "会社は別の Kloud 会社にすでにリンクされています。先に解除してください。",
+    "ko": "회사는 이미 다른 Kloud 회사에 연결되어 있습니다. 먼저 연결을 해제해 주세요."
+  },
+  "Your company is not linked to Kloud.": {
+    "zh": "你们的公司还没有关联 Kloud。",
+    "ja": "会社は Kloud にリンクされていません。",
+    "ko": "회사가 Kloud에 연결되어 있지 않습니다."
+  },
+  "Your email domain does not match this account": {
+    "zh": "你的邮箱域名与这个账号不匹配",
+    "ja": "メールアドレスのドメインがこのアカウントと一致しません",
+    "ko": "이메일 도메인이 이 계정과 일치하지 않습니다"
+  },
+  "action must be admit or deny": {
+    "zh": "操作只能是允许或拒绝",
+    "ja": "操作は許可または拒否である必要があります",
+    "ko": "작업은 허용 또는 거절이어야 합니다"
+  },
+  "action must be approve or deny": {
+    "zh": "操作只能是同意或拒绝",
+    "ja": "操作は承認または拒否である必要があります",
+    "ko": "작업은 승인 또는 거절이어야 합니다"
+  },
+  "events must be 1 to 40 items": {
+    "zh": "事件数量需要在 1 到 40 之间",
+    "ja": "イベントは 1〜40 件である必要があります",
+    "ko": "이벤트는 1개에서 40개 사이여야 합니다"
+  },
+  "from and to must be ISO dates, from < to": {
+    "zh": "开始和结束必须是 ISO 日期，且开始早于结束",
+    "ja": "開始と終了は ISO 日付で、開始は終了より前である必要があります",
+    "ko": "시작과 끝은 ISO 날짜여야 하며, 시작이 끝보다 앞서야 합니다"
+  },
+  "identity is required": {
+    "zh": "需要参会者身份",
+    "ja": "参加者 ID が必要です",
+    "ko": "참가자 ID가 필요합니다"
+  },
+  "ids or all is required": {
+    "zh": "请指定 ID，或选择全部",
+    "ja": "ID を指定するか、すべてを選んでください",
+    "ko": "ID를 지정하거나 전체를 선택해 주세요"
+  },
+  "items array required": {
+    "zh": "需要项目列表",
+    "ja": "項目の配列が必要です",
+    "ko": "항목 배열이 필요합니다"
+  },
+  "meetingId and content are required": {
+    "zh": "需要会议 ID 和内容",
+    "ja": "ミーティング ID と内容が必要です",
+    "ko": "회의 ID와 내용이 필요합니다"
+  },
+  "pageUrl is required for Web Egress": {
+    "zh": "网页录制需要页面地址",
+    "ja": "Web 録画にはページ URL が必要です",
+    "ko": "웹 녹화에는 페이지 주소가 필요합니다"
+  },
+  "pageUrl must be this meeting page": {
+    "zh": "页面地址必须是这场会议的页面",
+    "ja": "ページ URL はこのミーティングのページである必要があります",
+    "ko": "페이지 주소는 이 회의 페이지여야 합니다"
+  },
+  "roomName is required": {
+    "zh": "需要会议室名称",
+    "ja": "ルーム名が必要です",
+    "ko": "회의실 이름이 필요합니다"
+  }
+}

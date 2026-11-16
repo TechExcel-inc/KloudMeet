@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/db';
 import { Prisma } from '@prisma/client';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { isAuthError, requireInternalStaff, requireSession } from '@/lib/apiAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 // All setting keys managed by the System Settings modal
 const SETTING_KEYS = [
@@ -49,16 +50,17 @@ const LIVEDOC_SETTING_KEYS = ['livedoc_debug_enabled', 'livedoc_debug_url'] as c
 
 // GET /api/settings — Kloud Meet staff; ?scope=livedoc for any logged-in user (no auth in development)
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const scope = new URL(request.url).searchParams.get('scope');
 
   if (scope === 'livedoc') {
     if (process.env.NODE_ENV === 'development') {
       try {
         const settings = await loadSettings([...LIVEDOC_SETTING_KEYS]);
-        return NextResponse.json(settings);
+        return apiJson(settings);
       } catch (error) {
         console.error('[settings GET livedoc]', error);
-        return NextResponse.json(
+        return apiJson(
           { error: 'Failed to load settings' },
           { status: 500 },
         );
@@ -70,10 +72,10 @@ export async function GET(request: NextRequest) {
 
     try {
       const settings = await loadSettings([...LIVEDOC_SETTING_KEYS]);
-      return NextResponse.json(settings);
+      return apiJson(settings);
     } catch (error) {
       console.error('[settings GET livedoc]', error);
-      return NextResponse.json(
+      return apiJson(
         { error: 'Failed to load settings' },
         { status: 500 },
       );
@@ -85,18 +87,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const settings = await loadSettings(SETTING_KEYS);
-    return NextResponse.json(settings);
+    return apiJson(settings);
   } catch (error) {
     console.error('[settings GET]', error);
-    return NextResponse.json(
+    return apiJson(
       { error: 'Failed to load settings' },
       { status: 500 },
     );
   }
+
+  });
 }
 
 // PUT /api/settings — Upsert system settings (Kloud Meet staff only)
 export async function PUT(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await requireInternalStaff(request);
   if (isAuthError(member)) return member;
 
@@ -118,12 +123,14 @@ export async function PUT(request: NextRequest) {
       ),
     );
 
-    return NextResponse.json({ ok: true });
+    return apiJson({ ok: true });
   } catch (error) {
     console.error('[settings PUT]', error);
-    return NextResponse.json(
+    return apiJson(
       { error: 'Failed to save settings' },
       { status: 500 },
     );
   }
+
+  });
 }

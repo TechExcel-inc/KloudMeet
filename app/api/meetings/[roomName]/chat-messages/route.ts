@@ -8,6 +8,7 @@ import {
   type ChatAttachment,
   type ChatMessageKind,
 } from '@/lib/chatProtocol';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_HISTORY_MESSAGES = 500;
@@ -98,15 +99,16 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const participant = await verifyRoomParticipant(request, roomName);
     if (!participant) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -114,7 +116,7 @@ export async function GET(
       select: { id: true },
     });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const messages = await prisma.meetingChatMessage.findMany({
@@ -130,13 +132,15 @@ export async function GET(
       },
     });
 
-    return NextResponse.json({
+    return apiJson({
       messages: messages.reverse().map(serializeMessage),
     });
   } catch (error) {
     console.error('[GET /api/meetings/[roomName]/chat-messages]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 /** POST — 保存一条由当前 LiveKit 参与者发送的聊天消息。 */
@@ -144,15 +148,16 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const participant = await verifyRoomParticipant(request, roomName);
     if (!participant) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json() as ChatMessageBody;
@@ -163,13 +168,13 @@ export async function POST(
     const attachment = isChatAttachment(body.attachment) ? body.attachment : undefined;
 
     if (!clientMessageId || clientMessageId.length > MAX_CLIENT_MESSAGE_ID_LENGTH) {
-      return NextResponse.json({ error: 'Invalid client message ID' }, { status: 400 });
+      return apiJson({ error: 'Invalid client message ID' }, { status: 400 });
     }
     if (!message || message.length > MAX_MESSAGE_LENGTH) {
-      return NextResponse.json({ error: 'Invalid message' }, { status: 400 });
+      return apiJson({ error: 'Invalid message' }, { status: 400 });
     }
     if (kind === 'livedoc' && !attachment) {
-      return NextResponse.json({ error: 'Livedoc message requires attachment' }, { status: 400 });
+      return apiJson({ error: 'Livedoc message requires attachment' }, { status: 400 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -177,12 +182,12 @@ export async function POST(
       select: { id: true, kloudMeetingId: true },
     });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     if (kind === 'livedoc' && attachment) {
       if (!attachment.livedocInstanceId) {
-        return NextResponse.json(
+        return apiJson(
           { error: 'Livedoc attachment requires livedocInstanceId' },
           { status: 400 },
         );
@@ -193,7 +198,7 @@ export async function POST(
         Number.isFinite(attachmentLessonId) &&
         attachmentLessonId !== meeting.kloudMeetingId
       ) {
-        return NextResponse.json(
+        return apiJson(
           { error: 'Livedoc attachment does not belong to this meeting' },
           { status: 403 },
         );
@@ -227,9 +232,11 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ message: serializeMessage(saved) }, { status: 201 });
+    return apiJson({ message: serializeMessage(saved) }, { status: 201 });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/chat-messages]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

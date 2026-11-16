@@ -6,16 +6,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const { meetingId } = await params;
     const localMeetingId = parseInt(meetingId, 10);
     if (Number.isNaN(localMeetingId)) {
-      return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
+      return apiJson({ error: 'Invalid meetingId' }, { status: 400 });
     }
 
     const access = await requireMeetingAccess(req, localMeetingId);
@@ -26,9 +28,11 @@ export async function GET(
       orderBy: { captionTime: 'asc' },
     });
 
-    return NextResponse.json({ captions, source: 'local' });
+    return apiJson({ captions, source: 'local' });
   } catch (err) {
     console.error('[transcripts GET]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

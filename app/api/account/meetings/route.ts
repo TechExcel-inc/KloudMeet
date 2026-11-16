@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { Prisma, type Prisma as PrismaTypes } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { listActiveRoomNames } from '@/lib/livekitRooms';
@@ -10,6 +10,7 @@ import {
 import { fillShareKeys } from '@/lib/recordingShare';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { attendanceOverlapsRecording } from '@/lib/recordingAttendance';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /** A meeting's date is its scheduled time, or when it was created — the same date the list groups by. */
 function meetingDatedBefore(before: Date): PrismaTypes.MeetingWhereInput {
@@ -22,6 +23,7 @@ function meetingDatedBefore(before: Date): PrismaTypes.MeetingWhereInput {
 }
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     // requireSession also rejects expired sessions and inactive members.
     const member = await requireSession(request);
@@ -185,7 +187,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({
+    return apiJson({
       meetings: enhancedMeetings,
       total,
       page,
@@ -194,6 +196,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[account meetings GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

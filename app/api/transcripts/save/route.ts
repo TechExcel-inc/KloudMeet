@@ -8,8 +8,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function POST(req: NextRequest) {
+  return runWithLocale(req, async () => {
   try {
     const body = await req.json();
     const { meetingId, speakerName, content, offsetSeconds } = body as {
@@ -20,7 +22,7 @@ export async function POST(req: NextRequest) {
     };
 
     if (!meetingId || !content?.trim()) {
-      return NextResponse.json({ error: 'meetingId and content are required' }, { status: 400 });
+      return apiJson({ error: 'meetingId and content are required' }, { status: 400 });
     }
 
     const access = await requireMeetingAccess(req, Number(meetingId));
@@ -37,9 +39,11 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ ok: true, id: record.id });
+    return apiJson({ ok: true, id: record.id });
   } catch (err) {
     console.error('[transcripts/save POST]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

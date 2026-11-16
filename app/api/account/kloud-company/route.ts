@@ -1,9 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { createPersonalAccount } from '@/lib/billing/account';
 import { canMapKloudCompany, freshKloudCompanies, syncKloudMemberships } from '@/lib/kloudAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * The Kloud Meet company ↔ Kloud company mapping (decision 3).
@@ -22,8 +23,9 @@ async function ownedAccount(teamMemberId: number) {
 
 /** GET — the person's company, its mapping, and the Kloud companies they could map. */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await getSessionTeamMember(request);
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
   const account = await ownedAccount(member.id);
   const companies = member.kloudUserId ? freshKloudCompanies(member) : null;
@@ -37,7 +39,7 @@ export async function GET(request: NextRequest) {
         where: { teamMemberId: member.id, status: 'ACTIVE', deletedAt: null },
         select: { id: true },
       });
-  return NextResponse.json({
+  return apiJson({
     kloudConnected: Boolean(member.kloudUserId),
     account,
     // A member of someone else's company can't link one from here.
@@ -50,15 +52,18 @@ export async function GET(request: NextRequest) {
         mappedElsewhere: taken.some((t) => t.kloudCompanyId === c.id && t.id !== account?.id),
       })) ?? null,
   });
+
+  });
 }
 
 /** POST { kloudCompanyId } — maps the person's company (creating one named after it if they own none). */
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
     if (!member.kloudUserId) {
-      return NextResponse.json({ error: 'Connect your Kloud account first.', code: 'KLOUD_NOT_CONNECTED' }, { status: 400 });
+      return apiJson({ error: 'Connect your Kloud account first.', code: 'KLOUD_NOT_CONNECTED' }, { status: 400 });
     }
 
     const body = await request.json().catch(() => ({}));
@@ -66,14 +71,14 @@ export async function POST(request: NextRequest) {
     const kloudCompanyId = typeof rawId === 'string' || typeof rawId === 'number' ? String(rawId) : '';
     const companies = freshKloudCompanies(member);
     if (!companies) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Sign in with Kloud again to refresh your companies.', code: 'KLOUD_COMPANIES_STALE' },
         { status: 400 },
       );
     }
     const company = companies.find((c) => c.id === kloudCompanyId);
     if (!company || !canMapKloudCompany(company)) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Only an owner or admin of that Kloud company can link it.', code: 'NOT_KLOUD_ADMIN' },
         { status: 403 },
       );
@@ -81,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     let account = await ownedAccount(member.id);
     if (account?.kloudCompanyId && account.kloudCompanyId !== company.id) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Your company is already linked to another Kloud company. Unlink it first.', code: 'ALREADY_LINKED' },
         { status: 400 },
       );
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
         select: { id: true },
       });
       if (membership) {
-        return NextResponse.json(
+        return apiJson(
           { error: 'Only the owner of your Kloud Meet company can link it.', code: 'NOT_OWNER' },
           { status: 403 },
         );
@@ -122,7 +127,7 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        return NextResponse.json(
+        return apiJson(
           { error: 'That Kloud company is already linked to another Kloud Meet company.', code: 'KLOUD_COMPANY_TAKEN' },
           { status: 409 },
         );
@@ -130,21 +135,24 @@ export async function POST(request: NextRequest) {
       throw error;
     }
     await syncKloudMemberships(member.id, companies, now);
-    return NextResponse.json({ account: { ...account, kloudCompanyId: company.id, kloudCompanyName: company.name } });
+    return apiJson({ account: { ...account, kloudCompanyId: company.id, kloudCompanyName: company.name } });
   } catch (error) {
     console.error('[kloud-company POST]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 /** DELETE — unlinks; members who came from Kloud leave with the link, members added here stay. */
 export async function DELETE(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
     const account = await ownedAccount(member.id);
     if (!account?.kloudCompanyId) {
-      return NextResponse.json({ error: 'Your company is not linked to Kloud.', code: 'NOT_LINKED' }, { status: 400 });
+      return apiJson({ error: 'Your company is not linked to Kloud.', code: 'NOT_LINKED' }, { status: 400 });
     }
     const now = new Date();
     await prisma.$transaction([
@@ -164,9 +172,11 @@ export async function DELETE(request: NextRequest) {
         data: { status: 'REMOVED', deletedAt: now, deletedBy: 'kloud-unlink', modifiedAt: now, modifiedBy: member.username },
       }),
     ]);
-    return NextResponse.json({ account: { ...account, kloudCompanyId: null, kloudCompanyName: null } });
+    return apiJson({ account: { ...account, kloudCompanyId: null, kloudCompanyName: null } });
   } catch (error) {
     console.error('[kloud-company DELETE]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

@@ -13,8 +13,10 @@ import {
 import { createDesktopHandoff } from '@/lib/desktopAuth';
 import { redeemLinkIntent } from '@/lib/accountLinking';
 import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
+import { apiLine, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
@@ -29,7 +31,7 @@ export async function GET(request: NextRequest) {
     response.cookies.set(GOOGLE_STATE_COOKIE, '', googleStateCookieOptions(origin, 0));
     return response;
   };
-  const fail = (message: string) => finish(`/?error=${encodeURIComponent(message)}`);
+  const fail = (message: string) => finish(`/?error=${encodeURIComponent(apiLine(message))}`);
 
   if (error) {
     // The user closed or declined the Google consent screen.
@@ -219,4 +221,6 @@ export async function GET(request: NextRequest) {
     console.error('[google callback] unhandled error', err);
     return fail('Google sign-in failed. Please try again.');
   }
+
+  });
 }

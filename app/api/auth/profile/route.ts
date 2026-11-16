@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { normalizeEmail } from '@/lib/authPolicy';
 import { isInternalEmail } from '@/lib/internalStaff';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 // Helper: extract session token from Authorization header
 async function getSessionMember(request: NextRequest) {
@@ -22,10 +23,11 @@ async function getSessionMember(request: NextRequest) {
 
 // GET /api/auth/profile — Get current user profile
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const admin = await prisma.accountOwnerAndAdmin.findFirst({
@@ -33,7 +35,7 @@ export async function GET(request: NextRequest) {
       select: { id: true },
     });
 
-    return NextResponse.json({
+    return apiJson({
       id: member.id,
       isAccountAdmin: Boolean(admin),
       isInternalStaff: isInternalEmail(member.email),
@@ -51,16 +53,19 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[profile GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 // PUT /api/auth/profile — Update profile
 export async function PUT(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
@@ -82,7 +87,7 @@ export async function PUT(request: NextRequest) {
 
     // The email only changes through /api/account/email (a code sent to the new address).
     if (email !== undefined && email !== null && email !== '' && normalizeEmail(email) !== (member.email ?? '').toLowerCase()) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Confirm the new email with a code first.', code: 'EMAIL_NEEDS_CODE' },
         { status: 400 },
       );
@@ -92,7 +97,7 @@ export async function PUT(request: NextRequest) {
     if (phone !== undefined && phone !== member.phone) {
       const existing = await prisma.teamMember.findFirst({ where: { phone: phone.trim() } });
       if (existing && existing.id !== member.id) {
-        return NextResponse.json({ error: 'Phone already registered' }, { status: 400 });
+        return apiJson({ error: 'Phone already registered' }, { status: 400 });
       }
       updateData.phone = phone.trim();
     }
@@ -102,7 +107,7 @@ export async function PUT(request: NextRequest) {
       data: updateData,
     });
 
-    return NextResponse.json({
+    return apiJson({
       id: updated.id,
       email: updated.email,
       username: updated.username,
@@ -114,6 +119,8 @@ export async function PUT(request: NextRequest) {
     });
   } catch (error) {
     console.error('[profile PUT]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

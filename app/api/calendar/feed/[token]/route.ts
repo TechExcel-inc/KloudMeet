@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { buildCalendarFeedIcs, feedWindow, FEED_MAX_EVENTS, parseFeedTokenParam } from '@/lib/calendar/feed';
 import { ICS_RESPONSE_HEADERS, publicOrigin, toCalendarMeeting } from '@/lib/calendar/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * GET /api/calendar/feed/<token>.ics — read-only subscription feed of the member's scheduled
@@ -12,7 +13,8 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
-  const notFound = () => NextResponse.json({ error: 'Not found' }, { status: 404 });
+  return runWithLocale(request, async () => {
+  const notFound = () => apiJson({ error: 'Not found' }, { status: 404 });
   try {
     const token = parseFeedTokenParam((await params)?.token);
     if (!token) return notFound();
@@ -68,6 +70,8 @@ export async function GET(
     });
   } catch (error) {
     console.error('[calendar feed GET]', error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

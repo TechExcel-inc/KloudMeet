@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { ensurePersonalRoomMeeting } from '@/lib/meetingRoomIsActive';
 import { forbidden, isAuthError, requireSession } from '@/lib/apiAuth';
@@ -11,6 +11,7 @@ import {
   nudgeJoinRequests,
   resolveAccessTarget,
 } from '@/lib/meetingAccess.server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * Knocking on a Protected meeting (lib/meetingAccess.ts).
@@ -37,25 +38,26 @@ function cleanName(value: unknown, fallback: string): string {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ roomName: string }> }) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
     const target = await loadTarget(params, { startPersonalSession: true });
-    if (!target) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
 
     const body = await request.json().catch(() => ({}));
     const { decision } = await evaluateJoin({ meeting: target, member });
-    if (decision.kind === 'join') return NextResponse.json({ status: 'ADMITTED' });
+    if (decision.kind === 'join') return apiJson({ status: 'ADMITTED' });
     if (decision.kind === 'refused' && decision.reason === 'NOT_INVITED') {
-      return NextResponse.json({ code: 'NOT_INVITED', error: 'This meeting is invite-only' }, { status: 403 });
+      return apiJson({ code: 'NOT_INVITED', error: 'This meeting is invite-only' }, { status: 403 });
     }
-    if (decision.kind === 'sign_in') return NextResponse.json({ code: 'SIGN_IN_REQUIRED' }, { status: 403 });
+    if (decision.kind === 'sign_in') return apiJson({ code: 'SIGN_IN_REQUIRED' }, { status: 403 });
 
     const key = { meetingId_teamMemberId: { meetingId: target.id, teamMemberId: member.id } };
     const existing = await prisma.meetingJoinRequest.findUnique({ where: key });
     if (existing?.status === 'DENIED' && !mayKnockAgain(existing.respondedAt)) {
       const retryAfterMs = KNOCK_RETRY_AFTER_MS - (Date.now() - (existing.respondedAt?.getTime() ?? Date.now()));
-      return NextResponse.json({ code: 'TOO_SOON', retryAfterMs }, { status: 429 });
+      return apiJson({ code: 'TOO_SOON', retryAfterMs }, { status: 429 });
     }
 
     const now = new Date();
@@ -72,19 +74,22 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
     });
     if (fresh) void nudgeJoinRequests(target.roomName);
-    return NextResponse.json({ status: 'PENDING' });
+    return apiJson({ status: 'PENDING' });
   } catch (error) {
     console.error('[join-requests POST]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ roomName: string }> }) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
     const target = await loadTarget(params);
-    if (!target) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
 
     if (request.nextUrl.searchParams.get('mine') === '1') {
       const key = { meetingId_teamMemberId: { meetingId: target.id, teamMemberId: member.id } };
@@ -93,7 +98,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         await prisma.meetingJoinRequest.update({ where: key, data: { lastSeenAt: new Date() } });
       }
       const presence = row?.status === 'PENDING' ? await hostIsPresent(target) : null;
-      return NextResponse.json({
+      return apiJson({
         status: row?.status ?? null,
         hostPresent: presence?.hostPresent ?? null,
         participantCount: presence?.participantCount ?? null,
@@ -107,7 +112,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (!mayAdmit(member.id, target)) return forbidden('Only the host or a co-host can see who is waiting');
     const acceptsKnocks = parseAccessLevel(target.accessLevel) === 'PROTECTED';
     if (!acceptsKnocks) {
-      return NextResponse.json({ requests: [], companyName: null, acceptsKnocks: false });
+      return apiJson({ requests: [], companyName: null, acceptsKnocks: false });
     }
     const rows = await prisma.meetingJoinRequest.findMany({
       where: {
@@ -125,7 +130,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         })
       : [];
     const byId = new Map(people.map((p) => [p.id, p]));
-    return NextResponse.json({
+    return apiJson({
       acceptsKnocks: true,
       companyName: await companyNameOf(target.accountId),
       requests: rows.map((r) => ({
@@ -138,26 +143,29 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   } catch (error) {
     console.error('[join-requests GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ roomName: string }> }) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
     const target = await loadTarget(params);
-    if (!target) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
     if (!mayAdmit(member.id, target)) return forbidden('Only the host or a co-host can admit people');
 
     const body = await request.json().catch(() => ({}));
     const action = body?.action === 'admit' ? 'ADMITTED' : body?.action === 'deny' ? 'DENIED' : null;
-    if (!action) return NextResponse.json({ error: 'action must be admit or deny' }, { status: 400 });
+    if (!action) return apiJson({ error: 'action must be admit or deny' }, { status: 400 });
     const ids = Array.isArray(body?.ids)
       ? body.ids.filter((id: unknown): id is number => Number.isSafeInteger(id) && (id as number) > 0).slice(0, 100)
       : [];
     if (body?.all !== true && ids.length === 0) {
-      return NextResponse.json({ error: 'ids or all is required' }, { status: 400 });
+      return apiJson({ error: 'ids or all is required' }, { status: 400 });
     }
 
     const result = await prisma.meetingJoinRequest.updateMany({
@@ -165,27 +173,32 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       data: { status: action, respondedAt: new Date(), respondedByMemberId: member.id },
     });
     if (result.count > 0) void nudgeJoinRequests(target.roomName);
-    return NextResponse.json({ updated: result.count });
+    return apiJson({ updated: result.count });
   } catch (error) {
     console.error('[join-requests PATCH]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ roomName: string }> }) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
     const target = await loadTarget(params);
-    if (!target) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
     const result = await prisma.meetingJoinRequest.updateMany({
       where: { meetingId: target.id, teamMemberId: member.id, status: 'PENDING' },
       data: { status: 'CANCELED' },
     });
     if (result.count > 0) void nudgeJoinRequests(target.roomName);
-    return NextResponse.json({ canceled: result.count });
+    return apiJson({ canceled: result.count });
   } catch (error) {
     console.error('[join-requests DELETE]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

@@ -4,13 +4,14 @@ import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import type { TeamMember } from '@prisma/client';
 import { attendanceOverlapsRecording, type RecordingTimeFields } from '@/lib/recordingAttendance';
 import { isInternalEmail } from '@/lib/internalStaff';
+import { apiJson } from '@/lib/apiMsg';
 
 export function unauthorized(message = 'Unauthorized') {
-  return NextResponse.json({ error: message }, { status: 401 });
+  return apiJson({ error: message }, { status: 401 });
 }
 
 export function forbidden(message = 'Forbidden') {
-  return NextResponse.json({ error: message }, { status: 403 });
+  return apiJson({ error: message }, { status: 403 });
 }
 
 export function isAuthError(v: TeamMember | NextResponse): v is NextResponse {

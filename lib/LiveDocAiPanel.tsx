@@ -13,6 +13,11 @@ import type {
 import { authFetch } from './kloudSession';
 import { roomAuthHeaders } from './roomAuth';
 import type { LiveDocUploadQueue } from './useLiveDocUploadQueue';
+import {
+  LIVEDOC_IFRAME_RELOAD_EVENT,
+  LIVEDOC_IFRAME_SLOW_MS,
+  requestLiveDocIframeReload,
+} from './livedoc/iframeReload';
 import styles from '../styles/LiveDocAiPanel.module.css';
 
 /** The design link shown on the meeting stage (Design mode); listed above the LiveDocs. */
@@ -572,6 +577,26 @@ export function LiveDocAiPanel({
   const transcriptBodyRef = React.useRef<HTMLDivElement>(null);
   const transcriptStickRef = React.useRef(true);
   const meetingCaptions = useMeetingCaptions(open && activeTab === 'transcript');
+  const waitingForPlugin = open && (!connected || !state);
+  const [pluginSlow, setPluginSlow] = React.useState(false);
+  const [reloadNonce, setReloadNonce] = React.useState(0);
+
+  React.useEffect(() => {
+    const onReload = () => setReloadNonce((n) => n + 1);
+    window.addEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, onReload);
+    return () => window.removeEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, onReload);
+  }, []);
+
+  // 与 LiveDoc 视图相同：等 60s 仍未就绪才给「重新加载」，不自动重载 iframe。
+  React.useEffect(() => {
+    if (!waitingForPlugin) {
+      setPluginSlow(false);
+      return;
+    }
+    setPluginSlow(false);
+    const timer = window.setTimeout(() => setPluginSlow(true), LIVEDOC_IFRAME_SLOW_MS);
+    return () => window.clearTimeout(timer);
+  }, [waitingForPlugin, reloadNonce]);
 
   const runAction = React.useCallback(
     (action: string, payload?: Record<string, unknown>) => {
@@ -1031,7 +1056,19 @@ export function LiveDocAiPanel({
             )}
             <div className={styles.loading} role="status" aria-live="polite">
               {!error && <span className={styles.loadingSpinner} aria-hidden />}
-              <span>{t('liveDocAi.connecting')}</span>
+              <span>{pluginSlow ? t('livedoc.stillLoading') : t('liveDocAi.connecting')}</span>
+              {pluginSlow && (
+                <>
+                  <span className={styles.loadingDetail}>{t('livedoc.stillLoadingDetail')}</span>
+                  <button
+                    type="button"
+                    className={styles.primaryButton}
+                    onClick={requestLiveDocIframeReload}
+                  >
+                    {t('livedoc.retry')}
+                  </button>
+                </>
+              )}
             </div>
             {activeTab === 'file' && onAddDesignLink && (
               <footer className={styles.documentFooter}>

@@ -1904,7 +1904,7 @@
   opacity: 1;
 }
 
-/* Destructive rows (End meeting for everyone / Stop recording) */
+/* Destructive rows (End Meeting / Stop recording) */
 .actionSheetItemDanger,
 .actionSheetItemDanger:hover {
   color: #f28b82;

@@ -6,19 +6,21 @@
  * 入库时间保持采集端时钟：机器人与 egress 同机，和 Recording.mediaStartedAt 同一时钟，
  * 不可用服务器时间校正（会混入网络延迟）。对齐录像时减去 mediaStartedAt。
  */
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { readSpeakBatch } from '@/lib/recordingSpeakActivity';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const NAME_MAX = 191;
 
 const clampLevel = (value: number) => Math.min(1, Math.max(0, value));
 
 export async function POST(req: NextRequest) {
+  return runWithLocale(req, async () => {
   try {
     const batch = readSpeakBatch(await req.json().catch(() => null));
     if (!batch) {
-      return NextResponse.json({ error: 'Invalid speak activity batch' }, { status: 400 });
+      return apiJson({ error: 'Invalid speak activity batch' }, { status: 400 });
     }
 
     const recording = await prisma.recording.findUnique({
@@ -26,11 +28,11 @@ export async function POST(req: NextRequest) {
       select: { id: true, deletedAt: true },
     });
     if (!recording || recording.deletedAt) {
-      return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+      return apiJson({ error: 'Recording not found' }, { status: 404 });
     }
 
     if (batch.intervals.length === 0) {
-      return NextResponse.json({ ok: true, count: 0 });
+      return apiJson({ ok: true, count: 0 });
     }
 
     const result = await prisma.recordingSpeakInterval.createMany({
@@ -45,9 +47,11 @@ export async function POST(req: NextRequest) {
       })),
     });
 
-    return NextResponse.json({ ok: true, count: result.count });
+    return apiJson({ ok: true, count: result.count });
   } catch (err) {
     console.error('[recordings speak-activity POST]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

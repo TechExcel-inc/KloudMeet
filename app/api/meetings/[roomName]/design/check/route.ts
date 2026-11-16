@@ -3,6 +3,7 @@ import { publicOrigin } from '@/lib/calendar/server';
 import { checkDesignEmbed } from '@/lib/designEmbedServer';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 import { clientIp, rateLimited } from '@/lib/rateLimit';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /** Checks per participant (and per address) in a window: pasting and editing links, not crawling */
 const CHECKS_PER_WINDOW = 30;
@@ -19,17 +20,18 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
     const devPreview = process.env.NODE_ENV !== 'production' && !request.headers.get('authorization');
     let caller = 'dev-preview';
     if (!devPreview) {
       const participant = await verifyParticipant(request);
       if (!participant || participant.room !== roomName) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return apiJson({ error: 'Unauthorized' }, { status: 401 });
       }
       caller = `${roomName}:${participant.identity}`;
     }
@@ -37,23 +39,25 @@ export async function POST(
       rateLimited(`design-check:ip:${clientIp(request)}`, CHECKS_PER_WINDOW * 2, CHECK_WINDOW_MS) ||
       rateLimited(`design-check:id:${caller}`, CHECKS_PER_WINDOW, CHECK_WINDOW_MS)
     ) {
-      return NextResponse.json({ embed: 'unknown', error: 'Too many checks' }, { status: 429 });
+      return apiJson({ embed: 'unknown', error: 'Too many checks' }, { status: 429 });
     }
 
     let payload: { url?: unknown };
     try {
       payload = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON' }, { status: 400 });
     }
     if (typeof payload.url !== 'string' || !payload.url) {
-      return NextResponse.json({ error: 'Invalid link' }, { status: 400 });
+      return apiJson({ error: 'Invalid link' }, { status: 400 });
     }
 
     const result = await checkDesignEmbed(payload.url, publicOrigin(request));
-    return NextResponse.json(result, { headers: { 'Cache-Control': 'private, no-store' } });
+    return apiJson(result, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/design/check]', error);
-    return NextResponse.json({ embed: 'unknown' });
+    return apiJson({ embed: 'unknown' });
   }
+
+  });
 }

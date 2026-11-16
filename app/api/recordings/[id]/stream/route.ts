@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
@@ -6,6 +6,7 @@ import {
   findRecordingByKey,
   isRecordingResponse,
 } from '@/lib/recordingShare';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const s3Client = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -29,18 +30,19 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const resolvedParams = await params;
     const recording = await findRecordingByKey(resolvedParams.id);
     if (!recording) {
-      return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+      return apiJson({ error: 'Recording not found' }, { status: 404 });
     }
 
     const access = await authorizeRecordingView(req, recording);
     if (isRecordingResponse(access)) return access;
 
     if (recording.status !== 'READY') {
-      return NextResponse.json(
+      return apiJson(
         { error: `Recording is not ready yet (status: ${recording.status})` },
         { status: 404 },
       );
@@ -55,7 +57,7 @@ export async function GET(
     }
 
     if (!s3Key) {
-      return NextResponse.json({ error: 'Cannot determine S3 object key' }, { status: 404 });
+      return apiJson({ error: 'Cannot determine S3 object key' }, { status: 404 });
     }
 
     const command = new GetObjectCommand({
@@ -65,10 +67,12 @@ export async function GET(
 
     const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
 
-    return NextResponse.json({ url: presignedUrl });
+    return apiJson({ url: presignedUrl });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Internal server error';
     console.error('[stream] ERROR:', error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return apiJson({ error: message }, { status: 500 });
   }
+
+  });
 }

@@ -22,6 +22,7 @@ import {
 } from '@/lib/meetingSummary';
 import { isInternalMember } from '@/lib/internalStaff.server';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 // ── Auth helper ──────────────────────────────────────────────
 async function getSession(req: NextRequest) {
@@ -104,23 +105,24 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const session = await getSession(req);
     if (!session || session.expiresAt < new Date()) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { meetingId } = await params;
     const localMeetingId = parseInt(meetingId);
     if (isNaN(localMeetingId)) {
-      return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
+      return apiJson({ error: 'Invalid meetingId' }, { status: 400 });
     }
 
     // Only the host or members who attended may spend AI quota / overwrite the summary.
     const access = await requireMeetingAccess(req, localMeetingId);
     if (access instanceof NextResponse) return access;
     if (access.memberId == null) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -128,7 +130,7 @@ export async function POST(
       select: { id: true, title: true, roomName: true, actualStartedAt: true },
     });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const transcripts = await prisma.meetingTranscript.findMany({
@@ -137,7 +139,7 @@ export async function POST(
     });
 
     if (transcripts.length === 0) {
-      return NextResponse.json({ error: 'No transcript yet, so a summary cannot be generated.' }, { status: 422 });
+      return apiJson({ error: 'No transcript yet, so a summary cannot be generated.' }, { status: 422 });
     }
 
     // Billing (no-op when disabled): Free includes a few AI summaries per month.
@@ -152,13 +154,13 @@ export async function POST(
       ai = await draftSummary(meetingName, transcripts, callAI);
     } catch (e: any) {
       console.error('[generate] AI call failed:', e);
-      return NextResponse.json({ error: 'The AI service failed. Please try again.' }, { status: 502 });
+      return apiJson({ error: 'The AI service failed. Please try again.' }, { status: 502 });
     }
 
     // Every point and to-do must land on a real transcript line; the rest is dropped
     const summary = normalizeSummary(ai.raw, transcripts);
     if (!summary) {
-      return NextResponse.json({ error: 'The AI service returned no usable summary. Please try again.' }, { status: 502 });
+      return apiJson({ error: 'The AI service returned no usable summary. Please try again.' }, { status: 502 });
     }
 
     const saved = await prisma.$transaction(async (tx) => {
@@ -202,9 +204,11 @@ export async function POST(
     const generation = (await isInternalMember(session.teamMemberId))
       ? { model: ai.model, fallbackReason: ai.fallbackReason, at: updatedAt }
       : undefined;
-    return NextResponse.json({ success: true, items: saved.items, summary: { ...head, generation } });
+    return apiJson({ success: true, items: saved.items, summary: { ...head, generation } });
   } catch (err) {
     console.error('[meeting-summary generate]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

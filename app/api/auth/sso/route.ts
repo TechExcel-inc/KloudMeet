@@ -1,9 +1,10 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { usernameBaseFromEmail } from '@/lib/googleOAuth';
 import { fetchKloudUser, recordKloudCompanies } from '@/lib/kloudAuth';
 import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * GET /api/auth/sso
@@ -16,16 +17,17 @@ import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
  * Returns the same shape as /api/auth/login: { token, user }.
  */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const ssoToken = request.cookies.get('kloud_sso_token')?.value;
     if (!ssoToken) {
-      return NextResponse.json({ error: 'No SSO token' }, { status: 401 });
+      return apiJson({ error: 'No SSO token' }, { status: 401 });
     }
 
     // ── 1. Validate the PeerTime token and fetch the Kloud user ──
     const kloud = await fetchKloudUser(decodeURIComponent(ssoToken));
     if (!kloud) {
-      return NextResponse.json({ error: 'SSO token invalid or expired' }, { status: 401 });
+      return apiJson({ error: 'SSO token invalid or expired' }, { status: 401 });
     }
 
     // ── 2. Find-or-create the bound TeamMember in KloudMeet ──
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
 
     if (!member) {
       if (kloud.email && (await prisma.teamMember.findUnique({ where: { email: kloud.email }, select: { id: true } }))) {
-        return NextResponse.json(
+        return apiJson(
           { error: 'Sign in to your existing Kloud Meet account to connect Kloud.', code: 'CONNECT_REQUIRED' },
           { status: 409 },
         );
@@ -64,7 +66,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (member.status !== 'ACTIVE') {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Account is inactive or suspended' },
         { status: 401 },
       );
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
     });
     joinKloudSubsystemInBackground(member);
 
-    return NextResponse.json({
+    return apiJson({
       token,
       user: {
         id: member.id,
@@ -97,6 +99,8 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('[SSO]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

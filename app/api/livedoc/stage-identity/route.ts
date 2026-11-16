@@ -1,6 +1,7 @@
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { resolveStageIdentity } from '@/lib/livedoc/stageIdentity.server';
 import { NextRequest, NextResponse } from 'next/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * POST /api/livedoc/stage-identity
@@ -8,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
  * `token: null` means: use the anonymous instant account (/api/livedoc/instant-account).
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   const member = await getSessionTeamMember(request);
   const rawSso = request.cookies.get('kloud_sso_token')?.value ?? null;
   let ssoToken = rawSso;
@@ -20,5 +22,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const identity = await resolveStageIdentity({ member, ssoToken });
-  return NextResponse.json(identity, { headers: { 'Cache-Control': 'no-store' } });
+  return apiJson(identity, { headers: { 'Cache-Control': 'no-store' } });
+
+  });
 }

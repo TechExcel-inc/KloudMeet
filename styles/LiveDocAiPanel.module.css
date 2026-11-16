@@ -197,6 +197,10 @@
   text-align: center;
 }
 
+.loadingDetail {
+  max-width: 280px;
+}
+
 .loadingSpinner {
   width: 26px;
   height: 26px;

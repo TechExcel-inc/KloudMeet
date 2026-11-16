@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { buildMeetingIcs, icsContentDisposition, meetingTitle } from '@/lib/calendar/ics';
 import { meetingJoinUrl } from '@/lib/calendar/links';
 import { ICS_RESPONSE_HEADERS, publicOrigin, toCalendarMeeting } from '@/lib/calendar/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * GET /api/meetings/:roomName/calendar.ics — the meeting as an iCalendar file.
@@ -13,10 +14,11 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ) {
+  return runWithLocale(request, async () => {
   try {
     const roomName = (await params)?.roomName?.trim();
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -36,11 +38,11 @@ export async function GET(
       },
     });
     if (!meeting || meeting.deletedAt) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
     const { scheduledFor } = meeting;
     if (!scheduledFor) {
-      return NextResponse.json({ error: 'Meeting is not scheduled' }, { status: 404 });
+      return apiJson({ error: 'Meeting is not scheduled' }, { status: 404 });
     }
 
     const calendarMeeting = toCalendarMeeting({ ...meeting, scheduledFor });
@@ -56,6 +58,8 @@ export async function GET(
     });
   } catch (error) {
     console.error('[meetings calendar.ics GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

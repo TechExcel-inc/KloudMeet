@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import {
   isRecordingResponse,
@@ -7,11 +7,13 @@ import {
   recordingSharePayload,
 } from '@/lib/recordingShare';
 import { checkPublicReplayAllowed } from '@/lib/billing/limits';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return runWithLocale(req, async () => {
   try {
     const { id } = await params;
     const loaded = await loadManagedRecording(req, id);
@@ -19,7 +21,7 @@ export async function PATCH(
 
     const visibility = readVisibility(await req.json().catch(() => null));
     if (!visibility) {
-      return NextResponse.json({ error: 'Invalid visibility' }, { status: 400 });
+      return apiJson({ error: 'Invalid visibility' }, { status: 400 });
     }
 
     // Billing (no-op when disabled): public replay links are a paid feature.
@@ -33,12 +35,14 @@ export async function PATCH(
       data: { visibility },
     });
 
-    return NextResponse.json(recordingSharePayload({
+    return apiJson(recordingSharePayload({
       shareKey: loaded.shareKey,
       visibility: updated.visibility,
     }));
   } catch (error: unknown) {
     console.error('[recordings PATCH]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

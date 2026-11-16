@@ -17,10 +17,12 @@ import {
   stripeConfiguredOr503,
   stripeErrorResponse,
 } from '@/lib/billing/routeHelpers';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const MAX_SEATS = 500;
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     const plan = body?.plan;
     const interval = body?.interval;
     if (!isSelfServePlan(plan) || !isBillingInterval(interval)) {
-      return NextResponse.json({ error: 'Choose PRO, TEAM or BUSINESS and month or year' }, { status: 400 });
+      return apiJson({ error: 'Choose PRO, TEAM or BUSINESS and month or year' }, { status: 400 });
     }
     const minSeats = PLANS[plan].minSeats;
     const requestedSeats = Math.floor(Number(body?.seats ?? minSeats));
@@ -39,7 +41,7 @@ export async function POST(request: NextRequest) {
 
     const priceId = stripePriceIdFor(plan, interval);
     if (!priceId) {
-      return NextResponse.json({ error: 'This plan is not available for purchase yet' }, { status: 503 });
+      return apiJson({ error: 'This plan is not available for purchase yet' }, { status: 503 });
     }
     const notConfigured = stripeConfiguredOr503();
     if (notConfigured) return notConfigured;
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
 
     if (effectivePlan(subscription) !== 'FREE') {
       // Plan / seat changes on an existing subscription go through the Stripe portal.
-      return NextResponse.json(
+      return apiJson(
         { error: 'This account already has a plan. Use “Manage billing” to change it.', code: 'ALREADY_SUBSCRIBED' },
         { status: 409 },
       );
@@ -61,7 +63,7 @@ export async function POST(request: NextRequest) {
       (subscription.status || '').toLowerCase() === 'incomplete'
     ) {
       // A bank-debit payment is still clearing; a second checkout would charge twice.
-      return NextResponse.json(
+      return apiJson(
         { error: 'A payment for this account is still processing. Please wait for it to clear.', code: 'PAYMENT_PROCESSING' },
         { status: 409 },
       );
@@ -88,10 +90,12 @@ export async function POST(request: NextRequest) {
       subscription_data: { metadata },
     });
     if (!session.url) {
-      return NextResponse.json({ error: 'Checkout is unavailable, please try again' }, { status: 502 });
+      return apiJson({ error: 'Checkout is unavailable, please try again' }, { status: 502 });
     }
-    return NextResponse.json({ url: session.url });
+    return apiJson({ url: session.url });
   } catch (error) {
     return stripeErrorResponse('billing checkout', error);
   }
+
+  });
 }

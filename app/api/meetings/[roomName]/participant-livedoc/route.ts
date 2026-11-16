@@ -8,6 +8,7 @@ import {
 } from '@/lib/meetingRoomView';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { resolveCanonicalRoomName } from '@/lib/personalRoom';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 function getBearerToken(request: NextRequest): string {
   const authorization = request.headers.get('authorization');
@@ -45,29 +46,32 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const member = await getSessionTeamMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const canonical = await resolveCanonicalRoomName(roomName);
     const meeting = await findMeetingByRoomName(canonical);
     if (!meeting || meeting.createdByMemberId !== member.id) {
-      return NextResponse.json({ show: true });
+      return apiJson({ show: true });
     }
 
     const show = await getParticipantLiveDocAi(canonical);
-    return NextResponse.json({ show });
+    return apiJson({ show });
   } catch (error) {
     console.error('[GET /api/meetings/[roomName]/participant-livedoc]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 /** POST — 主持人入会后写入房间 metadata，后加入的普通参会者据此隐藏文档 AI。 */
@@ -75,42 +79,45 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const canonical = await resolveCanonicalRoomName(roomName);
     const meeting = await findMeetingByRoomName(canonical);
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const allowed = await verifyLiveKitHost(request, canonical, meeting.createdByMemberId);
     if (!allowed) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let payload: { show?: unknown };
     try {
       payload = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     if (typeof payload.show !== 'boolean') {
-      return NextResponse.json({ error: 'Invalid show' }, { status: 400 });
+      return apiJson({ error: 'Invalid show' }, { status: 400 });
     }
 
     const ok = await setParticipantLiveDocAi(canonical, payload.show);
     if (!ok) {
-      return NextResponse.json({ error: 'Failed to update room' }, { status: 502 });
+      return apiJson({ error: 'Failed to update room' }, { status: 502 });
     }
 
-    return NextResponse.json({ show: payload.show });
+    return apiJson({ show: payload.show });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/participant-livedoc]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

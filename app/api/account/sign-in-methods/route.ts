@@ -1,14 +1,18 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { canDisconnect, createLinkIntent, signInMethodsOf, type LinkProvider } from '@/lib/accountLinking';
 import { kloudSignInAvailable, removeKloudMemberships } from '@/lib/kloudAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /** GET /api/account/sign-in-methods — what My Profile shows under "Sign-in methods". */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await getSessionTeamMember(request);
-  if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  return NextResponse.json(signInMethodsOf(member));
+  if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
+  return apiJson(signInMethodsOf(member));
+
+  });
 }
 
 /**
@@ -17,33 +21,34 @@ export async function GET(request: NextRequest) {
  * - disconnect: only while another way to sign in remains.
  */
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
     const provider: LinkProvider | null = body?.provider === 'google' || body?.provider === 'kloud' ? body.provider : null;
     const action = body?.action === 'connect' || body?.action === 'disconnect' ? body.action : null;
     if (!provider || !action) {
-      return NextResponse.json({ error: 'Unknown sign-in method' }, { status: 400 });
+      return apiJson({ error: 'Unknown sign-in method' }, { status: 400 });
     }
 
     if (action === 'connect') {
       if (provider === 'google' && !(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET)) {
-        return NextResponse.json({ error: 'Google sign-in is not available yet', code: 'UNAVAILABLE' }, { status: 400 });
+        return apiJson({ error: 'Google sign-in is not available yet', code: 'UNAVAILABLE' }, { status: 400 });
       }
       if (provider === 'kloud' && !kloudSignInAvailable()) {
-        return NextResponse.json({ error: 'Kloud sign-in is not available yet', code: 'UNAVAILABLE' }, { status: 400 });
+        return apiJson({ error: 'Kloud sign-in is not available yet', code: 'UNAVAILABLE' }, { status: 400 });
       }
       if (provider === 'google' ? member.googleId : member.kloudUserId) {
-        return NextResponse.json({ error: 'Already connected', code: 'ALREADY_CONNECTED' }, { status: 400 });
+        return apiJson({ error: 'Already connected', code: 'ALREADY_CONNECTED' }, { status: 400 });
       }
       const token = await createLinkIntent(member.id, provider);
-      return NextResponse.json({ url: `/api/auth/${provider}?${new URLSearchParams({ link: token }).toString()}` });
+      return apiJson({ url: `/api/auth/${provider}?${new URLSearchParams({ link: token }).toString()}` });
     }
 
     if (!canDisconnect(member, provider)) {
-      return NextResponse.json(
+      return apiJson(
         {
           error: 'Keep at least one way to sign in: verify your email or connect another method first.',
           code: 'LAST_METHOD',
@@ -61,9 +66,11 @@ export async function POST(request: NextRequest) {
     });
     // Company memberships that came from Kloud end with the connection.
     if (provider === 'kloud') await removeKloudMemberships(member.id);
-    return NextResponse.json(signInMethodsOf(updated));
+    return apiJson(signInMethodsOf(updated));
   } catch (error) {
     console.error('[sign-in-methods]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

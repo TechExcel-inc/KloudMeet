@@ -1,35 +1,37 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { isValidPassword, isValidUsername, normalizeEmail } from '@/lib/authPolicy';
 import { checkCode, codeErrorMessage } from '@/lib/verificationCodes';
 import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const body = await request.json().catch(() => ({}));
     const { phone, password, verificationCode, firstName, lastName } = body ?? {};
     const username = typeof body?.username === 'string' ? body.username.trim() : '';
 
     if (phone && !body?.email) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Phone sign-up is not available yet. Please use your email address.' },
         { status: 400 },
       );
     }
     const email = normalizeEmail(body?.email);
     if (!email) {
-      return NextResponse.json({ error: 'Please enter a valid email address' }, { status: 400 });
+      return apiJson({ error: 'Please enter a valid email address' }, { status: 400 });
     }
     if (!isValidUsername(username)) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Login name: 2-20 letters and numbers, not all digits' },
         { status: 400 },
       );
     }
     if (!isValidPassword(password)) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Password: 8-64 characters with at least one letter and one number' },
         { status: 400 },
       );
@@ -38,19 +40,19 @@ export async function POST(request: NextRequest) {
     // Check uniqueness before using up the code, so a taken name doesn't cost a new email.
     const existing = await prisma.teamMember.findFirst({ where: { email }, select: { id: true } });
     if (existing) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'This email is already registered. Sign in or reset your password.', code: 'EMAIL_TAKEN' },
         { status: 400 },
       );
     }
     const existingUsername = await prisma.teamMember.findFirst({ where: { username }, select: { id: true } });
     if (existingUsername) {
-      return NextResponse.json({ error: 'Username already taken' }, { status: 400 });
+      return apiJson({ error: 'Username already taken' }, { status: 400 });
     }
 
     const verified = await checkCode(email, 'signup', verificationCode, { consume: true });
     if (!verified.ok) {
-      return NextResponse.json({ error: codeErrorMessage(verified), code: 'BAD_CODE' }, { status: 400 });
+      return apiJson({ error: codeErrorMessage(verified), code: 'BAD_CODE' }, { status: 400 });
     }
 
     const passwordHash = await bcrypt.hash(password, 10);
@@ -80,7 +82,7 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       // Lost a race with another sign-up for the same email or username.
       if ((e as { code?: string })?.code === 'P2002') {
-        return NextResponse.json({ error: 'This email or username was just taken. Please try another.' }, { status: 400 });
+        return apiJson({ error: 'This email or username was just taken. Please try another.' }, { status: 400 });
       }
       throw e;
     }
@@ -100,7 +102,7 @@ export async function POST(request: NextRequest) {
     });
     joinKloudSubsystemInBackground(member);
 
-    return NextResponse.json({
+    return apiJson({
       token,
       user: {
         id: member.id,
@@ -112,6 +114,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[signup]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

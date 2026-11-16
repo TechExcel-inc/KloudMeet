@@ -5,6 +5,7 @@ import { meetingDesignLinksEnabled } from '@/lib/designLinksSetting.server';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
 import { parseMeetingRoomView, setMeetingRoomDesignLink } from '@/lib/meetingRoomView';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * POST — Design mode: set the link everyone views ({ url, embed? }) or clear it ({ url: null, view }).
@@ -17,37 +18,38 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const participant = await verifyParticipant(request);
     if (!participant || participant.room !== roomName) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
     if (parseKloudMemberIdFromIdentity(participant.identity) === null) {
-      return NextResponse.json({ error: 'Sign in to show a link to everyone' }, { status: 403 });
+      return apiJson({ error: 'Sign in to show a link to everyone' }, { status: 403 });
     }
 
     let payload: { url?: unknown; view?: unknown; embed?: unknown };
     try {
       payload = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     if (payload.url === null) {
       // Stopping: clear the link and set the next view in one write
       const view = parseMeetingRoomView(payload.view);
       const ok = await setMeetingRoomDesignLink(roomName, null, view && view !== 'design' ? view : undefined);
-      if (!ok) return NextResponse.json({ error: 'Failed to update room' }, { status: 502 });
-      return NextResponse.json({ designLink: null });
+      if (!ok) return apiJson({ error: 'Failed to update room' }, { status: 502 });
+      return apiJson({ designLink: null });
     }
 
     if (!(await meetingDesignLinksEnabled({ roomName }))) {
-      return NextResponse.json(
+      return apiJson(
         { error: 'Design links are off for this meeting', code: 'DESIGN_LINKS_OFF' },
         { status: 403 },
       );
@@ -58,7 +60,7 @@ export async function POST(
       allowLocalHttp: DESIGN_ALLOW_LOCAL_HTTP,
     });
     if (!parsed.ok) {
-      return NextResponse.json({ error: 'Invalid link', code: parsed.error }, { status: 400 });
+      return apiJson({ error: 'Invalid link', code: parsed.error }, { status: 400 });
     }
 
     const designLink: StoredDesignLink = {
@@ -70,10 +72,12 @@ export async function POST(
       ...(payload.embed === 'blocked' ? { embed: 'blocked' as const } : {}),
     };
     const ok = await setMeetingRoomDesignLink(roomName, designLink, 'design');
-    if (!ok) return NextResponse.json({ error: 'Failed to update room' }, { status: 502 });
-    return NextResponse.json({ designLink });
+    if (!ok) return apiJson({ error: 'Failed to update room' }, { status: 502 });
+    return apiJson({ designLink });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/design]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

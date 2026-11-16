@@ -18,10 +18,12 @@ import {
   stripeErrorResponse,
 } from '@/lib/billing/routeHelpers';
 import { billingLimitResponse } from '@/lib/billing/limits';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const MAX_PACKS = 20;
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
@@ -33,7 +35,7 @@ export async function POST(request: NextRequest) {
 
     const priceId = hoursPackPriceId();
     if (!priceId) {
-      return NextResponse.json({ error: 'Hour packs are not available for purchase yet' }, { status: 503 });
+      return apiJson({ error: 'Hour packs are not available for purchase yet' }, { status: 503 });
     }
     const notConfigured = stripeConfiguredOr503();
     if (notConfigured) return notConfigured;
@@ -64,10 +66,12 @@ export async function POST(request: NextRequest) {
       },
     });
     if (!session.url) {
-      return NextResponse.json({ error: 'Checkout is unavailable, please try again' }, { status: 502 });
+      return apiJson({ error: 'Checkout is unavailable, please try again' }, { status: 502 });
     }
-    return NextResponse.json({ url: session.url });
+    return apiJson({ url: session.url });
   } catch (error) {
     return stripeErrorResponse('billing credits', error);
   }
+
+  });
 }

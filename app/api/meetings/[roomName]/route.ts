@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import {
   findMeetingByRoomName,
@@ -27,18 +27,20 @@ import { isCanceledStatus } from '@/lib/calendar/ics';
 import { publicOrigin } from '@/lib/calendar/server';
 import { sendCancellationEmails } from '@/lib/meetingInvites.server';
 import { parseAccessLevel } from '@/lib/meetingAccess';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
 ) {
+  return runWithLocale(request, async () => {
   try {
     const resolvedParams = await params;
     
     // Explicitly parse string properly as Next.js passes dynamic param objects
     const roomName = await resolveCanonicalRoomName(resolvedParams?.roomName ?? '');
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     // Reconnect check (?meetingId=): the session this client joined. A personal ID's ended session
@@ -52,7 +54,7 @@ export async function GET(
       const sessionRoom = session?.roomName.toLowerCase() ?? '';
       const asked = roomName.toLowerCase();
       if (session && (sessionRoom === asked || sessionRoom === `${asked}_${session.id}`)) {
-        return NextResponse.json({ id: session.id, roomName: session.roomName, status: session.status });
+        return apiJson({ id: session.id, roomName: session.roomName, status: session.status });
       }
     }
 
@@ -63,10 +65,10 @@ export async function GET(
     if (!meetingCore) {
       const owner = await findPersonalRoomOwner(roomName);
       if (!owner) {
-        return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+        return apiJson({ error: 'Meeting not found' }, { status: 404 });
       }
       // 专属会议室无当前场次记录时仍可入会（connection-details 会创建新场次）
-      return NextResponse.json({
+      return apiJson({
         roomName,
         title: `${owner.fullName || owner.username}'s Room`,
         status: 'ACTIVE',
@@ -87,7 +89,7 @@ export async function GET(
     });
 
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const afterIdle = await expireIdleMeetingIfNeeded(meeting);
@@ -122,34 +124,37 @@ export async function GET(
       sessionMember &&
       canManageMeeting(sessionMember.id, { createdByMemberId: meeting.createdByMemberId })
     ) {
-      return NextResponse.json(payloadWithMeta);
+      return apiJson(payloadWithMeta);
     }
-    return NextResponse.json(
+    return apiJson(
       publicMeetingPayload(payloadWithMeta as Record<string, unknown>),
     );
   } catch (error) {
     console.error('[meetings GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
 ) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
 
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
-    if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+    if (!roomName) return apiJson({ error: 'Room name not provided' }, { status: 400 });
 
     const body = await request.json();
     const { title, description, scheduledFor, durationMinutes, timezone, status, actualStartedAt, endedAt } = body;
 
     const current = await prisma.meeting.findUnique({ where: { roomName } });
-    if (!current) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!current) return apiJson({ error: 'Meeting not found' }, { status: 404 });
     if (!canManageMeeting(member.id, current)) {
       return forbidden('Only the meeting host can update this meeting');
     }
@@ -164,7 +169,7 @@ export async function PUT(
     // Schedule dialog → Access. Applies to whoever joins from now on; people already in stay.
     const accessLevel = parseAccessLevel(body.accessLevel);
     if (accessLevel === 'PRIVATE' && !current.accountId) {
-      return NextResponse.json({ error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' }, { status: 400 });
+      return apiJson({ error: 'Private meetings need a company account', code: 'NEEDS_COMPANY' }, { status: 400 });
     }
     if (accessLevel) data.accessLevel = accessLevel;
     // Calendar files derive SEQUENCE from modifiedAt, so bump it on every organizer edit.
@@ -204,27 +209,30 @@ export async function PUT(
         return { sent: 0, failed: [] };
       });
     }
-    return NextResponse.json({ success: true, meeting: updated, ...(cancelNotice ? { cancelNotice } : {}) });
+    return apiJson({ success: true, meeting: updated, ...(cancelNotice ? { cancelNotice } : {}) });
   } catch (error) {
     console.error('[meetings PUT]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> }
 ) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
 
     const resolvedParams = await params;
     const roomName = resolvedParams?.roomName;
-    if (!roomName) return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+    if (!roomName) return apiJson({ error: 'Room name not provided' }, { status: 400 });
 
     const current = await prisma.meeting.findUnique({ where: { roomName } });
-    if (!current) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!current) return apiJson({ error: 'Meeting not found' }, { status: 404 });
     if (!canManageMeeting(member.id, current)) {
       return forbidden('Only the meeting host can delete this meeting');
     }
@@ -245,9 +253,11 @@ export async function DELETE(
       });
     }
     const meeting = await prisma.meeting.findUnique({ where: { id: current.id } });
-    return NextResponse.json({ success: true, meeting: meeting ?? updated, ...(cancelNotice ? { cancelNotice } : {}) });
+    return apiJson({ success: true, meeting: meeting ?? updated, ...(cancelNotice ? { cancelNotice } : {}) });
   } catch (error) {
     console.error('[meetings DELETE]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

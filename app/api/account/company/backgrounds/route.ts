@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import {
   COMPANY_BACKGROUND_LIMITS,
@@ -10,6 +10,7 @@ import {
   isAdminError,
   requireCompanyAdmin,
 } from '@/lib/companyBackgrounds.server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 function accountIdFrom(value: unknown): number | null {
   const n = Number(value);
@@ -23,20 +24,24 @@ async function payload(accountId: number, companies: { id: number; name: string 
 
 // GET /api/account/company/backgrounds?accountId= — Company settings → Camera backgrounds
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const ctx = await requireCompanyAdmin(request, accountIdFrom(request.nextUrl.searchParams.get('accountId')));
   if (isAdminError(ctx)) return ctx;
-  return NextResponse.json(await payload(ctx.accountId, ctx.companies), {
+  return apiJson(await payload(ctx.accountId, ctx.companies), {
     headers: { 'Cache-Control': 'private, no-store' },
+  });
+
   });
 }
 
 // POST /api/account/company/backgrounds — multipart: accountId, name, image (1280×720 JPEG), thumb (320×180 JPEG)
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return NextResponse.json({ error: 'Expected a form upload' }, { status: 400 });
+    return apiJson({ error: 'Expected a form upload' }, { status: 400 });
   }
   const ctx = await requireCompanyAdmin(request, accountIdFrom(form.get('accountId')));
   if (isAdminError(ctx)) return ctx;
@@ -44,7 +49,7 @@ export async function POST(request: NextRequest) {
   const image = form.get('image');
   const thumb = form.get('thumb');
   if (!(image instanceof Blob) || !(thumb instanceof Blob)) {
-    return NextResponse.json({ error: 'Image and thumbnail are required' }, { status: 400 });
+    return apiJson({ error: 'Image and thumbnail are required' }, { status: 400 });
   }
   const imageBytes = new Uint8Array(await image.arrayBuffer());
   const thumbBytes = new Uint8Array(await thumb.arrayBuffer());
@@ -52,10 +57,10 @@ export async function POST(request: NextRequest) {
     !isAcceptableJpeg(imageBytes, COMPANY_BACKGROUND_LIMITS.MAX_IMAGE_BYTES) ||
     !isAcceptableJpeg(thumbBytes, COMPANY_BACKGROUND_LIMITS.MAX_THUMB_BYTES)
   ) {
-    return NextResponse.json({ error: 'unreadable' }, { status: 400 });
+    return apiJson({ error: 'unreadable' }, { status: 400 });
   }
   const count = await prisma.accountBackground.count({ where: { accountId: ctx.accountId } });
-  if (count >= MAX_COMPANY_BACKGROUNDS) return NextResponse.json({ error: 'full' }, { status: 409 });
+  if (count >= MAX_COMPANY_BACKGROUNDS) return apiJson({ error: 'full' }, { status: 409 });
 
   const created = await prisma.accountBackground.create({
     data: {
@@ -68,17 +73,20 @@ export async function POST(request: NextRequest) {
     },
     select: { id: true },
   });
-  return NextResponse.json({ ...(await payload(ctx.accountId, ctx.companies)), createdId: created.id });
+  return apiJson({ ...(await payload(ctx.accountId, ctx.companies)), createdId: created.id });
+
+  });
 }
 
 // PUT /api/account/company/backgrounds — { accountId, defaultBackgroundId: number | null, companyOnly: boolean }
 export async function PUT(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const body = (await request.json().catch(() => null)) as {
     accountId?: unknown;
     defaultBackgroundId?: unknown;
     companyOnly?: unknown;
   } | null;
-  if (!body) return NextResponse.json({ error: 'Invalid body' }, { status: 400 });
+  if (!body) return apiJson({ error: 'Invalid body' }, { status: 400 });
   const ctx = await requireCompanyAdmin(request, accountIdFrom(body.accountId));
   if (isAdminError(ctx)) return ctx;
 
@@ -89,7 +97,7 @@ export async function PUT(request: NextRequest) {
     const owned = id
       ? await prisma.accountBackground.findFirst({ where: { id, accountId: ctx.accountId }, select: { id: true } })
       : null;
-    if (!owned) return NextResponse.json({ error: 'Unknown background' }, { status: 400 });
+    if (!owned) return apiJson({ error: 'Unknown background' }, { status: 400 });
     data.defaultBackgroundId = owned.id;
   }
   if (typeof body.companyOnly === 'boolean') data.backgroundsCompanyOnly = body.companyOnly;
@@ -97,5 +105,7 @@ export async function PUT(request: NextRequest) {
     where: { id: ctx.accountId },
     data: { ...data, modifiedAt: new Date(), modifiedBy: String(ctx.member.id) },
   });
-  return NextResponse.json(await payload(ctx.accountId, ctx.companies));
+  return apiJson(await payload(ctx.accountId, ctx.companies));
+
+  });
 }

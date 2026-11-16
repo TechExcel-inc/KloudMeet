@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 async function getSessionMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -16,15 +17,16 @@ async function getSessionMember(request: NextRequest) {
 
 // GET /api/account/members?accountId=1 — List members of an account
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const accountId = parseInt(request.nextUrl.searchParams.get('accountId') || '');
     if (!accountId) {
-      return NextResponse.json({ error: 'Account ID required' }, { status: 400 });
+      return apiJson({ error: 'Account ID required' }, { status: 400 });
     }
 
     // Verify caller is a member of this account
@@ -32,7 +34,7 @@ export async function GET(request: NextRequest) {
       where: { accountId, teamMemberId: member.id, status: 'ACTIVE' },
     });
     if (!callerMembership) {
-      return NextResponse.json({ error: 'Not a member of this account' }, { status: 403 });
+      return apiJson({ error: 'Not a member of this account' }, { status: 403 });
     }
 
     // Get all members
@@ -58,9 +60,11 @@ export async function GET(request: NextRequest) {
       joinedVia: m.joinedVia,
     }));
 
-    return NextResponse.json({ members });
+    return apiJson({ members });
   } catch (error) {
     console.error('[account members]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

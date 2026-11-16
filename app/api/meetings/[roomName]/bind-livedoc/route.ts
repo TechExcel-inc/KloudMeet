@@ -3,6 +3,7 @@ import { TokenVerifier } from 'livekit-server-sdk';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 function getBearerToken(request: NextRequest): string {
   const authorization = request.headers.get('authorization');
@@ -37,22 +38,23 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ roomName: string }> },
 ): Promise<NextResponse> {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     if (!roomName) {
-      return NextResponse.json({ error: 'Room name not provided' }, { status: 400 });
+      return apiJson({ error: 'Room name not provided' }, { status: 400 });
     }
 
     const allowed = await verifyRoomParticipant(request, roomName);
     if (!allowed) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     let payload: { livedocInstanceId?: string | number };
     try {
       payload = await request.json();
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+      return apiJson({ error: 'Invalid JSON' }, { status: 400 });
     }
 
     const kloudMeetingId =
@@ -62,7 +64,7 @@ export async function POST(
           ? Number(payload.livedocInstanceId)
           : NaN;
     if (!Number.isFinite(kloudMeetingId) || kloudMeetingId <= 0) {
-      return NextResponse.json({ error: 'Invalid livedocInstanceId' }, { status: 400 });
+      return apiJson({ error: 'Invalid livedocInstanceId' }, { status: 400 });
     }
 
     const meeting = await prisma.meeting.findUnique({
@@ -70,7 +72,7 @@ export async function POST(
       select: { id: true, accountId: true, kloudMeetingId: true, createdByMemberId: true },
     });
     if (!meeting) {
-      return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+      return apiJson({ error: 'Meeting not found' }, { status: 404 });
     }
 
     const data: { kloudMeetingId: number; accountId?: number } = {
@@ -92,9 +94,11 @@ export async function POST(
       select: { id: true, roomName: true, kloudMeetingId: true, accountId: true },
     });
 
-    return NextResponse.json({ meeting: updated });
+    return apiJson({ meeting: updated });
   } catch (error) {
     console.error('[POST /api/meetings/[roomName]/bind-livedoc]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireMeetingAccess, requireMeetingHost } from '@/lib/meetingAccessGuards';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const KLOUD_API = process.env.NEXT_PUBLIC_REMOTE_API || 'https://meet.kloud.cn';
 
@@ -12,11 +13,12 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const { meetingId } = await params;
     const localMeetingId = parseInt(meetingId);
     if (isNaN(localMeetingId)) {
-      return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
+      return apiJson({ error: 'Invalid meetingId' }, { status: 400 });
     }
 
     const access = await requireMeetingAccess(req, localMeetingId);
@@ -33,7 +35,7 @@ export async function GET(
         where: { meetingId: localMeetingId },
         select: { topic: true, overview: true, speakers: true, todos: true },
       });
-      return NextResponse.json({ items: localItems, summary, source: 'local' });
+      return apiJson({ items: localItems, summary, source: 'local' });
     }
 
     // 2. 查 kloudMeetingId → 去 Java Server 拉取
@@ -44,7 +46,7 @@ export async function GET(
 
     const kloudId = (meeting as any)?.kloudMeetingId;
     if (!kloudId) {
-      return NextResponse.json({ items: [], source: 'none' });
+      return apiJson({ items: [], source: 'none' });
     }
 
     const authHeader = req.headers.get('authorization') || '';
@@ -59,7 +61,7 @@ export async function GET(
     );
 
     if (!javaRes.ok) {
-      return NextResponse.json({ items: [], source: 'java-error' });
+      return apiJson({ items: [], source: 'java-error' });
     }
 
     const javaData = await javaRes.json();
@@ -74,7 +76,7 @@ export async function GET(
     }
 
     if (!rawItems.length) {
-      return NextResponse.json({ items: [], source: 'java-empty' });
+      return apiJson({ items: [], source: 'java-empty' });
     }
 
     // 3. 缓存到本地 DB
@@ -93,22 +95,25 @@ export async function GET(
       orderBy: { sortOrder: 'asc' },
     });
 
-    return NextResponse.json({ items: saved, source: 'java' });
+    return apiJson({ items: saved, source: 'java' });
   } catch (err) {
     console.error('[meeting-summary GET]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ meetingId: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const { meetingId } = await params;
     const localMeetingId = parseInt(meetingId);
     if (isNaN(localMeetingId)) {
-      return NextResponse.json({ error: 'Invalid meetingId' }, { status: 400 });
+      return apiJson({ error: 'Invalid meetingId' }, { status: 400 });
     }
 
     const host = await requireMeetingHost(req, localMeetingId);
@@ -118,7 +123,7 @@ export async function POST(
     const { items }: { items: { title: string; content: string; timeOffset: string }[] } = body;
 
     if (!Array.isArray(items) || !items.length) {
-      return NextResponse.json({ error: 'items array required' }, { status: 400 });
+      return apiJson({ error: 'items array required' }, { status: 400 });
     }
 
     // 清空旧的再插入
@@ -138,9 +143,11 @@ export async function POST(
       orderBy: { sortOrder: 'asc' },
     });
 
-    return NextResponse.json({ success: true, items: saved });
+    return apiJson({ success: true, items: saved });
   } catch (err) {
     console.error('[meeting-summary POST]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

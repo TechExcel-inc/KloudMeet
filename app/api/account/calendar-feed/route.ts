@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { generateCalendarFeedToken } from '@/lib/calendar/feed';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * Manage the signed-in member's private calendar feed token.
@@ -12,12 +13,16 @@ import { generateCalendarFeedToken } from '@/lib/calendar/feed';
 const noStore = { 'Cache-Control': 'no-store' };
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await requireSession(request);
   if (isAuthError(member)) return member;
-  return NextResponse.json({ token: member.calendarFeedToken ?? null }, { headers: noStore });
+  return apiJson({ token: member.calendarFeedToken ?? null }, { headers: noStore });
+
+  });
 }
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await requireSession(request);
   if (isAuthError(member)) return member;
   try {
@@ -26,14 +31,17 @@ export async function POST(request: NextRequest) {
       where: { id: member.id },
       data: { calendarFeedToken: token },
     });
-    return NextResponse.json({ token }, { headers: noStore });
+    return apiJson({ token }, { headers: noStore });
   } catch (error) {
     console.error('[calendar-feed POST]', error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function DELETE(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const member = await requireSession(request);
   if (isAuthError(member)) return member;
   try {
@@ -41,9 +49,11 @@ export async function DELETE(request: NextRequest) {
       where: { id: member.id },
       data: { calendarFeedToken: null },
     });
-    return NextResponse.json({ token: null }, { headers: noStore });
+    return apiJson({ token: null }, { headers: noStore });
   } catch (error) {
     console.error('[calendar-feed DELETE]', error instanceof Error ? error.message : error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

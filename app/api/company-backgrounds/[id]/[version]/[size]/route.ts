@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
+import { runWithLocale } from '@/lib/apiMsg';
 
 /**
  * GET /api/company-backgrounds/:id/:version/full|thumb — a company camera background.
@@ -10,6 +11,7 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string; version: string; size: string }> },
 ) {
+  return runWithLocale(_request, async () => {
   const { id, version, size } = await params;
   const backgroundId = Number(id);
   if (!Number.isInteger(backgroundId) || backgroundId <= 0 || !/^[0-9a-f]{16}$/.test(version)) {
@@ -30,5 +32,7 @@ export async function GET(
       'Cache-Control': 'public, max-age=31536000, immutable',
       'X-Content-Type-Options': 'nosniff',
     },
+  });
+
   });
 }

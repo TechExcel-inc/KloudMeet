@@ -33,6 +33,7 @@ import {
   participantCapReached,
 } from '@/lib/billing/limits';
 import { NextRequest, NextResponse } from 'next/server';
+import { apiJson, apiText, runWithLocale } from '@/lib/apiMsg';
 
 const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
@@ -42,6 +43,7 @@ const COOKIE_KEY = 'random-participant-postfix';
 const DEVICE_COOKIE_KEY = 'kloud-device-id';
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     // Parse query parameters
     const roomName = request.nextUrl.searchParams.get('roomName');
@@ -58,10 +60,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (typeof roomName !== 'string') {
-      return new NextResponse('Missing required query parameter: roomName', { status: 400 });
+      return apiText('Missing required query parameter: roomName', { status: 400 });
     }
     if (participantName === null) {
-      return new NextResponse('Missing required query parameter: participantName', { status: 400 });
+      return apiText('Missing required query parameter: participantName', { status: 400 });
     }
 
     let livekitRoomName = await resolveCanonicalRoomName(roomName);
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
     );
 
     if (!meeting) {
-      return new NextResponse('Meeting not found', { status: 404 });
+      return apiText('Meeting not found', { status: 404 });
     }
 
     const authHeader = request.headers.get('authorization');
@@ -90,7 +92,7 @@ export async function GET(request: NextRequest) {
 
     const member = await getSessionTeamMember(request);
     if (clientClaimsLoggedIn && !member) {
-      return new NextResponse('Session expired or invalid', { status: 401 });
+      return apiText('Session expired or invalid', { status: 401 });
     }
 
     // One host, one meeting: starting another while hosting a live one asks first
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
     if (member && member.id === meeting.createdByMemberId) {
       const activeMeeting = await otherLiveMeetingOfHost(member.id, livekitRoomName);
       if (activeMeeting) {
-        return NextResponse.json({ code: 'HOST_ALREADY_IN_MEETING', activeMeeting }, { status: 409 });
+        return apiJson({ code: 'HOST_ALREADY_IN_MEETING', activeMeeting }, { status: 409 });
       }
     }
 
@@ -106,7 +108,7 @@ export async function GET(request: NextRequest) {
     // left) others stay on the pre-join page, which lets them in as soon as it starts.
     const joinerIsCreator = Boolean(member && member.id === meeting.createdByMemberId);
     if (!joinerIsCreator && !(await meetingHasStarted(meeting))) {
-      return NextResponse.json(
+      return apiJson(
         { code: 'NOT_STARTED', error: 'The host hasn’t started this meeting yet' },
         { status: 403 },
       );
@@ -115,7 +117,7 @@ export async function GET(request: NextRequest) {
     meeting = await prepareMeetingForJoin(meeting);
 
     if (isMeetingPermanentlyClosed(meeting.status) && !isPersonalRoom) {
-      return new NextResponse('Meeting has already ended', { status: 403 });
+      return apiText('Meeting has already ended', { status: 403 });
     }
 
     // Access level (lib/meetingAccess.ts). The host sets it from the pre-join dropdown when
@@ -127,7 +129,7 @@ export async function GET(request: NextRequest) {
       select: meetingAccessSelect,
     });
     if (!accessMeeting) {
-      return new NextResponse('Meeting not found', { status: 404 });
+      return apiText('Meeting not found', { status: 404 });
     }
     // Private needs a company to invite from; the dropdown disables it without one.
     if (isCreator && requestedLevel && (requestedLevel !== 'PRIVATE' || accessMeeting.accountId)) {
@@ -148,7 +150,7 @@ export async function GET(request: NextRequest) {
     const blocked = joinBlockCode(decision);
     if (blocked) {
       // 403, not 401: the client treats 401 as an expired session and signs the person out.
-      return NextResponse.json(
+      return apiJson(
         { code: blocked, error: 'You need the host’s permission to join this meeting' },
         { status: 403 },
       );
@@ -165,7 +167,7 @@ export async function GET(request: NextRequest) {
       meetingEndsAt = await meetingEndsAtFor(hostEntitlements, meeting);
       if (meetingEndsAt && meetingEndsAt.getTime() <= Date.now()) {
         await endMeetingForTimeLimit(meeting);
-        return new NextResponse('This meeting reached the time limit of the host’s plan', { status: 403 });
+        return apiText('This meeting reached the time limit of the host’s plan', { status: 403 });
       }
     }
 
@@ -210,7 +212,7 @@ export async function GET(request: NextRequest) {
         hostMemberId: meeting.createdByMemberId,
       }))
     ) {
-      return new NextResponse('This meeting is full', { status: 403 });
+      return apiText('This meeting is full', { status: 403 });
     }
 
     // Kick other devices/tabs for this member before minting. Same identity
@@ -304,9 +306,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     if (error instanceof Error) {
-      return new NextResponse(error.message, { status: 500 });
+      return apiText(error.message, { status: 500 });
     }
   }
+
+  });
 }
 
 function getCookieExpirationTime(): string {

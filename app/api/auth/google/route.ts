@@ -8,13 +8,15 @@ import {
   googleStateCookieOptions,
   newGoogleState,
 } from '@/lib/googleOAuth';
+import { apiLine, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const origin = appOrigin(request);
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId || !process.env.GOOGLE_CLIENT_SECRET) {
     console.error('[google] GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not set');
-    return NextResponse.redirect(new URL('/?error=Google+sign-in+is+not+available+yet', origin));
+    return NextResponse.redirect(new URL(`/?error=${encodeURIComponent(apiLine('Google sign-in is not available yet'))}`, origin));
   }
 
   const { searchParams } = request.nextUrl;
@@ -26,4 +28,6 @@ export async function GET(request: NextRequest) {
   );
   response.cookies.set(GOOGLE_STATE_COOKIE, encodeGoogleState(payload), googleStateCookieOptions(origin));
   return response;
+
+  });
 }

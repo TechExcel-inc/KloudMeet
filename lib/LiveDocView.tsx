@@ -14,10 +14,12 @@ import {
   isToolbarMobileUserAgent,
   postLivedocRoleToIframe,
 } from '@/lib/useToolbarIsMobile';
+import {
+  LIVEDOC_IFRAME_RELOAD_EVENT,
+  LIVEDOC_IFRAME_SLOW_MS,
+  requestLiveDocIframeReload,
+} from '@/lib/livedoc/iframeReload';
 import styles from '@/styles/LiveDocView.module.css';
-
-/** After this long without onkloudloaded, the loading screen says so and offers a reload. */
-const IFRAME_SLOW_LOAD_MS = 60_000;
 
 /* In-meeting surfaces are always dark (2026-10 redesign); the document itself stays white. */
 const darkStageStyle: React.CSSProperties = {
@@ -175,7 +177,7 @@ export function LiveDocView({
     if (!livedocInstanceId || !userToken || tokenLoading || settingsLoading || pluginLoaded || loadSlow) {
       return;
     }
-    const timer = window.setTimeout(() => setLoadSlow(true), IFRAME_SLOW_LOAD_MS);
+    const timer = window.setTimeout(() => setLoadSlow(true), LIVEDOC_IFRAME_SLOW_MS);
     return () => window.clearTimeout(timer);
   }, [livedocInstanceId, userToken, tokenLoading, settingsLoading, pluginLoaded, iframeReloadKey, loadSlow]);
 
@@ -203,6 +205,12 @@ export function LiveDocView({
     setPluginLoaded(false);
     setIframeReloadKey((key) => key + 1);
   }, []);
+
+  // 视图遮罩和 Doc AI 弹窗的「重新加载」走同一条：重挂 iframe，再等 60s。
+  React.useEffect(() => {
+    window.addEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, handleManualReload);
+    return () => window.removeEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, handleManualReload);
+  }, [handleManualReload]);
 
   if (isHost && hostInitError) {
     return (
@@ -302,7 +310,7 @@ export function LiveDocView({
                   type="button"
                   className={styles.retryButton}
                   style={retryButtonStyle}
-                  onClick={handleManualReload}
+                  onClick={requestLiveDocIframeReload}
                 >
                   {t('livedoc.retry')}
                 </button>

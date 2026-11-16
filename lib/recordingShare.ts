@@ -11,6 +11,7 @@ import {
 } from '@/lib/apiAuth';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { evaluateRecordingView } from '@/lib/meetingAccess.server';
+import { apiJson } from '@/lib/apiMsg';
 
 export type RecordingVisibility = 'PRIVATE' | 'PUBLIC';
 
@@ -89,7 +90,7 @@ export async function authorizeRecordingView(
   recording: Recording,
 ): Promise<NextResponse | { memberId: number | null }> {
   if (recording.deletedAt) {
-    return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    return apiJson({ error: 'Recording not found' }, { status: 404 });
   }
 
   const member = await getSessionTeamMember(req);
@@ -122,7 +123,7 @@ export async function authorizeRecordingView(
           select: { status: true },
         })
       : null;
-    return NextResponse.json(
+    return apiJson(
       {
         error: 'You do not have access to this recording',
         code: 'REQUEST_ACCESS',
@@ -133,7 +134,7 @@ export async function authorizeRecordingView(
       { status: 403 },
     );
   }
-  return NextResponse.json(
+  return apiJson(
     { error: 'Only people who attended this meeting can watch it', code: 'ATTENDEES_ONLY', meeting: card, signedInAs },
     { status: 403 },
   );
@@ -148,7 +149,7 @@ export async function loadManagedRecording(
 
   const recording = await findRecordingByKey(key);
   if (!recording || recording.deletedAt) {
-    return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    return apiJson({ error: 'Recording not found' }, { status: 404 });
   }
 
   const allowed = await canManageRecording(member.id, recording);
@@ -171,7 +172,7 @@ export async function loadAccessibleRecording(
 
   const recording = await findRecordingByKey(key);
   if (!recording || recording.deletedAt) {
-    return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    return apiJson({ error: 'Recording not found' }, { status: 404 });
   }
 
   const access = await authorizeRecordingView(req, recording);

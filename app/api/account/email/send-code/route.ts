@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { normalizeEmail } from '@/lib/authPolicy';
@@ -7,6 +7,7 @@ import { rateLimited } from '@/lib/rateLimit';
 import { sendMail } from '@/lib/mail';
 import { verificationEmail } from '@/lib/mail/templates';
 import { discardCode, issueCode, issueErrorMessage } from '@/lib/verificationCodes';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * POST /api/account/email/send-code { email }
@@ -14,32 +15,33 @@ import { discardCode, issueCode, issueErrorMessage } from '@/lib/verificationCod
  * current one only after /confirm) or the current, not yet verified one.
  */
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
     const body = await request.json().catch(() => ({}));
     const email = normalizeEmail(body?.email);
     if (!email) {
-      return NextResponse.json({ error: 'Please enter a valid email address', code: 'EMAIL_INVALID' }, { status: 400 });
+      return apiJson({ error: 'Please enter a valid email address', code: 'EMAIL_INVALID' }, { status: 400 });
     }
     if (email === member.email?.toLowerCase() && member.emailVerified) {
-      return NextResponse.json({ error: 'This email is already verified', code: 'EMAIL_ALREADY_VERIFIED' }, { status: 400 });
+      return apiJson({ error: 'This email is already verified', code: 'EMAIL_ALREADY_VERIFIED' }, { status: 400 });
     }
     const taken = await prisma.teamMember.findFirst({
       where: { email, id: { not: member.id } },
       select: { id: true },
     });
     if (taken) {
-      return NextResponse.json({ error: 'This email is already in use.', code: 'EMAIL_IN_USE' }, { status: 400 });
+      return apiJson({ error: 'This email is already in use.', code: 'EMAIL_IN_USE' }, { status: 400 });
     }
     if (rateLimited(`email-code:member:${member.id}`, 10, 60 * 60 * 1000)) {
-      return NextResponse.json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
+      return apiJson({ error: 'Too many requests. Please try again later.' }, { status: 429 });
     }
 
     const issued = await issueCode(emailCodeTarget(member.id, email), 'email');
     if (!issued.ok) {
-      return NextResponse.json(
+      return apiJson(
         { error: issueErrorMessage(issued), retryAfter: issued.retryAfterSeconds },
         { status: 429, headers: { 'Retry-After': String(issued.retryAfterSeconds) } },
       );
@@ -49,18 +51,20 @@ export async function POST(request: NextRequest) {
     if (!sent.ok) {
       console.error('[email send-code] email delivery failed:', sent.provider, sent.error);
       await discardCode(issued.id);
-      return NextResponse.json(
+      return apiJson(
         { error: "We couldn't send the email right now. Please try again in a minute." },
         { status: 502 },
       );
     }
 
-    return NextResponse.json({
+    return apiJson({
       message: 'Verification code sent',
       ...(process.env.NODE_ENV === 'development' ? { code: issued.code } : {}),
     });
   } catch (error) {
     console.error('[email send-code]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

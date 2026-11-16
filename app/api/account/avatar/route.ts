@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -23,25 +24,26 @@ async function getAuthMember(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getAuthMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
     const formData = await request.formData();
     const file = formData.get('file') as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return apiJson({ error: 'No file provided' }, { status: 400 });
     }
 
     // Validate type
     if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image files are allowed' }, { status: 400 });
+      return apiJson({ error: 'Only image files are allowed' }, { status: 400 });
     }
 
     // Validate size (2MB)
     if (file.size > 2 * 1024 * 1024) {
-      return NextResponse.json({ error: 'File size must be less than 2MB' }, { status: 400 });
+      return apiJson({ error: 'File size must be less than 2MB' }, { status: 400 });
     }
 
     // Generate unique S3 key
@@ -74,9 +76,11 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({ avatarUrl });
+    return apiJson({ avatarUrl });
   } catch (error) {
     console.error('[avatar-upload]', error);
-    return NextResponse.json({ error: 'Failed to upload avatar' }, { status: 500 });
+    return apiJson({ error: 'Failed to upload avatar' }, { status: 500 });
   }
+
+  });
 }

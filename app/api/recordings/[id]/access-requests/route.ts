@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { canManageRecording, forbidden, isAuthError, requireSession } from '@/lib/apiAuth';
 import { publicOrigin } from '@/lib/calendar/server';
@@ -8,6 +8,7 @@ import { recordingReplayPath } from '@/lib/recordingReplayPath';
 import { evaluateRecordingView, meetUserIdForEmail } from '@/lib/meetingAccess.server';
 import { recordingAnswerEmail, recordingRequestEmail } from '@/lib/recordingAccessEmails';
 import { KNOCK_RETRY_AFTER_MS } from '@/lib/meetingAccess';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * Asking to watch a recording of a Protected meeting (lib/meetingAccess.ts → decideRecordingView).
@@ -27,19 +28,20 @@ function meetingTitle(meeting: { title: string | null } | null): string {
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  return runWithLocale(req, async () => {
   try {
     const member = await requireSession(req);
     if (isAuthError(member)) return member;
     const recording = await loadRecording(params);
-    if (!recording) return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    if (!recording) return apiJson({ error: 'Recording not found' }, { status: 404 });
 
     const decision = await evaluateRecordingView(recording, member);
-    if (decision.kind === 'watch') return NextResponse.json({ status: 'APPROVED' });
+    if (decision.kind === 'watch') return apiJson({ status: 'APPROVED' });
     if (decision.kind !== 'request') {
-      return NextResponse.json({ code: 'ATTENDEES_ONLY', error: 'Only attendees can watch this recording' }, { status: 403 });
+      return apiJson({ code: 'ATTENDEES_ONLY', error: 'Only attendees can watch this recording' }, { status: 403 });
     }
     if (!member.email) {
-      return NextResponse.json({ error: 'Your account has no email address for the answer' }, { status: 400 });
+      return apiJson({ error: 'Your account has no email address for the answer' }, { status: 400 });
     }
 
     const requesterName = member.fullName || member.username;
@@ -48,9 +50,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       where: { recordingId: recording.id, meetUserId },
       orderBy: { id: 'desc' },
     });
-    if (existing?.status === 'PENDING') return NextResponse.json({ status: 'PENDING' });
+    if (existing?.status === 'PENDING') return apiJson({ status: 'PENDING' });
     if (existing?.status === 'DENIED' && existing.respondedAt && Date.now() - existing.respondedAt.getTime() < KNOCK_RETRY_AFTER_MS) {
-      return NextResponse.json({ code: 'TOO_SOON', status: 'DENIED' }, { status: 429 });
+      return apiJson({ code: 'TOO_SOON', status: 'DENIED' }, { status: 429 });
     }
 
     const now = new Date();
@@ -90,19 +92,22 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       );
       if (!sent.ok) console.error('[recording access-requests] host email failed', sent.provider);
     }
-    return NextResponse.json({ status: 'PENDING' });
+    return apiJson({ status: 'PENDING' });
   } catch (error) {
     console.error('[recording access-requests POST]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  return runWithLocale(req, async () => {
   try {
     const member = await requireSession(req);
     if (isAuthError(member)) return member;
     const recording = await loadRecording(params);
-    if (!recording) return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    if (!recording) return apiJson({ error: 'Recording not found' }, { status: 404 });
     if (!(await canManageRecording(member.id, recording))) return forbidden('Only the host can see requests');
 
     const rows = await prisma.recordingAccessRequest.findMany({
@@ -111,7 +116,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       orderBy: { requestedAt: 'asc' },
       take: 50,
     });
-    return NextResponse.json({
+    return apiJson({
       requests: rows.map((r) => ({
         id: r.id,
         name: r.meetUser.displayName || r.meetUser.email,
@@ -121,33 +126,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     });
   } catch (error) {
     console.error('[recording access-requests GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  return runWithLocale(req, async () => {
   try {
     const member = await requireSession(req);
     if (isAuthError(member)) return member;
     const recording = await loadRecording(params);
-    if (!recording) return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+    if (!recording) return apiJson({ error: 'Recording not found' }, { status: 404 });
     if (!(await canManageRecording(member.id, recording))) return forbidden('Only the host can answer requests');
 
     const body = await req.json().catch(() => ({}));
     const status = body?.action === 'approve' ? 'APPROVED' : body?.action === 'deny' ? 'DENIED' : null;
-    if (!status) return NextResponse.json({ error: 'action must be approve or deny' }, { status: 400 });
+    if (!status) return apiJson({ error: 'action must be approve or deny' }, { status: 400 });
     const ids = Array.isArray(body?.ids)
       ? body.ids.filter((id: unknown): id is number => Number.isSafeInteger(id) && (id as number) > 0).slice(0, 100)
       : [];
     if (body?.all !== true && ids.length === 0) {
-      return NextResponse.json({ error: 'ids or all is required' }, { status: 400 });
+      return apiJson({ error: 'ids or all is required' }, { status: 400 });
     }
 
     const rows = await prisma.recordingAccessRequest.findMany({
       where: { recordingId: recording.id, status: 'PENDING', ...(body?.all === true ? {} : { id: { in: ids } }) },
       include: { meetUser: { select: { email: true } } },
     });
-    if (rows.length === 0) return NextResponse.json({ updated: 0 });
+    if (rows.length === 0) return apiJson({ updated: 0 });
     await prisma.recordingAccessRequest.updateMany({
       where: { id: { in: rows.map((r) => r.id) } },
       data: { status, respondedAt: new Date(), respondedByMemberId: member.id },
@@ -163,9 +171,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       );
       if (!sent.ok) console.error('[recording access-requests] answer email failed', sent.provider);
     }
-    return NextResponse.json({ updated: rows.length });
+    return apiJson({ updated: rows.length });
   } catch (error) {
     console.error('[recording access-requests PATCH]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

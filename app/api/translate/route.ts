@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import crypto from 'crypto';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const WebOTS_URL = "https://ntrans.xfyun.cn/v2/ots";
 const APPID = process.env.XFYUN_APPID || '';
@@ -22,11 +23,12 @@ function hmacSign(message: string, secret: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
     if (!(await verifyParticipant(request))) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
     if (!APPID || !API_SECRET || !API_KEY) {
-        return NextResponse.json({ error: 'Translation is not configured' }, { status: 500 });
+        return apiJson({ error: 'Translation is not configured' }, { status: 500 });
     }
 
     try {
@@ -34,7 +36,7 @@ export async function POST(request: NextRequest) {
         const { text, from, to } = bodyData;
 
         if (!text || !text.trim()) {
-            return NextResponse.json({ translatedText: '' });
+            return apiJson({ translatedText: '' });
         }
 
         // 1. Build HTTP Body
@@ -72,19 +74,21 @@ export async function POST(request: NextRequest) {
         const result = await response.json();
 
         if (result.code === 0 && result.data && result.data.result) {
-            return NextResponse.json({ 
+            return apiJson({ 
                 translatedText: result.data.result.trans_result.dst,
                 code: 0 
             });
         }
 
-        return NextResponse.json({ 
+        return apiJson({ 
             error: result.message || 'Xunfei API error',
             code: result.code 
         }, { status: 500 });
 
     } catch (error: any) {
         console.error('[Translation API Proxy Error]:', error);
-        return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+        return apiJson({ error: error.message || 'Internal server error' }, { status: 500 });
     }
+
+  });
 }

@@ -5,9 +5,10 @@ import { prisma } from '@/lib/db';
 import { isBillingEnabled } from '@/lib/billing/entitlements';
 import { resolveBillingAccountForPurchase } from '@/lib/billing/account';
 import { StripeApiError, StripeConfigError, createStripeCustomer } from '@/lib/billing/stripe';
+import { apiJson } from '@/lib/apiMsg';
 
 export function billingDisabledResponse(): NextResponse {
-  return NextResponse.json({ error: 'Billing is not enabled' }, { status: 404 });
+  return apiJson({ error: 'Billing is not enabled' }, { status: 404 });
 }
 
 export function billingEnabledOr404(): NextResponse | null {
@@ -18,7 +19,7 @@ export function billingEnabledOr404(): NextResponse | null {
 export function stripeConfiguredOr503(): NextResponse | null {
   return process.env.STRIPE_SECRET_KEY?.trim()
     ? null
-    : NextResponse.json({ error: 'Payments are not configured yet' }, { status: 503 });
+    : apiJson({ error: 'Payments are not configured yet' }, { status: 503 });
 }
 
 /** Public origin for Stripe return URLs. */
@@ -37,7 +38,7 @@ export async function resolvePurchaseAccount(
   member: TeamMember,
 ): Promise<{ accountId: number; subscription: BillingSubscription | null } | NextResponse> {
   const resolved = await resolveBillingAccountForPurchase(member);
-  if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+  if (!resolved.ok) return apiJson({ error: resolved.error }, { status: resolved.status });
   const subscription = await prisma.billingSubscription.findUnique({ where: { accountId: resolved.accountId } });
   return { accountId: resolved.accountId, subscription };
 }
@@ -65,12 +66,12 @@ export async function ensureStripeCustomer(
 export function stripeErrorResponse(label: string, error: unknown): NextResponse {
   if (error instanceof StripeConfigError) {
     console.error(`[${label}] Stripe is not configured`);
-    return NextResponse.json({ error: 'Payments are not configured yet' }, { status: 503 });
+    return apiJson({ error: 'Payments are not configured yet' }, { status: 503 });
   }
   if (error instanceof StripeApiError) {
     console.error(`[${label}] Stripe API error`, error.status, error.message);
-    return NextResponse.json({ error: 'Payment provider error, please try again' }, { status: 502 });
+    return apiJson({ error: 'Payment provider error, please try again' }, { status: 502 });
   }
   console.error(`[${label}]`, error);
-  return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  return apiJson({ error: 'Internal server error' }, { status: 500 });
 }

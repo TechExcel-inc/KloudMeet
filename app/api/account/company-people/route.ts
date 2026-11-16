@@ -1,8 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { resolveMemberAccountId } from '@/lib/peerTimeCompany';
 import { normalizeEmails } from '@/lib/meetingInvites';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * People in the caller's company, for inviting to a Private meeting (pre-join and the
@@ -11,12 +12,13 @@ import { normalizeEmails } from '@/lib/meetingInvites';
  * { companyName: null } when the caller has no company account.
  */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
 
     const accountId = await resolveMemberAccountId(member.id);
-    if (!accountId) return NextResponse.json({ companyName: null, people: [], companyEmails: [] });
+    if (!accountId) return apiJson({ companyName: null, people: [], companyEmails: [] });
     const account = await prisma.kloudMeetAccount.findUnique({
       where: { id: accountId },
       select: { accountName: true },
@@ -55,13 +57,15 @@ export async function GET(request: NextRequest) {
       : [];
     const companyEmailSet = new Set(people.map((p) => (p.email ?? '').toLowerCase()).filter(Boolean));
 
-    return NextResponse.json({
+    return apiJson({
       companyName: account?.accountName ?? null,
       people: matches,
       companyEmails: check.filter((email) => companyEmailSet.has(email)),
     });
   } catch (error) {
     console.error('[account company-people]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

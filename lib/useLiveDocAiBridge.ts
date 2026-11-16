@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { getLiveDocIframe } from './chatProtocol';
+import { LIVEDOC_IFRAME_RELOAD_EVENT } from './livedoc/iframeReload';
 import {
   isLiveDocAiInboundMessage,
   LIVE_DOC_AI_CHANNEL,
@@ -129,12 +130,24 @@ export function useLiveDocAiBridge(enabled: boolean): LiveDocAiBridge {
       }
     };
 
+    const onIframeReload = () => {
+      lastRevisionRef.current = -1;
+      setConnected(false);
+      setState(null);
+      setError('');
+      postSubscribe();
+      if (retryTimer !== null) return;
+      retryTimer = window.setInterval(postSubscribe, SUBSCRIBE_RETRY_MS);
+    };
+
     window.addEventListener('message', handleMessage);
+    window.addEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, onIframeReload);
     postSubscribe();
     retryTimer = window.setInterval(postSubscribe, SUBSCRIBE_RETRY_MS);
 
     return () => {
       window.removeEventListener('message', handleMessage);
+      window.removeEventListener(LIVEDOC_IFRAME_RELOAD_EVENT, onIframeReload);
       if (retryTimer) window.clearInterval(retryTimer);
       const iframe = getLiveDocIframe();
       const targetOrigin = iframe ? getIframeOrigin(iframe) : null;

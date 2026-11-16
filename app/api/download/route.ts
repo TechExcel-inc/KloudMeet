@@ -5,6 +5,7 @@ import {
   findWindowsInstaller,
   releaseFileUrl,
 } from '@/lib/desktopReleaseManifest';
+import { runWithLocale } from '@/lib/apiMsg';
 
 /** Relative on purpose: behind the site's proxy request.url is the local server's own address. */
 function toDownloadPage(): NextResponse {
@@ -12,6 +13,7 @@ function toDownloadPage(): NextResponse {
 }
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const params = request.nextUrl.searchParams;
   const os = params.get('os') === 'mac' ? 'mac' : 'win';
   const manifest = await fetchReleaseManifest(os);
@@ -29,5 +31,7 @@ export async function GET(request: NextRequest) {
       'X-Release-Version': manifest.version,
       'X-Release-File': file.url,
     },
+  });
+
   });
 }

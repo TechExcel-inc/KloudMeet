@@ -3,8 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { prisma } from '@/lib/db';
 import { checkReplayQuota } from '@/lib/billing/limits';
+import { apiText, runWithLocale } from '@/lib/apiMsg';
 
 export async function GET(req: NextRequest) {
+  return runWithLocale(req, async () => {
   try {
     const member = await requireSession(req);
     if (isAuthError(member)) return member;
@@ -12,15 +14,15 @@ export async function GET(req: NextRequest) {
     const roomName = req.nextUrl.searchParams.get('roomName');
 
     if (roomName === null) {
-      return new NextResponse('Missing roomName parameter', { status: 403 });
+      return apiText('Missing roomName parameter', { status: 403 });
     }
 
     const meeting = await prisma.meeting.findUnique({ where: { roomName } });
     if (!meeting) {
-      return new NextResponse('Meeting not found', { status: 404 });
+      return apiText('Meeting not found', { status: 404 });
     }
     if (meeting.createdByMemberId !== member.id) {
-      return new NextResponse('Only the meeting host can start recording', { status: 403 });
+      return apiText('Only the meeting host can start recording', { status: 403 });
     }
 
     const quotaError = await checkReplayQuota(member.id);
@@ -44,7 +46,7 @@ export async function GET(req: NextRequest) {
 
     const existingEgresses = await egressClient.listEgress({ roomName });
     if (existingEgresses.length > 0 && existingEgresses.some((e) => e.status < 2)) {
-      return new NextResponse('Meeting is already being recorded', { status: 409 });
+      return apiText('Meeting is already being recorded', { status: 409 });
     }
 
     const fileOutput = new EncodedFileOutput({
@@ -74,7 +76,9 @@ export async function GET(req: NextRequest) {
     return new NextResponse(null, { status: 200 });
   } catch (error) {
     if (error instanceof Error) {
-      return new NextResponse(error.message, { status: 500 });
+      return apiText(error.message, { status: 500 });
     }
   }
+
+  });
 }

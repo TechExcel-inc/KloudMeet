@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { isValidPersonalRoomId, personalRoomIdCandidates } from '@/lib/personalRoomId';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 async function getAuthMember(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
@@ -34,9 +35,10 @@ async function takenByOthers(ids: string[], memberId: number): Promise<Set<strin
  * Saving still goes through PUT /api/account/profile.
  */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getAuthMember(request);
-    if (!member) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!member) return apiJson({ error: 'Unauthorized' }, { status: 401 });
 
     const names = { username: member.username, fullName: member.fullName, email: member.email };
     const check = request.nextUrl.searchParams.get('check');
@@ -45,7 +47,7 @@ export async function GET(request: NextRequest) {
       const candidates = personalRoomIdCandidates(names).slice(0, 12);
       const taken = await takenByOthers(candidates, member.id);
       const suggestion = candidates.find((c) => !taken.has(c.toLowerCase())) ?? null;
-      return NextResponse.json({ suggestion });
+      return apiJson({ suggestion });
     }
 
     const id = check.trim().slice(0, 32);
@@ -58,9 +60,11 @@ export async function GET(request: NextRequest) {
       ? []
       : candidates.filter((c) => c.toLowerCase() !== id.toLowerCase() && !taken.has(c.toLowerCase())).slice(0, 3);
 
-    return NextResponse.json({ id, valid, available, suggestions });
+    return apiJson({ id, valid, available, suggestions });
   } catch (error) {
     console.error('[personal-room-id GET]', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return apiJson({ error: 'Internal Server Error' }, { status: 500 });
   }
+
+  });
 }

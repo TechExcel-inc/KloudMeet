@@ -29,6 +29,12 @@ const dictionaries: Record<Locale, Record<string, string>> = { en, zh, ja, ko };
 /* ────────── Storage key ────────── */
 const STORAGE_KEY = 'kloud-locale';
 
+/** 与 localStorage 同步，供 API 按当前界面语言返回提示。 */
+function writeLocaleCookie(locale: Locale): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${STORAGE_KEY}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
 /* ────────── Detect browser language ────────── */
 function detectBrowserLocale(): Locale {
   if (typeof navigator === 'undefined') return 'en';
@@ -74,6 +80,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const setLocale = useCallback((l: Locale) => {
     setLocaleState(l);
     try { localStorage.setItem(STORAGE_KEY, l); } catch {}
+    writeLocaleCookie(l);
     // Also update the <html lang> attribute
     if (typeof document !== 'undefined') {
       document.documentElement.lang = l === 'zh' ? 'zh-CN' : l;
@@ -83,6 +90,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   // On mount, apply the real locale from localStorage / browser detection
   useEffect(() => {
     const real = getInitialLocale();
+    writeLocaleCookie(real);
     setLocaleState(real);
     if (typeof document !== 'undefined') {
       document.documentElement.lang = real === 'zh' ? 'zh-CN' : real;

@@ -15,6 +15,7 @@ import {
   resolveEntitlements,
 } from '@/lib/billing/entitlements';
 import { meterRecording, meterSafely } from '@/lib/billing/usage';
+import { apiJson } from '@/lib/apiMsg';
 
 export const BILLING_UPGRADE_URL = '/account/billing';
 export const RECORDING_STATUS_ARCHIVED = 'ARCHIVED';
@@ -40,7 +41,7 @@ export function billingLimitBody(limit: BillingLimit, error: string): BillingLim
 
 /** 402 Payment Required with a machine-readable reason the UI can turn into a toast. */
 export function billingLimitResponse(limit: BillingLimit, error: string, status = 402): NextResponse {
-  return NextResponse.json(billingLimitBody(limit, error), { status });
+  return apiJson(billingLimitBody(limit, error), { status });
 }
 
 /** Recording / captions: refuse to *start* once replay seconds are used up (running ones continue). */
@@ -66,12 +67,12 @@ export async function checkReplayQuota(teamMemberId: number): Promise<NextRespon
 export async function checkCaptionQuotaForRoom(roomName: string | null | undefined): Promise<NextResponse | null> {
   if (!isBillingEnabled()) return null;
   const name = roomName?.trim();
-  if (!name) return NextResponse.json({ error: 'roomName is required' }, { status: 400 });
+  if (!name) return apiJson({ error: 'roomName is required' }, { status: 400 });
   const meeting = await prisma.meeting.findUnique({
     where: { roomName: name },
     select: { createdByMemberId: true },
   });
-  if (!meeting) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+  if (!meeting) return apiJson({ error: 'Meeting not found' }, { status: 404 });
   const ent = await resolveEntitlements(meeting.createdByMemberId);
   const balance = await getReplayBalance(ent);
   if (balance.remainingSeconds !== null && balance.remainingSeconds <= 0) {

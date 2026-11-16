@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db';
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 // Helper: extract session member from Authorization header
 async function getSessionMember(request: NextRequest) {
@@ -17,17 +18,18 @@ async function getSessionMember(request: NextRequest) {
 
 // POST /api/account — Create a new KloudMeetAccount
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     const { accountCode, accountName, organizationType, teamSize, emailDomains, description } = body;
 
     if (!accountCode?.trim() || !accountName?.trim()) {
-      return NextResponse.json({ error: 'Account code and name required' }, { status: 400 });
+      return apiJson({ error: 'Account code and name required' }, { status: 400 });
     }
 
     // Check uniqueness
@@ -35,7 +37,7 @@ export async function POST(request: NextRequest) {
       where: { accountCode: accountCode.trim() },
     });
     if (existing) {
-      return NextResponse.json({ error: 'Account code already taken' }, { status: 400 });
+      return apiJson({ error: 'Account code already taken' }, { status: 400 });
     }
 
     // Generate a random join team code
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
+    return apiJson({
       id: account.id,
       accountCode: account.accountCode,
       accountName: account.accountName,
@@ -89,6 +91,8 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[account create]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

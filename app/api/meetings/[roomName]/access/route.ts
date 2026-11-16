@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { parseAccessLevel, mayKnockAgain, KNOCK_RETRY_AFTER_MS } from '@/lib/meetingAccess';
 import {
@@ -10,6 +10,7 @@ import {
   resolveAccessTarget,
 } from '@/lib/meetingAccess.server';
 import { prisma } from '@/lib/db';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /**
  * Pre-join: what this person may do with the meeting the link leads to.
@@ -17,10 +18,11 @@ import { prisma } from '@/lib/db';
  * Shows only the title, the host and (for someone waiting) a head count — never who is in it.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ roomName: string }> }) {
+  return runWithLocale(request, async () => {
   try {
     const { roomName } = await params;
     const target = await resolveAccessTarget(roomName ?? '');
-    if (!target) return NextResponse.json({ error: 'Meeting not found' }, { status: 404 });
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
 
     const member = await getSessionTeamMember(request);
     const isHost = Boolean(member && member.id === target.createdByMemberId);
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const presence = decision.kind === 'knock' ? await hostIsPresent(target) : null;
-    return NextResponse.json({
+    return apiJson({
       roomName: target.roomName,
       level: parseAccessLevel(target.accessLevel),
       isHost,
@@ -64,6 +66,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   } catch (error) {
     console.error('[meetings access GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

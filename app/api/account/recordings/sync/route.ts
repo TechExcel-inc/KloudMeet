@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
 import { EgressClient } from 'livekit-server-sdk';
@@ -6,20 +6,22 @@ import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import { onRecordingReady } from '@/lib/billing/limits';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
 const API_KEY = process.env.LIVEKIT_API_KEY || '';
 const API_SECRET = process.env.LIVEKIT_API_SECRET || '';
 
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (!LIVEKIT_URL || !API_KEY || !API_SECRET) {
-      return NextResponse.json({ error: 'LiveKit configuration missing' }, { status: 500 });
+      return apiJson({ error: 'LiveKit configuration missing' }, { status: 500 });
     }
 
     const egressClient = new EgressClient(LIVEKIT_URL, API_KEY, API_SECRET);
@@ -97,9 +99,11 @@ export async function GET(request: NextRequest) {
       console.error('[account recordings sync] screen sections failed to finish', e),
     );
 
-    return NextResponse.json({ success: true, updatedCount });
+    return apiJson({ success: true, updatedCount });
   } catch (error: any) {
     console.error('[account recordings sync GET]', error);
-    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+    return apiJson({ error: error.message || 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

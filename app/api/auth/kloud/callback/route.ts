@@ -11,6 +11,7 @@ import {
   recordKloudCompanies,
 } from '@/lib/kloudAuth';
 import { joinKloudSubsystemInBackground } from '@/lib/kloudSubsystem.server';
+import { apiLine, runWithLocale } from '@/lib/apiMsg';
 
 const TOKEN_RE = /^[A-Za-z0-9._~+/=-]{8,512}$/;
 
@@ -21,6 +22,7 @@ const TOKEN_RE = /^[A-Za-z0-9._~+/=-]{8,512}$/;
  *   An existing account with the same email is not taken over: the person signs in to it and connects.
  */
 export async function POST(request: NextRequest) {
+  return runWithLocale(request, async () => {
   const origin = appOrigin(request);
   const saved = decodeKloudState(request.cookies.get(KLOUD_STATE_COOKIE)?.value);
 
@@ -30,7 +32,7 @@ export async function POST(request: NextRequest) {
     response.cookies.set(KLOUD_STATE_COOKIE, '', kloudStateCookieOptions(origin, 0));
     return response;
   };
-  const fail = (message: string) => finish(`/?error=${encodeURIComponent(message)}`);
+  const fail = (message: string) => finish(`/?error=${encodeURIComponent(apiLine(message))}`);
 
   try {
     const form = await request.formData().catch(() => null);
@@ -141,4 +143,6 @@ export async function POST(request: NextRequest) {
     console.error('[kloud callback] unhandled error', err);
     return fail('Kloud sign-in failed. Please try again.');
   }
+
+  });
 }

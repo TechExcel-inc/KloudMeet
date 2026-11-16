@@ -1,7 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { getSessionTeamMember } from '@/lib/getSessionTeamMember';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 /** Enough for a month of very busy days; the calendar only needs to know which days have meetings. */
 const MAX_MEETINGS = 3000;
@@ -13,17 +14,18 @@ const MAX_MEETINGS = 3000;
  * The client buckets them by its own local day.
  */
 export async function GET(request: NextRequest) {
+  return runWithLocale(request, async () => {
   try {
     const member = await getSessionTeamMember(request);
     if (!member) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      return apiJson({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const { searchParams } = new URL(request.url);
     const from = new Date(searchParams.get('from') || '');
     const to = new Date(searchParams.get('to') || '');
     if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime()) || to <= from) {
-      return NextResponse.json({ error: 'from and to must be ISO dates, from < to' }, { status: 400 });
+      return apiJson({ error: 'from and to must be ISO dates, from < to' }, { status: 400 });
     }
     const search = searchParams.get('search')?.trim() || '';
     const scope = searchParams.get('scope') === 'hosted' ? 'hosted' : 'all';
@@ -61,11 +63,13 @@ export async function GET(request: NextRequest) {
       take: MAX_MEETINGS,
     });
 
-    return NextResponse.json({
+    return apiJson({
       dates: meetings.map((m) => (m.scheduledFor ?? m.createdAt).toISOString()),
     });
   } catch (error) {
     console.error('[account meetings days GET]', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }

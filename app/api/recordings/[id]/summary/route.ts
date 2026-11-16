@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -15,6 +15,7 @@ import {
   findRecordingByKey,
   isRecordingResponse,
 } from '@/lib/recordingShare';
+import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const s3 = new S3Client({
   region: process.env.S3_REGION || 'us-west-1',
@@ -28,11 +29,12 @@ export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  return runWithLocale(req, async () => {
   try {
     const { id } = await params;
     const located = await findRecordingByKey(id);
     if (!located) {
-      return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+      return apiJson({ error: 'Recording not found' }, { status: 404 });
     }
 
     const access = await authorizeRecordingView(req, located);
@@ -46,7 +48,7 @@ export async function GET(
       );
     }
     if (located.status !== 'READY') {
-      return NextResponse.json(
+      return apiJson(
         { error: `Recording is not ready yet (status: ${located.status})` },
         { status: 404 },
       );
@@ -103,7 +105,7 @@ export async function GET(
     let recording = await loadReplay(located.id);
 
     if (!recording || recording.deletedAt) {
-      return NextResponse.json({ error: 'Recording not found' }, { status: 404 });
+      return apiJson({ error: 'Recording not found' }, { status: 404 });
     }
 
     // 生成 S3 预签名播放 URL（1小时有效期）
@@ -153,7 +155,7 @@ export async function GET(
       };
     }
 
-    return NextResponse.json({
+    return apiJson({
       recording: {
         id: recording.id,
         shareKey,
@@ -204,8 +206,10 @@ export async function GET(
     });
   } catch (err) {
     console.error('[replay summary GET]', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return apiJson({ error: 'Internal server error' }, { status: 500 });
   }
+
+  });
 }
 
 /** LiveDoc Full presence. Missing table (SQL not applied yet) leaves the replay without the people window. */
