@@ -84,7 +84,6 @@ export async function GET(
         createdByMember: {
           select: { fullName: true, username: true },
         },
-        recordings: true,
       },
     });
 
@@ -114,7 +113,7 @@ export async function GET(
       }
     }
 
-    const payload = { ...meeting, status: currentStatus, isActive };
+    const payload = { ...meeting, status: currentStatus, isActive, recordings: [] };
     const sessionMember = await getSessionTeamMember(request);
     const payloadWithMeta = withMeetingLifecycleMeta(
       payload,

@@ -1,5 +1,5 @@
 import { resolveHostActiveMeeting } from '@/lib/hostActiveMeeting';
-import { listActiveRoomNames } from '@/lib/livekitRooms';
+import { listActiveRoomNamesOrNull } from '@/lib/livekitRooms';
 import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
 import { resolveRoomEntry } from '@/lib/resolvePersonalRoomJoin';
 
@@ -27,9 +27,11 @@ export async function followOwnerLiveRoom(roomName: string): Promise<string | nu
  */
 export async function otherLiveMeetingOfHost(memberId: number, roomName: string) {
   try {
-    const activeRooms = await listActiveRoomNames();
-    if (activeRooms.length === 0 || isRoomLiveInList(roomName, activeRooms)) return null;
-    const active = await resolveHostActiveMeeting(memberId, roomName);
+    // One live-room list. This room already up: the host is coming back, not opening a second meeting.
+    // LiveKit unreachable (null): allow the join, same as before.
+    const live = await listActiveRoomNamesOrNull();
+    if (!live || live.length === 0 || isRoomLiveInList(roomName, live)) return null;
+    const active = await resolveHostActiveMeeting(memberId, roomName, live);
     if (!active || active.roomName.trim().toLowerCase() === roomName.trim().toLowerCase()) return null;
     return active;
   } catch (error) {

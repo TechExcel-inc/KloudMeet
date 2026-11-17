@@ -2,6 +2,7 @@ import { ensurePersonalRoomMeeting } from '@/lib/meetingRoomIsActive';
 import {
   findPersonalRoomOwner,
   resolveCanonicalRoomName,
+  withPersonalRoomMemo,
 } from '@/lib/personalRoom';
 import { randomString } from '@/lib/client-utils';
 import { getLiveKitURL } from '@/lib/getLiveKitURL';
@@ -15,10 +16,9 @@ import {
   buildKloudMemberIdentity,
   sanitizeKloudDeviceId,
 } from '@/lib/meetingOwner';
-import { evictParticipantsByMemberId } from '@/lib/livekitRooms';
+import { countListedParticipants, evictParticipantsByMemberId, listRoomParticipants } from '@/lib/livekitRooms';
 import { followOwnerLiveRoom, otherLiveMeetingOfHost } from '@/lib/oneMeetingPerHost';
 import { readMeetingRoomFlags, setParticipantLiveDocAi } from '@/lib/meetingRoomView';
-import { meetingDesignLinksEnabled } from '@/lib/designLinksSetting.server';
 import { prisma } from '@/lib/db';
 import { createLiveKitParticipantToken } from '@/lib/livekitParticipantToken';
 import { joinBlockCode, parseAccessLevel } from '@/lib/meetingAccess';
@@ -30,7 +30,6 @@ import { isBillingEnabled, resolveEntitlements } from '@/lib/billing/entitlement
 import {
   endMeetingForTimeLimit,
   meetingEndsAtFor,
-  participantCapReached,
 } from '@/lib/billing/limits';
 import { NextRequest, NextResponse } from 'next/server';
 import { apiJson, apiText, runWithLocale } from '@/lib/apiMsg';
@@ -42,8 +41,14 @@ const LIVEKIT_URL = process.env.LIVEKIT_URL;
 const COOKIE_KEY = 'random-participant-postfix';
 const DEVICE_COOKIE_KEY = 'kloud-device-id';
 
+const joinExtraSelect = {
+  ...meetingAccessSelect,
+  kloudMeetingId: true,
+  createdByMember: { select: { designLinksEnabled: true } },
+} as const;
+
 export async function GET(request: NextRequest) {
-  return runWithLocale(request, async () => {
+  return runWithLocale(request, () => withPersonalRoomMemo(async () => {
   try {
     // Parse query parameters
     const roomName = request.nextUrl.searchParams.get('roomName');
@@ -70,10 +75,7 @@ export async function GET(request: NextRequest) {
     // One host, one meeting: a personal ID reaches the meeting its owner is hosting
     // now (e.g. m5888 → their instant meeting), never a second room of its own.
     const ownerLiveRoom = await followOwnerLiveRoom(livekitRoomName);
-    if (ownerLiveRoom) {
-      console.log(`[connection-details] Personal ID "${livekitRoomName}" follows its owner into "${ownerLiveRoom}"`);
-      livekitRoomName = ownerLiveRoom;
-    }
+    if (ownerLiveRoom) livekitRoomName = ownerLiveRoom;
 
     let meeting = await ensurePersonalRoomMeeting(livekitRoomName);
     const personalOwner = await findPersonalRoomOwner(livekitRoomName);
@@ -126,7 +128,7 @@ export async function GET(request: NextRequest) {
     const requestedLevel = parseAccessLevel(request.nextUrl.searchParams.get('accessLevel'));
     let accessMeeting = await prisma.meeting.findUnique({
       where: { id: meeting.id },
-      select: meetingAccessSelect,
+      select: joinExtraSelect,
     });
     if (!accessMeeting) {
       return apiText('Meeting not found', { status: 404 });
@@ -136,7 +138,7 @@ export async function GET(request: NextRequest) {
       accessMeeting = await prisma.meeting.update({
         where: { id: meeting.id },
         data: { accessLevel: requestedLevel },
-        select: meetingAccessSelect,
+        select: joinExtraSelect,
       });
     }
     const { decision, facts } = await evaluateJoin({
@@ -201,31 +203,28 @@ export async function GET(request: NextRequest) {
       if (isRecorder) tokenMetadata = RECORDER_PARTICIPANT_METADATA;
     }
 
-    if (
-      hostEntitlements &&
-      !isRecorder &&
-      (await participantCapReached({
-        hostEntitlements,
-        roomName: livekitRoomName,
-        joinerIdentity: identity,
-        joinerMemberId: member?.id ?? null,
-        hostMemberId: meeting.createdByMemberId,
-      }))
-    ) {
-      return apiText('This meeting is full', { status: 403 });
+    const cap = hostEntitlements?.limits.maxParticipants ?? null;
+    const joinerIsHost = Boolean(member && member.id === meeting.createdByMemberId);
+    const enforceCap = Boolean(hostEntitlements?.enabled && cap !== null && !isRecorder && !joinerIsHost);
+    const needsListed = Boolean(member) || enforceCap;
+    // Room metadata does not depend on the participant list, and evict does not change it.
+    // Start the read now so it overlaps the list; the host's LiveDoc write still waits for this read.
+    const roomFlagsPromise = readMeetingRoomFlags(livekitRoomName);
+    const listed = needsListed ? await listRoomParticipants(livekitRoomName) : null;
+    if (enforceCap && cap !== null && listed) {
+      const others = countListedParticipants(listed, {
+        identity,
+        memberId: member?.id ?? null,
+      });
+      if (others >= cap) return apiText('This meeting is full', { status: 403 });
     }
 
     // Kick other devices/tabs for this member before minting. Same identity
     // (page refresh / renew) is skipped — LiveKit replaces on join; removing
     // it would set a Cloud revoke cutoff that breaks subsequent tickets.
+    // listed is the same snapshot the cap check just used.
     if (member) {
-      console.log(`[connection-details] Evicting for room="${livekitRoomName}" memberId=${member.id} newIdentity="${identity}"`);
-      const evictedCount = await evictParticipantsByMemberId(
-        livekitRoomName,
-        member.id,
-        identity,
-      );
-      console.log(`[connection-details] Evicted ${evictedCount} old session(s)`);
+      await evictParticipantsByMemberId(livekitRoomName, member.id, identity, listed);
     }
 
     if (!API_KEY || !API_SECRET) {
@@ -240,31 +239,23 @@ export async function GET(request: NextRequest) {
       roomName: livekitRoomName,
       ttl: '2h',
     });
-
     // 参会记录本应由 LiveKit participant_joined webhook 写入（拿到票但没真正入会不算参会），
     // 但生产环境收不到 LiveKit webhook（见 a7ada47），所以拿票时先记一笔兜底；
-    // webhook 通了以后由它负责在场时间窗（joinedAt / leftAt）。
-    try {
-      if (member) {
-        await recordMeetingJoin({
+    // webhook 通了以后由它负责在场时间窗（joinedAt / leftAt）。和房间状态并行，但响应前会写完。
+    const recorded = member
+      ? recordMeetingJoin({
           meetingId: meeting.id,
           memberId: member.id,
           displayName: participantName.trim() || member.fullName || member.username,
           host: member.id === meeting.createdByMemberId,
-        });
-      } else if (!isRecorder) {
-        await recordGuestJoin({
-          meetingId: meeting.id,
-          displayName: participantName,
-        });
-      }
-    } catch (err) {
-      console.error('[connection-details] record join', err);
-    }
-
-    // Late joiners: adopt room's current stage without flashing default webcam.
-    // First host open: room has no metadata → currentView omitted → client keeps webcam.
-    const roomFlags = await readMeetingRoomFlags(livekitRoomName);
+        }).catch((err: unknown) => console.error('[connection-details] record join', err))
+      : !isRecorder
+        ? recordGuestJoin({
+            meetingId: meeting.id,
+            displayName: participantName,
+          }).catch((err: unknown) => console.error('[connection-details] record join', err))
+        : Promise.resolve();
+    const [roomFlags] = await Promise.all([roomFlagsPromise, recorded]);
     const currentView = roomFlags.currentView;
     const liveDocParam = request.nextUrl.searchParams.get('participantLiveDocAi');
     const requestedLiveDoc = liveDocParam === '0' ? false : liveDocParam === '1' ? true : null;
@@ -277,13 +268,9 @@ export async function GET(request: NextRequest) {
       await setParticipantLiveDocAi(livekitRoomName, requestedLiveDoc);
       participantLiveDocAi = requestedLiveDoc;
     }
-    const livedocBind = await prisma.meeting.findUnique({
-      where: { id: meeting.id },
-      select: { kloudMeetingId: true },
-    });
     const livedocInstanceId =
-      livedocBind?.kloudMeetingId != null && livedocBind.kloudMeetingId > 0
-        ? String(livedocBind.kloudMeetingId)
+      accessMeeting.kloudMeetingId != null && accessMeeting.kloudMeetingId > 0
+        ? String(accessMeeting.kloudMeetingId)
         : null;
 
     const data: ConnectionDetails = {
@@ -295,7 +282,7 @@ export async function GET(request: NextRequest) {
       isPersonalRoom,
       ...(currentView ? { currentView } : {}),
       ...(roomFlags.designLink ? { designLink: roomFlags.designLink } : {}),
-      designLinksEnabled: await meetingDesignLinksEnabled({ id: meeting.id }),
+      designLinksEnabled: accessMeeting.createdByMember.designLinksEnabled === true,
       participantLiveDocAi,
       livedocInstanceId,
       accessLevel: parseAccessLevel(accessMeeting.accessLevel),
@@ -310,7 +297,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  });
+  }));
 }
 
 function getCookieExpirationTime(): string {

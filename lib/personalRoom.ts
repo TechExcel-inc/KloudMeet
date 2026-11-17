@@ -1,5 +1,14 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import type { TeamMember } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { isPrismaConnectionError } from '@/lib/prismaErrors';
+
+const ownerMemo = new AsyncLocalStorage<Map<string, Promise<TeamMember | null>>>();
+
+/** 同一次请求里，个人房号解析只查一次库。 */
+export function withPersonalRoomMemo<T>(run: () => Promise<T>): Promise<T> {
+  return ownerMemo.run(new Map(), run);
+}
 
 /**
  * 个人房号 URL 大小写不敏感；LiveKit / DB 统一用 TeamMember.personalRoomId 原样。
@@ -40,11 +49,7 @@ export async function resolvePersonalRoomIdForSave(
   return { ok: true, personalRoomId: trimmed };
 }
 
-/** 是否为某成员的专属会议室 roomName（大小写不敏感） */
-export async function findPersonalRoomOwner(roomName: string) {
-  const trimmed = roomName.trim();
-  if (!trimmed) return null;
-  const key = trimmed.toLowerCase();
+async function queryPersonalOwner(key: string): Promise<TeamMember | null> {
   try {
     const rows = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM TeamMember
@@ -61,6 +66,19 @@ export async function findPersonalRoomOwner(roomName: string) {
     }
     throw error;
   }
+}
+
+/** 是否为某成员的专属会议室 roomName（大小写不敏感） */
+export async function findPersonalRoomOwner(roomName: string): Promise<TeamMember | null> {
+  const trimmed = roomName.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toLowerCase();
+  const store = ownerMemo.getStore();
+  const hit = store?.get(key);
+  if (hit) return hit;
+  const pending = queryPersonalOwner(key);
+  store?.set(key, pending);
+  return pending;
 }
 
 /**

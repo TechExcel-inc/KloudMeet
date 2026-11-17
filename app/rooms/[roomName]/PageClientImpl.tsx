@@ -405,16 +405,24 @@ export function PageClientImpl(props: {
           }
         }
 
-        const initialMeeting = await loadMeetingInfo(props.roomName);
-        if (cancelled) return;
+        // Meeting info and "which live room a personal ID follows" are independent reads.
+        // The host branch below still ignores the resolve result, same as not using it.
+        const meetingPromise = loadMeetingInfo(props.roomName);
+        const resolvePromise = fetchPersonalRoomResolve(props.roomName);
+        const initialMeeting = await meetingPromise;
+        if (cancelled) {
+          void resolvePromise.catch(() => undefined);
+          return;
+        }
 
-        // 发起人已在真实会场（如 /rooms/yieg-kgxf）：不调用 resolve，直接按原逻辑入会
+        // 发起人已在真实会场（如 /rooms/yieg-kgxf）：不用 resolve 的结果，直接按原逻辑入会
         if (isCurrentUserMeetingCreator(initialMeeting, kloudUser)) {
+          void resolvePromise.catch(() => undefined);
           setResolvedLiveRoom(null);
           return;
         }
 
-        const resolved = await fetchPersonalRoomResolve(props.roomName);
+        const resolved = await resolvePromise;
         if (cancelled) return;
 
         setResolvedLiveRoom(getResolvedLiveRoomName(props.roomName, resolved));

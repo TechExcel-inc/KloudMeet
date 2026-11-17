@@ -13,6 +13,47 @@ import {
 } from '@/lib/meetingAccess.server';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
+const POLL_TARGET_TTL_MS = 3_000;
+/** Waiting page polls every 2s; rewriting lastSeenAt that often is enough if we skip a couple. */
+const SEEN_WRITE_GAP_MS = 5_000;
+
+interface PollMeeting {
+  id: number;
+  roomName: string;
+  createdByMemberId: number;
+  meetingRoles: unknown;
+}
+
+const pollCache = new Map<string, { at: number; meeting: PollMeeting | null }>();
+
+/**
+ * Same meeting resolveAccessTarget would pick (including a personal ID following its owner).
+ * Cached briefly so the 2s poll does not repeat that lookup; the request row itself is always read fresh.
+ */
+async function meetingForPoll(roomParam: string): Promise<PollMeeting | null> {
+  const trimmed = roomParam.trim();
+  if (!trimmed) return null;
+  const key = trimmed.toLowerCase();
+  const now = Date.now();
+  const hit = pollCache.get(key);
+  if (hit && now - hit.at < POLL_TARGET_TTL_MS) return hit.meeting;
+  const target = await resolveAccessTarget(trimmed);
+  const meeting = target && target.id > 0
+    ? {
+        id: target.id,
+        roomName: target.roomName,
+        createdByMemberId: target.createdByMemberId,
+        meetingRoles: target.meetingRoles,
+      }
+    : null;
+  pollCache.set(key, { at: now, meeting });
+  if (pollCache.size > 300) {
+    const oldest = pollCache.keys().next().value;
+    if (oldest) pollCache.delete(oldest);
+  }
+  return meeting;
+}
+
 /**
  * Knocking on a Protected meeting (lib/meetingAccess.ts).
  * Person waiting:  POST ask (again) · GET ?mine=1 poll (also keeps the request fresh) · DELETE cancel.
@@ -88,13 +129,14 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const member = await requireSession(request);
     if (isAuthError(member)) return member;
-    const target = await loadTarget(params);
-    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
 
     if (request.nextUrl.searchParams.get('mine') === '1') {
+      const { roomName } = await params;
+      const target = await meetingForPoll(roomName ?? '');
+      if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
       const key = { meetingId_teamMemberId: { meetingId: target.id, teamMemberId: member.id } };
       const row = await prisma.meetingJoinRequest.findUnique({ where: key });
-      if (row?.status === 'PENDING') {
+      if (row?.status === 'PENDING' && Date.now() - row.lastSeenAt.getTime() >= SEEN_WRITE_GAP_MS) {
         await prisma.meetingJoinRequest.update({ where: key, data: { lastSeenAt: new Date() } });
       }
       const presence = row?.status === 'PENDING' ? await hostIsPresent(target) : null;
@@ -109,6 +151,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       });
     }
 
+    const target = await loadTarget(params);
+    if (!target) return apiJson({ error: 'Meeting not found' }, { status: 404 });
     if (!mayAdmit(member.id, target)) return forbidden('Only the host or a co-host can see who is waiting');
     const acceptsKnocks = parseAccessLevel(target.accessLevel) === 'PROTECTED';
     if (!acceptsKnocks) {

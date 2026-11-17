@@ -1,22 +1,13 @@
 import { prisma } from '@/lib/db';
+import { listRoomsByNames } from '@/lib/livekitRooms';
 import {
   findPersonalRoomOwner,
   resolveCanonicalRoomName,
 } from '@/lib/personalRoom';
-import { RoomServiceClient } from 'livekit-server-sdk';
-
-const LIVEKIT_URL =
-  process.env.LIVEKIT_URL || process.env.NEXT_PUBLIC_LIVEKIT_URL;
-const API_KEY = process.env.LIVEKIT_API_KEY;
-const API_SECRET = process.env.LIVEKIT_API_SECRET;
-
-function roomNameVariants(roomName: string): string[] {
-  const trimmed = roomName.trim();
-  return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];
-}
 
 /**
  * 与 GET /api/meetings/[roomName] 中 isActive 的计算方式完全一致。
+ * 只问这一个房号，不拉全服房间。
  */
 export async function getMeetingIsActiveByRoomName(
   roomName: string,
@@ -25,21 +16,8 @@ export async function getMeetingIsActiveByRoomName(
   if (!trimmed) return false;
 
   try {
-    if (LIVEKIT_URL && API_KEY && API_SECRET) {
-      const roomService = new RoomServiceClient(
-        LIVEKIT_URL,
-        API_KEY,
-        API_SECRET,
-      );
-      for (const rn of roomNameVariants(trimmed)) {
-        const matched = await roomService.listRooms([rn]);
-        if (matched && matched.length > 0) {
-          return true;
-        }
-      }
-      const allRooms = await roomService.listRooms();
-      return isRoomLiveInList(trimmed, allRooms.map((r) => r.name));
-    }
+    const live = await listRoomsByNames([trimmed]);
+    return Boolean(live && live.length > 0);
   } catch (e) {
     console.error('[meetingRoomIsActive] LiveKit query failed', e);
   }

@@ -271,8 +271,29 @@ export async function meetingHasStarted(meeting: {
   return Boolean(hostJoin);
 }
 
+const PRESENCE_TTL_MS = 2_000;
+const presenceCache = new Map<string, { at: number; value: { hostPresent: boolean | null; participantCount: number | null } }>();
+
 /** Whether the creator, the current host or a co-host is in the LiveKit room (null: unknown). */
 export async function hostIsPresent(meeting: Pick<AccessTarget, 'roomName' | 'createdByMemberId' | 'meetingRoles'>): Promise<{
+  hostPresent: boolean | null;
+  participantCount: number | null;
+}> {
+  const key = meeting.roomName.trim().toLowerCase();
+  const now = Date.now();
+  const hit = presenceCache.get(key);
+  if (hit && now - hit.at < PRESENCE_TTL_MS) return hit.value;
+  const value = await readHostPresence(meeting);
+  presenceCache.set(key, { at: now, value });
+  if (presenceCache.size > 200) {
+    for (const [room, row] of presenceCache) {
+      if (now - row.at >= PRESENCE_TTL_MS) presenceCache.delete(room);
+    }
+  }
+  return value;
+}
+
+async function readHostPresence(meeting: Pick<AccessTarget, 'roomName' | 'createdByMemberId' | 'meetingRoles'>): Promise<{
   hostPresent: boolean | null;
   participantCount: number | null;
 }> {

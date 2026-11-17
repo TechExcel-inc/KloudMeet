@@ -283,6 +283,11 @@ export function DashboardView({
   meetingScopeRef.current = meetingScope;
   const jumpDateRef = useRef(jumpDate);
   jumpDateRef.current = jumpDate;
+  const liveIdsRef = useRef('');
+  liveIdsRef.current = dbMeetings
+    .map((m) => Number(m.id))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .join(',');
   const meetingsFetchGenRef = useRef(0);
   const prevScopeRef = useRef(meetingScope);
   const prevJumpDateRef = useRef(jumpDate);
@@ -446,8 +451,9 @@ export function DashboardView({
     };
 
     const intervalId = setInterval(() => {
-      const qs = meetingsQuery(page, pageSize, searchQueryRef.current, meetingScopeRef.current, jumpDateRef.current);
-      fetch(`/api/account/meetings?${qs}`, {
+      const ids = liveIdsRef.current;
+      if (!ids) return;
+      fetch(`/api/account/meetings?ids=${ids}`, {
         headers: { Authorization: `Bearer ${userToken}` },
       })
         .then((res) => res.json())
@@ -459,7 +465,7 @@ export function DashboardView({
     }, 30000);
 
     return () => clearInterval(intervalId);
-  }, [userToken, hasLiveMeeting, page, pageSize]);
+  }, [userToken, hasLiveMeeting]);
 
   useEffect(() => {
     if (!scheduledModalData?.scheduledFor) return;

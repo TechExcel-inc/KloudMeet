@@ -1,17 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { followOwnerLiveRoom, otherLiveMeetingOfHost } from './oneMeetingPerHost';
 
-const { resolveRoomEntry, resolveHostActiveMeeting, listActiveRoomNames } = vi.hoisted(() => ({
+const { resolveRoomEntry, resolveHostActiveMeeting, listActiveRoomNamesOrNull } = vi.hoisted(() => ({
   resolveRoomEntry: vi.fn(),
   resolveHostActiveMeeting: vi.fn(),
-  listActiveRoomNames: vi.fn(),
+  listActiveRoomNamesOrNull: vi.fn(),
 }));
 
 vi.mock('@/lib/resolvePersonalRoomJoin', () => ({ resolveRoomEntry: (...a: unknown[]) => resolveRoomEntry(...a) }));
 vi.mock('@/lib/hostActiveMeeting', () => ({
   resolveHostActiveMeeting: (...a: unknown[]) => resolveHostActiveMeeting(...a),
 }));
-vi.mock('@/lib/livekitRooms', () => ({ listActiveRoomNames: () => listActiveRoomNames() }));
+vi.mock('@/lib/livekitRooms', () => ({
+  listActiveRoomNamesOrNull: () => listActiveRoomNamesOrNull(),
+}));
 vi.mock('@/lib/meetingRoomIsActive', () => ({
   isRoomLiveInList: (name: string, list: string[]) => list.some((n) => n.toLowerCase() === name.toLowerCase()),
 }));
@@ -46,25 +48,28 @@ describe('otherLiveMeetingOfHost', () => {
   const live = { id: 1929, roomName: 'uzf-dfxb-smf', title: null, status: 'ACTIVE' };
 
   it('reports the live meeting when the host starts another one', async () => {
-    listActiveRoomNames.mockResolvedValue(['uzf-dfxb-smf']);
+    listActiveRoomNamesOrNull.mockResolvedValue(['uzf-dfxb-smf']);
     resolveHostActiveMeeting.mockResolvedValue(live);
     expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toEqual(live);
-    expect(resolveHostActiveMeeting).toHaveBeenCalledWith(2, 'mmi-filo-tjy');
+    expect(resolveHostActiveMeeting).toHaveBeenCalledWith(2, 'mmi-filo-tjy', ['uzf-dfxb-smf']);
   });
 
   it('lets the host back into a meeting that is already running', async () => {
-    listActiveRoomNames.mockResolvedValue(['uzf-dfxb-smf', 'mmi-filo-tjy']);
+    listActiveRoomNamesOrNull.mockResolvedValue(['uzf-dfxb-smf', 'mmi-filo-tjy']);
     expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toBeNull();
     expect(resolveHostActiveMeeting).not.toHaveBeenCalled();
   });
 
   it('passes when nothing else is live, LiveKit is unreachable, or the check fails', async () => {
-    listActiveRoomNames.mockResolvedValueOnce(['uzf-dfxb-smf']);
+    listActiveRoomNamesOrNull.mockResolvedValueOnce(['uzf-dfxb-smf']);
     resolveHostActiveMeeting.mockResolvedValueOnce(null);
     expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toBeNull();
-    listActiveRoomNames.mockResolvedValueOnce([]);
+    listActiveRoomNamesOrNull.mockResolvedValueOnce([]);
     expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toBeNull();
-    listActiveRoomNames.mockRejectedValueOnce(new Error('livekit down'));
+    listActiveRoomNamesOrNull.mockResolvedValueOnce(null);
+    expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toBeNull();
+    expect(resolveHostActiveMeeting).toHaveBeenCalledTimes(1);
+    listActiveRoomNamesOrNull.mockRejectedValueOnce(new Error('livekit down'));
     expect(await otherLiveMeetingOfHost(2, 'mmi-filo-tjy')).toBeNull();
   });
 });

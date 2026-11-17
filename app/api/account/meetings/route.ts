@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { Prisma, type Prisma as PrismaTypes } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { listActiveRoomNames } from '@/lib/livekitRooms';
+import { listRoomsByNames } from '@/lib/livekitRooms';
 import { isRoomLiveInList } from '@/lib/meetingRoomIsActive';
 import {
   expireIdleMeetingIfNeeded,
@@ -11,6 +11,17 @@ import { fillShareKeys } from '@/lib/recordingShare';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { attendanceOverlapsRecording } from '@/lib/recordingAttendance';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
+
+/** ids=1,2,3 from the home page's 30s refresh: status only, for meetings this member can see. */
+function parseMeetingIds(raw: string): number[] {
+  const ids: number[] = [];
+  for (const part of raw.split(',')) {
+    const id = Number(part);
+    if (Number.isInteger(id) && id > 0) ids.push(id);
+    if (ids.length >= 50) break;
+  }
+  return ids;
+}
 
 /** A meeting's date is its scheduled time, or when it was created — the same date the list groups by. */
 function meetingDatedBefore(before: Date): PrismaTypes.MeetingWhereInput {
@@ -30,6 +41,58 @@ export async function GET(request: NextRequest) {
     if (isAuthError(member)) return member;
 
     const { searchParams } = new URL(request.url);
+    const idsParam = searchParams.get('ids');
+    if (idsParam !== null) {
+      const ids = parseMeetingIds(idsParam);
+      if (ids.length === 0) return apiJson({ meetings: [] });
+      const rows = await prisma.meeting.findMany({
+        where: {
+          id: { in: ids },
+          deletedAt: null,
+          OR: [
+            { createdByMemberId: member.id },
+            { participants: { some: { teamMemberId: member.id } } },
+          ],
+        },
+        select: {
+          id: true,
+          roomName: true,
+          status: true,
+          endedAt: true,
+          endedReason: true,
+          actualStartedAt: true,
+          actualDurationMinutes: true,
+          rejoinableUntil: true,
+          roomEmptyAt: true,
+          createdByMemberId: true,
+          startedAt: true,
+        },
+      });
+      const afterIdle = await Promise.all(rows.map((row) => expireIdleMeetingIfNeeded(row)));
+      const openNames = afterIdle
+        .filter((row) => !isMeetingPermanentlyClosed(row.status))
+        .map((row) => row.roomName);
+      const live = openNames.length > 0 ? (await listRoomsByNames(openNames)) ?? [] : [];
+      const byId = new Map(afterIdle.map((row) => [row.id, row]));
+      const meetings = ids.flatMap((id) => {
+        const row = byId.get(id);
+        if (!row) return [];
+        return [{
+          id: row.id,
+          roomName: row.roomName,
+          status: row.status,
+          isActive: isMeetingPermanentlyClosed(row.status) ? false : isRoomLiveInList(row.roomName, live),
+          isIdle: row.status === 'IDLE',
+          endedAt: row.endedAt,
+          endedReason: row.endedReason,
+          actualStartedAt: row.actualStartedAt,
+          actualDurationMinutes: row.actualDurationMinutes,
+          rejoinableUntil: row.rejoinableUntil,
+        }];
+      });
+      return apiJson({ meetings });
+    }
+
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '15', 10);
     const search = searchParams.get('search')?.trim() || '';
@@ -79,28 +142,22 @@ export async function GET(request: NextRequest) {
       before && !Number.isNaN(before.getTime())
         ? Prisma.sql`AND (m.scheduledFor < ${before} OR (m.scheduledFor IS NULL AND m.createdAt < ${before}))`
         : Prisma.empty;
-    const activityOrder = Prisma.sql`
-      CASE WHEN m.scheduledFor IS NOT NULL THEN m.scheduledFor
-      ELSE GREATEST(
-        m.createdAt,
-        IFNULL(m.actualStartedAt, m.createdAt),
-        IFNULL(m.endedAt, m.createdAt),
-        IFNULL(rec.recAt, m.createdAt)
-      ) END DESC`;
+    // Latest recording time is per meeting (Recording.meetingId), not a scan of every recording.
     const idRows = await prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
       SELECT m.id
       FROM Meeting m
-      LEFT JOIN (
-        SELECT meetingId, MAX(createdAt) AS recAt
-        FROM Recording
-        WHERE deletedAt IS NULL
-        GROUP BY meetingId
-      ) rec ON rec.meetingId = m.id
       WHERE m.deletedAt IS NULL
         AND ${accessSql}
         ${searchSql}
         ${beforeSql}
-      ORDER BY ${activityOrder}
+      ORDER BY
+        CASE WHEN m.scheduledFor IS NOT NULL THEN m.scheduledFor
+        ELSE GREATEST(
+          m.createdAt,
+          IFNULL(m.actualStartedAt, m.createdAt),
+          IFNULL(m.endedAt, m.createdAt),
+          IFNULL((SELECT MAX(r.createdAt) FROM Recording r WHERE r.meetingId = m.id AND r.deletedAt IS NULL), m.createdAt)
+        ) END DESC
       LIMIT ${pageSize} OFFSET ${skip}
     `);
     const pageIds = idRows.map((row) => Number(row.id));
@@ -139,11 +196,13 @@ export async function GET(request: NextRequest) {
       return row ? [row] : [];
     });
 
-    const activeRooms = await listActiveRoomNames();
-
     const meetingsAfterIdle = await Promise.all(
       meetings.map((m) => expireIdleMeetingIfNeeded(m)),
     );
+    const openNames = meetingsAfterIdle
+      .filter((m) => !isMeetingPermanentlyClosed(m.status))
+      .map((m) => m.roomName);
+    const activeRooms = openNames.length > 0 ? (await listRoomsByNames(openNames)) ?? [] : [];
 
     // Attendees only see recordings they started, PUBLIC ones, or ones made while they were in the room.
     const attendance = await prisma.meetingParticipant.findMany({

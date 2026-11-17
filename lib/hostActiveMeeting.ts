@@ -1,10 +1,10 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { listActiveRoomNames } from '@/lib/livekitRooms';
+import { listActiveRoomNamesOrNull } from '@/lib/livekitRooms';
 import {
   isRoomLiveInList,
   type MeetingRecordForActiveCheck,
 } from '@/lib/meetingRoomIsActive';
-import { findPersonalRoomOwner } from '@/lib/personalRoom';
 
 const meetingSelect = {
   id: true,
@@ -44,129 +44,81 @@ function isSameRoom(a: string, b: string): boolean {
   );
 }
 
-function isPreferredRoomLive(
-  preferred: string,
-  activeRooms: string[],
-): boolean {
-  return roomNameVariants(preferred).some((rn) =>
-    isRoomLiveInList(rn, activeRooms),
+function payloadFor(
+  liveName: string,
+  rows: MeetingRecordForActiveCheck[],
+  member: { personalRoomId: string | null; fullName: string | null; username: string } | null,
+  memberId: number,
+): ReturnType<typeof toPayload> | null {
+  const record =
+    rows.find((row) => row.roomName === liveName) ??
+    rows.find((row) => isRoomLiveInList(row.roomName, [liveName]));
+  if (record) return toPayload(record, true);
+
+  const personal = member?.personalRoomId?.trim();
+  if (!personal || !member || !isRoomLiveInList(personal, [liveName])) return null;
+  return toPayload(
+    {
+      id: 0,
+      roomName: liveName,
+      title: `${member.fullName || member.username}'s Room`,
+      status: 'ACTIVE',
+      actualStartedAt: null,
+      startedAt: new Date(),
+      scheduledFor: null,
+      createdByMemberId: memberId,
+      deletedAt: null,
+      endedReason: null,
+      rejoinableUntil: null,
+      roomEmptyAt: null,
+    },
+    true,
   );
-}
-
-function preferredLiveRoomName(
-  preferred: string,
-  activeRooms: string[],
-): string | null {
-  for (const rn of roomNameVariants(preferred)) {
-    if (isRoomLiveInList(rn, activeRooms)) {
-      return rn;
-    }
-  }
-  return null;
-}
-
-/** LiveKit 在线即匹配 DB（含 ENDED，用于冲突检测） */
-async function findHostMeetingByLiveRoom(
-  liveRoomName: string,
-  memberId: number,
-): Promise<MeetingRecordForActiveCheck | null> {
-  for (const rn of roomNameVariants(liveRoomName)) {
-    const row = await prisma.meeting.findUnique({
-      where: { roomName: rn },
-      select: meetingSelect,
-    });
-    if (row && row.createdByMemberId === memberId) {
-      return row;
-    }
-  }
-  return null;
-}
-
-async function payloadForActiveLiveRoom(
-  liveRoomName: string,
-  memberId: number,
-): Promise<ReturnType<typeof toPayload> | null> {
-  const record = await findHostMeetingByLiveRoom(liveRoomName, memberId);
-  if (record) {
-    return toPayload(record, true);
-  }
-
-  const owner = await findPersonalRoomOwner(liveRoomName);
-  if (owner?.id === memberId) {
-    return toPayload(
-      {
-        id: 0,
-        roomName: liveRoomName,
-        title: `${owner.fullName || owner.username}'s Room`,
-        status: 'ACTIVE',
-        actualStartedAt: null,
-        startedAt: new Date(),
-        scheduledFor: null,
-        createdByMemberId: memberId,
-        deletedAt: null,
-        endedReason: null,
-        rejoinableUntil: null,
-        roomEmptyAt: null,
-      },
-      true,
-    );
-  }
-
-  return null;
 }
 
 /**
  * active-meeting（仅主持人）：
  * - 以 LiveKit 在线房间为准（含 DB 已 ENDED 但房间未回收）
  * - 带 preferred（如 My Room A999）时：先找「其它」在线会，再找 preferred 本身是否在线
+ * 在线名单只拉一次；属于这个主持人的会议用一条查询对上，不再按房间逐条查库。
+ * `knownLive` 由调用方传入时不再问 LiveKit。null 表示问过了但失败。
  */
 export async function resolveHostActiveMeeting(
   memberId: number,
   preferredRoomName?: string | null,
+  knownLive?: string[] | null,
 ): Promise<ReturnType<typeof toPayload> | null> {
   const preferred = preferredRoomName?.trim() || null;
+  const live = knownLive === undefined ? await listActiveRoomNamesOrNull() : knownLive;
+  if (!live || live.length === 0) return null;
 
-  const activeRooms = await listActiveRoomNames();
-  if (activeRooms.length === 0) {
-    return null;
-  }
+  const keys = [...new Set(live.map((name) => name.trim().toLowerCase()).filter(Boolean))];
+  if (keys.length === 0) return null;
 
-  // 1) 其它在线房间（开 My Room 时必须先发现正在进行的普通会议等）
-  for (const liveName of activeRooms) {
-    if (preferred && isSameRoom(liveName, preferred)) {
-      continue;
-    }
-    const payload = await payloadForActiveLiveRoom(liveName, memberId);
-    if (payload) {
-      return payload;
-    }
-  }
-
-  // 2) preferred 本身已在 LiveKit（同房间继续 / 冲突）
-  if (preferred && isPreferredRoomLive(preferred, activeRooms)) {
-    const liveRn = preferredLiveRoomName(preferred, activeRooms);
-    if (liveRn) {
-      const payload = await payloadForActiveLiveRoom(liveRn, memberId);
-      if (payload) {
-        return payload;
-      }
-    }
-  }
-
-  // 3) 无 preferred：专属会议室在线但 DB 已归档
-  if (!preferred) {
-    const member = await prisma.teamMember.findUnique({
+  const [idRows, member] = await Promise.all([
+    prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+      SELECT id FROM Meeting
+      WHERE createdByMemberId = ${memberId}
+        AND LOWER(roomName) IN (${Prisma.join(keys)})
+    `),
+    prisma.teamMember.findUnique({
       where: { id: memberId },
       select: { personalRoomId: true, fullName: true, username: true },
-    });
-    const prId = member?.personalRoomId?.trim();
-    if (prId && isRoomLiveInList(prId, activeRooms)) {
-      const payload = await payloadForActiveLiveRoom(prId, memberId);
-      if (payload) {
-        return payload;
-      }
-    }
+    }),
+  ]);
+  const ids = idRows.map((row) => Number(row.id)).filter((id) => Number.isInteger(id));
+  const rows = ids.length
+    ? await prisma.meeting.findMany({ where: { id: { in: ids } }, select: meetingSelect })
+    : [];
+
+  for (const liveName of live) {
+    if (preferred && isSameRoom(liveName, preferred)) continue;
+    const payload = payloadFor(liveName, rows, member, memberId);
+    if (payload) return payload;
   }
 
-  return null;
+  if (!preferred) return null;
+  const preferredLive = live.find((name) => isSameRoom(name, preferred));
+  if (!preferredLive) return null;
+  return payloadFor(preferredLive, rows, member, memberId);
 }

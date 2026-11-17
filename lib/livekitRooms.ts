@@ -47,6 +47,73 @@ export async function listActiveRoomNamesOrNull(): Promise<string[] | null> {
   }
 }
 
+/**
+ * Rooms among `names` that are live right now.
+ * null: LiveKit could not be asked. []: none of these names are live.
+ */
+export async function listRoomsByNames(names: string[]): Promise<string[] | null> {
+  const unique = [
+    ...new Set(
+      names.flatMap((name) => {
+        const trimmed = name.trim();
+        if (!trimmed) return [];
+        return [trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()];
+      }),
+    ),
+  ];
+  if (unique.length === 0) return [];
+  const client = getRoomServiceClient();
+  if (!client) return null;
+  try {
+    const rooms = await withTimeout(
+      client.listRooms(unique),
+      LIVEKIT_LIST_ROOMS_TIMEOUT_MS,
+      'LiveKit listRooms',
+    );
+    return rooms.map((room) => room.name);
+  } catch (e) {
+    console.error('[livekitRooms] listRooms by name failed', e);
+    return null;
+  }
+}
+
+interface ListedParticipant {
+  identity: string;
+  metadata?: string;
+}
+
+/** People currently in the room. [] when the room does not exist; null when LiveKit could not be asked. */
+export async function listRoomParticipants(roomName: string): Promise<ListedParticipant[] | null> {
+  const client = getRoomServiceClient();
+  if (!client) return null;
+  try {
+    const participants = await withTimeout(
+      client.listParticipants(roomName),
+      LIVEKIT_EVICT_TIMEOUT_MS,
+      'LiveKit listParticipants',
+    );
+    return participants.map((p) => ({ identity: p.identity, metadata: p.metadata }));
+  } catch (e: unknown) {
+    const err = e as { code?: string; status?: number };
+    if (err.code === 'not_found' || err.status === 404) return [];
+    console.error('[livekitRooms] listParticipants failed', roomName, e);
+    return null;
+  }
+}
+
+/** Participants other than the joiner and their other devices (those are evicted on join). */
+export function countListedParticipants(
+  participants: ListedParticipant[],
+  exclude: { identity?: string; memberId?: number | null },
+): number {
+  return participants.filter((p) => {
+    if (isRecorderParticipant(p)) return false;
+    if (exclude.identity && p.identity === exclude.identity) return false;
+    const memberId = parseKloudMemberIdFromIdentity(p.identity);
+    return !(exclude.memberId != null && memberId === exclude.memberId);
+  }).length;
+}
+
 function roomNameVariants(roomName: string): string[] {
   const trimmed = roomName.trim();
   return [...new Set([trimmed, trimmed.toLowerCase(), trimmed.toUpperCase()])];
@@ -87,81 +154,60 @@ export async function evictParticipantsByMemberId(
   roomName: string,
   memberId: number,
   sameIdentity?: string,
+  listed?: ListedParticipant[] | null,
 ): Promise<number> {
+  if (listed === null) return 0;
   const client = getRoomServiceClient();
   if (!client) {
     console.warn('[evict] No RoomServiceClient available');
     return 0;
   }
 
-  try {
-    const participants = await withTimeout(
-      client.listParticipants(roomName),
-      LIVEKIT_EVICT_TIMEOUT_MS,
-      'LiveKit listParticipants',
-    );
-    console.log(`[evict] Room "${roomName}" has ${participants.length} participant(s):`,
-      participants.map(p => ({ identity: p.identity, sid: p.sid })));
-    let evicted = 0;
-    for (const p of participants) {
-      const pid = parseKloudMemberIdFromIdentity(p.identity);
-      console.log(`[evict] Checking participant identity="${p.identity}" → memberId=${pid}, looking for ${memberId}`);
-      if (pid == null || pid !== memberId) continue;
+  const participants = listed ?? (await listRoomParticipants(roomName));
+  if (!participants || participants.length === 0) return 0;
 
-      // Same identity (refresh / token renew): do NOT removeParticipant.
-      // LiveKit replaces the old connection on join. Calling removeParticipant
-      // sets a Cloud revoke cutoff; with legacy nbf:0 JWTs that made every
-      // subsequent ticket look permanently revoked.
-      if (sameIdentity && p.identity === sameIdentity) {
-        console.log(
-          `[evict] Skip same identity (will be replaced on join): ${p.identity}`,
-        );
-        continue;
-      }
+  let evicted = 0;
+  for (const p of participants) {
+    const pid = parseKloudMemberIdFromIdentity(p.identity);
+    if (pid == null || pid !== memberId) continue;
 
+    // Same identity (refresh / token renew): do NOT removeParticipant.
+    // LiveKit replaces the old connection on join. Calling removeParticipant
+    // sets a Cloud revoke cutoff; with legacy nbf:0 JWTs that made every
+    // subsequent ticket look permanently revoked.
+    if (sameIdentity && p.identity === sameIdentity) continue;
+
+    try {
+      // Cross-tab / other device: notify so the old client shows Session Moved
+      // instead of auto-reconnecting.
+      const notice = new TextEncoder().encode(
+        JSON.stringify({ type: 'SESSION_EVICTED' }),
+      );
       try {
-        // Cross-tab / other device: notify so the old client shows Session Moved
-        // instead of auto-reconnecting.
-        const notice = new TextEncoder().encode(
-          JSON.stringify({ type: 'SESSION_EVICTED' }),
-        );
-        try {
-          await withTimeout(
-            client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
-              destinationIdentities: [p.identity],
-              topic: 'kloud-session',
-            }),
-            LIVEKIT_EVICT_TIMEOUT_MS,
-            'LiveKit sendData',
-          );
-          console.log(`[evict] Sent SESSION_EVICTED to ${p.identity}, waiting 150ms…`);
-          await new Promise((r) => setTimeout(r, 150));
-        } catch (sendErr) {
-          console.warn(`[evict] sendData failed (non-fatal) for ${p.identity}`, sendErr);
-        }
-
-        console.log(`[evict] Removing participant: ${p.identity} (memberId=${pid})`);
         await withTimeout(
-          client.removeParticipant(roomName, p.identity),
+          client.sendData(roomName, notice, DataPacket_Kind.RELIABLE, {
+            destinationIdentities: [p.identity],
+            topic: 'kloud-session',
+          }),
           LIVEKIT_EVICT_TIMEOUT_MS,
-          'LiveKit removeParticipant',
+          'LiveKit sendData',
         );
-        console.log(`[evict] Successfully removed: ${p.identity}`);
-        evicted++;
-      } catch (e) {
-        console.error('[evict] removeParticipant failed', p.identity, e);
+        await new Promise((r) => setTimeout(r, 150));
+      } catch (sendErr) {
+        console.warn(`[evict] sendData failed (non-fatal) for ${p.identity}`, sendErr);
       }
+
+      await withTimeout(
+        client.removeParticipant(roomName, p.identity),
+        LIVEKIT_EVICT_TIMEOUT_MS,
+        'LiveKit removeParticipant',
+      );
+      evicted++;
+    } catch (e) {
+      console.error('[evict] removeParticipant failed', p.identity, e);
     }
-    console.log(`[evict] Done. Evicted ${evicted} participant(s).`);
-    return evicted;
-  } catch (e: any) {
-    if (e?.code === 'not_found' || e?.status === 404) {
-      console.log(`[evict] Room "${roomName}" not found (new meeting) — nothing to evict.`);
-      return 0;
-    }
-    console.error('[evict] listParticipants failed', roomName, e);
-    return 0;
   }
+  return evicted;
 }
 
 /**
@@ -173,26 +219,9 @@ export async function countOtherRoomParticipants(
   roomName: string,
   exclude: { identity?: string; memberId?: number | null },
 ): Promise<number | null> {
-  const client = getRoomServiceClient();
-  if (!client) return null;
-  try {
-    const participants = await withTimeout(
-      client.listParticipants(roomName),
-      LIVEKIT_EVICT_TIMEOUT_MS,
-      'LiveKit listParticipants',
-    );
-    return participants.filter((p) => {
-      if (isRecorderParticipant(p)) return false;
-      if (exclude.identity && p.identity === exclude.identity) return false;
-      const memberId = parseKloudMemberIdFromIdentity(p.identity);
-      return !(exclude.memberId != null && memberId === exclude.memberId);
-    }).length;
-  } catch (e: unknown) {
-    const err = e as { code?: string; status?: number };
-    if (err?.code === 'not_found' || err?.status === 404) return 0;
-    console.error('[livekitRooms] countOtherRoomParticipants failed', roomName, e);
-    return null;
-  }
+  const participants = await listRoomParticipants(roomName);
+  if (!participants) return null;
+  return countListedParticipants(participants, exclude);
 }
 
 export async function deleteLiveKitRoom(roomName: string): Promise<boolean> {
