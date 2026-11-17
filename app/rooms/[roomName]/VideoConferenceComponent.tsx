@@ -1624,6 +1624,8 @@ export function VideoConferenceComponent(props: {
       turnOnCam: t('toolbar.turnOnCam'),
       leave: t('toolbar.leaveTheMeeting'),
       endForEveryone: t('toolbar.endForEveryone'),
+      leaveFolded: t('toolbar.smartCamLeave'),
+      endFolded: t('toolbar.smartCamEnd'),
       meeting: t('meeting.documentPipTitle'),
       you: t('toolbar.you'),
       minimize: t('meeting.documentPipMinimize'),

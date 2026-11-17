@@ -17,6 +17,9 @@ export interface MeetingDocumentPipLabels {
   turnOnCam: string;
   leave: string;
   endForEveryone: string;
+  /** Folded Smart Webcam menu only */
+  leaveFolded: string;
+  endFolded: string;
   meeting: string;
   you: string;
   minimize: string;
@@ -878,7 +881,7 @@ export function MeetingDocumentPipPanel({
           {exitMenuOpen && canEndForAll ? (
             <div ref={leaveMenuInlineRef} className={styles.leaveMenuInline} role="menu">
               <button type="button" className={styles.exitMenuItem} role="menuitem" onClick={onLeave}>
-                {labels.leave}
+                {labels.leaveFolded}
               </button>
               <button
                 type="button"
@@ -886,7 +889,7 @@ export function MeetingDocumentPipPanel({
                 role="menuitem"
                 onClick={() => onEndForAll?.()}
               >
-                {labels.endForEveryone}
+                {labels.endFolded}
               </button>
             </div>
           ) : null}
