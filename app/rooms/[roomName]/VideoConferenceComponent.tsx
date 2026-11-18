@@ -2304,33 +2304,48 @@ export function VideoConferenceComponent(props: {
   // Listen for incoming DataChannel messages
   React.useEffect(() => {
     const handleData = (payload: Uint8Array, participant?: any, kind?: any, topic?: string) => {
+      // 字幕和设计同步各自有监听，会议控制不读这些高频包
+      if (
+        topic === 'kloud-caption' ||
+        topic === 'kloud-caption-lang' ||
+        topic === 'kloud-caption-status' ||
+        topic === DESIGN_TOPIC
+      ) {
+        return;
+      }
+      let msg: ReturnType<typeof JSON.parse>;
       try {
-        const msg = JSON.parse(decoder.decode(payload));
-        // 服务端踢人通知（可能来自 meeting-control 或 kloud-session）
-        if (msg.type === 'SESSION_EVICTED') {
-          // Self token renew / voluntary leave must not show "Session Moved"
-          if (intentionalDisconnectRef.current) {
-            return;
-          }
-          duplicateSessionHandledRef.current = true;
-          intentionalDisconnectRef.current = true;
-          setEvictedByDuplicateSession(true);
+        const parsed: unknown = JSON.parse(decoder.decode(payload));
+        if (!parsed || typeof parsed !== 'object') {
+          if (topic === TOPIC) console.error('Meeting control message error:', parsed);
           return;
         }
-        if (msg.type === 'REMOVED_FROM_MEETING') {
-          const target =
-            typeof msg.identity === 'string' ? msg.identity : room.localParticipant.identity;
-          if (target === room.localParticipant.identity) {
-            handleRemovedFromMeeting();
-          }
+        msg = parsed;
+      } catch (e) {
+        if (topic === TOPIC) console.error('Meeting control message error:', e);
+        return;
+      }
+      // 服务端踢人通知（可能来自 meeting-control 或 kloud-session）
+      if (msg.type === 'SESSION_EVICTED') {
+        // Self token renew / voluntary leave must not show "Session Moved"
+        if (intentionalDisconnectRef.current) {
           return;
         }
-      } catch {
-        /* fall through to topic-gated handler */
+        duplicateSessionHandledRef.current = true;
+        intentionalDisconnectRef.current = true;
+        setEvictedByDuplicateSession(true);
+        return;
+      }
+      if (msg.type === 'REMOVED_FROM_MEETING') {
+        const target =
+          typeof msg.identity === 'string' ? msg.identity : room.localParticipant.identity;
+        if (target === room.localParticipant.identity) {
+          handleRemovedFromMeeting();
+        }
+        return;
       }
       if (topic !== TOPIC) return;
       try {
-        const msg = JSON.parse(decoder.decode(payload));
         const senderIdentity = participant?.identity;
 
         if (msg.type === 'VIEW_CHANGE') {
@@ -2962,50 +2977,13 @@ export function VideoConferenceComponent(props: {
     };
   }, [room, isHost, applyHostHands]);
 
-  // All participants: send heartbeat every 5s to the authoritative host identity.
-  // Protected meetings also refresh the waiting list on this clock (host / co-host only).
-  React.useEffect(() => {
-    if (!room.localParticipant.identity) return;
-
-    const interval = setInterval(() => {
-      if (acceptsKnocks && (isHost || isCohost)) {
-        joinRequestsRefreshRef.current?.();
-      }
-      if (hostIdentity === room.localParticipant.identity) return;
-      sendMeetingMsg(
-        {
-          type: 'HEARTBEAT',
-          // An attendee looking at their own choice reports the room view, so the host doesn't pull them back
-          view: localViewChoiceRef.current
-            ? roomViewRef.current
-            : activeView === 'liveDoc' && isLocalScreenShare
-              ? 'shareScreen'
-              : activeView,
-          presenter: copresenterIdentities,
-          identity: room.localParticipant.identity,
-          livedocInstanceId,
-          muteAllActive,
-          muteAllLockUntil,
-          hostMutedIdentities,
-          hostMutedUntilByIdentity,
-          exemptFromMuteAllIdentities,
-          hostDisabledVideoIdentities,
-          hostDisabledVideoUntilByIdentity,
-          captionsOn: captionsRunningRef.current,
-          // 自己的举手态 + 举手时刻：主持人据此重建权威队列（举手持久化）
-          handRaised: handRaisedRef.current,
-          handRaisedAt: handRaisedAtRef.current,
-          // 本地举手队列镜像，供主持人检测不一致后下发 CORRECTION
-          raisedHands: raisedHandsRef.current,
-        },
-        [hostIdentity],
-      );
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [
-    room,
+  // 心跳报文随渲染更新；定时器只跟「本地 identity 有了没有」走，避免视图/禁麦一变就把 5s 周期拆掉重排。
+  const heartbeatRef = React.useRef({
+    acceptsKnocks,
+    isHost,
+    isCohost,
     hostIdentity,
+    sendMeetingMsg,
     activeView,
     isLocalScreenShare,
     copresenterIdentities,
@@ -3017,11 +2995,69 @@ export function VideoConferenceComponent(props: {
     exemptFromMuteAllIdentities,
     hostDisabledVideoIdentities,
     hostDisabledVideoUntilByIdentity,
-    sendMeetingMsg,
+  });
+  heartbeatRef.current = {
     acceptsKnocks,
     isHost,
     isCohost,
-  ]);
+    hostIdentity,
+    sendMeetingMsg,
+    activeView,
+    isLocalScreenShare,
+    copresenterIdentities,
+    livedocInstanceId,
+    muteAllActive,
+    muteAllLockUntil,
+    hostMutedIdentities,
+    hostMutedUntilByIdentity,
+    exemptFromMuteAllIdentities,
+    hostDisabledVideoIdentities,
+    hostDisabledVideoUntilByIdentity,
+  };
+
+  // All participants: send heartbeat every 5s to the authoritative host identity.
+  // Protected meetings also refresh the waiting list on this clock (host / co-host only).
+  React.useEffect(() => {
+    if (!localIdentity) return;
+
+    const interval = setInterval(() => {
+      const snap = heartbeatRef.current;
+      if (snap.acceptsKnocks && (snap.isHost || snap.isCohost)) {
+        joinRequestsRefreshRef.current?.();
+      }
+      if (snap.hostIdentity === localIdentity) return;
+      snap.sendMeetingMsg(
+        {
+          type: 'HEARTBEAT',
+          // An attendee looking at their own choice reports the room view, so the host doesn't pull them back
+          view: localViewChoiceRef.current
+            ? roomViewRef.current
+            : snap.activeView === 'liveDoc' && snap.isLocalScreenShare
+              ? 'shareScreen'
+              : snap.activeView,
+          presenter: snap.copresenterIdentities,
+          identity: localIdentity,
+          livedocInstanceId: snap.livedocInstanceId,
+          muteAllActive: snap.muteAllActive,
+          muteAllLockUntil: snap.muteAllLockUntil,
+          hostMutedIdentities: snap.hostMutedIdentities,
+          hostMutedUntilByIdentity: snap.hostMutedUntilByIdentity,
+          exemptFromMuteAllIdentities: snap.exemptFromMuteAllIdentities,
+          hostDisabledVideoIdentities: snap.hostDisabledVideoIdentities,
+          hostDisabledVideoUntilByIdentity: snap.hostDisabledVideoUntilByIdentity,
+          captionsOn: captionsRunningRef.current,
+          // 自己的举手态 + 举手时刻：主持人据此重建权威队列（举手持久化）
+          handRaised: handRaisedRef.current,
+          handRaisedAt: handRaisedAtRef.current,
+          // 本地举手队列镜像，供主持人检测不一致后下发 CORRECTION
+          raisedHands: raisedHandsRef.current,
+        },
+        [snap.hostIdentity],
+      );
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [localIdentity]);
 
   // ═══ Grid tile click-to-mute (host / co-host only) ═══
   // Event delegation on document (capture phase) so it fires before LiveKit's own handlers.

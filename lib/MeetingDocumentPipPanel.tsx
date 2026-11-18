@@ -981,6 +981,9 @@ export function MeetingDocumentPipPanel({
                 <button
                   type="button"
                   className={styles.pillMic}
+                  onMouseEnter={() => {
+                    if (!minimizeLocked) setMiniControls(true);
+                  }}
                   onClick={onToggleMic}
                   aria-label={micEnabled ? labels.muteMic : labels.unmuteMic}
                   title={micEnabled ? labels.muteMic : labels.unmuteMic}
