@@ -646,6 +646,14 @@
   min-height: 0;
 }
 
+/* AI Notes Only 解析后：活文档和普通回放视频一样高（视频上限再减去 56px 控制条） */
+.notesStage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: calc(62vh - 156px);
+  min-height: 0;
+}
+
 /* LiveDoc Full: who is in the meeting at the playhead. Dragged inside the stage. */
 .people {
   position: absolute;

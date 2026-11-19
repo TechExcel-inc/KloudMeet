@@ -1529,6 +1529,7 @@ export default function ReplayPage() {
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
                 fill={!hasTranscripts}
                 fillClass={s.livedocFill}
+                boxClass={notesOnly && hasTranscripts ? s.notesStage : undefined}
                 shots={recording.shots ?? []}
                 coverWithShots={notesOnly}
               >
