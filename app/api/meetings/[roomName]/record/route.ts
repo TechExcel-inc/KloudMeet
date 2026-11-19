@@ -42,25 +42,23 @@ function findActiveRecording(meetingId: number) {
   });
 }
 
-/**
- * Every recording is LiveDoc Full (voice, LiveDoc actions, screen shares) once the meeting has its
- * LiveDoc; before LiveDoc was ever opened there is none to record, so the screen recording is used.
- */
-function livedocFullFor(meeting: MeetingRow): boolean {
+/** 会议开过活文档，AI Notes Only 才能把活文档动作一起录下来。 */
+function meetingHasLivedoc(meeting: MeetingRow): boolean {
   return !!meeting.kloudMeetingId;
 }
 
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
   // 正在录的这场用它自己的模式；否则用会议上下一次会用的模式。旧的四种在这里折成两种。
   const mode = active?.mode ?? meeting.recordingMode;
+  const livedoc = active?.kind === 'livedoc_full';
   return {
     active: !!active,
     paused: !!active?.pausedAt,
     mode: recordingModeOf(mode),
     hostOnly: meeting.recordingHostOnly,
     syncTranscript: meeting.recordingSyncTranscript,
-    option: livedocFullFor(meeting) ? 'livedoc_full' : 'screen_share',
-    livedocRecordingId: active?.livedocRecordingId ?? null,
+    option: livedoc ? 'livedoc_full' : 'screen_share',
+    livedocRecordingId: livedoc ? active?.livedocRecordingId ?? null : null,
   };
 }
 
@@ -310,9 +308,10 @@ export async function POST(
       return apiJson({ error: 'pageUrl must be this meeting page' }, { status: 400 });
     }
 
-    // LiveDoc Full Recording: Kloud saves the LiveDoc actions; the media is the meeting's voice,
-    // recorded with the audio-only web egress, and each screen share as its own section.
-    const livedocFull = livedocFullFor(meeting) && !!livedocToken;
+    // AI Notes Only 且会议已有活文档：Kloud 记下活文档动作，媒体只录音频。
+    // 完整录制不走 LiveDoc，网页出口录整段会议画面（共享也在这段视频里）。
+    const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
+    const livedocFull = mode === 'ai_notes' && meetingHasLivedoc(meeting) && !!livedocToken;
     let livedocRecordingId: number | null = null;
     let livedocStartedAt: Date | null = null;
     if (livedocFull && meeting.kloudMeetingId && livedocToken) {
@@ -325,10 +324,7 @@ export async function POST(
       livedocStartedAt = new Date();
     }
 
-    // The layout the person chose; LiveDoc Full records audio only whatever the layout.
-    const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
-    // 有活文档时声音仍是回放时钟。AI Notes Only 一律只录音频；完整录制在没有活文档时才录整页视频。
-    const audioOnly = livedocFull || mode === 'ai_notes';
+    const audioOnly = mode === 'ai_notes';
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
     const activityToken = newShareKey();
@@ -373,12 +369,7 @@ export async function POST(
           : {}),
       }
     });
-    // 完整录制才把共享收成视频。AI Notes Only 由共享者自己截有变化的画面。
-    if (livedocFull && mode !== 'ai_notes') {
-      await startScreenSectionsForRoom(recording, roomName).catch((e) =>
-        console.error('[meetings record] screen sections failed to start', e),
-      );
-    }
+    // AI Notes Only 的共享由共享者截有变化的画面，不另开一路屏幕视频。
     if (livedocFull) {
       await snapshotPresence(roomName).catch((e) =>
         console.error('[meetings record] presence snapshot failed', e),

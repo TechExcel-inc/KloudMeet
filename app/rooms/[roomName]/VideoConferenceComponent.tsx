@@ -350,8 +350,7 @@ export function VideoConferenceComponent(props: {
       const pageUrlStr = window.location.href;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
 
-      // LiveDoc Full Recording: Kloud starts / ends its recording with this user's LiveDoc login
-      // (the server records LiveDoc Full whenever the meeting has its LiveDoc).
+      // AI Notes Only 才会用这个登录去开 LiveDoc 录制；完整录制服务端会忽略它。
       const livedocToken = await getLiveDocStageAccount(
         props.userChoices.username,
         props.connectionDetails.roomName,
