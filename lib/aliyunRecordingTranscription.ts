@@ -1,5 +1,10 @@
+import { createWriteStream, openAsBlob } from 'node:fs';
+import { stat, unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Recording } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import {
@@ -12,8 +17,6 @@ import { toSttStatus, type TranscribeState } from '@/lib/recordingTranscribeStat
 
 const DASHSCOPE_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
 const MODEL = process.env.DASHSCOPE_FILE_ASR_MODEL || 'paraformer-v2';
-/** 阿里云排队后才下载文件，链接有效期要覆盖排队时间 */
-const FILE_URL_TTL_SECONDS = 12 * 3600;
 /** 提交阶段超过该时长仍未拿到 taskId，重新提交（进程中途退出等） */
 const SUBMIT_STALE_MS = 2 * 60 * 1000;
 /** 对齐写入的互斥标记；超时后允许下一次打开接着写 */
@@ -54,25 +57,111 @@ function objectKey(recording: Recording): string | null {
   return fromUrl(recording.storageUrl);
 }
 
-async function fileUrl(recording: Recording): Promise<string> {
-  const key = objectKey(recording);
-  if (!key || !process.env.S3_BUCKET) throw new Error('Cannot determine recording object key');
-  return getSignedUrl(s3, new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }), {
-    expiresIn: FILE_URL_TTL_SECONDS,
-  });
+function nodeStream(body: unknown): Readable | null {
+  if (body instanceof Readable) return body;
+  if (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream) return Readable.fromWeb(body);
+  return null;
 }
 
-async function submitTask(url: string): Promise<string> {
+function fileNameOf(key: string): string {
+  const base = key.split('/').pop() || 'recording.mp4';
+  const clean = base.replace(/[^\w.\-]+/g, '_');
+  return clean || 'recording.mp4';
+}
+
+function textField(value: unknown, key: string): string {
+  const found = field(value, key);
+  if (typeof found !== 'string' || !found) throw new Error(`DashScope upload policy missing ${key}`);
+  return found;
+}
+
+/** 百炼临时空间的上传凭证。文件由阿里云在 48 小时后删除。 */
+async function uploadPolicy(): Promise<{
+  host: string;
+  dir: string;
+  accessKeyId: string;
+  signature: string;
+  policy: string;
+  acl: string;
+  forbidOverwrite: string;
+  maxMb: number | null;
+}> {
+  const res = await fetch(`${DASHSCOPE_BASE}/uploads?action=getPolicy&model=${encodeURIComponent(MODEL)}`, {
+    headers: { Authorization: `Bearer ${apiKey()}` },
+  });
+  const json: unknown = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(`DashScope upload policy failed (${res.status}): ${String(field(json, 'message') ?? '')}`);
+  }
+  const data = field(json, 'data');
+  const rawMax = field(data, 'max_file_size_mb');
+  const parsedMax = typeof rawMax === 'number' ? rawMax : typeof rawMax === 'string' ? Number(rawMax) : NaN;
+  return {
+    host: textField(data, 'upload_host'),
+    dir: textField(data, 'upload_dir'),
+    accessKeyId: textField(data, 'oss_access_key_id'),
+    signature: textField(data, 'signature'),
+    policy: textField(data, 'policy'),
+    acl: textField(data, 'x_oss_object_acl'),
+    forbidOverwrite: textField(data, 'x_oss_forbid_overwrite'),
+    maxMb: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : null,
+  };
+}
+
+/**
+ * 服务器自己从录音桶取出文件，再传到百炼临时空间。
+ * 阿里云转写机器下不到美国 S3，所以不再把 S3 链接交给它。
+ */
+async function uploadRecording(recording: Recording): Promise<string> {
+  const key = objectKey(recording);
+  if (!key || !process.env.S3_BUCKET) throw new Error('Cannot determine recording object key');
+  const name = fileNameOf(key);
+  const path = join(tmpdir(), `skymeet-${recording.id}-${Date.now()}-${name}`);
+  try {
+    const out = await s3.send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }));
+    const stream = nodeStream(out.Body);
+    if (!stream) throw new Error('Recording file is empty');
+    await pipeline(stream, createWriteStream(path));
+
+    const policy = await uploadPolicy();
+    const size = (await stat(path)).size;
+    if (policy.maxMb && size > policy.maxMb * 1024 * 1024) {
+      throw new Error(`Recording is larger than DashScope temporary upload limit (${policy.maxMb}MB)`);
+    }
+    const objectKeyOnOss = `${policy.dir}/${name}`;
+    const form = new FormData();
+    form.append('OSSAccessKeyId', policy.accessKeyId);
+    form.append('Signature', policy.signature);
+    form.append('policy', policy.policy);
+    form.append('x-oss-object-acl', policy.acl);
+    form.append('x-oss-forbid-overwrite', policy.forbidOverwrite);
+    form.append('key', objectKeyOnOss);
+    form.append('success_action_status', '200');
+    form.append('file', await openAsBlob(path), name);
+    const res = await fetch(policy.host, { method: 'POST', body: form });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`DashScope upload failed (${res.status}): ${text.slice(0, 300)}`);
+    }
+    return `oss://${objectKeyOnOss}`;
+  } finally {
+    await unlink(path).catch(() => undefined);
+  }
+}
+
+async function submitTask(recording: Recording): Promise<string> {
+  const ossUrl = await uploadRecording(recording);
   const res = await fetch(`${DASHSCOPE_BASE}/services/audio/asr/transcription`, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey()}`,
       'Content-Type': 'application/json',
       'X-DashScope-Async': 'enable',
+      'X-DashScope-OssResourceResolve': 'enable',
     },
     body: JSON.stringify({
       model: MODEL,
-      input: { file_urls: [url] },
+      input: { file_urls: [ossUrl] },
       parameters: { channel_id: [0], language_hints: ['zh', 'en'] },
     }),
   });
@@ -241,7 +330,7 @@ async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
 
   if (claimed.count > 0) {
     try {
-      const taskId = await submitTask(await fileUrl(recording));
+      const taskId = await submitTask(recording);
       await prisma.recording.update({
         where: { id: recording.id },
         data: { sttStatus: 'RUNNING', sttTaskId: taskId },
