@@ -1019,7 +1019,6 @@ export default function ReplayPage() {
   );
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [mediaDuration, setMediaDuration] = useState(0);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1324,7 +1323,6 @@ export default function ReplayPage() {
   const livedoc = recording.livedoc ?? null;
   const notesOnly = !!recording.notesOnly;
   const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
-  const notesDuration = mediaDuration || recording.durationSeconds || 0;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1532,6 +1530,7 @@ export default function ReplayPage() {
                 fill={!hasTranscripts}
                 fillClass={s.livedocFill}
                 shots={recording.shots ?? []}
+                coverWithShots={notesOnly}
               >
                 {recording.presence && recording.presence.length > 0 && (
                   <ReplayPeople
@@ -1549,23 +1548,25 @@ export default function ReplayPage() {
             <video
               ref={videoRef}
               src={recording.streamUrl!}
-              controls={!notesOnly}
+              controls
               muted={notesOnly}
-              // AI Notes Only 不放声音，元素只当进度时钟。
               // 有活文档或共享截图时，控制条压成一条，避免把画面挤出屏幕。
+              // AI Notes Only 用同一条控制条，只是不出声。
               style={
-                notesOnly
-                  ? undefined
-                  : livedoc || noteShot
-                    ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
-                    : undefined
+                livedoc || noteShot
+                  ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
+                  : undefined
               }
-              className={notesOnly ? s.notesClock : `${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
+              className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
               onLoadedMetadata={(e) => {
-                setMediaDuration(e.currentTarget.duration || 0);
                 if (!notesOnly) return;
                 e.currentTarget.muted = true;
-                void e.currentTarget.play().catch(() => undefined);
+                e.currentTarget.volume = 0;
+              }}
+              onVolumeChange={(e) => {
+                if (!notesOnly || (e.currentTarget.muted && e.currentTarget.volume === 0)) return;
+                e.currentTarget.muted = true;
+                e.currentTarget.volume = 0;
               }}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget;
@@ -1577,27 +1578,6 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
-            {notesOnly && (
-              <div
-                className={s.notesBar}
-                role="slider"
-                aria-valuemin={0}
-                aria-valuemax={notesDuration}
-                aria-valuenow={currentTime}
-                aria-label={fmtTime(currentTime)}
-                onClick={(e) => {
-                  if (notesDuration <= 0) return;
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const ratio = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
-                  seekTo(Math.min(notesDuration, Math.max(0, ratio * notesDuration)));
-                }}
-              >
-                <div
-                  className={s.notesFill}
-                  style={{ width: notesDuration > 0 ? `${Math.min(100, (currentTime / notesDuration) * 100)}%` : '0%' }}
-                />
-              </div>
-            )}
             {/* Fit toggle (not for LiveDoc Full: its stage has a fixed shape) */}
             {!livedoc && !noteShot && !notesOnly && (
             <button

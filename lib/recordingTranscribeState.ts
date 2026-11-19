@@ -9,6 +9,12 @@ export interface TranscribeState {
 
 export const IDLE_TRANSCRIBE: TranscribeState = { status: null, progress: 0, error: null };
 
+/** 提交阶段从 10% 缓慢趋近 40%。识别进度接上后由界面保持不回退。 */
+export function submitProgress(elapsedMs: number): number {
+  const elapsed = Math.max(0, elapsedMs);
+  return Math.min(40, Math.round(10 + 30 * (1 - Math.exp(-elapsed / 45000))));
+}
+
 const STATUSES: readonly SttStatus[] = ['SUBMITTING', 'QUEUED', 'RUNNING', 'ALIGNING', 'SUCCEEDED', 'FAILED'];
 
 export function toSttStatus(value: unknown): SttStatus | null {

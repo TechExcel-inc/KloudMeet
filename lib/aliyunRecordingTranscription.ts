@@ -13,7 +13,7 @@ import {
   type SpeakWindow,
   type TimedSentence,
 } from '@/lib/alignSpeakTranscript';
-import { toSttStatus, type TranscribeState } from '@/lib/recordingTranscribeState';
+import { submitProgress, toSttStatus, type TranscribeState } from '@/lib/recordingTranscribeState';
 
 const DASHSCOPE_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
 const MODEL = process.env.DASHSCOPE_FILE_ASR_MODEL || 'paraformer-v2';
@@ -282,12 +282,16 @@ async function markFailed(recordingId: number, err: unknown, clearTask = false):
 
 /**
  * 识别中按录像时长估算。预计时间内从 5 走到 90；之后按同样时长缓慢趋近 99。
- * 匹配发言人停在 99，真正写完才是 100。排队不计入。
+ * 匹配发言人停在 99，真正写完才是 100。提交中从 10 缓慢上涨。排队不计入。
  */
 function progressOf(recording: Recording): number {
   const status = toSttStatus(recording.sttStatus);
   if (status === 'SUCCEEDED') return 100;
   if (status === 'ALIGNING') return 99;
+  if (status === 'SUBMITTING') {
+    if (!recording.sttStartedAt) return 10;
+    return submitProgress(Date.now() - recording.sttStartedAt.getTime());
+  }
   if (status !== 'RUNNING' || !recording.sttStartedAt) return 0;
   const expected = Math.max(60_000, (recording.durationSeconds ?? 600) * 200);
   const ratio = (Date.now() - recording.sttStartedAt.getTime()) / expected;

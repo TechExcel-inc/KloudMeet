@@ -46,6 +46,7 @@ export function LiveDocReplayStage({
   viewerName,
   speaker,
   shots = [],
+  coverWithShots = false,
   fill = false,
   fillClass,
   children,
@@ -55,6 +56,8 @@ export function LiveDocReplayStage({
   viewerName: string;
   speaker: ReplaySpeaker | null;
   shots?: ShareShot[];
+  /** 有共享截图的时间段用图片盖住活文档，不再让共享视频挡住 */
+  coverWithShots?: boolean;
   /** 无字幕时占满剩余高度，把下方声音控制条留在可视区域内 */
   fill?: boolean;
   /** fill 时的布局类（桌面限高、窄屏改回 16:9） */
@@ -152,8 +155,12 @@ export function LiveDocReplayStage({
   }, [mediaRef, info.offsetMs, postTime]);
 
   // Screen share: full view while one was on, kept on the clock (muted: the voice is the media)
-  const screen = info.screens.find((sc) => kloudMs >= sc.startMs && (sc.endMs === null || kloudMs < sc.endMs)) ?? null;
-  const shot = screen ? null : shotAt(shots, kloudMs);
+  const shot = shotAt(shots, kloudMs);
+  const screen =
+    shot && coverWithShots
+      ? null
+      : (info.screens.find((sc) => kloudMs >= sc.startMs && (sc.endMs === null || kloudMs < sc.endMs)) ?? null);
+  const shownShot = screen ? null : shot;
   React.useEffect(() => {
     const video = screenRef.current;
     const media = mediaRef.current;
@@ -172,7 +179,7 @@ export function LiveDocReplayStage({
           ref={iframeRef}
           src={src}
           title="LiveDoc replay"
-          style={{ ...fillStyle, border: 0, visibility: screen || shot ? 'hidden' : 'visible' }}
+          style={{ ...fillStyle, border: 0, visibility: screen || shownShot ? 'hidden' : 'visible' }}
           allow="autoplay *; fullscreen *"
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
@@ -180,11 +187,11 @@ export function LiveDocReplayStage({
       {screen && (
         <video key={screen.url} ref={screenRef} src={screen.url} muted playsInline style={{ ...fillStyle, objectFit: 'contain', background: '#000' }} />
       )}
-      {shot && (
+      {shownShot && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={shot.url} alt="" style={{ ...fillStyle, objectFit: 'contain', background: '#000' }} />
+        <img src={shownShot.url} alt="" style={{ ...fillStyle, objectFit: 'contain', background: '#000', zIndex: 2 }} />
       )}
-      {(!ready || error) && !screen && !shot && (
+      {(!ready || error) && !screen && !shownShot && (
         <div style={{ ...fillStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 14 }}>
           {error ? `${t('livedoc.errorTitle')}: ${error}` : t('livedoc.loading')}
         </div>

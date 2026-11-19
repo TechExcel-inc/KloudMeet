@@ -6,6 +6,7 @@ import { authHeaders } from '@/lib/kloudSession';
 import {
   isSttActive,
   readTranscribeState,
+  submitProgress,
   type TranscribeState,
 } from '@/lib/recordingTranscribeState';
 import styles from '@/styles/RecordingTranscribePrompt.module.css';
@@ -43,7 +44,11 @@ export function RecordingTranscribePrompt({
   const [state, setState] = React.useState<TranscribeState>(initial);
   const [starting, setStarting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);
+  const [now, setNow] = React.useState(() => Date.now());
   const onDoneRef = React.useRef(onDone);
+  const postingRef = React.useRef(false);
+  const shownRef = React.useRef(0);
+  const startedRef = React.useRef<number | null>(null);
   onDoneRef.current = onDone;
 
   const endpoint = `/api/recordings/${encodeURIComponent(recordingKey)}/transcribe`;
@@ -64,8 +69,16 @@ export function RecordingTranscribePrompt({
 
   React.useEffect(() => {
     if (phase !== 'running') return;
+    if (state.status !== 'SUBMITTING' && !postingRef.current) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 500);
+    return () => window.clearInterval(timer);
+  }, [phase, state.status]);
+
+  React.useEffect(() => {
+    if (phase !== 'running') return;
     let stopped = false;
     const poll = async () => {
+      if (postingRef.current) return;
       try {
         const res = await fetch(endpoint, { headers: authHeaders(), cache: 'no-store' });
         if (stopped) return;
@@ -89,8 +102,15 @@ export function RecordingTranscribePrompt({
   }, [phase, endpoint, apply, t]);
 
   const handleStart = async () => {
+    const started = Date.now();
+    postingRef.current = true;
+    startedRef.current = started;
+    shownRef.current = 10;
+    setNow(started);
     setStarting(true);
     setRequestError(null);
+    setState({ status: 'SUBMITTING', progress: 10, error: null });
+    setPhase('running');
     try {
       const res = await fetch(endpoint, { method: 'POST', headers: authHeaders() });
       if (res.status === 409) {
@@ -101,13 +121,16 @@ export function RecordingTranscribePrompt({
       const next = res.ok ? readTranscribeState(await res.json()) : null;
       if (!next) {
         setRequestError(t('replay.transcribeRequestFailed'));
+        setPhase('prompt');
         return;
       }
       apply(next);
     } catch (err) {
       console.warn('[RecordingTranscribePrompt] start failed', err);
       setRequestError(t('replay.transcribeRequestFailed'));
+      setPhase('prompt');
     } finally {
+      postingRef.current = false;
       setStarting(false);
     }
   };
@@ -133,12 +156,12 @@ export function RecordingTranscribePrompt({
     );
   }
 
-  if (phase === 'running' && (state.status === 'QUEUED' || state.status === 'SUBMITTING')) {
+  if (phase === 'running' && state.status === 'QUEUED') {
     return (
       <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title">
         <div className={styles.dialog}>
           <h3 id="recording-transcribe-title" className={styles.title} aria-live="polite">
-            {state.status === 'QUEUED' ? t('replay.transcribeQueued') : t('replay.transcribeStageSubmit')}
+            {t('replay.transcribeQueued')}
           </h3>
         </div>
       </div>
@@ -150,7 +173,13 @@ export function RecordingTranscribePrompt({
       state.status === 'ALIGNING'
         ? t('replay.transcribeStageAlign')
         : t('replay.transcribeStageRecognize');
-    const pct = Math.max(0, Math.min(100, Math.round(state.progress)));
+    const serverPct = Math.max(0, Math.min(100, Math.round(state.progress)));
+    const local =
+      state.status === 'SUBMITTING' && startedRef.current != null
+        ? submitProgress(now - startedRef.current)
+        : 0;
+    const pct = Math.min(100, Math.max(shownRef.current, serverPct, local));
+    shownRef.current = pct;
     return (
       <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title">
         <div className={styles.dialog}>
