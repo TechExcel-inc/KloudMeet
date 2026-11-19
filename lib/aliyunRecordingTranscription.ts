@@ -58,9 +58,7 @@ function objectKey(recording: Recording): string | null {
 }
 
 function nodeStream(body: unknown): Readable | null {
-  if (body instanceof Readable) return body;
-  if (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream) return Readable.fromWeb(body);
-  return null;
+  return body instanceof Readable ? body : null;
 }
 
 function fileNameOf(key: string): string {
