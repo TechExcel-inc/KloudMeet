@@ -133,7 +133,7 @@ model Meeting {
   roomEmptyAt             DateTime?
   /// Recording settings for this meeting (set by the host in the recording sheet)
   recordingHostOnly       Boolean                  @default(true)
-  recordingMode           String                   @default("follow")
+  recordingMode           String                   @default("full")
   recordingSyncTranscript Boolean                  @default(true)
   /// Pre-join Recording choice: none | ai_smart | livedoc_full | screen_share. Only livedoc_full
   /// changes how the record API works today; the others use the screen share recording.
@@ -336,8 +336,8 @@ model Recording {
   sttStatus          String?
   sttStartedAt       DateTime?
   sttError           String?                  @db.Text
-  /// Layout recorded: follow | gallery | speaker | audio
-  mode               String                   @default("follow")
+  /// ai_notes（只录音频）| full（会议视频）。旧行里的 follow / gallery / speaker / audio 读取时折算。
+  mode               String                   @default("full")
   /// Set while the recording is paused (pause = the recorder shows a "paused" slate and is silent)
   pausedAt           DateTime?
   /// Closed pauses as [{ "from": ISO, "to": ISO }] — skipped on replay and not billed

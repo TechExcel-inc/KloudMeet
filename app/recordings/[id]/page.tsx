@@ -12,6 +12,7 @@ import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
+import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
 import {
@@ -105,6 +106,8 @@ interface ReplayData {
     /** Paused stretches [start, end] in seconds; the player jumps over them */
     pausedRanges?: Array<[number, number]>;
     streamUrl: string | null;
+    /** AI Notes Only：回放不放声音，只留进度 */
+    notesOnly?: boolean;
     status: string;
     createdAt: string;
     recordedBy: { fullName: string | null; username: string } | null;
@@ -115,6 +118,8 @@ interface ReplayData {
     transcribe?: TranscribeState;
     /** LiveDoc Full Recording: replay LiveDoc, screen shares and SmartCam on the voice's clock */
     livedoc?: LiveDocReplayInfo | null;
+    /** AI Notes Only：共享画面有变化时存下的图，时间在播放时钟上 */
+    shots?: ShareShot[];
     /** LiveDoc Full: join, leave, microphone and camera, on the LiveDoc clock */
     presence?: PresenceEvent[];
   };
@@ -1014,6 +1019,7 @@ export default function ReplayPage() {
   );
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [mediaDuration, setMediaDuration] = useState(0);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1096,7 +1102,7 @@ export default function ReplayPage() {
   const seekTo = useCallback((secs: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = secs;
-      videoRef.current.play();
+      void videoRef.current.play().catch(() => undefined);
       setPlaying(true);
     }
   }, []);
@@ -1316,6 +1322,9 @@ export default function ReplayPage() {
   const showPanel = hasTranscripts && panelVisible;
   const videoClass = !hasTranscripts ? s.videoSolo : videoFit === 'height' ? s.videoTall : '';
   const livedoc = recording.livedoc ?? null;
+  const notesOnly = !!recording.notesOnly;
+  const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
+  const notesDuration = mediaDuration || recording.durationSeconds || 0;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1522,6 +1531,7 @@ export default function ReplayPage() {
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
                 fill={!hasTranscripts}
                 fillClass={s.livedocFill}
+                shots={recording.shots ?? []}
               >
                 {recording.presence && recording.presence.length > 0 && (
                   <ReplayPeople
@@ -1532,14 +1542,31 @@ export default function ReplayPage() {
                 )}
               </LiveDocReplayStage>
             )}
+            {noteShot && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img className={s.shot} src={noteShot.url} alt="" />
+            )}
             <video
               ref={videoRef}
               src={recording.streamUrl!}
-              controls
-              // LiveDoc Full: the file is the meeting's voice, so only its controls show.
-              // flex 锁定高度，避免被上方画面挤出可视区域。
-              style={livedoc ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' } : undefined}
-              className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
+              controls={!notesOnly}
+              muted={notesOnly}
+              // AI Notes Only 不放声音，元素只当进度时钟。
+              // 有活文档或共享截图时，控制条压成一条，避免把画面挤出屏幕。
+              style={
+                notesOnly
+                  ? undefined
+                  : livedoc || noteShot
+                    ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
+                    : undefined
+              }
+              className={notesOnly ? s.notesClock : `${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
+              onLoadedMetadata={(e) => {
+                setMediaDuration(e.currentTarget.duration || 0);
+                if (!notesOnly) return;
+                e.currentTarget.muted = true;
+                void e.currentTarget.play().catch(() => undefined);
+              }}
               onTimeUpdate={(e) => {
                 const el = e.currentTarget;
                 // Recording was paused here: the file shows a "paused" slate, so skip past it
@@ -1550,8 +1577,29 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
+            {notesOnly && (
+              <div
+                className={s.notesBar}
+                role="slider"
+                aria-valuemin={0}
+                aria-valuemax={notesDuration}
+                aria-valuenow={currentTime}
+                aria-label={fmtTime(currentTime)}
+                onClick={(e) => {
+                  if (notesDuration <= 0) return;
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const ratio = rect.width > 0 ? (e.clientX - rect.left) / rect.width : 0;
+                  seekTo(Math.min(notesDuration, Math.max(0, ratio * notesDuration)));
+                }}
+              >
+                <div
+                  className={s.notesFill}
+                  style={{ width: notesDuration > 0 ? `${Math.min(100, (currentTime / notesDuration) * 100)}%` : '0%' }}
+                />
+              </div>
+            )}
             {/* Fit toggle (not for LiveDoc Full: its stage has a fixed shape) */}
-            {!livedoc && (
+            {!livedoc && !noteShot && !notesOnly && (
             <button
               type="button"
               className={s.fitBtn}

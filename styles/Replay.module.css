@@ -584,6 +584,37 @@
   outline: none;
 }
 
+.notesClock {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.notesBar {
+  flex: none;
+  height: 28px;
+  background: #161922;
+  cursor: pointer;
+}
+
+.notesFill {
+  height: 100%;
+  background: #7c79ff;
+  pointer-events: none;
+}
+
+.shot {
+  display: block;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 200px;
+  max-height: calc(62vh - 156px);
+  object-fit: contain;
+  background: #000;
+}
+
 .videoTall {
   height: calc(100vh - 112px);
   height: calc(100dvh - 112px);

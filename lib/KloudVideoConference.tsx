@@ -41,8 +41,6 @@ export interface KloudVideoConferenceProps extends React.HTMLAttributes<HTMLDivE
   webcamLayoutMode?: WebcamLayoutMode;
   /** The viewer's own gallery settings (tiles per page, video first, hide without video) */
   galleryPrefs?: GalleryPrefs;
-  /** Recorder bot in gallery mode: keep the video grid even while someone shares their screen */
-  ignoreScreenShare?: boolean;
 }
 
 function trackKey(track: TrackReferenceOrPlaceholder): string {
@@ -65,7 +63,6 @@ export function KloudVideoConference({
   SettingsComponent,
   webcamLayoutMode = 'tile',
   galleryPrefs = DEFAULT_GALLERY_PREFS,
-  ignoreScreenShare = false,
   ...props
 }: KloudVideoConferenceProps) {
   const room = useRoomContext();
@@ -93,11 +90,10 @@ export function KloudVideoConference({
       allTracks.filter(
         (track) =>
           !isRecorderParticipant(track.participant) &&
-          isParticipantReady(track.participant) &&
-          !(ignoreScreenShare && track.source === Track.Source.ScreenShare),
+          isParticipantReady(track.participant),
       ),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- activeTick: isActive lives on the participant
-    [allTracks, ignoreScreenShare, activeTick],
+    [allTracks, activeTick],
   );
 
   const layoutContext = useCreateLayoutContext();

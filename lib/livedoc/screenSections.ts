@@ -7,6 +7,7 @@ import {
   type EgressInfo,
 } from 'livekit-server-sdk';
 import { prisma } from '@/lib/db';
+import { recordingModeOf } from '@/lib/recordingControls';
 import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 
@@ -118,7 +119,7 @@ export async function onTrackPublished(
 ): Promise<void> {
   if (!track || track.source !== TrackSource.SCREEN_SHARE) return;
   const recording = await activeLivedocRecording(roomName);
-  if (!recording) return;
+  if (!recording || recordingModeOf(recording.mode) === 'ai_notes') return;
   await startScreenSection(recording, roomName, track.sid, identity);
 }
 

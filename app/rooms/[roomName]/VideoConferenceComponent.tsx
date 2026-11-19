@@ -30,6 +30,7 @@ import { peerStateOf } from '@/lib/RtasrHelper/captionPeers';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
+import { useShareShots } from '@/lib/useShareShots';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
 import {
@@ -41,6 +42,7 @@ import { useIsDesktop } from '@/lib/useIsDesktop';
 import { MeetingPipSuggestPrompt } from '@/lib/MeetingPipSuggestPrompt';
 import {
   canControlRecording,
+  coerceRecordingState,
   IDLE_RECORDING_STATE,
   RECORDING_STATE_MSG,
   type RecordingMode,
@@ -297,8 +299,9 @@ export function VideoConferenceComponent(props: {
   const applyRecordingState = React.useCallback(
     (state: RecordingState | undefined | null, broadcast: boolean) => {
       if (!state) return;
-      setRecordingState(state);
-      if (broadcast) broadcastRecordingStateRef.current(state);
+      const next = coerceRecordingState(state);
+      setRecordingState(next);
+      if (broadcast) broadcastRecordingStateRef.current(next);
     },
     [],
   );
@@ -549,6 +552,7 @@ export function VideoConferenceComponent(props: {
   React.useEffect(() => {
     if (
       !recordingState.active ||
+      recordingState.mode === 'ai_notes' ||
       recordingState.option !== 'livedoc_full' ||
       !startedRecordingHereRef.current
     )
@@ -562,10 +566,20 @@ export function VideoConferenceComponent(props: {
       headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ action: 'screen' }),
     }).catch(() => fresh.forEach((sid) => reportedSidsRef.current.delete(sid)));
-  }, [screenSids, recordingState.active, recordingState.option]);
+  }, [screenSids, recordingState.active, recordingState.mode, recordingState.option]);
   // Whether the local participant is the one sharing their screen (derived from tracks, not state)
   const isLocalScreenShare = screenShareTracks.some(
     (t) => t.participant?.identity === room.localParticipant.identity,
+  );
+  useShareShots(
+    room,
+    recordingState.active &&
+      !recordingState.paused &&
+      recordingState.mode === 'ai_notes' &&
+      isLocalScreenShare &&
+      !isRecorderBot,
+    props.connectionDetails.participantToken,
+    props.connectionDetails.roomName,
   );
 
   // 屏幕共享时默认收起左侧参会者列表，优先展示共享画面
@@ -2828,7 +2842,7 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === RECORDING_STATE_MSG && msg.state) {
           // Someone started / stopped / paused recording or changed its settings
-          setRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) });
+          setRecordingState(coerceRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) }));
         } else if (msg.type === 'CAPTIONS_ON') {
           // Host/Co-host 开启了全局字幕 — 本地启动识别
           setCaptionsOpenRef.current?.(true);
@@ -3538,7 +3552,7 @@ export function VideoConferenceComponent(props: {
     fetch(`/api/meetings/${roomSeg}/record`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.state) setRecordingState(data.state as RecordingState);
+        if (!cancelled && data?.state) setRecordingState(coerceRecordingState(data.state as RecordingState));
       })
       .catch(() => undefined);
     return () => {
@@ -3571,38 +3585,6 @@ export function VideoConferenceComponent(props: {
     }, 600);
     return () => window.clearTimeout(id);
   }, [livekitConnected, isHost, isRecorderBot, meetingRolesKey]);
-
-  // Recorder bot: the cloud recording mode decides what it shows.
-  //   follow  — whatever the meeting shows (as before)
-  //   gallery — everyone's video in a grid, even while someone shares
-  //   speaker — whoever is talking; the shared content while someone shares / presents LiveDoc
-  // The meeting's own view is kept in meetingViewRef so "follow" and "speaker" can return to it.
-  const meetingViewRef = React.useRef<ViewMode>(activeView);
-  const botForcingViewRef = React.useRef(false);
-  const botMode = isRecorderBot ? recordingState.mode : 'follow';
-  React.useEffect(() => {
-    if (!isRecorderBot) return;
-    if (botForcingViewRef.current) {
-      botForcingViewRef.current = false;
-    } else {
-      meetingViewRef.current = activeView;
-    }
-    const meetingView = meetingViewRef.current;
-    let wantView: ViewMode = meetingView;
-    if (botMode === 'gallery') wantView = 'webcam';
-    if (botMode === 'speaker') {
-      wantView =
-        hasScreenShare || meetingView === 'liveDoc' || meetingView === 'design'
-          ? meetingView
-          : 'webcam';
-    }
-    if (wantView !== activeView) {
-      botForcingViewRef.current = true;
-      setActiveView(wantView);
-    }
-    if (botMode === 'gallery' && webcamLayoutMode !== 'tile') setWebcamLayoutMode('tile');
-    if (botMode === 'speaker' && webcamLayoutMode !== 'spotlight') setWebcamLayoutMode('spotlight');
-  }, [isRecorderBot, botMode, activeView, hasScreenShare, webcamLayoutMode]);
 
   /** Who may start / stop / pause recording here (the server checks the same rule) */
   const canRecordHere = canControlRecording({
@@ -4000,7 +3982,6 @@ export function VideoConferenceComponent(props: {
                 <VideoConferenceErrorBoundary>
                   <KloudVideoConference
                     webcamLayoutMode={hasScreenShare ? 'tile' : webcamLayoutMode}
-                    ignoreScreenShare={botMode === 'gallery'}
                     galleryPrefs={galleryPrefs}
                     chatMessageFormatter={formatChatMessageLinks}
                     SettingsComponent={SHOW_SETTINGS_MENU ? SettingsMenu : undefined}

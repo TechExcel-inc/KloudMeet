@@ -4,11 +4,32 @@
  * file were paused (skipped on replay, not billed).
  */
 
-export const RECORDING_MODES = ['follow', 'gallery', 'speaker', 'audio'] as const;
+/** AI Notes Only 只录音频；Full Recording 录会议视频。旧值在读取时折进来。 */
+export const RECORDING_MODES = ['ai_notes', 'full'] as const;
 export type RecordingMode = (typeof RECORDING_MODES)[number];
 
+const LEGACY_MODES: Record<string, RecordingMode> = {
+  ai_notes: 'ai_notes',
+  full: 'full',
+  audio: 'ai_notes',
+  follow: 'full',
+  gallery: 'full',
+  speaker: 'full',
+};
+
 export function isRecordingMode(value: unknown): value is RecordingMode {
-  return typeof value === 'string' && (RECORDING_MODES as readonly string[]).includes(value);
+  return value === 'ai_notes' || value === 'full';
+}
+
+/** 库里的旧模式（跟随 / 宫格 / 演讲者 / 仅音频）读出来时归到现在的两种。 */
+export function recordingModeOf(value: unknown): RecordingMode {
+  if (typeof value !== 'string') return 'full';
+  return LEGACY_MODES[value] ?? 'full';
+}
+
+/** 广播或接口里带来的录制状态，模式一律收成当前两种。 */
+export function coerceRecordingState(state: RecordingState): RecordingState {
+  return { ...state, mode: recordingModeOf(state.mode) };
 }
 
 /** Pre-join Recording choice (Meeting.recordingOption). */
@@ -23,7 +44,7 @@ export function isRecordingOption(value: unknown): value is RecordingOption {
 export interface RecordingState {
   active: boolean;
   paused: boolean;
-  /** Layout of the running recording, or the one the next recording will use */
+  /** ai_notes 只录音频；full 录会议视频 */
   mode: RecordingMode;
   /** Only host / co-host may start, stop and pause (off: presenters may too) */
   hostOnly: boolean;
@@ -38,7 +59,7 @@ export interface RecordingState {
 export const IDLE_RECORDING_STATE: RecordingState = {
   active: false,
   paused: false,
-  mode: 'follow',
+  mode: 'full',
   hostOnly: true,
   syncTranscript: true,
 };

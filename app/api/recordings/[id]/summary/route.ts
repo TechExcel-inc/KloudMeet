@@ -1,11 +1,13 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
+import { storeClient } from '@/lib/objectStore';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
-import { parsePauseSpans, pauseRangesInMedia } from '@/lib/recordingControls';
+import { parsePauseSpans, pauseRangesInMedia, recordingModeOf } from '@/lib/recordingControls';
+import { SHOT_KIND, type ShareShot } from '@/lib/shareShot';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
 import { isPresenceKind, type PresenceEvent } from '@/lib/livedoc/presence';
 import { isInternalMember } from '@/lib/internalStaff.server';
@@ -17,13 +19,7 @@ import {
 } from '@/lib/recordingShare';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
-const s3 = new S3Client({
-  region: process.env.S3_REGION || 'us-west-1',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY!,
-    secretAccessKey: process.env.S3_SECRET!,
-  },
-});
+const s3 = storeClient();
 
 export async function GET(
   req: NextRequest,
@@ -94,7 +90,7 @@ export async function GET(
             },
           },
           teamMember: { select: { id: true, fullName: true, username: true } },
-          sections: { where: { kind: 'screen', status: 'READY' }, orderBy: { startMs: 'asc' } },
+          sections: { where: { kind: { in: ['screen', SHOT_KIND] }, status: 'READY' }, orderBy: { startMs: 'asc' } },
         },
       });
 
@@ -135,7 +131,7 @@ export async function GET(
           : 0;
       const screens = [];
       for (const section of recording.sections) {
-        if (section.startMs === null) continue;
+        if (section.kind !== 'screen' || section.startMs === null) continue;
         try {
           const url = await getSignedUrl(
             s3,
@@ -155,6 +151,25 @@ export async function GET(
       };
     }
 
+    const shots: ShareShot[] = [];
+    for (const section of recording.sections) {
+      if (section.kind !== SHOT_KIND || section.startMs === null) continue;
+      try {
+        const url = await getSignedUrl(
+          s3,
+          new GetObjectCommand({ Bucket: process.env.S3_BUCKET!, Key: section.storageKey }),
+          { expiresIn: 3600 },
+        );
+        shots.push({
+          url,
+          startMs: onPlayClock(recording, section.startMs),
+          endMs: section.endMs === null ? null : onPlayClock(recording, section.endMs),
+        });
+      } catch (e) {
+        console.error('[replay summary] S3 presign failed for shot', section.id, e);
+      }
+    }
+
     return apiJson({
       recording: {
         id: recording.id,
@@ -170,9 +185,11 @@ export async function GET(
         status: recording.status,
         createdAt: recording.createdAt,
         streamUrl,
+        notesOnly: recordingModeOf(recording.mode) === 'ai_notes',
         recordedBy: recording.teamMember,
         transcribe: transcribeStateOf(recording),
         livedoc,
+        shots,
         presence: await loadPresence(recording.id, recording.kind),
       },
       meeting: recording.meeting
@@ -210,6 +227,22 @@ export async function GET(
   }
 
   });
+}
+
+/**
+ * 截图入库时相对活文档起点（没有则相对录制创建时间）。
+ * 回放时钟：有活文档就是那条时间轴，否则是声音文件自己的时间。
+ */
+function onPlayClock(
+  recording: { kind: string; livedocStartedAt: Date | null; createdAt: Date; mediaStartedAt: Date | null },
+  startMs: number,
+): number {
+  const stored = recording.livedocStartedAt ?? recording.createdAt;
+  const shown =
+    recording.kind === 'livedoc_full' && recording.livedocStartedAt
+      ? recording.livedocStartedAt
+      : recording.mediaStartedAt ?? recording.createdAt;
+  return startMs - (shown.getTime() - stored.getTime());
 }
 
 /** LiveDoc Full presence. Missing table (SQL not applied yet) leaves the replay without the people window. */

@@ -3,7 +3,7 @@
 import React from 'react';
 import { useI18n } from '@/lib/i18n';
 import { buildInviteLinkForClipboard } from '@/lib/KloudMeetToolbar';
-import type { RecordingMode } from '@/lib/recordingControls';
+import { RECORDING_MODES, type RecordingMode } from '@/lib/recordingControls';
 
 interface MeetingReadyModalProps {
   /** 桌面端客户端（决定复制的邀请链接形式） */
@@ -77,7 +77,7 @@ export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: Rec
           {/* Cloud recording mode: chosen before starting (can change while recording) */}
           <div role="radiogroup" aria-label={t('toolbar.recordingModeLabel')} style={{ margin: '0 0 20px' }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{t('toolbar.recordingModeLabel')}</div>
-            {(['follow', 'gallery', 'speaker', 'audio'] as const).map((m) => (
+            {RECORDING_MODES.map((m) => (
               <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 0', cursor: 'pointer', fontSize: '13px', color: '#111827' }}>
                 <input
                   type="radio"

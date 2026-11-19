@@ -13,6 +13,7 @@ import {
   closePause,
   isRecordingMode,
   memberMayRecord,
+  recordingModeOf,
   memberMayReportRoles,
   parseMeetingRoles,
   parsePauseSpans,
@@ -50,13 +51,12 @@ function livedocFullFor(meeting: MeetingRow): boolean {
 }
 
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
-  // A LiveDoc Full recording's file is always audio only; its `mode` is not a layout anyone chose
-  // (older rows stored 'audio' there), so the meeting's layout setting is what the UI shows.
-  const mode = active && active.kind !== 'livedoc_full' ? active.mode : meeting.recordingMode;
+  // 正在录的这场用它自己的模式；否则用会议上下一次会用的模式。旧的四种在这里折成两种。
+  const mode = active?.mode ?? meeting.recordingMode;
   return {
     active: !!active,
     paused: !!active?.pausedAt,
-    mode: isRecordingMode(mode) ? mode : 'follow',
+    mode: recordingModeOf(mode),
     hostOnly: meeting.recordingHostOnly,
     syncTranscript: meeting.recordingSyncTranscript,
     option: livedocFullFor(meeting) ? 'livedoc_full' : 'screen_share',
@@ -158,9 +158,9 @@ export async function POST(
       if (body.mode !== undefined) {
         if (!isRecordingMode(body.mode)) return apiJson({ error: 'Unknown recording mode' }, { status: 400 });
         if (!mayRecord) return apiJson({ error: 'You cannot change the recording' }, { status: 403 });
-        // Audio-only is a different kind of file: switching to or from it needs a new recording.
-        if (active && active.kind !== 'livedoc_full' && (active.mode === 'audio') !== (body.mode === 'audio')) {
-          return apiJson({ error: 'Stop the recording to switch to or from audio only', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
+        // 两种录的不是同一种文件：一种只录音频，一种录视频。换的话要先停。
+        if (active && recordingModeOf(active.mode) !== body.mode) {
+          return apiJson({ error: 'Stop the recording to switch mode', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
         }
         data.recordingMode = body.mode;
         if (active) await prisma.recording.update({ where: { id: active.id }, data: { mode: body.mode } });
@@ -178,7 +178,9 @@ export async function POST(
     // The recording page saw a screen share start: record it (also without LiveKit's webhook).
     if (action === 'screen') {
       const active = await findActiveRecording(meeting.id);
-      if (active?.kind === 'livedoc_full') await startScreenSectionsForRoom(active, roomName);
+      if (active?.kind === 'livedoc_full' && recordingModeOf(active.mode) !== 'ai_notes') {
+        await startScreenSectionsForRoom(active, roomName);
+      }
       return apiJson({ success: true });
     }
 
@@ -231,6 +233,11 @@ export async function POST(
           await stopScreenSections(rec.id);
           await finishLivedocRecording(rec, meeting.kloudMeetingId, livedocToken);
         }
+        const openMs = Math.max(0, now.getTime() - (rec.livedocStartedAt ?? rec.createdAt).getTime());
+        await prisma.recordingSection.updateMany({
+          where: { recordingId: rec.id, kind: 'shot', endMs: null },
+          data: { endMs: openMs },
+        });
       }
       
       return apiJson({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
@@ -319,8 +326,9 @@ export async function POST(
     }
 
     // The layout the person chose; LiveDoc Full records audio only whatever the layout.
-    const mode = isRecordingMode(body.mode) ? body.mode : isRecordingMode(meeting.recordingMode) ? meeting.recordingMode : 'follow';
-    const audioOnly = livedocFull || mode === 'audio';
+    const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
+    // 有活文档时声音仍是回放时钟。AI Notes Only 一律只录音频；完整录制在没有活文档时才录整页视频。
+    const audioOnly = livedocFull || mode === 'ai_notes';
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
     const activityToken = newShareKey();
@@ -365,11 +373,13 @@ export async function POST(
           : {}),
       }
     });
-    // LiveDoc Full: a screen share already on is recorded from now (later ones via the page and the webhook)
-    if (livedocFull) {
+    // 完整录制才把共享收成视频。AI Notes Only 由共享者自己截有变化的画面。
+    if (livedocFull && mode !== 'ai_notes') {
       await startScreenSectionsForRoom(recording, roomName).catch((e) =>
         console.error('[meetings record] screen sections failed to start', e),
       );
+    }
+    if (livedocFull) {
       await snapshotPresence(roomName).catch((e) =>
         console.error('[meetings record] presence snapshot failed', e),
       );

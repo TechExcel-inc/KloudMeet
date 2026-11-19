@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canControlRecording,
   closePause,
+  recordingModeOf,
   memberMayRecord,
   memberMayReportRoles,
   parseMeetingRoles,
@@ -10,6 +11,18 @@ import {
   pausedSeconds,
   skipPaused,
 } from './recordingControls';
+
+describe('recordingModeOf', () => {
+  it('keeps the two modes and folds the old ones', () => {
+    expect(recordingModeOf('ai_notes')).toBe('ai_notes');
+    expect(recordingModeOf('full')).toBe('full');
+    expect(recordingModeOf('audio')).toBe('ai_notes');
+    expect(recordingModeOf('gallery')).toBe('full');
+    expect(recordingModeOf('speaker')).toBe('full');
+    expect(recordingModeOf('follow')).toBe('full');
+    expect(recordingModeOf(null)).toBe('full');
+  });
+});
 
 describe('canControlRecording', () => {
   it('lets host and co-host record; presenters only when not host-only', () => {

@@ -9,6 +9,7 @@ import {
   syncLivedocLessonMember,
   type LiveDocRuntimeSettings,
 } from './livedoc/client';
+import { shotAt, type ShareShot } from './shareShot';
 
 /** What the replay API returns for a LiveDoc Full recording. */
 export interface LiveDocReplayInfo {
@@ -44,6 +45,7 @@ export function LiveDocReplayStage({
   mediaRef,
   viewerName,
   speaker,
+  shots = [],
   fill = false,
   fillClass,
   children,
@@ -52,6 +54,7 @@ export function LiveDocReplayStage({
   mediaRef: React.RefObject<HTMLVideoElement | null>;
   viewerName: string;
   speaker: ReplaySpeaker | null;
+  shots?: ShareShot[];
   /** 无字幕时占满剩余高度，把下方声音控制条留在可视区域内 */
   fill?: boolean;
   /** fill 时的布局类（桌面限高、窄屏改回 16:9） */
@@ -150,6 +153,7 @@ export function LiveDocReplayStage({
 
   // Screen share: full view while one was on, kept on the clock (muted: the voice is the media)
   const screen = info.screens.find((sc) => kloudMs >= sc.startMs && (sc.endMs === null || kloudMs < sc.endMs)) ?? null;
+  const shot = screen ? null : shotAt(shots, kloudMs);
   React.useEffect(() => {
     const video = screenRef.current;
     const media = mediaRef.current;
@@ -168,7 +172,7 @@ export function LiveDocReplayStage({
           ref={iframeRef}
           src={src}
           title="LiveDoc replay"
-          style={{ ...fillStyle, border: 0, visibility: screen ? 'hidden' : 'visible' }}
+          style={{ ...fillStyle, border: 0, visibility: screen || shot ? 'hidden' : 'visible' }}
           allow="autoplay *; fullscreen *"
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
@@ -176,7 +180,11 @@ export function LiveDocReplayStage({
       {screen && (
         <video key={screen.url} ref={screenRef} src={screen.url} muted playsInline style={{ ...fillStyle, objectFit: 'contain', background: '#000' }} />
       )}
-      {(!ready || error) && !screen && (
+      {shot && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={shot.url} alt="" style={{ ...fillStyle, objectFit: 'contain', background: '#000' }} />
+      )}
+      {(!ready || error) && !screen && !shot && (
         <div style={{ ...fillStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 14 }}>
           {error ? `${t('livedoc.errorTitle')}: ${error}` : t('livedoc.loading')}
         </div>

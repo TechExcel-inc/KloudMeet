@@ -3737,7 +3737,7 @@ function ActiveSheetContent({
         (() => {
           const rec: RecordingState | undefined = recordingControls?.state;
           const paused = !!rec?.paused;
-          const mode: RecordingMode = rec?.mode ?? 'follow';
+          const mode: RecordingMode = rec?.mode ?? 'full';
           const policyTitle = recordingControls?.canChangePolicy
             ? undefined
             : t('toolbar.recordingHostSetting');
