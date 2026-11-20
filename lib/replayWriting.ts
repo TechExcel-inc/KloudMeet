@@ -52,14 +52,20 @@ export function buildReplayWriting(raw: unknown, lines: SummaryTranscriptLine[],
   };
 }
 
+export function writingSourceSeconds(
+  slide: Pick<PresentationSlide, 'startSec' | 'endSec'>,
+  progress: number,
+): number | null {
+  if (slide.startSec === null) return null;
+  const span = Math.max(0, (slide.endSec ?? slide.startSec) - slide.startSec);
+  return slide.startSec + span * Math.min(1, Math.max(0, progress));
+}
+
 export function writingShot(
   shots: readonly ShareShot[],
   slide: Pick<PresentationSlide, 'startSec' | 'endSec'>,
   progress: number,
 ): ShareShot | null {
-  if (slide.startSec === null) return null;
-  const start = slide.startSec * 1000;
-  const end = (slide.endSec ?? slide.startSec) * 1000;
-  const time = start + Math.max(0, end - start) * Math.min(1, Math.max(0, progress));
-  return shotAt(shots, time);
+  const seconds = writingSourceSeconds(slide, progress);
+  return seconds === null ? null : shotAt(shots, seconds * 1000);
 }

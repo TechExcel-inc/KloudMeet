@@ -1,54 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import { isWritingLength, WRITING_LENGTHS, type ReplayWriting, type WritingLength } from '@/lib/replayWriting';
-import { PresentationPlayer, type PlayerMemory } from '@/lib/notesReplay/PresentationPlayer';
+import { SmartPlay } from '@/lib/SmartPlay';
+import type { LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
-import playerStyles from '@/styles/NotesReplayStage.module.css';
-
-function SmartPlay({
-  presentation, shots, onClose, onPause, onJump,
-}: {
-  presentation: MeetingPresentation;
-  shots: ShareShot[];
-  onClose: () => void;
-  onPause: () => void;
-  onJump: (seconds: number) => void;
-}) {
-  const { t } = useI18n();
-  const dialog = useRef<HTMLDialogElement>(null);
-  const memory = useRef<PlayerMemory | null>(null);
-  useEffect(() => {
-    const element = dialog.current;
-    if (element && !element.open) element.showModal();
-  }, []);
-
-  return (
-    <dialog ref={dialog} className={s.smartPlayDialog} aria-label={t('replay.write.smartPlay')}
-      onCancel={(event) => { event.preventDefault(); onClose(); }}>
-      <div className={playerStyles.stage}>
-        <PresentationPlayer presentation={presentation} writingShots={shots}
-          meetingTitle={presentation.title} meetingMeta="" meetingSeconds={presentation.meetingSeconds}
-          memory={memory} modeSwitch={<button type="button" className={playerStyles.ghostBtn} onClick={onClose}>{t('settings.close')}</button>}
-          canManage={false} regenerating={false} onRegenerate={onClose} onTakeOver={onPause}
-          onJump={(seconds) => { onClose(); onJump(seconds); }}
-          onTimeline={onClose} speakerColor={() => 'inherit'} />
-      </div>
-    </dialog>
-  );
-}
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, shots, onPause, onSeek, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, shots, liveDoc, viewerName, onPause, onSeek, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
   hasTranscript: boolean;
   shots: ShareShot[];
+  liveDoc: LiveDocReplayInfo | null;
+  viewerName: string;
   onPause: () => void;
   onSeek: (seconds: number) => void;
   legacy?: ReactNode;
@@ -64,7 +34,7 @@ export function ReplayWritingPanel({
   const [selected, setSelected] = useState<WritingLength | 'new' | 'legacy'>(legacy && (legacyFocus || !canManage) ? 'legacy' : 'new');
   const [choice, setChoice] = useState<WritingLength>();
   const [submitting, setSubmitting] = useState(false);
-  const [smartPlay, setSmartPlay] = useState<MeetingPresentation | null>(null);
+  const [smartPlay, setSmartPlay] = useState<{ minutes: WritingLength; presentation: MeetingPresentation } | null>(null);
   const pending = writings.some((item) => item.status === 'GENERATING');
   const current = writings.find((item) => item.minutes === selected);
   const available = WRITING_LENGTHS.filter((minutes) =>
@@ -174,7 +144,7 @@ export function ReplayWritingPanel({
           <h2>{current.presentation.title}</h2>
           <button type="button" className={s.primaryBtn} onClick={() => {
             onPause();
-            setSmartPlay(current.presentation);
+            if (current.presentation) setSmartPlay({ minutes: current.minutes, presentation: current.presentation });
           }}>{t('replay.write.smartPlay')}</button>
           {current.presentation.slides.map((slide, index) => (
             <section key={index}>
@@ -220,7 +190,9 @@ export function ReplayWritingPanel({
       {requestFailed && <p className={s.writingNotice} role="alert">{t('replay.write.failed')}</p>}
 
       {smartPlay && (
-        <SmartPlay presentation={smartPlay} shots={shots} onClose={() => setSmartPlay(null)} onPause={onPause} onJump={onSeek} />
+        <SmartPlay recordingKey={recordingKey} minutes={smartPlay.minutes} presentation={smartPlay.presentation}
+          shots={shots} liveDoc={liveDoc} viewerName={viewerName} onClose={() => setSmartPlay(null)}
+          onJump={(seconds) => { setSmartPlay(null); onSeek(seconds); }} />
       )}
     </div>
   );

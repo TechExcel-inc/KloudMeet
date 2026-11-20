@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReplayWriting, writingShot, writingTranscript } from '@/lib/replayWriting';
+import { buildReplayWriting, writingShot, writingSourceSeconds, writingTranscript } from '@/lib/replayWriting';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
 const transcript = [
@@ -24,6 +24,8 @@ describe('AI Write presentations', () => {
       { url: 'first', startMs: 10_000, endMs: 15_000 },
       { url: 'second', startMs: 16_000, endMs: 19_000 },
     ];
+    expect(writingSourceSeconds({ startSec: 10, endSec: 18 }, 0.5)).toBe(14);
+    expect(writingSourceSeconds({ startSec: 10, endSec: null }, 0.5)).toBe(10);
     expect(writingShot(shots, { startSec: 10, endSec: 18 }, 0)?.url).toBe('first');
     expect(writingShot(shots, { startSec: 10, endSec: 18 }, 0.7)).toBeNull();
     expect(writingShot(shots, { startSec: 10, endSec: 18 }, 0.9)?.url).toBe('second');

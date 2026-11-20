@@ -23,6 +23,13 @@ export interface LiveDocReplayInfo {
   screens: Array<{ url: string; startMs: number; endMs: number | null }>;
 }
 
+export interface LiveDocReplayClock {
+  seconds: number;
+  playing: boolean;
+  rate: number;
+  seekId: number;
+}
+
 export interface ReplaySpeaker {
   name: string;
   photo?: string;
@@ -43,6 +50,8 @@ const SCREEN_DRIFT_S = 0.3;
 export function LiveDocReplayStage({
   info,
   mediaRef,
+  clock,
+  onFailure,
   viewerName,
   speaker,
   shots = [],
@@ -53,7 +62,9 @@ export function LiveDocReplayStage({
   children,
 }: {
   info: LiveDocReplayInfo;
-  mediaRef: React.RefObject<HTMLVideoElement | null>;
+  mediaRef?: React.RefObject<HTMLVideoElement | null>;
+  clock?: LiveDocReplayClock;
+  onFailure?: () => void;
   viewerName: string;
   speaker: ReplaySpeaker | null;
   shots?: ShareShot[];
@@ -76,6 +87,14 @@ export function LiveDocReplayStage({
   const [error, setError] = React.useState<string | null>(null);
   const [kloudMs, setKloudMs] = React.useState(0);
   const readyRef = React.useRef(false);
+  const clockRef = React.useRef(clock);
+  clockRef.current = clock;
+  const lastClock = React.useRef<{ seconds: number; seekId: number; playing: boolean } | undefined>(undefined);
+
+
+  React.useEffect(() => {
+    if (error) onFailure?.();
+  }, [error, onFailure]);
 
   // LiveDoc plugin in replay mode, signed in as this viewer's LiveDoc guest
   React.useEffect(() => {
@@ -110,12 +129,16 @@ export function LiveDocReplayStage({
 
   const postTime = React.useCallback(
     (seek: boolean) => {
-      const media = mediaRef.current;
+      const media = mediaRef?.current;
+      const external = clockRef.current;
       const frame = iframeRef.current;
-      if (!media || !frame?.contentWindow || !src) return;
-      const ms = Math.max(0, Math.round(media.currentTime * 1000 + info.offsetMs));
+      if ((!media && !external) || !frame?.contentWindow || !src) return;
+      const seconds = external?.seconds ?? media?.currentTime ?? 0;
+      const playing = external?.playing ?? (media ? !media.paused : false);
+      const rate = external?.rate ?? media?.playbackRate ?? 1;
+      const ms = Math.max(0, Math.round(seconds * 1000 + info.offsetMs));
       frame.contentWindow.postMessage(
-        { type: 'Kloud-ReplayTime', ms, playing: !media.paused, rate: media.playbackRate, seek },
+        { type: 'Kloud-ReplayTime', ms, playing, rate, seek },
         new URL(src).origin,
       );
     },
@@ -141,7 +164,7 @@ export function LiveDocReplayStage({
 
   // Clock: send the time while playing; a seek rebuilds the page
   React.useEffect(() => {
-    const media = mediaRef.current;
+    const media = mediaRef?.current;
     if (!media) return;
     const onSeeked = () => {
       if (readyRef.current) postTime(true);
@@ -157,23 +180,34 @@ export function LiveDocReplayStage({
     };
   }, [mediaRef, info.offsetMs, postTime]);
 
+  React.useEffect(() => {
+    if (!clock) return;
+    const previous = lastClock.current;
+    lastClock.current = clock;
+    if (readyRef.current) postTime(
+      previous?.seekId !== clock.seekId || (!clock.playing && previous?.seconds !== clock.seconds),
+    );
+  }, [clock, postTime]);
+
+  const onscreenMs = clock ? Math.max(0, clock.seconds * 1000 + info.offsetMs) : kloudMs;
   // Screen share: full view while one was on, kept on the clock (muted: the voice is the media)
-  const shot = shotAt(shots, kloudMs);
+  const shot = shotAt(shots, onscreenMs);
   const screen =
     shot && coverWithShots
       ? null
-      : (info.screens.find((sc) => kloudMs >= sc.startMs && (sc.endMs === null || kloudMs < sc.endMs)) ?? null);
+      : (info.screens.find((sc) => onscreenMs >= sc.startMs && (sc.endMs === null || onscreenMs < sc.endMs)) ?? null);
   const shownShot = screen ? null : shot;
   React.useEffect(() => {
     const video = screenRef.current;
-    const media = mediaRef.current;
-    if (!video || !media || !screen) return;
-    const target = (kloudMs - screen.startMs) / 1000;
+    const media = mediaRef?.current;
+    if (!video || (!media && !clock) || !screen) return;
+    const target = (onscreenMs - screen.startMs) / 1000;
     if (Math.abs(video.currentTime - target) > SCREEN_DRIFT_S) video.currentTime = Math.max(0, target);
-    video.playbackRate = media.playbackRate;
-    if (media.paused && !video.paused) video.pause();
-    else if (!media.paused && video.paused) void video.play().catch(() => undefined);
-  }, [screen, kloudMs, mediaRef]);
+    video.playbackRate = clock?.rate ?? media?.playbackRate ?? 1;
+    const playing = clock?.playing ?? (media ? !media.paused : false);
+    if (!playing && !video.paused) video.pause();
+    else if (playing && video.paused) void video.play().catch(() => undefined);
+  }, [screen, onscreenMs, mediaRef, clock]);
 
   return (
     <div className={fill ? fillClass : boxClass} style={fill ? stageFillStyle : boxClass ? stageBoxStyle : stageStyle}>

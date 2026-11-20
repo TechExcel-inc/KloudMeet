@@ -1698,7 +1698,8 @@ export default function ReplayPage() {
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
                   canManage={canManage} hasTranscript={hasTranscripts}
-                  shots={recording.shots ?? []} onPause={pauseClock} onSeek={seekTo}
+                  shots={recording.shots ?? []} liveDoc={livedoc} viewerName={userInfo?.displayName || ''}
+                  onPause={pauseClock} onSeek={seekTo}
                   legacyFocus={chapterFocus?.n}
                   legacy={summaryItems.length > 0 ? (
                     <SummaryPanel items={summaryItems} currentTime={currentTime} onSeek={seekTo}

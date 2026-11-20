@@ -1609,35 +1609,3 @@ button.storySeg:hover .storyTrack {
     transform: none;
   }
 }
-
-.writingSlide {
-  display: flex;
-  flex: 1 1 auto;
-  flex-direction: column;
-  align-items: flex-start;
-  min-width: 0;
-  min-height: 0;
-  gap: 0.75rem;
-  overflow: auto;
-}
-
-.writingSlide h2 {
-  margin: 0;
-  font-size: clamp(18px, 3cqw, 32px);
-}
-
-.writingSlide p {
-  max-width: 65ch;
-  margin: 0;
-  font-size: clamp(15px, 2cqw, 22px);
-  line-height: 1.55;
-}
-
-.writingSlide img {
-  display: block;
-  flex: 1 1 0;
-  align-self: center;
-  width: 100%;
-  min-height: 0;
-  object-fit: contain;
-}
