@@ -235,12 +235,38 @@ button.storySeg:hover .storyTrack {
 /* ── Slides ────────────────────────────────────────────────────────────────── */
 
 .slideArea {
+  position: relative;
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   overflow: hidden;
   padding: calc(var(--u) * 1.4) var(--pad) calc(var(--u) * 0.6);
   animation: nrsSlideIn 0.5s var(--nrs-ease) both;
+}
+
+.centerPlay {
+  position: absolute;
+  z-index: 5;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: calc(var(--u) * 11);
+  height: calc(var(--u) * 11);
+  min-width: 64px;
+  min-height: 64px;
+  padding: 0 0 0 4px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(11, 13, 18, 0.55);
+  color: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.centerPlay:hover {
+  background: rgba(94, 92, 230, 0.92);
 }
 
 @keyframes nrsSlideIn {

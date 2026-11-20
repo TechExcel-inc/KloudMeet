@@ -1000,6 +1000,8 @@
   "replay.camOn": "Camera on",
   "replay.camOff": "Camera off",
   "replay.speakingNow": "Speaking",
+  "replay.captionCollapse": "Hide captions",
+  "replay.captionExpand": "Show captions",
   "replay.download": "Download MP4",
   "replay.present.unassigned": "Unassigned",
   "replay.present.modeLabel": "Playback mode",

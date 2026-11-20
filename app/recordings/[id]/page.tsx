@@ -16,6 +16,8 @@ import { NotesReplayStage, type NotesStageMode } from '@/lib/NotesReplayStage';
 import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentation';
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
+import { ReplayCaption } from '@/lib/ReplayCaption';
+import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
 import {
   RecordingAccessBlocked,
@@ -1160,6 +1162,12 @@ export default function ReplayPage() {
     videoRef.current?.pause();
   }, []);
 
+  const resumeClock = useCallback(() => {
+    const media = videoRef.current;
+    if (!media) return;
+    void media.play().catch(() => undefined);
+  }, []);
+
   const seekTo = useCallback((secs: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = secs;
@@ -1614,11 +1622,17 @@ export default function ReplayPage() {
                     speaking={replaySpeaker?.name ?? ''}
                   />
                 )}
+                <ReplayCaption lines={transcripts} time={currentTime} />
+                {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </LiveDocReplayStage>
             )}
             {noteShot && !presenting && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img className={s.shot} src={noteShot.url} alt="" />
+              <div className={s.shotFrame}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img className={s.shot} src={noteShot.url} alt="" />
+                <ReplayCaption lines={transcripts} time={currentTime} />
+                {!playing && <ReplayPlayButton onPlay={resumeClock} />}
+              </div>
             )}
             {(presenting || captioning) && (
               <div className={hasTranscripts ? s.notesReplay : s.notesReplayFill}>
@@ -1640,6 +1654,7 @@ export default function ReplayPage() {
                   onRegenerate={regeneratePresentation}
                   speakerColor={(name) => speakerColor(name, avatarTones)}
                 />
+                {captioning && !playing && <ReplayPlayButton onPlay={resumeClock} />}
               </div>
             )}
             {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
@@ -1686,6 +1701,12 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
+            {!livedoc && !noteShot && !presenting && !captioning && (
+              <ReplayCaption lines={transcripts} time={currentTime} lift />
+            )}
+            {!livedoc && !noteShot && !presenting && !captioning && !playing && (
+              <ReplayPlayButton onPlay={resumeClock} />
+            )}
             {/* Fit toggle (not for LiveDoc Full: its stage has a fixed shape) */}
             {!livedoc && !noteShot && !notesOnly && (
             <button

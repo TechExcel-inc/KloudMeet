@@ -615,6 +615,17 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
 
       <div className={s.slideArea} key={`${length}-${slide.index}`}>
         {body}
+        {started && !playing && !ended && (
+          <button
+            type="button"
+            className={s.centerPlay}
+            onClick={play}
+            aria-label={t('replay.present.play')}
+            title={t('replay.present.play')}
+          >
+            <PlayIcon size={28} />
+          </button>
+        )}
       </div>
 
       <div className={subtitled ? s.subtitle : `${s.subtitle} ${s.subtitleEmpty}`} aria-live="off">

@@ -1001,6 +1001,8 @@
   "replay.camOn": "カメラオン",
   "replay.camOff": "カメラオフ",
   "replay.speakingNow": "発言中",
+  "replay.captionCollapse": "字幕を閉じる",
+  "replay.captionExpand": "字幕を表示",
   "replay.download": "MP4をダウンロード",
   "replay.present.unassigned": "担当者未定",
   "replay.present.modeLabel": "再生モード",

@@ -986,6 +986,8 @@
   "replay.camOn": "摄像头开着",
   "replay.camOff": "摄像头关着",
   "replay.speakingNow": "正在说话",
+  "replay.captionCollapse": "收起字幕",
+  "replay.captionExpand": "显示字幕",
   "replay.download": "下载 MP4",
   "replay.present.unassigned": "未指定负责人",
   "replay.present.modeLabel": "回放方式",

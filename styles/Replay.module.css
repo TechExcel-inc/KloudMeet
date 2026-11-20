@@ -605,6 +605,11 @@
   pointer-events: none;
 }
 
+.shotFrame {
+  position: relative;
+  width: 100%;
+}
+
 .shot {
   display: block;
   width: 100%;
@@ -613,6 +618,118 @@
   max-height: calc(62vh - 156px);
   object-fit: contain;
   background: #000;
+}
+
+/* 回放画面底部正中的字幕。拖动后改用 left/top。 */
+.cue {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%);
+  max-width: min(520px, calc(100% - 24px));
+}
+
+.cueLift {
+  bottom: 41px;
+}
+
+.cuePlaced {
+  right: auto;
+  bottom: auto;
+  transform: none;
+}
+
+.cueBar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 12px;
+  border-radius: 12px;
+  background: rgba(15, 18, 26, 0.86);
+  color: #f8fafc;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.cueBar:active {
+  cursor: grabbing;
+}
+
+.cueLine {
+  margin: 0;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cueWho {
+  margin-right: 6px;
+  color: #c4b5fd;
+  font-weight: 700;
+}
+
+.cueText {
+  font-weight: 550;
+}
+
+.cueFold,
+.cueDot {
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+}
+
+.cueFold {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.cueDot {
+  width: 36px;
+  height: 36px;
+  background: rgba(15, 18, 26, 0.9);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+  cursor: grab;
+  touch-action: none;
+}
+
+.cueDot:active {
+  cursor: grabbing;
+}
+
+/* 暂停时盖在画面正中；播放中不渲染 */
+.centerPlay {
+  position: absolute;
+  z-index: 8;
+  left: 50%;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 72px;
+  height: 72px;
+  padding: 0 0 0 4px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15, 18, 26, 0.72);
+  color: #fff;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+  transform: translate(-50%, -50%);
+}
+
+.centerPlay:hover {
+  background: rgba(94, 92, 230, 0.92);
 }
 
 .videoTall {
@@ -657,6 +774,7 @@
 /* AI Taking Notes replay (no media file): the AI presentation or the caption stage. The stage
    sizes its own text from this box (container queries), so the box must have a real height. */
 .notesReplay {
+  position: relative;
   width: 100%;
   aspect-ratio: 16 / 9;
   max-height: calc(62vh - 56px);
@@ -664,6 +782,7 @@
 }
 
 .notesReplayFill {
+  position: relative;
   flex: 1 1 0;
   width: 100%;
   min-height: 280px;

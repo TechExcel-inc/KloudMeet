@@ -1001,6 +1001,8 @@
   "replay.camOn": "카메라 켜짐",
   "replay.camOff": "카메라 꺼짐",
   "replay.speakingNow": "말하는 중",
+  "replay.captionCollapse": "자막 접기",
+  "replay.captionExpand": "자막 보기",
   "replay.download": "MP4 다운로드",
   "replay.present.unassigned": "담당자 미정",
   "replay.present.modeLabel": "재생 방식",
