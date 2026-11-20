@@ -12,7 +12,7 @@ import {
 import { onRecordingReady } from '@/lib/billing/limits';
 import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
-import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
+import { startRecordingTranscription } from '@/lib/recordingTranscription';
 import { hasNoMedia } from '@/lib/liveNotes';
 import { finishLiveNotes } from '@/lib/liveNotesServer';
 import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';

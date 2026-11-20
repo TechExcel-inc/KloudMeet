@@ -4,7 +4,7 @@ import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { storeClient } from '@/lib/objectStore';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { canManageRecording } from '@/lib/apiAuth';
-import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
+import { transcribeStateOf } from '@/lib/recordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import { parsePauseSpans, pauseRangesInMedia, recordingModeOf } from '@/lib/recordingControls';
 import { hasNoMedia, silenceUrl } from '@/lib/liveNotes';

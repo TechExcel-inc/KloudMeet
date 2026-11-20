@@ -1,7 +1,7 @@
 /**
  * /api/recordings/[id]/transcribe
  *
- * POST：提交阿里云录音文件识别任务（会议已有字幕时拒绝）。
+ * POST：提交录音文件识别任务（会议已有字幕时拒绝）。
  * GET ：轮询任务进度；完成时用录制采样的说话区间匹配说话人并写入 MeetingTranscript。
  * 已登录且能观看该录像的用户可用。
  */
@@ -11,7 +11,7 @@ import { isRecordingResponse, loadAccessibleRecording } from '@/lib/recordingSha
 import {
   advanceRecordingTranscription,
   startRecordingTranscription,
-} from '@/lib/aliyunRecordingTranscription';
+} from '@/lib/recordingTranscription';
 import { hasNoMedia } from '@/lib/liveNotes';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 

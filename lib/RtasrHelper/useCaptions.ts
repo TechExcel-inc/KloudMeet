@@ -4,7 +4,7 @@
  * useCaptions.ts — 会议实时字幕 React Hook
  *
  * 字幕数据流：
- *   麦克风 → 国内百炼 Fun-ASR / 国外 OpenAI → onMessage → publishData(LiveKit) → 所有参与者 → 渲染
+ *   麦克风 → 国内百炼 Fun-ASR / 国外 AssemblyAI → onMessage → publishData(LiveKit) → 所有参与者 → 渲染
  *
  * 额外功能（本次新增）：
  *   — 每当本地发言者收到 type=0（最终字幕）时，自动 POST /api/transcripts/save
@@ -19,9 +19,9 @@
 import React from 'react';
 import { RoomEvent, Track } from 'livekit-client';
 import type { LocalTrackPublication, Room } from 'livekit-client';
-import { RtasrHelper } from './RtasrHelper';
-import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
 import { FunAsrHelper } from './FunAsrHelper';
+import type { CaptionEngine, RtasrMessage } from './RtasrHelper';
+import { AssemblyAiHelper } from './AssemblyAiHelper';
 import { resolveSttProvider } from './sttProvider';
 import type { SttProvider } from './sttProvider';
 import { translateText } from './translationService';
@@ -517,7 +517,7 @@ export function useCaptions({
         if (!rtasrRef.current || providerRef.current !== provider) {
           supervisorRef.current?.dispose();
           const token = () => getTokenRef.current();
-          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new RtasrHelper(token);
+          const helper: CaptionEngine = provider === 'bailian' ? new FunAsrHelper(token) : new AssemblyAiHelper(token);
           helper.languageCode = loadCaptionSettings(uiLanguage).speakLanguage;
           helper.roomName = room.name;
           micSourceRef.current = meetingMicSource(room);

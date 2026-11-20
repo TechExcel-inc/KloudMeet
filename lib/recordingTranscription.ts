@@ -1,10 +1,5 @@
-import { createWriteStream, openAsBlob } from 'node:fs';
-import { stat, unlink } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
 import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Recording } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import {
@@ -16,17 +11,13 @@ import {
 import { submitProgress, toSttStatus, type TranscribeState } from '@/lib/recordingTranscribeState';
 
 const DASHSCOPE_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
-const MODEL = process.env.DASHSCOPE_FILE_ASR_MODEL || 'paraformer-v2';
-/**
- * 提交阶段超过该时长仍未拿到 taskId，重新提交（进程中途退出等）。
- * 提交包含从 S3 下载整个文件再上传到百炼，大文件要好几分钟，
- * 所以要留够时间，否则轮询会在上传途中再提交一次。
- */
+const ASSEMBLY_BASE = 'https://api.assemblyai.com/v2/transcript';
+const ASSEMBLY_TASK_PREFIX = 'assemblyai:';
+// Allow in-flight legacy uploads to finish during the release switch.
 export const SUBMIT_STALE_MS = 30 * 60 * 1000;
 /** 对齐写入的互斥标记；超时后允许下一次打开接着写 */
 const SAVE_LOCK = 'resume';
 const SAVE_STALE_MS = 60 * 1000;
-const SOURCE_PREFIX = 'aliyun';
 /** DashScope's answer for a file it processed but found no speech in: done, not failed */
 const NO_SPEECH = 'SUCCESS_WITH_NO_VALID_FRAGMENT';
 
@@ -42,7 +33,7 @@ function field(value: unknown, key: string): unknown {
   return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined;
 }
 
-function apiKey(): string {
+function dashscopeKey(): string {
   const key = process.env.DASHSCOPE_API_KEY || '';
   if (!key) throw new Error('DASHSCOPE_API_KEY is not configured');
   return key;
@@ -61,118 +52,35 @@ function objectKey(recording: Recording): string | null {
   return fromUrl(recording.storageUrl);
 }
 
-function nodeStream(body: unknown): Readable | null {
-  return body instanceof Readable ? body : null;
-}
-
-function fileNameOf(key: string): string {
-  const base = key.split('/').pop() || 'recording.mp4';
-  const clean = base.replace(/[^\w.\-]+/g, '_');
-  return clean || 'recording.mp4';
-}
-
-function textField(value: unknown, key: string): string {
-  const found = field(value, key);
-  if (typeof found !== 'string' || !found) throw new Error(`DashScope upload policy missing ${key}`);
-  return found;
-}
-
-/** 百炼临时空间的上传凭证。文件由阿里云在 48 小时后删除。 */
-async function uploadPolicy(): Promise<{
-  host: string;
-  dir: string;
-  accessKeyId: string;
-  signature: string;
-  policy: string;
-  acl: string;
-  forbidOverwrite: string;
-  maxMb: number | null;
-}> {
-  const res = await fetch(`${DASHSCOPE_BASE}/uploads?action=getPolicy&model=${encodeURIComponent(MODEL)}`, {
-    headers: { Authorization: `Bearer ${apiKey()}` },
-  });
-  const json: unknown = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(`DashScope upload policy failed (${res.status}): ${String(field(json, 'message') ?? '')}`);
-  }
-  const data = field(json, 'data');
-  const rawMax = field(data, 'max_file_size_mb');
-  const parsedMax = typeof rawMax === 'number' ? rawMax : typeof rawMax === 'string' ? Number(rawMax) : NaN;
-  return {
-    host: textField(data, 'upload_host'),
-    dir: textField(data, 'upload_dir'),
-    accessKeyId: textField(data, 'oss_access_key_id'),
-    signature: textField(data, 'signature'),
-    policy: textField(data, 'policy'),
-    acl: textField(data, 'x_oss_object_acl'),
-    forbidOverwrite: textField(data, 'x_oss_forbid_overwrite'),
-    maxMb: Number.isFinite(parsedMax) && parsedMax > 0 ? parsedMax : null,
-  };
-}
-
-/**
- * 服务器自己从录音桶取出文件，再传到百炼临时空间。
- * 阿里云转写机器下不到美国 S3，所以不再把 S3 链接交给它。
- */
-async function uploadRecording(recording: Recording): Promise<string> {
-  const key = objectKey(recording);
-  if (!key || !process.env.S3_BUCKET) throw new Error('Cannot determine recording object key');
-  const name = fileNameOf(key);
-  const path = join(tmpdir(), `skymeet-${recording.id}-${Date.now()}-${name}`);
-  try {
-    const out = await s3.send(new GetObjectCommand({ Bucket: process.env.S3_BUCKET, Key: key }));
-    const stream = nodeStream(out.Body);
-    if (!stream) throw new Error('Recording file is empty');
-    await pipeline(stream, createWriteStream(path));
-
-    const policy = await uploadPolicy();
-    const size = (await stat(path)).size;
-    if (policy.maxMb && size > policy.maxMb * 1024 * 1024) {
-      throw new Error(`Recording is larger than DashScope temporary upload limit (${policy.maxMb}MB)`);
-    }
-    const objectKeyOnOss = `${policy.dir}/${name}`;
-    const form = new FormData();
-    form.append('OSSAccessKeyId', policy.accessKeyId);
-    form.append('Signature', policy.signature);
-    form.append('policy', policy.policy);
-    form.append('x-oss-object-acl', policy.acl);
-    form.append('x-oss-forbid-overwrite', policy.forbidOverwrite);
-    form.append('key', objectKeyOnOss);
-    form.append('success_action_status', '200');
-    form.append('file', await openAsBlob(path), name);
-    const res = await fetch(policy.host, { method: 'POST', body: form });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`DashScope upload failed (${res.status}): ${text.slice(0, 300)}`);
-    }
-    return `oss://${objectKeyOnOss}`;
-  } finally {
-    await unlink(path).catch(() => undefined);
-  }
+function assemblyKey(): string {
+  const key = process.env.ASSEMBLYAI_API_KEY?.trim();
+  if (!key) throw new Error('ASSEMBLYAI_API_KEY is not configured');
+  return key;
 }
 
 async function submitTask(recording: Recording): Promise<string> {
-  const ossUrl = await uploadRecording(recording);
-  const res = await fetch(`${DASHSCOPE_BASE}/services/audio/asr/transcription`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey()}`,
-      'Content-Type': 'application/json',
-      'X-DashScope-Async': 'enable',
-      'X-DashScope-OssResourceResolve': 'enable',
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      input: { file_urls: [ossUrl] },
-      parameters: { channel_id: [0], language_hints: ['zh', 'en'] },
-    }),
+  const key = objectKey(recording);
+  const bucket = process.env.S3_BUCKET;
+  if (!key || !bucket) throw new Error('Cannot determine recording object key');
+  const audioUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+    expiresIn: 86400,
   });
-  const json: unknown = await res.json().catch(() => null);
-  const taskId = field(field(json, 'output'), 'task_id');
-  if (!res.ok || typeof taskId !== 'string') {
-    throw new Error(`DashScope submit failed (${res.status}): ${String(field(json, 'message') ?? '')}`);
+  const response = await fetch(ASSEMBLY_BASE, {
+    method: 'POST',
+    headers: { Authorization: assemblyKey(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      audio_url: audioUrl,
+      speech_models: ['universal-3-pro', 'universal-2'],
+      language_detection: true,
+    }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const data: unknown = await response.json().catch(() => null);
+  const id = field(data, 'id');
+  if (!response.ok || typeof id !== 'string' || !id) {
+    throw new Error(`AssemblyAI transcription submission failed (${response.status})`);
   }
-  return taskId;
+  return ASSEMBLY_TASK_PREFIX + id;
 }
 
 type TaskResult =
@@ -180,11 +88,11 @@ type TaskResult =
   | { state: 'running' }
   | { state: 'failed'; error: string }
   | { state: 'no_speech' }
-  | { state: 'succeeded'; transcriptionUrl: string };
+  | { state: 'succeeded'; loadSentences: () => Promise<TimedSentence[]> };
 
-async function queryTask(taskId: string): Promise<TaskResult> {
+async function queryDashscopeTask(taskId: string): Promise<TaskResult> {
   const res = await fetch(`${DASHSCOPE_BASE}/tasks/${encodeURIComponent(taskId)}`, {
-    headers: { Authorization: `Bearer ${apiKey()}` },
+    headers: { Authorization: `Bearer ${dashscopeKey()}` },
   });
   const json: unknown = await res.json().catch(() => null);
   if (!res.ok) throw new Error(`DashScope query failed (${res.status})`);
@@ -196,14 +104,14 @@ async function queryTask(taskId: string): Promise<TaskResult> {
   const first: unknown = Array.isArray(results) ? results[0] : undefined;
   const url = field(first, 'transcription_url');
   if (status === 'SUCCEEDED' && field(first, 'subtask_status') === 'SUCCEEDED' && typeof url === 'string') {
-    return { state: 'succeeded', transcriptionUrl: url };
+    return { state: 'succeeded', loadSentences: () => fetchDashscopeSentences(url) };
   }
   if (field(first, 'code') === NO_SPEECH || field(first, 'message') === NO_SPEECH) return { state: 'no_speech' };
   const message = field(first, 'message') ?? field(output, 'message') ?? status;
   return { state: 'failed', error: `DashScope task failed: ${String(message)}` };
 }
 
-async function fetchSentences(url: string): Promise<TimedSentence[]> {
+async function fetchDashscopeSentences(url: string): Promise<TimedSentence[]> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to download transcription result (${res.status})`);
   const json: unknown = await res.json();
@@ -225,6 +133,50 @@ async function fetchSentences(url: string): Promise<TimedSentence[]> {
     .sort((a, b) => a.startMs - b.startMs);
 }
 
+async function assemblyRequest(path: string): Promise<Response> {
+  return fetch(`${ASSEMBLY_BASE}/${path}`, {
+    headers: { Authorization: assemblyKey() },
+    cache: 'no-store',
+    signal: AbortSignal.timeout(15_000),
+  });
+}
+
+async function queryTask(taskId: string): Promise<TaskResult> {
+  if (!taskId.startsWith(ASSEMBLY_TASK_PREFIX)) return queryDashscopeTask(taskId);
+
+  const id = encodeURIComponent(taskId.slice(ASSEMBLY_TASK_PREFIX.length));
+  const response = await assemblyRequest(id);
+  if (response.status === 404) return { state: 'failed', error: 'AssemblyAI transcription could not be found' };
+  if (!response.ok) throw new Error(`AssemblyAI status check failed (${response.status})`);
+
+  const data: unknown = await response.json();
+  switch (field(data, 'status')) {
+    case 'queued': return { state: 'pending' };
+    case 'processing': return { state: 'running' };
+    case 'error': return { state: 'failed', error: String(field(data, 'error') || 'AssemblyAI transcription failed') };
+    case 'completed': {
+      const transcript = field(data, 'text');
+      if (typeof transcript !== 'string' || !transcript.trim()) return { state: 'no_speech' };
+      return { state: 'succeeded', loadSentences: () => fetchAssemblySentences(id) };
+    }
+    default: throw new Error('Unexpected AssemblyAI transcription status');
+  }
+}
+
+async function fetchAssemblySentences(id: string): Promise<TimedSentence[]> {
+  const response = await assemblyRequest(`${id}/sentences`);
+  if (!response.ok) throw new Error(`AssemblyAI sentence retrieval failed (${response.status})`);
+  const sentences = field(await response.json(), 'sentences');
+  if (!Array.isArray(sentences)) throw new Error('AssemblyAI returned invalid sentences');
+  return sentences.flatMap((sentence: unknown): TimedSentence[] => {
+    const startMs = field(sentence, 'start');
+    const endMs = field(sentence, 'end');
+    const text = field(sentence, 'text');
+    if (typeof startMs !== 'number' || typeof endMs !== 'number' || typeof text !== 'string') return [];
+    return text.trim() ? [{ startMs, endMs, text: text.trim() }] : [];
+  }).sort((a, b) => a.startMs - b.startMs);
+}
+
 async function speakWindows(recording: Recording): Promise<SpeakWindow[]> {
   // 缺少 egress 回调写入的文件起点时，用开始录制请求返回的时间近似（通常偏早 1–2 秒）
   const start = recording.mediaStartedAt ?? recording.createdAt;
@@ -243,14 +195,14 @@ async function speakWindows(recording: Recording): Promise<SpeakWindow[]> {
 }
 
 /** 识别结果对齐说话人后写入 MeetingTranscript；无采样数据时统一记为 Speaker 1 */
-async function saveTranscripts(recording: Recording, transcriptionUrl: string): Promise<void> {
-  const sentences = await fetchSentences(transcriptionUrl);
+async function saveTranscripts(recording: Recording, taskId: string, sentences: TimedSentence[]): Promise<void> {
   const windows = await speakWindows(recording);
   const aligned = windows.length
     ? alignSpeakTranscript(sentences, windows)
     : sentences.map((sentence) => ({ ...sentence, speakerName: 'Speaker 1' }));
   const origin = (recording.mediaStartedAt ?? recording.createdAt).getTime();
-  const prefix = `${SOURCE_PREFIX}-${recording.id}-`;
+  const source = taskId.startsWith(ASSEMBLY_TASK_PREFIX) ? 'assemblyai' : 'aliyun';
+  const prefix = `${source}-${recording.id}-`;
 
   await prisma.$transaction([
     prisma.meetingTranscript.deleteMany({
@@ -317,7 +269,7 @@ export function transcribeStateOf(recording: Recording): TranscribeState {
 }
 
 /**
- * claimAndSubmit — 抢占后向阿里云提交新任务。
+ * claimAndSubmit — 抢占后向 AssemblyAI 提交新任务。
  * 已有 taskId 的失败不走这里，避免丢掉可继续的识别结果。
  */
 async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
@@ -346,10 +298,10 @@ async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
       });
       if (saved.count === 0) {
         // 上传期间被另一次提交取代：不覆盖它的任务和状态
-        console.warn('[aliyunRecordingTranscription] submit superseded, task dropped', recording.id, taskId);
+        console.warn('[recordingTranscription] submit superseded, task dropped', recording.id, taskId);
       }
     } catch (err) {
-      console.error('[aliyunRecordingTranscription] submit failed', err);
+      console.error('[recordingTranscription] submit failed', err);
       // 同样只在仍持有凭证时记失败，避免把正在进行的另一次提交标成失败
       await prisma.recording.updateMany({
         where: held,
@@ -367,7 +319,7 @@ async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
 }
 
 /**
- * continueTask — 用已有阿里云 taskId 接着查进度；识别完成后写入字幕。
+ * continueTask — 用已有供应商 taskId 接着查进度；识别完成后写入字幕。
  * 写入中断（ALIGNING / 带 taskId 的 FAILED）会再次拉取结果，不重新提交。
  */
 async function continueTask(recording: Recording): Promise<void> {
@@ -375,7 +327,7 @@ async function continueTask(recording: Recording): Promise<void> {
   if (!taskId) return;
 
   const result = await queryTask(taskId).catch((err: unknown) => {
-    console.error('[aliyunRecordingTranscription] query failed', err);
+    console.error('[recordingTranscription] query failed', err);
     return null;
   });
   if (!result) return;
@@ -434,8 +386,7 @@ async function continueTask(recording: Recording): Promise<void> {
       id: recording.id,
       sttTaskId: taskId,
       OR: [
-        { sttStatus: 'RUNNING' },
-        { sttStatus: 'FAILED' },
+        { sttStatus: { in: ['QUEUED', 'RUNNING', 'FAILED'] } },
         { sttStatus: 'ALIGNING', sttError: null },
         { sttStatus: 'ALIGNING', sttError: SAVE_LOCK, sttStartedAt: { lt: staleSave } },
       ],
@@ -445,15 +396,15 @@ async function continueTask(recording: Recording): Promise<void> {
   if (claimed.count === 0) return;
 
   try {
-    await saveTranscripts(recording, result.transcriptionUrl);
+    await saveTranscripts(recording, taskId, await result.loadSentences());
   } catch (err) {
-    console.error('[aliyunRecordingTranscription] save failed', err);
+    console.error('[recordingTranscription] save failed', err);
     await markFailed(recording.id, err);
   }
 }
 
 /**
- * startRecordingTranscription — 提交阿里云录音文件识别任务
+ * startRecordingTranscription — 提交录音文件识别任务
  *
  * 进行中或已有 taskId 的失败改为接着查，不重新提交。
  *
@@ -477,7 +428,7 @@ export async function startRecordingTranscription(recording: Recording): Promise
 /**
  * advanceRecordingTranscription — 接着上次的解析往下走
  *
- * RUNNING 继续查阿里云；ALIGNING 或写入失败则重新拉取结果并写入。
+ * RUNNING 继续查供应商；ALIGNING 或写入失败则重新拉取结果并写入。
  * 提交阶段超时则重新提交。由打开回放页和前端轮询驱动。
  *
  * @param recording  录像（读取当前 stt 状态）

@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { prisma } from '@/lib/db';
 import type { Recording } from '@prisma/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -33,17 +33,14 @@ const db = vi.hoisted(() => {
   return { state, prisma: { recording } };
 });
 
-/** The S3 download, held open by a test until it calls release() or fail(). */
-const s3 = vi.hoisted(() => ({ send: (): Promise<unknown> => Promise.resolve(null) }));
-
 vi.mock('@/lib/db', () => ({ prisma: db.prisma }));
 vi.mock('@aws-sdk/client-s3', () => ({
-  S3Client: class {
-    send() {
-      return s3.send();
-    }
-  },
+  S3Client: class {},
   GetObjectCommand: class {},
+}));
+
+vi.mock('@aws-sdk/s3-request-presigner', () => ({
+  getSignedUrl: async () => 'https://storage.example/signed-recording',
 }));
 
 import {
@@ -51,7 +48,7 @@ import {
   advanceRecordingTranscription,
   startRecordingTranscription,
   transcribeStateOf,
-} from '@/lib/aliyunRecordingTranscription';
+} from '@/lib/recordingTranscription';
 
 function recording(fields: Partial<Recording>): Recording {
   return { id: 1, sttStatus: null, sttError: null, sttStartedAt: null, durationSeconds: 60, ...fields } as Recording;
@@ -75,41 +72,24 @@ describe('transcribeStateOf', () => {
 });
 
 describe('submitting a recording', () => {
-  let downloads: number;
+  let submissions: number;
   let release: () => void;
   let fail: (err: Error) => void;
   const row = () => db.state.row as unknown as Recording;
 
   beforeEach(() => {
-    process.env.S3_BUCKET = 'bucket';
-    process.env.DASHSCOPE_API_KEY = 'test-key';
+    vi.stubEnv('S3_BUCKET', 'bucket');
+    vi.stubEnv('ASSEMBLYAI_API_KEY', 'test-key');
     db.state.row = { ...recording({ storageKey: 'rooms/a/meeting.mp4', sttTaskId: null }) };
-    downloads = 0;
-    s3.send = () => {
-      downloads += 1;
-      return new Promise((resolve, reject) => {
-        release = () => resolve({ Body: Readable.from([Buffer.from('audio')]) });
+    submissions = 0;
+    vi.stubGlobal('fetch', (url: string, init: RequestInit) => {
+      expect(url).toBe('https://api.assemblyai.com/v2/transcript');
+      expect(JSON.parse(String(init.body)).audio_url).toBe('https://storage.example/signed-recording');
+      submissions += 1;
+      return new Promise<Response>((resolve, reject) => {
+        release = () => resolve(Response.json({ id: 'task-1' }));
         fail = reject;
       });
-    };
-    vi.stubGlobal('fetch', async (url: string | URL) => {
-      const target = String(url);
-      if (target.includes('/uploads?action=getPolicy')) {
-        return Response.json({
-          data: {
-            upload_host: 'https://upload.example',
-            upload_dir: 'tmp/dir',
-            oss_access_key_id: 'id',
-            signature: 'sig',
-            policy: 'policy',
-            x_oss_object_acl: 'private',
-            x_oss_forbid_overwrite: 'true',
-            max_file_size_mb: 100,
-          },
-        });
-      }
-      if (target === 'https://upload.example') return new Response('');
-      return Response.json({ output: { task_id: 'task-1' } });
     });
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
@@ -117,44 +97,45 @@ describe('submitting a recording', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
   /** Starts a submit and waits until its download from S3 is in flight. */
   async function startSubmit() {
     const submit = startRecordingTranscription(row());
-    await vi.waitFor(() => expect(downloads).toBe(1));
+    await vi.waitFor(() => expect(submissions).toBe(1));
     return { submit };
   }
 
-  /** Another request claims the recording while the first upload is still running. */
+  /** Another request claims the recording while the first submission is still running. */
   function takeOver(): Date {
     const newer = new Date(Date.now() + 5000);
     db.state.row.sttStartedAt = newer;
     return newer;
   }
 
-  it('uploads the file and records the task', async () => {
+  it('submits a signed recording URL and records the task', async () => {
     const { submit } = await startSubmit();
     release();
     const state = await submit;
     expect(state.status).toBe('RUNNING');
-    expect(row().sttTaskId).toBe('task-1');
+    expect(row().sttTaskId).toBe('assemblyai:task-1');
   });
 
-  it('is not submitted again while a slow upload is still in progress', async () => {
+  it('is not submitted again while a slow submission is still in progress', async () => {
     db.state.row.sttStatus = 'SUBMITTING';
     db.state.row.sttStartedAt = new Date(Date.now() - 10 * 60 * 1000);
     const state = await advanceRecordingTranscription(row());
     expect(state.status).toBe('SUBMITTING');
-    expect(downloads).toBe(0);
+    expect(submissions).toBe(0);
   });
 
   it('is submitted again once the earlier submit has clearly been abandoned', async () => {
     db.state.row.sttStatus = 'SUBMITTING';
     db.state.row.sttStartedAt = new Date(Date.now() - SUBMIT_STALE_MS - 1000);
     const submit = advanceRecordingTranscription(row());
-    await vi.waitFor(() => expect(downloads).toBe(1));
+    await vi.waitFor(() => expect(submissions).toBe(1));
     release();
     expect((await submit).status).toBe('RUNNING');
   });
@@ -184,5 +165,50 @@ describe('submitting a recording', () => {
     expect(state.status).toBe('FAILED');
     expect(state.error).toContain('S3 unreachable');
     expect(row().sttTaskId).toBeNull();
+  });
+});
+
+describe('advanceRecordingTranscription', () => {
+  it('saves timed AssemblyAI sentences even when the last recorded state was queued', async () => {
+    const current = recording({
+      sttStatus: 'QUEUED',
+      sttTaskId: 'assemblyai:meeting-test',
+      meetingId: 7,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+    });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(Response.json({ status: 'completed', text: '你好。' }))
+      .mockResolvedValueOnce(Response.json({ sentences: [{ start: 1250, end: 2000, text: '你好。' }] }));
+    const findUniqueOrThrow = vi.fn().mockResolvedValue({ ...current, sttStatus: 'SUCCEEDED' });
+    const claim = vi.fn().mockResolvedValue({ count: 1 });
+    const createMany = vi.fn();
+    Object.assign(prisma, {
+      recording: { findUnique: vi.fn().mockResolvedValue(current), findUniqueOrThrow, updateMany: claim, update: vi.fn() },
+      recordingSpeakInterval: { findMany: vi.fn().mockResolvedValue([]) },
+      meetingTranscript: { deleteMany: vi.fn(), createMany },
+      $transaction: vi.fn().mockResolvedValue(undefined),
+    });
+    vi.stubEnv('ASSEMBLYAI_API_KEY', 'test-key');
+    vi.stubGlobal('fetch', fetchMock);
+
+    try {
+      await expect(advanceRecordingTranscription(current)).resolves.toMatchObject({ status: 'SUCCEEDED' });
+      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+        'https://api.assemblyai.com/v2/transcript/meeting-test',
+        'https://api.assemblyai.com/v2/transcript/meeting-test/sentences',
+      ]);
+      expect(claim.mock.calls[0][0].where.OR[0].sttStatus.in).toContain('QUEUED');
+      expect(createMany).toHaveBeenCalledWith({ data: [{
+        meetingId: 7,
+        speakerName: 'Speaker 1',
+        content: '你好。',
+        captionTime: new Date('2026-01-01T00:00:01.250Z'),
+        offsetSeconds: 1,
+        sourceId: 'assemblyai-1-0',
+      }] });
+    } finally {
+      vi.unstubAllGlobals();
+      vi.unstubAllEnvs();
+    }
   });
 });
