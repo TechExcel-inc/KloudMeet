@@ -27,6 +27,8 @@ interface ConnectErrorOverlayProps {
 interface RecordingSaveOverlayProps {
   /** saving：正在停止并保存录制；saved：已保存，即将离开 */
   phase: 'saving' | 'saved';
+  /** AI Taking Notes: there is no recording to save, only the notes */
+  notes?: boolean;
 }
 
 interface RemoteControlApprovalDialogProps {
@@ -448,7 +450,7 @@ export function ConnectErrorOverlay({ error, onCancel, onRejoin }: ConnectErrorO
 }
 
 /** 录制中离会：保存录制的全屏进度 */
-export function RecordingSaveOverlay({ phase }: RecordingSaveOverlayProps) {
+export function RecordingSaveOverlay({ phase, notes = false }: RecordingSaveOverlayProps) {
   const { t } = useI18n();
   return (
     <div
@@ -503,7 +505,7 @@ export function RecordingSaveOverlay({ phase }: RecordingSaveOverlayProps) {
               background: '#ef4444',
             }} />
             <span style={{ color: '#e2e8f0', fontSize: '16px', fontWeight: 600 }}>
-              {t('toolbar.savingRecording')}
+              {t(notes ? 'toolbar.savingNotes' : 'toolbar.savingRecording')}
             </span>
           </div>
           <span style={{ color: '#9ca3af', fontSize: '13px' }}>
@@ -528,7 +530,7 @@ export function RecordingSaveOverlay({ phase }: RecordingSaveOverlayProps) {
             </svg>
           </div>
           <span style={{ color: '#e2e8f0', fontSize: '17px', fontWeight: 700 }}>
-            {t('toolbar.recordingSaved')}
+            {t(notes ? 'toolbar.notesSaved' : 'toolbar.recordingSaved')}
           </span>
           <span style={{ color: '#9ca3af', fontSize: '13px' }}>
             {t('toolbar.leavingMeeting')}

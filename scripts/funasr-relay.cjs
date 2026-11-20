@@ -10,7 +10,9 @@ const { WebSocket, WebSocketServer } = require('ws');
 
 const PORT = Number(process.env.FUNASR_WS_PORT || 3202);
 const PATH = '/ws/funasr';
-const DASHSCOPE_URL = 'wss://dashscope.aliyuncs.com/api-ws/v1/inference';
+const DASHSCOPE_URL = process.env.DASHSCOPE_WS_URL || 'wss://dashscope.aliyuncs.com/api-ws/v1/inference';
+/** After "finish", how long to wait for the recognizer's last sentence before closing. */
+const FINISH_WAIT_MS = 3000;
 const MAX_CLIENTS = 200;
 const MAX_QUEUE_BYTES = 256000;
 const LANGS = new Set(['zh', 'en', 'ja', 'ko']);
@@ -69,6 +71,9 @@ function parseDashscope(raw) {
       final: sentence?.sentence_end === true,
       id: typeof sentence?.sentence_id === 'number' ? sentence.sentence_id : 0,
       heartbeat: sentence?.heartbeat === true,
+      // Milliseconds from the start of this task's audio (AI Taking Notes places sentences with them)
+      begin: typeof sentence?.begin_time === 'number' ? sentence.begin_time : null,
+      end: typeof sentence?.end_time === 'number' ? sentence.end_time : null,
     };
   } catch {
     return null;
@@ -170,6 +175,8 @@ function handle(client, key) {
             type: event.final ? 'final' : 'partial',
             id: event.id,
             text: event.text,
+            begin: event.begin,
+            end: event.end,
           });
         }
       });
@@ -198,7 +205,10 @@ function handle(client, key) {
             payload: { input: {} },
           }));
         }
-        setTimeout(() => closePair(client, upstream), 300);
+        // The recognizer answers "finish" with the sentence in progress and then task-finished,
+        // which closes the pair above. A caption client closes its own side at once; the notes
+        // recorder waits for that last sentence, so give it time before giving up.
+        setTimeout(() => closePair(client, upstream), FINISH_WAIT_MS);
       }
       return;
     }

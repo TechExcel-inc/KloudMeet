@@ -135,7 +135,13 @@ export function distinctCaptionMinutes(captionTimes: readonly Date[]): number {
  */
 export async function meterCaptions(meeting: { id: number; createdByMemberId: number }): Promise<number> {
   const rows = await prisma.meetingTranscript.findMany({
-    where: { meetingId: meeting.id },
+    where: {
+      meetingId: meeting.id,
+      // AI Taking Notes writes its transcript while the meeting runs (sourceId "live-…"). That
+      // session is metered by its length as a recording; counting its lines here as captions
+      // too would bill the same time twice. (A null sourceId, a live caption, never matches NOT.)
+      OR: [{ sourceId: null }, { NOT: { sourceId: { startsWith: 'live-' } } }],
+    },
     select: { captionTime: true },
   });
   const cumulative = distinctCaptionMinutes(rows.map((r) => r.captionTime)) * 60;

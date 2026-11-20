@@ -14,6 +14,8 @@ interface MeetingReadyModalProps {
 interface RecordConsentModalProps {
   /** 当前选中的云录制模式 */
   mode: RecordingMode;
+  /** AI Notes Only keeps no audio on this server: say so under the option */
+  notesLive?: boolean;
   onModeChange: (mode: RecordingMode) => void;
   onClose: () => void;
   /** 确认开始录制 */
@@ -57,7 +59,7 @@ export function MeetingReadyModal({ isDesktop, onClose }: MeetingReadyModalProps
 }
 
 /** 开始云录制前的同意确认，并选择录制模式 */
-export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: RecordConsentModalProps) {
+export function RecordConsentModal({ mode, notesLive = false, onModeChange, onClose, onStart }: RecordConsentModalProps) {
   const { t } = useI18n();
   return (
     <div className="kloud-modal-overlay" onMouseDown={onClose}>
@@ -88,7 +90,9 @@ export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: Rec
                 />
                 <span>
                   {t(`toolbar.recordingMode.${m}`)}
-                  <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>{t(`toolbar.recordingMode.${m}Hint`)}</span>
+                  <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
+                    {t(m === 'ai_notes' && notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
+                  </span>
                 </span>
               </label>
             ))}

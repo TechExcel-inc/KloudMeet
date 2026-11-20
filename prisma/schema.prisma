@@ -158,6 +158,7 @@ model Meeting {
   chatMessages            MeetingChatMessage[]
   summaryItems            MeetingSummaryItem[]
   summary                 MeetingSummary?
+  presentation            MeetingPresentation?
   transcripts             MeetingTranscript[]
   recordings              Recording[]
   recordingAccessRequests RecordingAccessRequest[]
@@ -260,6 +261,27 @@ model MeetingSummary {
   meeting        Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingSummary_meetingId_fkey")
 
   @@map("MeetingSummary")
+}
+
+/// AI presentation of a meeting: the meeting retold as slides that play by themselves, much
+/// shorter than the meeting (lib/meetingPresentation.ts). Made as soon as an AI Notes session ends.
+model MeetingPresentation {
+  id        Int      @id @default(autoincrement())
+  meetingId Int      @unique(map: "MeetingPresentation_meetingId_key")
+  /// GENERATING | READY | FAILED
+  status    String   @default("GENERATING") @db.VarChar(20)
+  /// MeetingPresentation JSON (version, title, language, slides); null until READY
+  content   Json?
+  /// Model that directed it, and a short reason when generation failed. Internal notes.
+  model     String?  @db.VarChar(100)
+  error     String?  @db.VarChar(500)
+  /// When the current generation was claimed: a newer claim replaces an abandoned one
+  startedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  meeting   Meeting  @relation(fields: [meetingId], references: [id], onDelete: Cascade, map: "MeetingPresentation_meetingId_fkey")
+
+  @@map("MeetingPresentation")
 }
 
 model MeetingTranscript {

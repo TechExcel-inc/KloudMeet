@@ -7,6 +7,9 @@ import { canManageRecording } from '@/lib/apiAuth';
 import { transcribeStateOf } from '@/lib/aliyunRecordingTranscription';
 import { RECORDING_STATUS_ARCHIVED, billingLimitResponse } from '@/lib/billing/limits';
 import { parsePauseSpans, pauseRangesInMedia, recordingModeOf } from '@/lib/recordingControls';
+import { hasNoMedia, silenceUrl } from '@/lib/liveNotes';
+import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentation';
+import { loadPresentation, schedulePresentation } from '@/lib/meetingPresentationServer';
 import { SHOT_KIND, type ShareShot } from '@/lib/shareShot';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
 import { isPresenceKind, type PresenceEvent } from '@/lib/livedoc/presence';
@@ -106,14 +109,21 @@ export async function GET(
 
     // 生成 S3 预签名播放 URL（1小时有效期）
     let streamUrl: string | null = null;
-    try {
-      const command = new GetObjectCommand({
-        Bucket: process.env.S3_BUCKET!,
-        Key: recording.storageKey,
-      });
-      streamUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
-    } catch (e) {
-      console.error('[replay summary] S3 presign failed:', e);
+    const noMedia = hasNoMedia(recording);
+    if (noMedia) {
+      // AI Taking Notes kept no audio: replay keeps time with a silent file of the session's length.
+      const lastLine = recording.meeting?.transcripts.reduce((max, line) => Math.max(max, line.offsetSeconds ?? 0), 0) ?? 0;
+      streamUrl = silenceUrl(recording.durationSeconds || lastLine + 60);
+    } else {
+      try {
+        const command = new GetObjectCommand({
+          Bucket: process.env.S3_BUCKET!,
+          Key: recording.storageKey,
+        });
+        streamUrl = await getSignedUrl(s3, command, { expiresIn: 3600 });
+      } catch (e) {
+        console.error('[replay summary] S3 presign failed:', e);
+      }
     }
 
     // LiveDoc Full Recording: the replay shows LiveDoc (Kloud's saved actions) and the screen
@@ -170,13 +180,28 @@ export async function GET(
       }
     }
 
+    // AI Taking Notes: the AI presentation of the meeting. It is made when the session ends; if
+    // that didn't happen (the server restarted meanwhile), opening the replay starts it.
+    let presentation: PresentationState = NO_PRESENTATION;
+    if (noMedia) {
+      presentation = await loadPresentation(recording.meetingId);
+      if (presentation.status === 'NONE' && (recording.meeting?.transcripts.length ?? 0) > 0) {
+        schedulePresentation(recording.meetingId, { memberId: recording.teamMemberId });
+        presentation = { status: 'GENERATING', content: null };
+      }
+    }
+
     return apiJson({
       recording: {
         id: recording.id,
         shareKey,
         visibility: recording.visibility,
         canManage,
-        canTranscribe,
+        // No audio was kept, so there is nothing to transcribe afterwards.
+        canTranscribe: canTranscribe && !noMedia,
+        // False for AI Taking Notes: streamUrl is then a silent clock, not a recording.
+        hasMedia: !noMedia,
+        presentation,
         fileName: recording.fileName,
         durationSeconds: recording.durationSeconds,
         // Paused stretches, as [start, end] seconds into the file: the player skips them

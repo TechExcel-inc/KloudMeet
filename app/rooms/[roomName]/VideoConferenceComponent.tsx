@@ -30,6 +30,7 @@ import { peerStateOf } from '@/lib/RtasrHelper/captionPeers';
 import { SpeakWhileMutedPrompt } from '@/lib/SpeakWhileMutedPrompt';
 import { useSpeakWhileMutedPrompt } from '@/lib/useSpeakWhileMutedPrompt';
 import { useSpeakActivityRecorder } from '@/lib/useSpeakActivityRecorder';
+import { useLiveNotesStreamer } from '@/lib/useLiveNotesStreamer';
 import { useShareShots } from '@/lib/useShareShots';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { useMeetingDocumentPip, type MeetingDocumentPipApi } from '@/lib/useMeetingDocumentPip';
@@ -45,6 +46,7 @@ import {
   coerceRecordingState,
   IDLE_RECORDING_STATE,
   RECORDING_STATE_MSG,
+  takesNotesOnly,
   type RecordingMode,
   type RecordingState,
 } from '@/lib/recordingControls';
@@ -1612,6 +1614,13 @@ export function VideoConferenceComponent(props: {
 
   const speakActivityToken = searchParams?.get(SPEAK_TOKEN_PARAM) ?? null;
   useSpeakActivityRecorder(room, isRecorderBot && livekitConnected ? speakActivityToken : null);
+  // AI Taking Notes: the recorder sends the room's audio to the recognizer as the meeting runs,
+  // so no audio file is kept. It turns itself off for a recording that keeps a media file.
+  useLiveNotesStreamer(
+    room,
+    isRecorderBot && livekitConnected ? speakActivityToken : null,
+    recordingState.paused,
+  );
 
   const speakWhileMutedMonitoring =
     livekitConnected &&
@@ -3733,7 +3742,9 @@ export function VideoConferenceComponent(props: {
           )}
 
           {/* ── Recording Save Overlay ── */}
-          {recordSavePhase !== null && <RecordingSaveOverlay phase={recordSavePhase} />}
+          {recordSavePhase !== null && (
+            <RecordingSaveOverlay phase={recordSavePhase} notes={takesNotesOnly(recordingState)} />
+          )}
 
           {/* Remote Control approval dialog — rendered at top level to avoid overflow clipping */}
           {remoteControlRequest && screenShareActive && (
@@ -4538,6 +4549,7 @@ export function VideoConferenceComponent(props: {
           {showRecordPopup && canRecordHere && (
             <RecordConsentModal
               mode={recordingState.mode}
+              notesLive={recordingState.notesLive === true}
               onModeChange={(m) => setRecordingState((st) => ({ ...st, mode: m }))}
               onClose={() => setShowRecordPopup(false)}
               onStart={() => {
@@ -4548,7 +4560,7 @@ export function VideoConferenceComponent(props: {
           )}
 
           {process.env.NODE_ENV === 'development' ? <DebugMode /> : null}
-          <RecordingIndicator />
+          <RecordingIndicator notes={takesNotesOnly(recordingState)} />
           {!isRecorderBot && acceptsKnocks && (isHost || isCohost) && (
             <JoinRequestsPrompt
               room={room}

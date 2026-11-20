@@ -1,6 +1,8 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { EgressClient, EncodedFileType, EncodedFileOutput } from 'livekit-server-sdk';
+import { EgressClient, EncodedFileType, EncodedFileOutput, StreamOutput, StreamProtocol } from 'livekit-server-sdk';
+import { hasNoMedia, liveNotesEnabled, NO_MEDIA_PROVIDER } from '@/lib/liveNotes';
+import { askRecorderToFlush, finishLiveNotes } from '@/lib/liveNotesServer';
 import { isAuthError, requireSession } from '@/lib/apiAuth';
 import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
@@ -31,7 +33,10 @@ const S3_REGION = process.env.S3_REGION;
 const S3_BUCKET = process.env.S3_BUCKET;
 const S3_ENDPOINT = process.env.S3_ENDPOINT;
 
-type MeetingRow = NonNullable<Awaited<ReturnType<typeof prisma.meeting.findUnique>>>;
+/** After a live notes session failed, how long the meeting records a file instead. */
+const LIVE_NOTES_RETRY_AFTER_MS = 30 * 60 * 1000;
+
+type MeetingRow =NonNullable<Awaited<ReturnType<typeof prisma.meeting.findUnique>>>;
 type RecordingRow = NonNullable<Awaited<ReturnType<typeof prisma.recording.findFirst>>>;
 
 /** The running recording of a meeting (egress still writing), if any. */
@@ -59,6 +64,8 @@ function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingSta
     syncTranscript: meeting.recordingSyncTranscript,
     option: livedoc ? 'livedoc_full' : 'screen_share',
     livedocRecordingId: livedoc ? active?.livedocRecordingId ?? null : null,
+    // What is running decides; with nothing running, what a new AI Notes session would do.
+    notesLive: active ? hasNoMedia(active) : liveNotesEnabled(),
   };
 }
 
@@ -212,6 +219,11 @@ export async function POST(
         return apiJson({ error: 'No active recording found' }, { status: 404 });
       }
       
+      // AI Taking Notes: let the recorder hand in the sentence being spoken before it is shut down.
+      if (activeRecordings.some((rec) => hasNoMedia(rec) && !rec.pausedAt)) {
+        await askRecorderToFlush(roomName);
+      }
+
       // Stop all active egresses for this meeting (a pause still open ends here)
       const now = new Date();
       for (const rec of activeRecordings) {
@@ -236,6 +248,12 @@ export async function POST(
           where: { recordingId: rec.id, kind: 'shot', endMs: null },
           data: { endMs: openMs },
         });
+        // No file will arrive to make it READY: the session ends here.
+        if (hasNoMedia(rec)) {
+          await finishLiveNotes(rec, { endedAt: now }).catch((e) =>
+            console.error('[meetings record] live notes failed to finish', rec.id, e),
+          );
+        }
       }
       
       return apiJson({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
@@ -246,7 +264,26 @@ export async function POST(
     const quotaError = await checkReplayQuota(teamMemberId);
     if (quotaError) return quotaError;
 
-    if (!S3_ACCESS_KEY || !S3_SECRET || !S3_REGION || !S3_BUCKET) {
+    const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
+    // AI Taking Notes: speech becomes text while the meeting runs and no file is written
+    // (lib/liveNotes.ts). AI_NOTES_CAPTURE=file keeps the old audio file instead.
+    // If a live notes session of this meeting just ended in failure (its recorder broke before
+    // any notes), don't try the same thing again: record the audio file as before.
+    const brokeRecently = mode === 'ai_notes' && liveNotesEnabled()
+      ? await prisma.recording.findFirst({
+          where: {
+            meetingId: meeting.id,
+            storageProvider: NO_MEDIA_PROVIDER,
+            status: 'FAILED',
+            createdAt: { gte: new Date(Date.now() - LIVE_NOTES_RETRY_AFTER_MS) },
+          },
+          select: { id: true },
+        })
+      : null;
+    const wantLiveNotes = mode === 'ai_notes' && liveNotesEnabled() && !brokeRecently;
+    const hasStorage = !!(S3_ACCESS_KEY && S3_SECRET && S3_REGION && S3_BUCKET);
+
+    if (!hasStorage && !wantLiveNotes) {
       console.error('S3 configuration is missing in .env');
       return apiJson({ error: 'Cloud storage (S3/OSS) configuration is missing in environment variables. LiveKit Cloud requires a cloud storage destination for recordings.' }, { status: 500 });
     }
@@ -254,10 +291,12 @@ export async function POST(
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filepath = `recordings/${roomName}-${timestamp}.mp4`;
 
-    let fileOutput: EncodedFileOutput;
-    
+    let fileOutput: EncodedFileOutput | null = null;
+
     // Check if it's AliOSS or S3 based on endpoint or explicit variable
-    if (S3_ENDPOINT && S3_ENDPOINT.includes('aliyuncs.com')) {
+    if (!hasStorage) {
+      fileOutput = null;
+    } else if (S3_ENDPOINT && S3_ENDPOINT.includes('aliyuncs.com')) {
       fileOutput = new EncodedFileOutput({
         fileType: EncodedFileType.MP4,
         filepath,
@@ -310,7 +349,6 @@ export async function POST(
 
     // AI Notes Only 且会议已有活文档：Kloud 记下活文档动作，媒体只录音频。
     // 完整录制不走 LiveDoc，网页出口录整段会议画面（共享也在这段视频里）。
-    const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
     const livedocFull = mode === 'ai_notes' && meetingHasLivedoc(meeting) && !!livedocToken;
     let livedocRecordingId: number | null = null;
     let livedocStartedAt: Date | null = null;
@@ -333,15 +371,35 @@ export async function POST(
     const targetUrl = parsedUrl.toString();
 
     let info;
+    let noMedia = false;
     try {
-      info = await egressClient.startWebEgress(
-        targetUrl,
-        fileOutput, // The new standard requires passing the output definition object natively here
-        {
-          audioOnly,
-          videoOnly: false,
+      if (wantLiveNotes) {
+        // The recorder needs an output to run, so it gets a stream with no destination: the
+        // page is loaded and plays the room's audio, and nothing is written or sent anywhere.
+        // The page itself sends that audio to the recognizer (lib/useLiveNotesStreamer.ts).
+        try {
+          info = await egressClient.startWebEgress(
+            targetUrl,
+            new StreamOutput({ protocol: StreamProtocol.RTMP, urls: [] }),
+            { audioOnly: true, videoOnly: false },
+          );
+          noMedia = true;
+        } catch (e) {
+          if (!fileOutput) throw e;
+          console.error('[meetings record] live notes recorder failed to start; recording a file instead', e);
         }
-      );
+      }
+      if (!info) {
+        if (!fileOutput) throw new Error('Cloud storage (S3/OSS) configuration is missing');
+        info = await egressClient.startWebEgress(
+          targetUrl,
+          fileOutput, // The new standard requires passing the output definition object natively here
+          {
+            audioOnly,
+            videoOnly: false,
+          }
+        );
+      }
     } catch (e) {
       // Don't leave Kloud recording a meeting that has no media.
       if (livedocRecordingId && meeting.kloudMeetingId && livedocToken) {
@@ -357,8 +415,8 @@ export async function POST(
         teamMemberId: teamMemberId,
         shareKey: newShareKey(),
         visibility: 'PRIVATE',
-        fileName: `${roomName}-${timestamp}.mp4`,
-        storageProvider: S3_ENDPOINT?.includes('aliyuncs') ? 'ALI_OSS' : 'S3',
+        fileName: noMedia ? `${roomName}-${timestamp}` : `${roomName}-${timestamp}.mp4`,
+        storageProvider: noMedia ? NO_MEDIA_PROVIDER : S3_ENDPOINT?.includes('aliyuncs') ? 'ALI_OSS' : 'S3',
         storageKey: info.egressId, // Temporarily store egressId here
         status: 'PROCESSING',
         activityToken,

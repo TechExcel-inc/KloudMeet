@@ -13,6 +13,8 @@ import { onRecordingReady } from '@/lib/billing/limits';
 import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
 import { startRecordingTranscription } from '@/lib/aliyunRecordingTranscription';
+import { hasNoMedia } from '@/lib/liveNotes';
+import { finishLiveNotes } from '@/lib/liveNotesServer';
 import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
 import { onSectionEgressEnded, onTrackPublished } from '@/lib/livedoc/screenSections';
 import { appendPresence, isPresenceRecorder, type PresenceInput } from '@/lib/livedoc/presenceRecord';
@@ -93,7 +95,13 @@ export async function POST(request: NextRequest) {
           });
           await finishLivedocRecording(recording, meeting?.kloudMeetingId ?? null);
         }
-        if (error) {
+        if (hasNoMedia(recording)) {
+          // AI Taking Notes: no file comes back. The session ends when its recorder does.
+          await finishLiveNotes(recording, {
+            endedAt: egressTimeToDate(event.egressInfo.endedAt) ?? new Date(),
+            failed: !!error,
+          });
+        } else if (error) {
           await prisma.recording.update({
             where: { id: recording.id },
             data: { status: 'FAILED' }

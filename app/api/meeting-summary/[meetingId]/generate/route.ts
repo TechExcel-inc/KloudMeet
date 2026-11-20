@@ -9,17 +9,11 @@
  *   4. 每节写一行 MeetingSummaryItem（章节卡片也用它），主题 / 概览 / 待办写 MeetingSummary
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { meterAiSummary, meterSafely } from '@/lib/billing/usage';
-import {
-  aiFailureReason,
-  draftSummary,
-  normalizeSummary,
-  sectionContent,
-  type SummaryDraft,
-} from '@/lib/meetingSummary';
+import { writeMeetingSummary } from '@/lib/meetingSummaryServer';
+import { schedulePresentation } from '@/lib/meetingPresentationServer';
 import { isInternalMember } from '@/lib/internalStaff.server';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
@@ -33,71 +27,6 @@ async function getSession(req: NextRequest) {
     where: { token },
     select: { id: true, expiresAt: true, teamMemberId: true },
   });
-}
-
-// ── Format seconds to HH:mm:ss ──────────────────────────────
-function secsToHMS(secs: number): string {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  const s = Math.floor(secs % 60);
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-// ── Call AI (DeepSeek first, OpenAI fallback); returns the parsed JSON object ──
-async function chat(
-  url: string,
-  key: string,
-  model: string,
-  system: string,
-  prompt: string,
-  maxTokens: number,
-): Promise<unknown> {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: prompt },
-      ],
-      temperature: 0.2,
-      max_tokens: maxTokens,
-      response_format: { type: 'json_object' },
-    }),
-    signal: AbortSignal.timeout(90000),
-  });
-  if (!res.ok) {
-    throw Object.assign(new Error(`${model} error: ${await res.text()}`), { status: res.status });
-  }
-  const data = await res.json();
-  return JSON.parse(data.choices?.[0]?.message?.content || '{}');
-}
-
-/** One call: DeepSeek, or OpenAI when DeepSeek is missing or fails (for this call only). */
-async function callAI(system: string, prompt: string, maxTokens: number): Promise<SummaryDraft> {
-  const deepseekKey = process.env.DEEPSEEK_API_KEY;
-  let fallbackReason = 'no-key';
-  if (deepseekKey) {
-    try {
-      const raw = await chat(
-        'https://api.deepseek.com/v1/chat/completions',
-        deepseekKey,
-        'deepseek-chat',
-        system,
-        prompt,
-        maxTokens,
-      );
-      return { raw, model: 'deepseek-chat', fallbackReason: null };
-    } catch (e) {
-      fallbackReason = aiFailureReason(e);
-      console.warn(`[generate] DeepSeek failed (${fallbackReason}), trying OpenAI:`, e);
-    }
-  }
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (!openaiKey) throw new Error('No AI API key configured');
-  const raw = await chat('https://api.openai.com/v1/chat/completions', openaiKey, 'gpt-4o-mini', system, prompt, maxTokens);
-  return { raw, model: 'gpt-4o-mini', fallbackReason };
 }
 
 // ── Main handler ─────────────────────────────────────────────
@@ -148,54 +77,21 @@ export async function POST(
 
     const meetingName = meeting.title || meeting.roomName || `Meeting #${localMeetingId}`;
 
-    // Long meetings are drafted in parts (lib/meetingSummary draftSummary)
-    let ai: SummaryDraft;
-    try {
-      ai = await draftSummary(meetingName, transcripts, callAI);
-    } catch (e: any) {
-      console.error('[generate] AI call failed:', e);
-      return apiJson({ error: 'The AI service failed. Please try again.' }, { status: 502 });
+    // Drafted by the model, checked against the transcript, then stored (lib/meetingSummaryServer.ts)
+    const saved = await writeMeetingSummary(localMeetingId, meetingName, transcripts);
+    if ('failed' in saved) {
+      return apiJson(
+        {
+          error: saved.failed === 'ai_failed'
+            ? 'The AI service failed. Please try again.'
+            : 'The AI service returned no usable summary. Please try again.',
+        },
+        { status: 502 },
+      );
     }
-
-    // Every point and to-do must land on a real transcript line; the rest is dropped
-    const summary = normalizeSummary(ai.raw, transcripts);
-    if (!summary) {
-      return apiJson({ error: 'The AI service returned no usable summary. Please try again.' }, { status: 502 });
-    }
-
-    const saved = await prisma.$transaction(async (tx) => {
-      await tx.meetingSummaryItem.deleteMany({ where: { meetingId: localMeetingId } });
-      await tx.meetingSummaryItem.createMany({
-        data: summary.sections.map((section, idx) => ({
-          meetingId: localMeetingId,
-          title: section.title,
-          content: sectionContent(section),
-          timeOffset: secsToHMS(section.startSec),
-          speaker: section.speaker,
-          points: section.points as unknown as Prisma.InputJsonValue,
-          sortOrder: idx,
-        })),
-      });
-      const fields = {
-        topic: summary.topic || null,
-        overview: summary.overview || null,
-        speakers: summary.speakers as unknown as Prisma.InputJsonValue,
-        todos: summary.todos as unknown as Prisma.InputJsonValue,
-        model: ai.model,
-        fallbackReason: ai.fallbackReason,
-      };
-      const head = await tx.meetingSummary.upsert({
-        where: { meetingId: localMeetingId },
-        create: { meetingId: localMeetingId, ...fields },
-        update: fields,
-        select: { topic: true, overview: true, speakers: true, todos: true, updatedAt: true },
-      });
-      const items = await tx.meetingSummaryItem.findMany({
-        where: { meetingId: localMeetingId },
-        orderBy: { sortOrder: 'asc' },
-      });
-      return { items, head };
-    });
+    const ai = saved.ai;
+    // A presentation made from the earlier summary no longer matches: make it again.
+    schedulePresentation(localMeetingId, { force: true });
 
     await meterSafely(`ai:${localMeetingId}`, () => meterAiSummary(session.teamMemberId, localMeetingId));
 

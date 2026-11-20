@@ -17,8 +17,12 @@ import { submitProgress, toSttStatus, type TranscribeState } from '@/lib/recordi
 
 const DASHSCOPE_BASE = process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/api/v1';
 const MODEL = process.env.DASHSCOPE_FILE_ASR_MODEL || 'paraformer-v2';
-/** 提交阶段超过该时长仍未拿到 taskId，重新提交（进程中途退出等） */
-const SUBMIT_STALE_MS = 2 * 60 * 1000;
+/**
+ * 提交阶段超过该时长仍未拿到 taskId，重新提交（进程中途退出等）。
+ * 提交包含从 S3 下载整个文件再上传到百炼，大文件要好几分钟，
+ * 所以要留够时间，否则轮询会在上传途中再提交一次。
+ */
+export const SUBMIT_STALE_MS = 30 * 60 * 1000;
 /** 对齐写入的互斥标记；超时后允许下一次打开接着写 */
 const SAVE_LOCK = 'resume';
 const SAVE_STALE_MS = 60 * 1000;
@@ -317,7 +321,10 @@ export function transcribeStateOf(recording: Recording): TranscribeState {
  * 已有 taskId 的失败不走这里，避免丢掉可继续的识别结果。
  */
 async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
-  const staleBefore = new Date(Date.now() - SUBMIT_STALE_MS);
+  // 抢占时间同时是本次提交的凭证：之后的写入只在凭证未被别的提交取代时生效
+  const claimedAt = new Date();
+  const staleBefore = new Date(claimedAt.getTime() - SUBMIT_STALE_MS);
+  const held = { id: recording.id, sttStatus: 'SUBMITTING', sttStartedAt: claimedAt };
   const claimed = await prisma.recording.updateMany({
     where: {
       id: recording.id,
@@ -327,19 +334,31 @@ async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
         { sttStatus: 'SUBMITTING', sttStartedAt: { lt: staleBefore } },
       ],
     },
-    data: { sttStatus: 'SUBMITTING', sttStartedAt: new Date(), sttError: null, sttTaskId: null },
+    data: { sttStatus: 'SUBMITTING', sttStartedAt: claimedAt, sttError: null, sttTaskId: null },
   });
 
   if (claimed.count > 0) {
     try {
       const taskId = await submitTask(recording);
-      await prisma.recording.update({
-        where: { id: recording.id },
+      const saved = await prisma.recording.updateMany({
+        where: held,
         data: { sttStatus: 'RUNNING', sttTaskId: taskId },
       });
+      if (saved.count === 0) {
+        // 上传期间被另一次提交取代：不覆盖它的任务和状态
+        console.warn('[aliyunRecordingTranscription] submit superseded, task dropped', recording.id, taskId);
+      }
     } catch (err) {
       console.error('[aliyunRecordingTranscription] submit failed', err);
-      await markFailed(recording.id, err, true);
+      // 同样只在仍持有凭证时记失败，避免把正在进行的另一次提交标成失败
+      await prisma.recording.updateMany({
+        where: held,
+        data: {
+          sttStatus: 'FAILED',
+          sttError: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
+          sttTaskId: null,
+        },
+      });
     }
   }
 

@@ -24,7 +24,8 @@ function isFunLine(value: unknown): value is FunLine {
   return typeof value === 'object' && value !== null;
 }
 
-function relayUrl(token: string): string {
+/** Address of the Fun-ASR relay for a one-time ticket (also used by lib/liveNotesStreamer.ts). */
+export function relayUrl(token: string): string {
   const configured = process.env.NEXT_PUBLIC_FUNASR_WS_URL?.trim();
   if (configured) {
     const url = new URL(configured);

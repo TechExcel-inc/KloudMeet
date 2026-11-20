@@ -54,6 +54,16 @@ export interface RecordingState {
   option?: RecordingOption;
   /** Kloud recording id while a livedoc_full recording runs */
   livedocRecordingId?: number | null;
+  /**
+   * AI Notes Only turns speech into text as the meeting runs and keeps no audio file
+   * (lib/liveNotes.ts). False when this server still records a file for notes.
+   */
+  notesLive?: boolean;
+}
+
+/** True when what is running (or would start) is AI Taking Notes with no audio kept. */
+export function takesNotesOnly(state: Pick<RecordingState, 'mode' | 'notesLive'>): boolean {
+  return state.mode === 'ai_notes' && state.notesLive === true;
 }
 
 export const IDLE_RECORDING_STATE: RecordingState = {

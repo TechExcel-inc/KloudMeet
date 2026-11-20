@@ -5,6 +5,8 @@ import { EgressClient } from 'livekit-server-sdk';
 import { egressOutputFile } from '@/lib/egressFile';
 import { egressTimeToDate } from '@/lib/recordingSpeakActivity';
 import { onRecordingReady } from '@/lib/billing/limits';
+import { hasNoMedia } from '@/lib/liveNotes';
+import { finishLiveNotes } from '@/lib/liveNotesServer';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
@@ -59,7 +61,14 @@ export async function GET(request: NextRequest) {
           newStatus = 'FAILED';
         }
 
-        if (newStatus === 'READY' && fileInfo) {
+        if (newStatus && hasNoMedia(rec)) {
+          // AI Taking Notes has no file: the session ends when its recorder has.
+          await finishLiveNotes(rec, {
+            endedAt: egressTimeToDate(egressInfo.endedAt) ?? new Date(),
+            failed: newStatus === 'FAILED',
+          });
+          updatedCount++;
+        } else if (newStatus === 'READY' && fileInfo) {
           const ready = await prisma.recording.update({
             where: { id: rec.id },
             data: {

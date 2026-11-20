@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
 import { requireMeetingAccess } from '@/lib/meetingAccessGuards';
+import { NO_MEDIA_PROVIDER } from '@/lib/liveNotes';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export async function POST(req: NextRequest) {
@@ -27,6 +28,20 @@ export async function POST(req: NextRequest) {
 
     const access = await requireMeetingAccess(req, Number(meetingId));
     if (access instanceof NextResponse) return access;
+
+    // AI Taking Notes is already writing this meeting's transcript from the room's audio, so a
+    // live caption of the same speech would be a second copy. Captions still show on screen.
+    const notes = await prisma.recording.findFirst({
+      where: {
+        meetingId: access.meeting.id,
+        status: 'PROCESSING',
+        storageProvider: NO_MEDIA_PROVIDER,
+        pausedAt: null,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (notes) return apiJson({ ok: true, skipped: 'notes' });
 
     const record = await prisma.meetingTranscript.create({
       data: {

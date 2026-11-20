@@ -9,6 +9,8 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { readSpeakBatch } from '@/lib/recordingSpeakActivity';
+import { hasNoMedia } from '@/lib/liveNotes';
+import { realignLiveNotes } from '@/lib/liveNotesServer';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const NAME_MAX = 191;
@@ -25,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const recording = await prisma.recording.findUnique({
       where: { activityToken: batch.token },
-      select: { id: true, deletedAt: true },
+      select: { id: true, deletedAt: true, meetingId: true, storageProvider: true, mediaStartedAt: true, createdAt: true },
     });
     if (!recording || recording.deletedAt) {
       return apiJson({ error: 'Recording not found' }, { status: 404 });
@@ -46,6 +48,14 @@ export async function POST(req: NextRequest) {
         peakLevel: clampLevel(item.peakLevel),
       })),
     });
+
+    // AI Taking Notes: sentences arrive before the intervals around them, so name them now.
+    if (hasNoMedia(recording)) {
+      const fromMs = Math.min(...batch.intervals.map((item) => item.startMs));
+      await realignLiveNotes(recording, { fromMs }).catch((err: unknown) =>
+        console.error('[recordings speak-activity] live notes realign failed', recording.id, err),
+      );
+    }
 
     return apiJson({ ok: true, count: result.count });
   } catch (err) {

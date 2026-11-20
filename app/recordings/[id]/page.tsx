@@ -12,6 +12,8 @@ import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
+import { NotesReplayStage, type NotesStageMode } from '@/lib/NotesReplayStage';
+import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentation';
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
@@ -108,6 +110,10 @@ interface ReplayData {
     streamUrl: string | null;
     /** AI Notes Only：回放不放声音，只留进度 */
     notesOnly?: boolean;
+    /** False for AI Taking Notes: no audio was kept, and streamUrl is a silent playback clock */
+    hasMedia?: boolean;
+    /** AI Taking Notes: the AI presentation of the meeting (made when the session ended) */
+    presentation?: PresentationState;
     status: string;
     createdAt: string;
     recordedBy: { fullName: string | null; username: string } | null;
@@ -1012,6 +1018,10 @@ export default function ReplayPage() {
   const [panelVisible, setPanelVisible] = useState(true);
   const [videoFit, setVideoFit] = useState<'width' | 'height'>('width');
   const [helpOpen, setHelpOpen] = useState(false);
+  // AI Taking Notes replay: what the stage shows. null = not chosen yet (the presentation when there is one).
+  const [stageMode, setStageMode] = useState<NotesStageMode | null>(null);
+  const [presentation, setPresentation] = useState<PresentationState>(NO_PRESENTATION);
+  const [regenerating, setRegenerating] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
   const [userInfo, setUserInfo] = useState<{ displayName: string; avatarUrl?: string } | null>(
@@ -1096,6 +1106,58 @@ export default function ReplayPage() {
   const handleTranscribeDone = useCallback(() => {
     setReloadKey((k) => k + 1);
     setActiveTab('transcript');
+  }, []);
+
+  // The presentation arrives with the page; while one is being made, ask again until it is done.
+  const loadedPresentation = data?.recording.presentation;
+  useEffect(() => {
+    if (loadedPresentation) setPresentation(loadedPresentation);
+  }, [loadedPresentation]);
+  const presentationStatus = presentation.status;
+  useEffect(() => {
+    if (!id || presentationStatus !== 'GENERATING') return;
+    let stopped = false;
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/presentation`, {
+          headers: authHeaders(),
+          cache: 'no-store',
+        });
+        if (!res.ok || stopped) return;
+        const next = ((await res.json()) as { presentation?: PresentationState }).presentation;
+        if (!next || stopped || next.status === 'GENERATING') return;
+        setPresentation(next);
+        setRegenerating(false);
+        // The summary and chapters were written with it: show them too.
+        if (next.status === 'READY') setReloadKey((k) => k + 1);
+      } catch {
+        /* try again on the next tick */
+      }
+    }, 4000);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+    };
+  }, [id, presentationStatus]);
+
+  const regeneratePresentation = useCallback(async () => {
+    if (!id) return;
+    setRegenerating(true);
+    try {
+      const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/presentation`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setPresentation({ status: 'GENERATING', content: null });
+      setStageMode('presentation');
+    } catch {
+      setRegenerating(false);
+    }
+  }, [id]);
+
+  const pauseClock = useCallback(() => {
+    videoRef.current?.pause();
   }, []);
 
   const seekTo = useCallback((secs: number) => {
@@ -1283,24 +1345,26 @@ export default function ReplayPage() {
       .filter((p) => p.member?.avatarUrl)
       .map((p) => [p.displayName, p.member!.avatarUrl as string]),
   );
+  const metaWhen = meeting?.actualStartedAt
+    ? new Date(meeting.actualStartedAt).toLocaleString(locale, {
+        ...(new Date(meeting.actualStartedAt).getFullYear() !== new Date().getFullYear()
+          ? { year: 'numeric' as const }
+          : {}),
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+  const metaLength = meeting?.actualDurationMinutes
+    ? t('replay.minutes', { n: meeting.actualDurationMinutes })
+    : recording.durationSeconds
+      ? fmtTime(recording.durationSeconds)
+      : '';
   const metaParts = [
     !canManage && sharerName ? t('replay.sharedBy', { name: sharerName }) : '',
-    meeting?.actualStartedAt
-      ? new Date(meeting.actualStartedAt).toLocaleString(locale, {
-          ...(new Date(meeting.actualStartedAt).getFullYear() !== new Date().getFullYear()
-            ? { year: 'numeric' as const }
-            : {}),
-          month: 'short',
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit',
-        })
-      : '',
-    meeting?.actualDurationMinutes
-      ? t('replay.minutes', { n: meeting.actualDurationMinutes })
-      : recording.durationSeconds
-        ? fmtTime(recording.durationSeconds)
-        : '',
+    metaWhen,
+    metaLength,
     // The code lets people join a personal room, so only the owner sees it
     canManage && meeting?.roomName ? t('replay.metaCode', { code: meeting.roomName.replace(/_\d+$/, '') }) : '',
   ].filter(Boolean);
@@ -1323,6 +1387,13 @@ export default function ReplayPage() {
   const livedoc = recording.livedoc ?? null;
   const notesOnly = !!recording.notesOnly;
   const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
+  // AI Taking Notes kept no audio or video: the stage shows the AI presentation, or the meeting's
+  // own timeline with the transcript as captions (a LiveDoc or shared screenshot, when there is one).
+  const notesReplay = recording.hasMedia === false;
+  const notesMode: NotesStageMode =
+    stageMode ?? (presentation.status === 'READY' || presentation.status === 'GENERATING' ? 'presentation' : 'timeline');
+  const presenting = notesReplay && notesMode === 'presentation';
+  const captioning = notesReplay && !presenting && !livedoc && !noteShot;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1473,6 +1544,8 @@ export default function ReplayPage() {
                 >
                   {t('replay.back')}
                 </button>
+                {/* AI Taking Notes kept no audio: there is nothing to download */}
+                {recording.hasMedia !== false && (
                 <a
                   role="menuitem"
                   href={recording.streamUrl!}
@@ -1487,6 +1560,7 @@ export default function ReplayPage() {
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </a>
+                )}
                 <button
                   type="button"
                   role="menuitem"
@@ -1521,7 +1595,7 @@ export default function ReplayPage() {
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
           <div className={hasTranscripts ? s.videoCard : `${s.videoCard} ${s.videoCardFill}`}>
-            {livedoc && (
+            {livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
                 mediaRef={videoRef}
@@ -1542,21 +1616,54 @@ export default function ReplayPage() {
                 )}
               </LiveDocReplayStage>
             )}
-            {noteShot && (
+            {noteShot && !presenting && (
               // eslint-disable-next-line @next/next/no-img-element
               <img className={s.shot} src={noteShot.url} alt="" />
+            )}
+            {(presenting || captioning) && (
+              <div className={hasTranscripts ? s.notesReplay : s.notesReplayFill}>
+                <NotesReplayStage
+                  meetingTitle={meetingTitle}
+                  meetingMeta={[metaWhen, metaLength].filter(Boolean).join(' · ')}
+                  presentation={presentation}
+                  transcripts={transcripts}
+                  sections={realChapters.map((ch) => ({ title: ch.topic, startSec: ch.startSec, endSec: ch.endSec }))}
+                  durationSeconds={realDuration}
+                  currentTime={currentTime}
+                  playing={playing}
+                  mode={notesMode}
+                  onModeChange={setStageMode}
+                  onSeek={seekTo}
+                  onPauseClock={pauseClock}
+                  canManage={canManage}
+                  regenerating={regenerating}
+                  onRegenerate={regeneratePresentation}
+                  speakerColor={(name) => speakerColor(name, avatarTones)}
+                />
+              </div>
+            )}
+            {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
+            {notesReplay && !presenting && !captioning && (
+              <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
+                {t('replay.present.modePresentation')}
+              </button>
             )}
             <video
               ref={videoRef}
               src={recording.streamUrl!}
               controls
+              // The silent clock of an AI Taking Notes replay is not something to download or cast
+              controlsList={notesReplay ? 'nodownload noremoteplayback' : undefined}
+              disablePictureInPicture={notesReplay}
               muted={notesOnly}
               // 有活文档或共享截图时，控制条压成一条，避免把画面挤出屏幕。
               // AI Notes Only 用同一条控制条，只是不出声。
               style={
-                livedoc || noteShot
-                  ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
-                  : undefined
+                presenting
+                  ? { display: 'none' }
+                  : livedoc || noteShot || captioning
+                    ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
+                    : undefined
               }
               className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
               onLoadedMetadata={(e) => {
@@ -1718,7 +1825,8 @@ export default function ReplayPage() {
         )}
       </main>
 
-      {canAskTranscribe && meeting && (!hasTranscripts || unfinished) && (
+      {/* Not for AI Taking Notes: its transcript was written during the meeting and no audio is left */}
+      {canAskTranscribe && recording.hasMedia !== false && meeting && (!hasTranscripts || unfinished) && (
         <RecordingTranscribePrompt
           recordingKey={id}
           initial={recording.transcribe ?? IDLE_TRANSCRIBE}

@@ -48,6 +48,8 @@ export interface MeetingCornerStatusProps {
   room: Room | undefined;
   isRecording: boolean;
   paused: boolean;
+  /** AI Taking Notes with no audio kept: the chip says so instead of "Recording" */
+  notesOnly?: boolean;
   /** Host / co-host: the chip opens the recording controls. Everyone else sees a status. */
   canControlRecording: boolean;
   controlsOpen: boolean;
@@ -68,6 +70,7 @@ export function MeetingCornerStatus({
   room,
   isRecording,
   paused,
+  notesOnly = false,
   canControlRecording,
   controlsOpen,
   onOpenRecordingControls,
@@ -80,7 +83,9 @@ export function MeetingCornerStatus({
 
   if ((!isRecording && !weak) || typeof document === 'undefined') return null;
 
-  const recLabel = paused ? t('toolbar.recordingPaused') : t('toolbar.recording');
+  const recLabel = notesOnly
+    ? paused ? t('toolbar.notesPaused') : t('toolbar.takingNotes')
+    : paused ? t('toolbar.recordingPaused') : t('toolbar.recording');
   const recClass = `${styles.rec} ${paused ? styles.recPaused : ''}`;
 
   return createPortal(

@@ -7,7 +7,7 @@ import styles from '../styles/KloudMeetToolbar.module.css';
 import { useIsLandscape, useToolbarIsMobile } from './useToolbarIsMobile';
 import { ShareFullscreenButton } from './ShareFullscreenButton';
 import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
-import { RECORDING_MODES, type RecordingMode, type RecordingState } from './recordingControls';
+import { RECORDING_MODES, takesNotesOnly, type RecordingMode, type RecordingState } from './recordingControls';
 import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
@@ -2872,6 +2872,7 @@ export function KloudMeetToolbar({
           room={maybeRoom}
           isRecording={!!isRecording}
           paused={!!recordingState?.paused}
+          notesOnly={!!recordingState && takesNotesOnly(recordingState)}
           canControlRecording={canRecord}
           controlsOpen={activeSheet === 'recording'}
           onOpenRecordingControls={() => openSheet('recording')}
@@ -3489,12 +3490,14 @@ function ActiveSheetContent({
                 <circle cx="12" cy="12" r="10" />
               </svg>
               <span className={styles.actionSheetItemLabel}>
-                {isRecording ? t('toolbar.stopRecording') : t('toolbar.record')}
+                {isRecording
+                  ? t(recordingControls?.state && takesNotesOnly(recordingControls.state) ? 'toolbar.stopNotes' : 'toolbar.stopRecording')
+                  : t('toolbar.record')}
               </span>
               {isRecording && (
                 <span className={styles.recStatus}>
                   <span className={styles.recStatusDot} aria-hidden="true" />
-                  {t('toolbar.recording')}
+                  {t(recordingControls?.state && takesNotesOnly(recordingControls.state) ? 'toolbar.takingNotes' : 'toolbar.recording')}
                 </span>
               )}
             </button>
@@ -3738,6 +3741,8 @@ function ActiveSheetContent({
           const rec: RecordingState | undefined = recordingControls?.state;
           const paused = !!rec?.paused;
           const mode: RecordingMode = rec?.mode ?? 'full';
+          // AI Taking Notes keeps no recording, so its controls don't say "recording"
+          const notes = !!rec && takesNotesOnly(rec);
           const policyTitle = recordingControls?.canChangePolicy
             ? undefined
             : t('toolbar.recordingHostSetting');
@@ -3760,7 +3765,9 @@ function ActiveSheetContent({
                     <rect x="14" y="4" width="4" height="16" />
                   </svg>
                 )}
-                {paused ? t('toolbar.resumeRecording') : t('toolbar.pauseRecording')}
+                {notes
+                  ? paused ? t('toolbar.resumeNotes') : t('toolbar.pauseNotes')
+                  : paused ? t('toolbar.resumeRecording') : t('toolbar.pauseRecording')}
               </button>
               <button
                 className={`${styles.actionSheetItem} ${styles.actionSheetItemDanger}`}
@@ -3772,7 +3779,7 @@ function ActiveSheetContent({
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <rect x="6" y="6" width="12" height="12" rx="2" />
                 </svg>
-                {t('toolbar.stopRecording')}
+                {t(notes ? 'toolbar.stopNotes' : 'toolbar.stopRecording')}
               </button>
 
               <div
@@ -3835,7 +3842,7 @@ function ActiveSheetContent({
                     >
                       <span>{t(`toolbar.recordingMode.${m}`)}</span>
                       <span style={{ fontSize: 11, opacity: 0.6 }}>
-                        {t(`toolbar.recordingMode.${m}Hint`)}
+                        {t(m === 'ai_notes' && rec?.notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
                       </span>
                     </span>
                   </button>

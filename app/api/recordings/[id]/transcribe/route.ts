@@ -12,6 +12,7 @@ import {
   advanceRecordingTranscription,
   startRecordingTranscription,
 } from '@/lib/aliyunRecordingTranscription';
+import { hasNoMedia } from '@/lib/liveNotes';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 export const runtime = 'nodejs';
@@ -28,6 +29,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 
     if (recording.status !== 'READY') {
       return apiJson({ error: 'Recording is not ready yet' }, { status: 409 });
+    }
+    // AI Taking Notes kept no audio: there is no file to transcribe afterwards.
+    if (hasNoMedia(recording)) {
+      return apiJson({ error: 'This recording has no audio file' }, { status: 409 });
     }
     const existing = await prisma.meetingTranscript.count({
       where: { meetingId: recording.meetingId },

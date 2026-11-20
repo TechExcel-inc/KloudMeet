@@ -654,6 +654,42 @@
   min-height: 0;
 }
 
+/* AI Taking Notes replay (no media file): the AI presentation or the caption stage. The stage
+   sizes its own text from this box (container queries), so the box must have a real height. */
+.notesReplay {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-height: calc(62vh - 56px);
+  min-height: 280px;
+}
+
+.notesReplayFill {
+  flex: 1 1 0;
+  width: 100%;
+  min-height: 280px;
+}
+
+/* Over a LiveDoc or shared screenshot: back to the AI presentation */
+.presentBtn {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 7;
+  padding: 6px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  background: rgba(11, 13, 18, 0.72);
+  color: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.presentBtn:hover {
+  background: rgba(94, 92, 230, 0.85);
+}
+
 /* LiveDoc Full: who is in the meeting at the playhead. Dragged inside the stage. */
 .people {
   position: absolute;
