@@ -12,6 +12,8 @@ export interface ReplayCaptionProps {
   time: number;
   /** 普通视频的控制条盖住画面底部，字幕往上让开 */
   lift?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 /**
@@ -19,12 +21,11 @@ export interface ReplayCaptionProps {
  *
  * 显示当前这句话和说话人。整条可以在画面里拖动，也能收成一个小圆点，点一下再展开。
  */
-export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps) {
+export function ReplayCaption({ lines, time, lift = false, open, onOpenChange }: ReplayCaptionProps) {
   const { t } = useI18n();
-  const [open, setOpen] = React.useState(true);
   const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
-  const dragRef = React.useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
+  const dragRef = React.useRef<{ dx: number; dy: number; startX: number; startY: number; moved: boolean } | null>(null);
   const timed = React.useMemo(() => timedLines([...lines]), [lines]);
   const moment = captionAt(timed, time);
   const line = moment.current && !moment.quiet ? moment.current : null;
@@ -37,8 +38,14 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
     if (!root || !(stage instanceof HTMLElement)) return;
     const box = root.getBoundingClientRect();
     const stageBox = stage.getBoundingClientRect();
-    dragRef.current = { dx: event.clientX - box.left, dy: event.clientY - box.top, moved: false };
-    setPos({ x: box.left - stageBox.left, y: box.top - stageBox.top });
+    dragRef.current = {
+      dx: event.clientX - box.left,
+      dy: event.clientY - box.top,
+      startX: event.clientX,
+      startY: event.clientY,
+      moved: false,
+    };
+    place(box.left - stageBox.left, box.top - stageBox.top, root, stage);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -47,20 +54,27 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
     const root = rootRef.current;
     const stage = root?.offsetParent;
     if (!drag || !root || !(stage instanceof HTMLElement)) return;
-    if (Math.abs(event.movementX) + Math.abs(event.movementY) > 0) drag.moved = true;
+    if (Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) > 3) drag.moved = true;
     const stageBox = stage.getBoundingClientRect();
-    const maxX = Math.max(0, stage.clientWidth - root.offsetWidth);
-    const maxY = Math.max(0, stage.clientHeight - root.offsetHeight);
-    setPos({
-      x: Math.min(maxX, Math.max(0, event.clientX - stageBox.left - drag.dx)),
-      y: Math.min(maxY, Math.max(0, event.clientY - stageBox.top - drag.dy)),
-    });
+    place(event.clientX - stageBox.left - drag.dx, event.clientY - stageBox.top - drag.dy, root, stage);
   };
+
+  function place(x: number, y: number, root: HTMLElement, stage: HTMLElement) {
+    const fraction = (value: number, space: number) => space > 0 ? Math.min(1, Math.max(0, value / space)) : 0;
+    setPos({
+      x: 100 * fraction(x, stage.clientWidth - root.offsetWidth),
+      y: 100 * fraction(y, stage.clientHeight - root.offsetHeight),
+    });
+  }
+
+  const positionStyle = pos
+    ? { left: `${pos.x}%`, top: `${pos.y}%`, transform: `translate(-${pos.x}%, -${pos.y}%)` }
+    : undefined;
 
   const endDrag = () => {
     const drag = dragRef.current;
     dragRef.current = null;
-    if (drag && !drag.moved && !open) setOpen(true);
+    if (drag && !drag.moved && !open) onOpenChange(true);
   };
 
   if (timed.length === 0) return null;
@@ -69,7 +83,7 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
       <div
         ref={rootRef}
         className={pos ? `${styles.cue} ${styles.cuePlaced}` : `${styles.cue}${lift ? ` ${styles.cueLift}` : ''}`}
-        style={pos ? { left: pos.x, top: pos.y } : undefined}
+        style={positionStyle}
       >
         <div
           className={styles.cueDot}
@@ -80,10 +94,11 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
           onPointerDown={beginDrag}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
+          onPointerCancel={() => { dragRef.current = null; }}
           onKeyDown={(event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
-            setOpen(true);
+            onOpenChange(true);
           }}
         >
           <CaptionIcon />
@@ -98,13 +113,14 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
     <div
       ref={rootRef}
       className={pos ? `${styles.cue} ${styles.cuePlaced}` : `${styles.cue}${lift ? ` ${styles.cueLift}` : ''}`}
-      style={pos ? { left: pos.x, top: pos.y } : undefined}
+      style={positionStyle}
     >
       <div
         className={styles.cueBar}
         onPointerDown={beginDrag}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
+        onPointerCancel={() => { dragRef.current = null; }}
       >
         <p className={styles.cueLine}>
           {name && <span className={styles.cueWho}>{name}</span>}
@@ -116,7 +132,7 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
           aria-label={t('replay.captionCollapse')}
           title={t('replay.captionCollapse')}
           onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setOpen(false)}
+          onClick={() => onOpenChange(false)}
         >
           <MinusIcon />
         </button>
@@ -125,11 +141,11 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
   );
 }
 
-function CaptionIcon() {
+export function CaptionIcon() {
   return (
     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="2.5" y="5.5" width="19" height="13" rx="3" />
-      <path d="M6.5 10.5h5.5M6.5 14h9" />
+      <path d="M10.5 10a2.5 2.5 0 1 0 0 4M17.5 10a2.5 2.5 0 1 0 0 4" />
     </svg>
   );
 }

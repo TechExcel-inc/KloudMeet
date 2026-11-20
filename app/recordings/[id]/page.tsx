@@ -17,7 +17,7 @@ import { NotesReplayStage, type NotesStageMode } from '@/lib/NotesReplayStage';
 import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentation';
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
-import { ReplayCaption } from '@/lib/ReplayCaption';
+import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
 import {
@@ -1027,6 +1027,8 @@ export default function ReplayPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
+  const [captionsOpen, setCaptionsOpen] = useState(true);
+  const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
   const [regenerateTranscript, setRegenerateTranscript] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -1179,6 +1181,40 @@ export default function ReplayPage() {
     if (!media) return;
     void media.play().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setFullscreen((current) => stageRef.current && document.fullscreenElement === stageRef.current
+        ? 'native' : current === 'native' ? null : current);
+    };
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', onFullscreenChange);
+  }, []);
+
+  useEffect(() => {
+    if (fullscreen !== 'fallback') return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFullscreen(null);
+    };
+    document.addEventListener('keydown', onEscape);
+    return () => document.removeEventListener('keydown', onEscape);
+  }, [fullscreen]);
+
+  const enterFullscreen = () => {
+    const stage = stageRef.current;
+    if (!stage || fullscreen) return;
+    if (document.fullscreenEnabled && stage.requestFullscreen) {
+      void stage.requestFullscreen().catch(() => setFullscreen('fallback'));
+    } else {
+      setFullscreen('fallback');
+    }
+  };
+
+  const toggleFullscreen = () => {
+    if (fullscreen === 'native') void document.exitFullscreen().catch(() => undefined);
+    else if (fullscreen === 'fallback') setFullscreen(null);
+    else enterFullscreen();
+  };
 
   const seekTo = useCallback((secs: number) => {
     if (videoRef.current) {
@@ -1402,6 +1438,7 @@ export default function ReplayPage() {
     stageMode ?? (presentation.status === 'READY' || presentation.status === 'GENERATING' ? 'presentation' : 'timeline');
   const presenting = notesReplay && notesMode === 'presentation';
   const captioning = notesReplay && !presenting && !livedoc && !noteShot;
+  const showCaptionOverlay = !presenting && !captioning && hasTranscripts;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1540,10 +1577,7 @@ export default function ReplayPage() {
                 }}>{t('replay.accessUrl')}</button>
                 <button type="button" role="menuitem" className={s.menuItem} onClick={() => {
                   setAvatarMenuOpen(false);
-                  const stage = stageRef.current;
-                  if (stage?.requestFullscreen) void stage.requestFullscreen().catch(() => undefined);
-                  else (videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)
-                    ?.webkitEnterFullscreen?.();
+                  enterFullscreen();
                   resumeClock();
                 }}>{t('replay.playFullscreen')}</button>
                 {canManage && recording.hasMedia !== false && (
@@ -1605,14 +1639,35 @@ export default function ReplayPage() {
       {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
-          <div ref={stageRef} className={s.videoCard}>
+          <div ref={stageRef} className={s.videoCard} data-fullscreen={fullscreen ?? undefined}
+            data-clock-only={livedoc || noteShot ? true : undefined}
+          >
+            <div className={s.replayControls}>
+              {showCaptionOverlay && (
+                <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
+                  aria-label={t('replay.closedCaptions')}
+                  title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
+                  onClick={() => setCaptionsOpen((visible) => !visible)}
+                ><CaptionIcon /></button>
+              )}
+              <button type="button" className={s.replayControl}
+                aria-label={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+                title={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+                onClick={toggleFullscreen}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
+                </svg>
+              </button>
+            </div>
             {livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
                 mediaRef={videoRef}
                 viewerName={userInfo?.displayName || ''}
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
-                boxClass={notesOnly ? s.notesStage : undefined}
+                boxClass={s.notesStage}
                 shots={recording.shots ?? []}
                 coverWithShots={notesOnly}
               >
@@ -1623,7 +1678,6 @@ export default function ReplayPage() {
                     speaking={replaySpeaker?.name ?? ''}
                   />
                 )}
-                <ReplayCaption lines={transcripts} time={currentTime} />
                 {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </LiveDocReplayStage>
             )}
@@ -1631,7 +1685,6 @@ export default function ReplayPage() {
               <div className={s.shotFrame}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className={s.shot} src={noteShot.url} alt="" />
-                <ReplayCaption lines={transcripts} time={currentTime} />
                 {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </div>
             )}
@@ -1669,7 +1722,8 @@ export default function ReplayPage() {
               src={recording.streamUrl!}
               controls
               // The silent clock of an AI Taking Notes replay is not something to download or cast
-              controlsList={notesReplay ? 'nodownload noremoteplayback' : undefined}
+              controlsList={notesReplay ? 'nofullscreen nodownload noremoteplayback' : 'nofullscreen'}
+              playsInline
               disablePictureInPicture={notesReplay}
               muted={notesOnly}
               // 有活文档或共享截图时，控制条压成一条，避免把画面挤出屏幕。
@@ -1702,8 +1756,9 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
-            {!livedoc && !noteShot && !presenting && !captioning && (
-              <ReplayCaption lines={transcripts} time={currentTime} lift />
+            {showCaptionOverlay && (
+              <ReplayCaption lines={transcripts} time={currentTime} lift
+                open={captionsOpen} onOpenChange={setCaptionsOpen} />
             )}
             {!livedoc && !noteShot && !presenting && !captioning && !playing && (
               <ReplayPlayButton onPlay={resumeClock} />

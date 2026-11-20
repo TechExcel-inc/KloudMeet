@@ -626,7 +626,11 @@
 }
 
 .cueLift {
-  bottom: 41px;
+  bottom: var(--replay-caption-bottom, 41px);
+}
+
+.videoCard[data-clock-only] {
+  --replay-caption-bottom: 58px;
 }
 
 .cuePlaced {
@@ -1770,7 +1774,44 @@
   }
 }
 
-.videoCard:fullscreen {
+.replayControls {
+  position: absolute;
+  z-index: 9;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+}
+
+.replayControl {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #ffffff55;
+  border-radius: 8px;
+  background: #0f121ae6;
+  color: #fff;
+  cursor: pointer;
+}
+
+.replayControl:hover,
+.replayControl[aria-pressed='true'] {
+  background: #3d3772;
+}
+
+.replayControl:focus-visible {
+  outline: 2px solid #c4b5fd;
+  outline-offset: 2px;
+}
+
+/* Use the stage fullscreen control so the browser keeps the caption overlay with the video. */
+.video::-webkit-media-controls-fullscreen-button {
+  display: none;
+}
+
+.videoCard[data-fullscreen] {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1778,16 +1819,34 @@
   background: #000;
 }
 
-.videoCard:fullscreen > .video,
-.videoCard:fullscreen > .shotFrame,
-.videoCard:fullscreen > .notesReplay,
-.videoCard:fullscreen > .notesStage {
+.videoCard[data-fullscreen='fallback'] {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+}
+
+.videoCard[data-fullscreen] > .video,
+.videoCard[data-fullscreen] > .shotFrame,
+.videoCard[data-fullscreen] > .notesReplay,
+.videoCard[data-fullscreen] > .notesStage {
   max-height: 100%;
   min-height: 0;
 }
 
-.videoCard:fullscreen .shot {
+.videoCard[data-fullscreen] .shot {
   max-height: calc(100dvh - 56px);
+}
+
+.videoCard[data-fullscreen] .cue {
+  max-width: min(720px, calc(100% - 32px));
+}
+
+.videoCard[data-fullscreen] .cueLine {
+  font-size: clamp(16px, 1.65vw, 21px);
+}
+
+.videoCard[data-fullscreen] .cueBar {
+  padding: 9px 12px 9px 14px;
 }
 
 .meetingDialog {
