@@ -13,9 +13,9 @@ function timestamp(seconds: number) {
 }
 
 export function ReplayTransport({
-  mediaRef, time, expectedDuration, playing, silent, presenting, download, children,
+  mediaRef, time, expectedDuration, playing, silent, presenting, download, children, playback,
 }: {
-  mediaRef: RefObject<HTMLVideoElement | null>;
+  mediaRef: RefObject<HTMLMediaElement | null>;
   time: number;
   expectedDuration: number;
   playing: boolean;
@@ -23,6 +23,7 @@ export function ReplayTransport({
   presenting: boolean;
   download?: { url: string; fileName: string };
   children: ReactNode;
+  playback?: { duration: number; onToggle: () => void; onSeek: (seconds: number) => void; playDisabled: boolean };
 }) {
   const { t } = useI18n();
   const menu = useRef<HTMLDetailsElement>(null);
@@ -46,7 +47,10 @@ export function ReplayTransport({
     return () => events.forEach((event) => media.removeEventListener(event, sync));
   }, [mediaRef, download?.url]);
 
+  const playbackDuration = playback?.duration ?? duration;
+
   const togglePlay = () => {
+    if (playback) return playback.onToggle();
     const media = mediaRef.current;
     if (!media) return;
     if (media.paused) void media.play().catch(() => undefined);
@@ -67,12 +71,12 @@ export function ReplayTransport({
           <>
             <button type="button" className={s.replayControl}
               aria-label={t(playing ? 'replay.pause' : 'replay.play')}
-              title={t(playing ? 'replay.pause' : 'replay.play')} onClick={togglePlay}>
+              title={t(playing ? 'replay.pause' : 'replay.play')} disabled={playback?.playDisabled} onClick={togglePlay}>
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">
                 <path d={playing ? 'M7 5h4v14H7zm6 0h4v14h-4z' : 'M8 5v14l12-7z'} />
               </svg>
             </button>
-            <span className={s.transportTime}>{timestamp(time)} / {timestamp(duration || expectedDuration)}</span>
+            <span className={s.transportTime}>{timestamp(time)} / {timestamp(playbackDuration || expectedDuration)}</span>
           </>
         )}
         <div className={s.transportRight}>
@@ -135,11 +139,13 @@ export function ReplayTransport({
         </div>
       </div>
       {!presenting && (
-        <input type="range" className={s.transportSeek} min={0} max={duration || 1} step={0.1}
-          value={Math.min(time, duration)} disabled={!duration}
+        <input type="range" className={s.transportSeek} min={0} max={playbackDuration || 1} step={0.1}
+          value={Math.min(time, playbackDuration)} disabled={!playbackDuration}
           aria-label={t('replay.playbackPosition')} aria-valuetext={timestamp(time)}
           onChange={(event) => {
-            if (mediaRef.current) mediaRef.current.currentTime = Number(event.target.value);
+            const seconds = Number(event.target.value);
+            if (playback) playback.onSeek(seconds);
+            else if (mediaRef.current) mediaRef.current.currentTime = seconds;
           }}
         />
       )}

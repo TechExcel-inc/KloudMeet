@@ -18,6 +18,9 @@ import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentati
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
+import { SmartPlay } from '@/lib/SmartPlay';
+import type { WritingLength } from '@/lib/replayWriting';
+import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
@@ -995,6 +998,8 @@ export default function ReplayPage() {
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
   const [captionsOpen, setCaptionsOpen] = useState(true);
+  const [smartPlay, setSmartPlay] = useState<{ minutes: WritingLength; presentation: MeetingPresentation } | null>(null);
+  const [scriptHost, setScriptHost] = useState<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
   const [regenerateTranscript, setRegenerateTranscript] = useState(false);
@@ -1184,6 +1189,7 @@ export default function ReplayPage() {
   };
 
   const seekTo = useCallback((secs: number) => {
+    setSmartPlay(null);
     if (videoRef.current) {
       videoRef.current.currentTime = secs;
       void videoRef.current.play().catch(() => undefined);
@@ -1351,6 +1357,50 @@ export default function ReplayPage() {
     ? { name: speakingNow.name, photo: avatarPhotos[speakingNow.name], color: speakingNow.color }
     : null;
 
+  const playerButtons = (
+    <>
+      {(showCaptionOverlay || smartPlay) && (
+        <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
+          aria-label={t('replay.closedCaptions')}
+          title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
+          onClick={() => setCaptionsOpen((visible) => !visible)}
+        ><CaptionIcon enabled={captionsOpen} /></button>
+      )}
+      <button type="button" className={s.replayControl}
+        aria-label={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+        title={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+        onClick={toggleFullscreen}
+      >
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
+        </svg>
+      </button>
+      {meeting && (
+        <button type="button" className={s.replayControl}
+          aria-pressed={!fullscreen && panelVisible}
+          aria-label={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
+          title={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
+          onClick={() => {
+            if (fullscreen) {
+              setPanelVisible(true);
+              toggleFullscreen();
+            } else {
+              setPanelVisible((visible) => !visible);
+            }
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <path d="M15 4v16" />
+            {!fullscreen && panelVisible && <path d="M15 5h5v14h-5z" fill="currentColor" stroke="none" />}
+          </svg>
+        </button>
+      )}
+    </>
+  );
+
   return (
     <AvatarContext.Provider value={{ photos: avatarPhotos, tones: avatarTones }}>
     <div className={s.page}>
@@ -1465,7 +1515,7 @@ export default function ReplayPage() {
                 <button type="button" role="menuitem" className={s.menuItem} onClick={() => {
                   setAvatarMenuOpen(false);
                   enterFullscreen();
-                  resumeClock();
+                  if (!smartPlay) resumeClock();
                 }}>{t('replay.playFullscreen')}</button>
                 {canManage && recording.hasMedia !== false && (
                   <button type="button" role="menuitem" className={s.menuItem}
@@ -1528,7 +1578,16 @@ export default function ReplayPage() {
         <section className={s.stage}>
           <div ref={stageRef} className={s.videoCard} data-fullscreen={fullscreen ?? undefined}
           >
-            {livedoc && !presenting && (
+            {smartPlay && (
+              <SmartPlay key={`${id}:${smartPlay.minutes}`} recordingKey={id} minutes={smartPlay.minutes}
+                presentation={smartPlay.presentation} shots={recording.shots ?? []} liveDoc={livedoc}
+                viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
+                captionsOpen={captionsOpen} onJump={seekTo}
+                visualVideoUrl={recording.hasMedia !== false && !notesOnly ? recording.streamUrl ?? undefined : undefined}>
+                {playerButtons}
+              </SmartPlay>
+            )}
+            {!smartPlay && livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
                 mediaRef={videoRef}
@@ -1548,14 +1607,14 @@ export default function ReplayPage() {
                 {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </LiveDocReplayStage>
             )}
-            {noteShot && !presenting && (
+            {!smartPlay && noteShot && !presenting && (
               <div className={s.shotFrame}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img className={s.shot} src={noteShot.url} alt="" />
                 {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </div>
             )}
-            {(presenting || captioning) && (
+            {!smartPlay && (presenting || captioning) && (
               <div className={s.notesReplay}>
                 <NotesReplayStage
                   meetingTitle={meetingTitle}
@@ -1579,7 +1638,7 @@ export default function ReplayPage() {
               </div>
             )}
             {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
-            {notesReplay && !presenting && !captioning && (
+            {!smartPlay && notesReplay && !presenting && !captioning && (
               <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
                 {t('replay.present.modePresentation')}
               </button>
@@ -1590,7 +1649,7 @@ export default function ReplayPage() {
               playsInline
               disablePictureInPicture={notesReplay}
               muted={notesOnly}
-              className={presenting || livedoc || noteShot || captioning ? s.notesClock : s.video}
+              className={smartPlay || presenting || livedoc || noteShot || captioning ? s.notesClock : s.video}
               onLoadedMetadata={(e) => {
                 if (!notesOnly) return;
                 e.currentTarget.muted = true;
@@ -1611,60 +1670,22 @@ export default function ReplayPage() {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
             />
-            {showCaptionOverlay && (
+            {!smartPlay && showCaptionOverlay && (
               <ReplayCaption lines={transcripts} time={currentTime} lift
                 open={captionsOpen} />
             )}
-            {!livedoc && !noteShot && !presenting && !captioning && !playing && (
+            {!smartPlay && !livedoc && !noteShot && !presenting && !captioning && !playing && (
               <ReplayPlayButton onPlay={resumeClock} />
             )}
-            <ReplayTransport mediaRef={videoRef} time={currentTime} expectedDuration={realDuration}
+            {!smartPlay && <ReplayTransport mediaRef={videoRef} time={currentTime} expectedDuration={realDuration}
               playing={playing} silent={notesOnly || notesReplay} presenting={presenting}
               download={!notesReplay && recording.streamUrl ? { url: recording.streamUrl, fileName: recording.fileName } : undefined}
             >
-              {showCaptionOverlay && (
-                <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
-                  aria-label={t('replay.closedCaptions')}
-                  title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
-                  onClick={() => setCaptionsOpen((visible) => !visible)}
-                ><CaptionIcon enabled={captionsOpen} /></button>
-              )}
-              <button type="button" className={s.replayControl}
-                aria-label={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
-                title={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
-                onClick={toggleFullscreen}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
-                </svg>
-              </button>
-              {meeting && (
-                <button type="button" className={s.replayControl}
-                  aria-pressed={!fullscreen && panelVisible}
-                  aria-label={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
-                  title={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
-                  onClick={() => {
-                    if (fullscreen) {
-                      setPanelVisible(true);
-                      toggleFullscreen();
-                    } else {
-                      setPanelVisible((visible) => !visible);
-                    }
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                    strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
-                    <rect x="3" y="4" width="18" height="16" rx="2" />
-                    <path d="M15 4v16" />
-                    {!fullscreen && panelVisible && <path d="M15 5h5v14h-5z" fill="currentColor" stroke="none" />}
-                  </svg>
-                </button>
-              )}
-            </ReplayTransport>
+              {playerButtons}
+            </ReplayTransport>}
           </div>
 
-          {hasTranscripts && (
+          {!smartPlay && hasTranscripts && (
             <StageViews
               chapters={realChapters}
               speakers={realSpeakerSegments}
@@ -1698,8 +1719,12 @@ export default function ReplayPage() {
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
                   canManage={canManage} hasTranscript={hasTranscripts}
-                  shots={recording.shots ?? []} liveDoc={livedoc} viewerName={userInfo?.displayName || ''}
-                  onPause={pauseClock} onSeek={seekTo}
+                  activeWriting={smartPlay?.minutes} scriptHostRef={setScriptHost}
+                  onSmartPlay={(minutes, recap) => {
+                    pauseClock();
+                    setSmartPlay({ minutes, presentation: recap });
+                  }}
+                  onReturn={() => setSmartPlay(null)}
                   legacyFocus={chapterFocus?.n}
                   legacy={summaryItems.length > 0 ? (
                     <SummaryPanel items={summaryItems} currentTime={currentTime} onSeek={seekTo}

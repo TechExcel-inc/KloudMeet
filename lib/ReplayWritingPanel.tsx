@@ -4,23 +4,19 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import { isWritingLength, WRITING_LENGTHS, type ReplayWriting, type WritingLength } from '@/lib/replayWriting';
-import { SmartPlay } from '@/lib/SmartPlay';
-import type { LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
-import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, shots, liveDoc, viewerName, onPause, onSeek, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, scriptHostRef, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
   hasTranscript: boolean;
-  shots: ShareShot[];
-  liveDoc: LiveDocReplayInfo | null;
-  viewerName: string;
-  onPause: () => void;
-  onSeek: (seconds: number) => void;
+  activeWriting?: WritingLength;
+  onSmartPlay: (minutes: WritingLength, presentation: MeetingPresentation) => void;
+  onReturn: () => void;
+  scriptHostRef: (element: HTMLDivElement | null) => void;
   legacy?: ReactNode;
   legacyFocus?: number;
 }) {
@@ -31,12 +27,17 @@ export function ReplayWritingPanel({
   const [loadFailed, setLoadFailed] = useState(false);
   const [requestFailed, setRequestFailed] = useState(false);
   const [recommended, setRecommended] = useState<WritingLength>();
-  const [selected, setSelected] = useState<WritingLength | 'new' | 'legacy'>(legacy && (legacyFocus || !canManage) ? 'legacy' : 'new');
+  const [selected, setSelected] = useState<WritingLength | 'new' | 'legacy'>(activeWriting ?? (legacy && (legacyFocus || !canManage) ? 'legacy' : 'new'));
   const [choice, setChoice] = useState<WritingLength>();
   const [submitting, setSubmitting] = useState(false);
-  const [smartPlay, setSmartPlay] = useState<{ minutes: WritingLength; presentation: MeetingPresentation } | null>(null);
   const pending = writings.some((item) => item.status === 'GENERATING');
   const current = writings.find((item) => item.minutes === selected);
+  const presenting = current?.minutes !== undefined && activeWriting === current.minutes;
+
+  function selectTab(next: WritingLength | 'new' | 'legacy') {
+    if (activeWriting && next !== activeWriting) onReturn();
+    setSelected(next);
+  }
   const available = WRITING_LENGTHS.filter((minutes) =>
     !writings.some((item) => item.minutes === minutes && item.status !== 'FAILED'));
   const showNew = canManage && hasTranscript && available.length > 0;
@@ -124,16 +125,16 @@ export function ReplayWritingPanel({
         <div className={s.writingTabs} role="tablist" aria-label={t('replay.write.versions')}>
           {[...writings].sort((a, b) => a.minutes - b.minutes).map((item) => (
             <button key={item.minutes} type="button" role="tab" aria-selected={selected === item.minutes}
-              className={selected === item.minutes ? s.tabOn : s.tab} onClick={() => setSelected(item.minutes)}>
+              className={selected === item.minutes ? s.tabOn : s.tab} onClick={() => selectTab(item.minutes)}>
               {t('replay.minutes', { n: item.minutes })}
             </button>
           ))}
           {legacy && <button type="button" role="tab" aria-selected={selected === 'legacy'}
-            className={selected === 'legacy' ? s.tabOn : s.tab} onClick={() => setSelected('legacy')}>
+            className={selected === 'legacy' ? s.tabOn : s.tab} onClick={() => selectTab('legacy')}>
             {t('replay.write.meetingNotes')}
           </button>}
           {showNew && <button type="button" role="tab" aria-selected={selected === 'new'}
-            className={selected === 'new' ? s.tabOn : s.tab} onClick={() => setSelected('new')}>
+            className={selected === 'new' ? s.tabOn : s.tab} onClick={() => selectTab('new')}>
             {t('replay.write.new')}
           </button>}
         </div>
@@ -143,10 +144,12 @@ export function ReplayWritingPanel({
         <div className={s.scroll + ' ' + s.writingContent}>
           <h2>{current.presentation.title}</h2>
           <button type="button" className={s.primaryBtn} onClick={() => {
-            onPause();
-            if (current.presentation) setSmartPlay({ minutes: current.minutes, presentation: current.presentation });
-          }}>{t('replay.write.smartPlay')}</button>
-          {current.presentation.slides.map((slide, index) => (
+            if (presenting) onReturn();
+            else if (current.presentation) onSmartPlay(current.minutes, current.presentation);
+          }}>{t(presenting ? 'replay.write.originalPlayback' : 'replay.write.smartPlay')}</button>
+          {presenting ? (
+            <div ref={scriptHostRef} className={s.smartScript} aria-label={t('replay.write.script')} />
+          ) : current.presentation.slides.map((slide, index) => (
             <section key={index}>
               <h3>{slide.title}</h3>
               <p>{slide.narration}</p>
@@ -189,11 +192,6 @@ export function ReplayWritingPanel({
       )}
       {requestFailed && <p className={s.writingNotice} role="alert">{t('replay.write.failed')}</p>}
 
-      {smartPlay && (
-        <SmartPlay recordingKey={recordingKey} minutes={smartPlay.minutes} presentation={smartPlay.presentation}
-          shots={shots} liveDoc={liveDoc} viewerName={viewerName} onClose={() => setSmartPlay(null)}
-          onJump={(seconds) => { setSmartPlay(null); onSeek(seconds); }} />
-      )}
     </div>
   );
 }

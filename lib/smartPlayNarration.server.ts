@@ -7,6 +7,7 @@ import { storeClient } from '@/lib/objectStore';
 const SAMPLE_RATE = 24_000;
 const MAX_BYTES = SAMPLE_RATE * 2 * 180;
 const MODEL = 'gpt-realtime-2.1-mini';
+const SPEECH_MODEL = 'gpt-4o-mini-tts';
 const VOICE = 'marin';
 const storage = storeClient();
 const generating = new Map<string, Promise<void>>();
@@ -28,9 +29,7 @@ function pcmToWav(pcm: Buffer): Buffer {
   return Buffer.concat([header, pcm]);
 }
 
-function synthesize(narration: string, language: string): Promise<Buffer> {
-  const key = process.env.OPENAI_TTS_API_KEY || process.env.OPENAI_API_KEY;
-  if (!key) return Promise.reject(new Error('OpenAI voice is not configured'));
+function synthesizeRealtime(key: string, narration: string, language: string): Promise<Buffer> {
   const socket = new WebSocket(`wss://api.openai.com/v1/realtime?model=${MODEL}`, {
     headers: { Authorization: `Bearer ${key}` },
   });
@@ -46,7 +45,7 @@ function synthesize(narration: string, language: string): Promise<Buffer> {
       if (error) reject(error);
       else resolve(pcmToWav(Buffer.concat(chunks, bytes)));
     };
-    const timer = setTimeout(() => finish(new Error('OpenAI voice timed out')), 75_000);
+    const timer = setTimeout(() => finish(Object.assign(new Error('OpenAI voice timed out'), { code: 'timeout' })), 40_000);
     socket.on('open', () => {
       socket.send(JSON.stringify({
         type: 'session.update',
@@ -74,9 +73,12 @@ function synthesize(narration: string, language: string): Promise<Buffer> {
           chunks.push(pcm);
         } else if (event.type === 'response.done') {
           finish(event.response?.status === 'completed' && bytes > 0 && bytes % 2 === 0
-            ? undefined : new Error('OpenAI did not finish narrating this section'));
+            ? undefined : Object.assign(new Error('OpenAI did not finish narrating this section'), {
+              code: String(event.response?.status_details?.reason || event.response?.status || 'empty_audio').replace(/[^a-z0-9_-]/gi, '').slice(0, 60),
+            }));
         } else if (event.type === 'error') {
-          finish(new Error('OpenAI voice request failed'));
+          const code = String(event.error?.code || event.error?.type || 'unknown').replace(/[^a-z0-9_-]/gi, '').slice(0, 60);
+          finish(Object.assign(new Error('OpenAI voice request failed'), { code }));
         }
       } catch {
         finish(new Error('Invalid OpenAI voice response'));
@@ -87,12 +89,44 @@ function synthesize(narration: string, language: string): Promise<Buffer> {
   });
 }
 
+async function synthesize(narration: string, language: string): Promise<Buffer> {
+  const key = process.env.OPENAI_TTS_API_KEY || process.env.OPENAI_API_KEY;
+  if (!key) throw new Error('OpenAI voice is not configured');
+  try {
+    const response = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: SPEECH_MODEL,
+        voice: VOICE,
+        input: narration,
+        response_format: 'pcm',
+        instructions: `Narrate clearly and naturally in the original language (${language}). Preserve every word and pronounce Mandarin and English naturally when the text switches languages.`,
+      }),
+      signal: AbortSignal.timeout(35_000),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw Object.assign(new Error('OpenAI speech request failed'), { code: `speech_${response.status}` });
+    }
+    const pcm = Buffer.from(await response.arrayBuffer());
+    if (!pcm.length || pcm.length % 2 !== 0 || pcm.length > MAX_BYTES) throw new Error('Invalid OpenAI speech audio');
+    return pcmToWav(pcm);
+  } catch (error) {
+    const failure = error as { name?: string; code?: string };
+    console.warn('[smart-play] speech endpoint failed; trying Realtime', failure.name, failure.code);
+    // Keep Realtime available when the dedicated speech model is unavailable.
+    return synthesizeRealtime(key, narration, language);
+  }
+}
+
 export async function smartPlayNarration(
   recordingId: number, narration: string, language: string, canGenerate: boolean,
-): Promise<{ url: string; seconds: number } | 'sign-in' | 'busy'> {
+  options: { poll?: boolean; background?: (wait: () => Promise<void>) => void } = {},
+): Promise<{ url: string; seconds: number } | 'sign-in' | 'busy' | 'preparing' | 'failed'> {
   const bucket = process.env.S3_BUCKET;
   if (!bucket) throw new Error('Narration storage is not configured');
-  const hash = createHash('sha256').update(JSON.stringify([MODEL, VOICE, 'v1', narration, language])).digest('hex');
+  const hash = createHash('sha256').update(JSON.stringify([SPEECH_MODEL, MODEL, VOICE, 'v2', narration, language])).digest('hex');
   const item = { Bucket: bucket, Key: `SmartPlay/${recordingId}/${hash}.wav` };
   const head = async () => {
     try {
@@ -107,13 +141,26 @@ export async function smartPlayNarration(
   if (!stored) {
     if (!canGenerate) return 'sign-in';
     let job = generating.get(item.Key);
+    if (job && (options.poll || options.background)) return 'preparing';
     if (!job) {
+      // Only a deliberate start or retry can launch synthesis. Polls never start another charge.
+      if (options.poll) return 'failed';
       if (generating.size >= 8) return 'busy';
       job = (async () => {
         const wav = await synthesize(narration, language);
         await storage.send(new PutObjectCommand({ ...item, Body: wav, ContentType: 'audio/wav' }));
       })().finally(() => generating.delete(item.Key));
       generating.set(item.Key, job);
+      if (options.background) {
+        const pending = job;
+        // Attach the rejection handler immediately, before Next runs the after callback.
+        const observed = pending.catch((error: unknown) => {
+          const failure = error as { name?: string; code?: string; $metadata?: { httpStatusCode?: number } };
+          console.warn('[smart-play] background narration failed', failure.name, failure.code, failure.$metadata?.httpStatusCode);
+        });
+        options.background(() => observed);
+        return 'preparing';
+      }
     }
     await job;
     stored = await head();

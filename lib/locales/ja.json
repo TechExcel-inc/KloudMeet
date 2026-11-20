@@ -1098,6 +1098,7 @@
   "replay.write.create": "振り返りを作成",
   "replay.write.emptyViewer": "この会議の振り返りはまだありません。",
   "replay.write.noTranscript": "文字起こしが用意されると AI ライティングを利用できます。",
+  "replay.write.originalPlayback": "録画に戻る",
   "replay.write.aiVoice": "OpenAI が生成した AI ナレーション",
   "replay.write.script": "振り返りの本文",
   "replay.write.preparingVoice": "OpenAI のナレーションを準備中…",

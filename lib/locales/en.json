@@ -1097,6 +1097,7 @@
   "replay.write.create": "Write recap",
   "replay.write.emptyViewer": "No recap has been written for this meeting yet.",
   "replay.write.noTranscript": "AI Write is available once this meeting has a transcript.",
+  "replay.write.originalPlayback": "Return to recording",
   "replay.write.aiVoice": "AI-generated narration by OpenAI",
   "replay.write.script": "Written recap",
   "replay.write.preparingVoice": "Preparing OpenAI narration…",
