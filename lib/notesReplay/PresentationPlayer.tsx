@@ -3,6 +3,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import s from '@/styles/NotesReplayStage.module.css';
 import { useI18n } from '@/lib/i18n';
+import { writingShot } from '@/lib/replayWriting';
+import type { ShareShot } from '@/lib/shareShot';
 import {
   presentationPlan,
   slideAt,
@@ -56,6 +58,7 @@ export interface PlayerMemory {
 
 export interface PresentationPlayerProps {
   presentation: MeetingPresentation;
+  writingShots?: readonly ShareShot[];
   meetingTitle: string;
   meetingMeta: string;
   /** Length of the real meeting in seconds (0 when unknown) */
@@ -116,11 +119,12 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
   const { presentation, memory, speakerColor, onTakeOver, onJump } = props;
   const { t } = useI18n();
 
+  const writing = props.writingShots !== undefined;
   const [length, setLength] = useState<PresentationLength>(() => memory.current?.length ?? 'full');
   const [pace, setPace] = useState(() => memory.current?.pace ?? 1);
   const [elapsed, setElapsed] = useState(() => memory.current?.elapsed ?? 0);
-  const [started, setStarted] = useState(() => (memory.current?.elapsed ?? 0) > 0);
-  const [playing, setPlaying] = useState(false);
+  const [started, setStarted] = useState(() => writing || (memory.current?.elapsed ?? 0) > 0);
+  const [playing, setPlaying] = useState(writing);
   /** Paused and stepped to a slide by hand: it shows whole, and plays from its start */
   const [peek, setPeek] = useState(false);
   const [voice, setVoice] = useState(false);
@@ -157,11 +161,12 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
     if (!hasSpeech()) return;
     setSpeech(true);
     try {
-      setVoice(window.localStorage.getItem(VOICE_KEY) === '1');
+      const preference = window.localStorage.getItem(VOICE_KEY);
+      setVoice(preference === null ? writing : preference === '1');
     } catch {
-      /* private mode: stays off */
+      setVoice(writing);
     }
-  }, []);
+  }, [writing]);
 
   // Subtitles are cut to what the stage can show: two lines, one on a very short stage.
   useEffect(() => {
@@ -566,7 +571,27 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
     );
   }
 
-  const subtitled = slide.kind !== 'title' && slide.kind !== 'closing' && moment.chunk >= 0;
+  const shot = props.writingShots ? writingShot(props.writingShots, slide, progress) : null;
+  if (writing) {
+    body = (
+      <div className={s.writingSlide}>
+        <h2>{slide.title}</h2>
+        {shot ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={shot.url} alt={t('replay.write.screenshot')} />
+        ) : (
+          <p><Karaoke chunks={chunks} spoken={spokenTotal} /></p>
+        )}
+        {slide.startSec !== null && (
+          <button type="button" className={s.ghostBtn} onClick={() => jump(slide.startSec!)}>
+            {jumpLabel(slide.startSec)}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  const subtitled = (!writing || shot !== null) && slide.kind !== 'title' && slide.kind !== 'closing' && moment.chunk >= 0;
   const nextPace = PACES[(PACES.indexOf(pace) + 1) % PACES.length] ?? 1;
   const paceText = `${pace}×`;
 
@@ -651,7 +676,7 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
           <span className={s.timeTotal}> / {formatClock(plan.totalSeconds)}</span>
         </span>
         <span className={s.spacer} />
-        <Segmented<PresentationLength>
+        {!writing && <Segmented<PresentationLength>
           className={s.lengthSwitch}
           label={t('replay.present.lengthLabel')}
           value={length}
@@ -660,7 +685,7 @@ export function PresentationPlayer(props: PresentationPlayerProps) {
             { value: 'short', label: t('replay.present.lengthShort'), detail: formatClock(totals.short) },
             { value: 'full', label: t('replay.present.lengthFull'), detail: formatClock(totals.full) },
           ]}
-        />
+        />}
         <button type="button" className={s.paceBtn} onClick={() => replan(length, nextPace)} aria-label={t('replay.present.speed', { speed: paceText })} title={t('replay.present.speed', { speed: paceText })}>
           {paceText}
         </button>

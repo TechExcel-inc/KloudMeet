@@ -46,7 +46,7 @@ export function frameChanged(prev: Uint8Array | null, next: Uint8Array): boolean
  * @param shots 按 startMs 升序
  * @param ms    播放时间（毫秒）
  */
-export function shotAt(shots: ShareShot[], ms: number): ShareShot | null {
+export function shotAt(shots: readonly ShareShot[], ms: number): ShareShot | null {
   let found: ShareShot | null = null;
   for (const shot of shots) {
     if (ms < shot.startMs) break;

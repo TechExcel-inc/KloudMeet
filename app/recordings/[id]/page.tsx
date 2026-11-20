@@ -18,6 +18,7 @@ import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentati
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
+import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
@@ -972,37 +973,6 @@ function InfoPanel({
   );
 }
 
-/** AI 生成进度（模拟） */
-function GenerateProgress({ pct }: { pct: number }) {
-  const { t } = useI18n();
-  return (
-    <div className={s.progress}>
-      <div className={s.progressTrack} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)}>
-        <div className={s.progressBar} style={{ width: `${Math.round(pct)}%` }} />
-      </div>
-      <p className={s.muted}>{t('replay.generating', { pct: Math.round(pct) })}</p>
-    </div>
-  );
-}
-
-/** While the summary is being written: progress, then the outline of what will appear */
-function SummarySkeleton({ pct }: { pct: number }) {
-  const { t } = useI18n();
-  return (
-    <div className={s.tabBody}>
-      <div className={s.scroll}>
-        <GenerateProgress pct={pct} />
-        <div className={s.skeleton} aria-hidden="true">
-          {[40, 100, 85, 30, 92, 70, 30, 88].map((w, i) => (
-            <span key={i} className={i === 0 || i === 3 || i === 6 ? s.skelHead : s.skelLine} style={{ width: `${w}%` }} />
-          ))}
-        </div>
-      </div>
-      <p className={s.panelFoot}>{t('replay.aiNote')}</p>
-    </div>
-  );
-}
-
 /* ─── Main Page ──────────────────────────────────────────── */
 export default function ReplayPage() {
   const params = useParams();
@@ -1019,12 +989,8 @@ export default function ReplayPage() {
   const [playing, setPlaying] = useState(false);
   // null = 还没手动选过：有纪要时先看纪要，否则看转写
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript' | 'info' | null>(null);
-  const [linkCopied, setLinkCopied] = useState(false);
   // 最近一次点击的章节，用来展开并滚动到对应摘要
   const [chapterFocus, setChapterFocus] = useState<{ id: number; n: number } | null>(null);
-  const [generating, setGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
-  const [genProgress, setGenProgress] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
@@ -1236,55 +1202,6 @@ export default function ReplayPage() {
     [seekTo],
   );
 
-  // AI 生成会议摘要
-  const generateSummary = useCallback(async () => {
-    if (!data?.meeting?.id) return;
-    setGenerating(true);
-    setGenProgress(0);
-    setGenerateError(null);
-    try {
-      const stored = typeof window !== 'undefined' ? localStorage.getItem('kloudUser') : null;
-      const token = stored ? JSON.parse(stored).token || '' : '';
-      const res = await fetch(`/api/meeting-summary/${data.meeting.id}/generate`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        setGenerateError(json.error || '生成失败');
-        return;
-      }
-      setGenProgress(100);
-      // 将新生成的摘要写回 data state，触发页面更新
-      setData((prev) =>
-        prev && prev.meeting
-          ? { ...prev, meeting: { ...prev.meeting, summaryItems: json.items, summary: json.summary ?? null } }
-          : prev,
-      );
-      setChapterFocus(null);
-    } catch (e: any) {
-      setGenerateError(e.message || '网络错误');
-    } finally {
-      setGenerating(false);
-    }
-  }, [data]);
-
-  // 模拟进度：generating 时从 0→90 缓慢增长，完成后跳到 100
-  useEffect(() => {
-    if (!generating) return;
-    setGenProgress(0);
-    // 每 600ms 推进一次，越接近 90 推进越慢（模拟 AI 延迟感）
-    const timer = setInterval(() => {
-      setGenProgress((prev) => {
-        if (prev >= 90) return prev;
-        const remaining = 90 - prev;
-        const step = Math.max(0.5, remaining * 0.08);
-        return Math.min(90, prev + step);
-      });
-    }, 600);
-    return () => clearInterval(timer);
-  }, [generating]);
-
   /* ── Loading ── */
   if (loading) {
     return (
@@ -1385,17 +1302,13 @@ export default function ReplayPage() {
     (transcripts.length ? Math.max(...transcripts.map((row) => row.offsetSeconds ?? 0)) + 60 : 300);
 
   const tabs = [
-    { key: 'transcript', label: t('replay.tabTranscript'), count: transcripts.length },
-    { key: 'summary', label: t('replay.tabSummary'), count: summaryItems.length },
-    { key: 'info', label: t('replay.tabInfo'), count: null },
+    { key: 'transcript', label: t('replay.tabTranscript') },
+    { key: 'summary', label: t('replay.write.tab') },
+    { key: 'info', label: t('replay.tabInfo') },
   ] as const;
   const tab = activeTab ?? (summaryItems.length > 0 ? 'summary' : 'transcript');
   const canManage = recording.canManage === true;
 
-  const hostName = meeting?.createdBy ? meeting.createdBy.fullName || meeting.createdBy.username : '';
-  const sharerName = recording.recordedBy
-    ? recording.recordedBy.fullName || recording.recordedBy.username
-    : hostName;
   const avatarPhotos: Record<string, string> = Object.fromEntries(
     participants
       .filter((p) => p.member?.avatarUrl)
@@ -1418,17 +1331,7 @@ export default function ReplayPage() {
       ? fmtTime(recording.durationSeconds)
       : '';
   const viewPath = recordingReplayPath(recording.shareKey || id);
-  const copyPageLink = async () => {
-    try {
-      await navigator.clipboard.writeText(new URL(viewPath, window.location.origin).href);
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const showPanel = hasTranscripts && panelVisible;
+  const showPanel = panelVisible;
   const livedoc = recording.livedoc ?? null;
   const notesOnly = !!recording.notesOnly;
   const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
@@ -1736,7 +1639,7 @@ export default function ReplayPage() {
                   <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
                 </svg>
               </button>
-              {hasTranscripts && (
+              {meeting && (
                 <button type="button" className={s.replayControl}
                   aria-pressed={!fullscreen && panelVisible}
                   aria-label={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
@@ -1786,83 +1689,24 @@ export default function ReplayPage() {
                   onClick={() => setActiveTab(tabItem.key)}
                 >
                   {tabItem.label}
-                  {tabItem.count !== null && tabItem.count > 0 && <span className={s.tabCount}>{tabItem.count}</span>}
                 </button>
               ))}
-              {tab === 'summary' && summaryItems.length > 0 && canManage && !generating && (
-                <button
-                  type="button"
-                  className={`${s.textBtn} ${s.tabsAction}`}
-                  onClick={generateSummary}
-                  title={t('replay.regenerateSummaryHint')}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <polyline points="23 4 23 10 17 10" />
-                    <polyline points="1 20 1 14 7 14" />
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                  </svg>
-                  {t('replay.regenerateShort')}
-                </button>
-              )}
+
             </div>
 
             <div className={s.tabBody} role="tabpanel">
-              {tab === 'summary' &&
-                (summaryItems.length > 0 ? (
-                  generating ? (
-                    <SummarySkeleton pct={genProgress} />
-                  ) : (
-                  <>
-                    {generateError && (
-                      <p className={s.error} style={{ padding: '8px 14px 0' }}>{generateError}</p>
-                    )}
-                    <SummaryPanel
-                      items={summaryItems}
-                      currentTime={currentTime}
-                      onSeek={seekTo}
-                      meetingId={meeting?.id ?? 0}
-                      kloudMeetingId={meeting?.kloudMeetingId ?? null}
-                      focus={chapterFocus}
-                      canManage={canManage}
-                      head={meeting?.summary ?? null}
-                    />
-                  </>
-                  )
-                ) : generating ? (
-                  <SummarySkeleton pct={genProgress} />
-                ) : transcripts.length > 0 && canManage ? (
-                  <div className={s.empty}>
-                    <span className={s.emptyIcon} aria-hidden="true">
-                      <SparkGlyph size={20} />
-                    </span>
-                    <p className={s.emptyTitle}>{t('replay.noSummaryYet')}</p>
-                    <p className={s.muted}>{t('replay.noSummaryHint', { count: transcripts.length })}</p>
-                    {generateError && <p className={s.error}>{generateError}</p>}
-                    <button type="button" className={s.primaryBtn} onClick={generateSummary}>
-                      {t('replay.generateSummary')}
-                    </button>
-                  </div>
-                ) : transcripts.length > 0 ? (
-                  /* Someone opening a shared link: they can't generate, so point them to the owner */
-                  <div className={s.notifyCard}>
-                    <SparkGlyph size={16} />
-                    <div>
-                      <p className={s.notifyTitle}>{t('replay.visitorNoSummary')}</p>
-                      <p className={s.muted}>{t('replay.visitorNoSummaryHint', { name: sharerName || hostName })}</p>
-                      <button type="button" className={s.linkBtn} onClick={copyPageLink}>
-                        {linkCopied ? t('replay.linkCopied') : t('replay.copyLink')}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={s.empty}>
-                    <span className={s.emptyIcon} aria-hidden="true">
-                      <DocGlyph />
-                    </span>
-                    <p className={s.emptyTitle}>{t('replay.noTranscriptForSummary')}</p>
-                    <p className={s.muted}>{t('replay.noTranscriptForSummaryHint')}</p>
-                  </div>
-                ))}
+              {tab === 'summary' && (
+                <ReplayWritingPanel key={id} recordingKey={id}
+                  canManage={canManage} hasTranscript={hasTranscripts}
+                  shots={recording.shots ?? []} onPause={pauseClock} onSeek={seekTo}
+                  legacyFocus={chapterFocus?.n}
+                  legacy={summaryItems.length > 0 ? (
+                    <SummaryPanel items={summaryItems} currentTime={currentTime} onSeek={seekTo}
+                      meetingId={meeting?.id ?? 0} kloudMeetingId={meeting?.kloudMeetingId ?? null}
+                      focus={chapterFocus} canManage={canManage} head={meeting?.summary ?? null} />
+                  ) : undefined}
+                />
+              )}
               {tab === 'transcript' && (
                 <TranscriptPanel transcripts={transcripts} currentTime={currentTime} onSeek={seekTo} />
               )}

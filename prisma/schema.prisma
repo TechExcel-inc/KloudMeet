@@ -382,6 +382,7 @@ model Recording {
   teamMember         TeamMember               @relation(fields: [teamMemberId], references: [id], map: "Recording_teamMemberId_fkey")
   accessRequests     RecordingAccessRequest[]
   speakIntervals     RecordingSpeakInterval[]
+  writings           RecordingWriting[]
   sections           RecordingSection[]
   presence           RecordingPresence[]
 
@@ -391,6 +392,17 @@ model Recording {
 }
 
 /// One media file of a livedoc_full recording (voice, a screen share), placed on the LiveDoc timeline.
+model RecordingWriting {
+  recordingId Int
+  minutes     Int
+  status      String    @db.VarChar(20)
+  content     Json?
+  startedAt   DateTime  @default(now())
+  recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade, map: "RecordingWriting_recordingId_fkey")
+
+  @@id([recordingId, minutes])
+}
+
 model RecordingSection {
   id          Int       @id @default(autoincrement())
   recordingId Int
