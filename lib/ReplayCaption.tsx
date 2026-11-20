@@ -25,7 +25,7 @@ export function ReplayCaption({ lines, time, lift = false }: ReplayCaptionProps)
   const [pos, setPos] = React.useState<{ x: number; y: number } | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const dragRef = React.useRef<{ dx: number; dy: number; moved: boolean } | null>(null);
-  const timed = React.useMemo(() => timedLines(lines), [lines]);
+  const timed = React.useMemo(() => timedLines([...lines]), [lines]);
   const moment = captionAt(timed, time);
   const line = moment.current && !moment.quiet ? moment.current : null;
 
