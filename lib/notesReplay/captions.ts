@@ -65,7 +65,7 @@ export function initials(name: string): string {
 // ── the full timeline ────────────────────────────────────────────────────────
 
 /** Lines that have a time, in time order (the stage ignores lines it cannot place). */
-export function timedLines<T extends CaptionLine>(lines: T[]): (T & { offsetSeconds: number })[] {
+export function timedLines<T extends CaptionLine>(lines: readonly T[]): (T & { offsetSeconds: number })[] {
   return lines
     .filter((line): line is T & { offsetSeconds: number } =>
       typeof line.offsetSeconds === 'number' && Number.isFinite(line.offsetSeconds) && line.content.trim() !== '')
