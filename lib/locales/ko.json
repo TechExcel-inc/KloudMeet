@@ -574,7 +574,7 @@
   "toolbar.recordingModeLabel": "녹화할 내용",
   "toolbar.recordingMode.ai_notes": "AI 회의록만",
   "toolbar.recordingMode.ai_notesHint": "영상은 남기지 않고, 회의 전체를 요약합니다",
-  "toolbar.recordingMode.ai_notesLiveHint": "녹음·녹화 없음. 말하는 대로 텍스트로 변환합니다",
+  "toolbar.recordingMode.ai_notesLiveHint": "AI 비서가 메모합니다",
   "toolbar.recordingMode.full": "전체 녹화",
   "toolbar.recordingMode.fullHint": "회의 영상을 녹화",
   "toolbar.recordingModeNeedsRestart": "녹화 방식을 바꾸려면 먼저 녹화를 중지하세요",

@@ -583,7 +583,7 @@
   "toolbar.recordingModeLabel": "What to record",
   "toolbar.recordingMode.ai_notes": "AI Notes Only",
   "toolbar.recordingMode.ai_notesHint": "No video. Summarizes the whole meeting",
-  "toolbar.recordingMode.ai_notesLiveHint": "No recording. Speech is turned into text as you talk",
+  "toolbar.recordingMode.ai_notesLiveHint": "AI assistant takes notes",
   "toolbar.recordingMode.full": "Full Recording",
   "toolbar.recordingMode.fullHint": "Records the meeting video",
   "toolbar.recordingModeNeedsRestart": "Stop the recording before switching how this meeting is recorded",

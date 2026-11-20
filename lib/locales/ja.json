@@ -574,7 +574,7 @@
   "toolbar.recordingModeLabel": "録画する内容",
   "toolbar.recordingMode.ai_notes": "AI 議事録のみ",
   "toolbar.recordingMode.ai_notesHint": "映像は録らず、会議全体の要約を作ります",
-  "toolbar.recordingMode.ai_notesLiveHint": "録音・録画なし。話した内容をその場で文字にします",
+  "toolbar.recordingMode.ai_notesLiveHint": "AI アシスタントがメモを取ります",
   "toolbar.recordingMode.full": "フル録画",
   "toolbar.recordingMode.fullHint": "会議の映像を録画",
   "toolbar.recordingModeNeedsRestart": "録画方法を切り替える前に録画を停止してください",

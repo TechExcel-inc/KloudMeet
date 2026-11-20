@@ -574,7 +574,7 @@
   "toolbar.recordingModeLabel": "录制内容",
   "toolbar.recordingMode.ai_notes": "仅 AI 纪要",
   "toolbar.recordingMode.ai_notesHint": "不录画面，整理整场会议摘要",
-  "toolbar.recordingMode.ai_notesLiveHint": "不录音录像，边说边转成文字",
+  "toolbar.recordingMode.ai_notesLiveHint": "AI 助手记笔记",
   "toolbar.recordingMode.full": "完整录制",
   "toolbar.recordingMode.fullHint": "录下会议上的整段画面",
   "toolbar.recordingModeNeedsRestart": "切换录制方式需要先停止录制",

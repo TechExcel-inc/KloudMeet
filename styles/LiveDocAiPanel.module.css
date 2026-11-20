@@ -151,10 +151,7 @@
 .close:focus-visible,
 .moreButton:focus-visible,
 .addButton:focus-visible,
-.browseButton:focus-visible,
 .smartCamButton:focus-visible,
-.sourceItem:focus-visible,
-.sourceButton:focus-visible,
 .primaryButton:focus-visible,
 .documentRow:focus-visible,
 .dropdown button:focus-visible,
@@ -230,202 +227,6 @@
 .emptyIconError {
   color: #f6aea9;
   background: rgba(242, 139, 130, 0.12);
-}
-
-/* No documents yet: "What do you want to present?" with drop zone + source list */
-.emptyStart {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding: 16px 12px 10px;
-  text-align: center;
-  border-radius: 12px;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.emptyStartDrag {
-  background: rgba(124, 121, 255, 0.06);
-}
-
-.heroSection {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-
-.heroTitle {
-  color: var(--km-stage-text, #e8eaed);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-}
-
-.heroSubtitle {
-  margin-top: 2px;
-  color: var(--km-stage-muted, #9aa0a6);
-  font-size: 12px;
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.dropZone {
-  margin: 12px 0 0;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  border: 1.5px dashed rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease;
-}
-
-.emptyStartDrag .dropZone {
-  border-color: var(--km-on-dark-accent, #c9c8ff);
-  background: rgba(124, 121, 255, 0.08);
-}
-
-.dropZoneIcon {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 8px;
-  color: var(--km-on-dark-accent, #c9c8ff);
-  background: rgba(124, 121, 255, 0.1);
-}
-
-.dropZonePrompt {
-  color: var(--km-stage-text, #e8eaed);
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
-.dropZoneText {
-  max-width: 300px;
-  text-wrap: balance;
-  color: var(--km-stage-muted, #9aa0a6);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-.browseButton {
-  height: 28px;
-  margin-top: 2px;
-  padding: 0 14px;
-  display: inline-flex;
-  align-items: center;
-  color: #1f1d6b;
-  background: var(--km-on-dark-accent, #c9c8ff);
-  border: none;
-  border-radius: 8px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.browseButton:hover:not(:disabled) {
-  background: #d8d7ff;
-}
-
-.browseButton:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sourceList {
-  margin-top: 12px;
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(0, 1fr);
-  gap: 8px;
-  align-items: stretch;
-}
-
-.sourceList .menuAnchor {
-  display: flex;
-  min-width: 0;
-}
-
-.sourceItem {
-  width: 100%;
-  min-height: 108px;
-  height: auto;
-  padding: 12px 8px 10px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 8px;
-  text-align: center;
-  color: var(--km-stage-text, #e8eaed);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px;
-  font: inherit;
-  cursor: pointer;
-  transition:
-    background 0.15s ease,
-    border-color 0.15s ease;
-}
-
-.sourceItemIcon {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  flex: none;
-  color: var(--km-on-dark-accent, #c9c8ff);
-  background: rgba(124, 121, 255, 0.12);
-  border-radius: 8px;
-}
-
-.sourceItem svg {
-  flex: none;
-  color: inherit;
-}
-
-.sourceItem:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.12);
-}
-
-.sourceItem:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.sourceItemText {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  width: 100%;
-}
-
-.sourceItemTitle {
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-wrap: balance;
-}
-
-.sourceItemHint {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  color: var(--km-stage-muted, #9aa0a6);
-  font-size: 11px;
-  line-height: 1.35;
 }
 
 .smartCamButton {
@@ -607,6 +408,11 @@
 
 .documentList {
   padding: 4px 8px 8px;
+}
+
+.documentListEmpty {
+  display: flex;
+  flex-direction: column;
 }
 
 .documentRow {
