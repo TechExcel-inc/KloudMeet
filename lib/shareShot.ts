@@ -1,7 +1,8 @@
 /** AI Notes Only：共享画面有变化才上传的一张图，回放按时间轴盖在声音上。 */
 
 export const SHOT_KIND = 'shot';
-export const SHOT_INTERVAL_MS = 5000;
+/** 隔多久在本地看一眼。只做比较，画面没变、还在动，都不上传。 */
+export const SHOT_LOOK_MS = 1000;
 export const SHOT_DIFF_W = 32;
 export const SHOT_DIFF_H = 18;
 /** 缩小后的平均灰度差达到这个值，才当作画面变了 */
