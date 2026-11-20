@@ -18,6 +18,7 @@ import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentati
 import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
+import { ReplayTransport } from '@/lib/ReplayTransport';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
 import {
@@ -1451,7 +1452,7 @@ export default function ReplayPage() {
     <AvatarContext.Provider value={{ photos: avatarPhotos, tones: avatarTones }}>
     <div className={s.page}>
       {/* ── Header ── */}
-      <header className={s.header}>
+      <header className={s.header} data-menu-open={langMenuOpen || avatarMenuOpen || undefined}>
         <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
           <Chevron dir="left" />
         </Link>
@@ -1459,23 +1460,6 @@ export default function ReplayPage() {
           <h1 className={s.title} title={meetingTitle}>{meetingTitle}</h1>
         </div>
         <div className={s.headerRight}>
-          {/* Panel toggle */}
-          {hasTranscripts && (
-            <button
-              type="button"
-              className={s.iconBtn}
-              onClick={() => setPanelVisible(!panelVisible)}
-              aria-pressed={panelVisible}
-              aria-label={panelVisible ? t('replay.hidePanel') : t('replay.showPanel')}
-              title={panelVisible ? t('replay.hidePanel') : t('replay.showPanel')}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="3" y="3" width="18" height="18" rx="2" />
-                {panelVisible ? <line x1="15" y1="3" x2="15" y2="21" /> : <line x1="9" y1="3" x2="9" y2="21" />}
-              </svg>
-            </button>
-          )}
-
           {/* Help */}
           <button
             type="button"
@@ -1640,27 +1624,7 @@ export default function ReplayPage() {
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
           <div ref={stageRef} className={s.videoCard} data-fullscreen={fullscreen ?? undefined}
-            data-clock-only={livedoc || noteShot ? true : undefined}
           >
-            <div className={s.replayControls}>
-              {showCaptionOverlay && (
-                <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
-                  aria-label={t('replay.closedCaptions')}
-                  title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
-                  onClick={() => setCaptionsOpen((visible) => !visible)}
-                ><CaptionIcon /></button>
-              )}
-              <button type="button" className={s.replayControl}
-                aria-label={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
-                title={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
-                onClick={toggleFullscreen}
-              >
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
-                </svg>
-              </button>
-            </div>
             {livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
@@ -1720,22 +1684,10 @@ export default function ReplayPage() {
             <video
               ref={videoRef}
               src={recording.streamUrl!}
-              controls
-              // The silent clock of an AI Taking Notes replay is not something to download or cast
-              controlsList={notesReplay ? 'nofullscreen nodownload noremoteplayback' : 'nofullscreen'}
               playsInline
               disablePictureInPicture={notesReplay}
               muted={notesOnly}
-              // 有活文档或共享截图时，控制条压成一条，避免把画面挤出屏幕。
-              // AI Notes Only 用同一条控制条，只是不出声。
-              style={
-                presenting
-                  ? { display: 'none' }
-                  : livedoc || noteShot || captioning
-                    ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
-                    : undefined
-              }
-              className={s.video}
+              className={presenting || livedoc || noteShot || captioning ? s.notesClock : s.video}
               onLoadedMetadata={(e) => {
                 if (!notesOnly) return;
                 e.currentTarget.muted = true;
@@ -1758,11 +1710,55 @@ export default function ReplayPage() {
             />
             {showCaptionOverlay && (
               <ReplayCaption lines={transcripts} time={currentTime} lift
-                open={captionsOpen} onOpenChange={setCaptionsOpen} />
+                open={captionsOpen} />
             )}
             {!livedoc && !noteShot && !presenting && !captioning && !playing && (
               <ReplayPlayButton onPlay={resumeClock} />
             )}
+            <ReplayTransport mediaRef={videoRef} time={currentTime} expectedDuration={realDuration}
+              playing={playing} silent={notesOnly || notesReplay} presenting={presenting}
+              download={!notesReplay && recording.streamUrl ? { url: recording.streamUrl, fileName: recording.fileName } : undefined}
+            >
+              {showCaptionOverlay && (
+                <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
+                  aria-label={t('replay.closedCaptions')}
+                  title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
+                  onClick={() => setCaptionsOpen((visible) => !visible)}
+                ><CaptionIcon enabled={captionsOpen} /></button>
+              )}
+              <button type="button" className={s.replayControl}
+                aria-label={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+                title={t(fullscreen ? 'replay.exitFullscreen' : 'replay.enterFullscreen')}
+                onClick={toggleFullscreen}
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={fullscreen ? 'M9 3v6H3m12-6v6h6M3 15h6v6m12-6h-6v6' : 'M9 3H3v6m12-6h6v6M3 15v6h6m12 0h6v-6'} />
+                </svg>
+              </button>
+              {hasTranscripts && (
+                <button type="button" className={s.replayControl}
+                  aria-pressed={!fullscreen && panelVisible}
+                  aria-label={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
+                  title={t(!fullscreen && panelVisible ? 'replay.hidePanel' : 'replay.showPanel')}
+                  onClick={() => {
+                    if (fullscreen) {
+                      setPanelVisible(true);
+                      toggleFullscreen();
+                    } else {
+                      setPanelVisible((visible) => !visible);
+                    }
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                    strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                    <path d="M15 4v16" />
+                    {!fullscreen && panelVisible && <path d="M15 5h5v14h-5z" fill="currentColor" stroke="none" />}
+                  </svg>
+                </button>
+              )}
+            </ReplayTransport>
           </div>
 
           {hasTranscripts && (

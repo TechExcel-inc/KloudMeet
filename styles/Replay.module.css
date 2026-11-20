@@ -3,6 +3,7 @@
    follows html[data-theme] like the other pre-meeting pages; the video stage stays dark. */
 
 .page {
+  position: relative;
   /* html/body 是 overflow:hidden，这一页必须自己占满视口，否则左下角多出来的内容会被裁掉且无法滚动 */
   height: 100vh;
   height: 100dvh;
@@ -626,11 +627,7 @@
 }
 
 .cueLift {
-  bottom: var(--replay-caption-bottom, 41px);
-}
-
-.videoCard[data-clock-only] {
-  --replay-caption-bottom: 58px;
+  bottom: 64px;
 }
 
 .cuePlaced {
@@ -673,38 +670,6 @@
 
 .cueText {
   font-weight: 550;
-}
-
-.cueFold,
-.cueDot {
-  flex: none;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  color: #fff;
-  cursor: pointer;
-}
-
-.cueFold {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.cueDot {
-  width: 36px;
-  height: 36px;
-  background: rgba(15, 18, 26, 0.9);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
-  cursor: grab;
-  touch-action: none;
-}
-
-.cueDot:active {
-  cursor: grabbing;
 }
 
 /* 暂停时盖在画面正中；播放中不渲染 */
@@ -1774,41 +1739,160 @@
   }
 }
 
-.replayControls {
+.replayTransport {
   position: absolute;
   z-index: 9;
-  top: 10px;
-  right: 10px;
+  inset: auto 0 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px 10px 7px;
+  background: linear-gradient(transparent, #080a10e8 42%);
+  color: #fff;
+}
+
+.replayTransport[data-presenting] {
+  inset: auto 0 0 auto;
+  border-top-left-radius: 8px;
+  background: #10131de0;
+}
+
+.transportRow,
+.transportRight {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 3px;
+}
+
+.transportRight {
+  margin-left: auto;
+}
+
+.transportTime {
+  padding-inline: 4px;
+  color: #fff;
+  font: 500 12px var(--km-font);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .replayControl {
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  border: 1px solid #ffffff55;
-  border-radius: 8px;
-  background: #0f121ae6;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
   color: #fff;
   cursor: pointer;
 }
 
 .replayControl:hover,
 .replayControl[aria-pressed='true'] {
-  background: #3d3772;
+  background: #ffffff25;
 }
 
-.replayControl:focus-visible {
+.replayControl:focus-visible,
+.transportSeek:focus-visible {
   outline: 2px solid #c4b5fd;
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
-/* Use the stage fullscreen control so the browser keeps the caption overlay with the video. */
-.video::-webkit-media-controls-fullscreen-button {
+.transportSeek {
+  width: 100%;
+  height: 15px;
+  margin: 0;
+  accent-color: #a9a4ff;
+  cursor: pointer;
+}
+
+.transportSeek:disabled {
+  cursor: default;
+}
+
+.transportMenu {
+  position: relative;
+}
+
+.transportMenu summary {
+  list-style: none;
+}
+
+.transportMenu summary::-webkit-details-marker {
   display: none;
+}
+
+.transportMenuOptions {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  display: grid;
+  gap: 10px;
+  width: max-content;
+  padding: 12px;
+  border: 1px solid #ffffff33;
+  border-radius: 8px;
+  background: #141722;
+  color: #fff;
+  font: 13px var(--km-font);
+  color-scheme: dark;
+}
+
+.transportMenuOptions label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.transportMenuOptions a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.transportMenuOptions a:hover {
+  text-decoration: underline;
+}
+
+.transportMenuOptions input {
+  width: 85px;
+  accent-color: #a9a4ff;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .page {
+    padding-top: 10px;
+  }
+
+  .header {
+    position: absolute;
+    inset: 0 0 auto;
+    transform: translateY(calc(-100% + 10px));
+    transition: transform 180ms ease;
+  }
+
+  .header:hover,
+  .header:has(:focus-visible),
+  .header[data-menu-open] {
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .header {
+    transition: none;
+  }
+}
+
+@media (max-width: 375px) {
+  .replayControl {
+    width: 30px;
+  }
+
+  .transportRight {
+    gap: 1px;
+  }
 }
 
 .videoCard[data-fullscreen] {
