@@ -88,7 +88,7 @@ export async function GET(
               // Every line, so long meetings keep their whole transcript; only what the page shows
               transcripts: {
                 orderBy: { captionTime: 'asc' },
-                select: { id: true, speakerName: true, content: true, captionTime: true, offsetSeconds: true },
+                select: { id: true, speakerName: true, content: true, captionTime: true, offsetSeconds: true, sourceId: true },
               },
             },
           },
@@ -191,6 +191,9 @@ export async function GET(
       }
     }
 
+    const transcripts = recording.meeting?.transcripts ?? [];
+    const regenerated = transcripts.filter((row) => row.sourceId?.startsWith(`assemblyai-${recording.id}-`));
+
     return apiJson({
       recording: {
         id: recording.id,
@@ -222,6 +225,7 @@ export async function GET(
             id: recording.meeting.id,
             kloudMeetingId: recording.meeting.kloudMeetingId,
             title: recording.meeting.title,
+            description: recording.meeting.description,
             roomName: recording.meeting.roomName,
             status: recording.meeting.status,
             actualStartedAt: recording.meeting.actualStartedAt,
@@ -242,7 +246,7 @@ export async function GET(
             summary: recording.meeting.summary
               ? await withInternalNote(recording.meeting.summary, access.memberId)
               : null,
-            transcripts: recording.meeting.transcripts,
+            transcripts: (regenerated.length ? regenerated : transcripts).map(({ sourceId, ...row }) => row),
           }
         : null,
     });

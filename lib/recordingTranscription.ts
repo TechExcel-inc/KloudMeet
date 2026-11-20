@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Recording } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { assemblyAiKey } from '@/lib/speechSettings.server';
 import {
   alignSpeakTranscript,
   SPEAK_LAG_MS,
@@ -52,13 +53,9 @@ function objectKey(recording: Recording): string | null {
   return fromUrl(recording.storageUrl);
 }
 
-function assemblyKey(): string {
-  const key = process.env.ASSEMBLYAI_API_KEY?.trim();
-  if (!key) throw new Error('ASSEMBLYAI_API_KEY is not configured');
-  return key;
-}
-
 async function submitTask(recording: Recording): Promise<string> {
+  const credential = await assemblyAiKey();
+  if (!credential) throw new Error('AssemblyAI is disabled or not configured');
   const key = objectKey(recording);
   const bucket = process.env.S3_BUCKET;
   if (!key || !bucket) throw new Error('Cannot determine recording object key');
@@ -67,7 +64,7 @@ async function submitTask(recording: Recording): Promise<string> {
   });
   const response = await fetch(ASSEMBLY_BASE, {
     method: 'POST',
-    headers: { Authorization: assemblyKey(), 'Content-Type': 'application/json' },
+    headers: { Authorization: credential, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       audio_url: audioUrl,
       speech_models: ['universal-3-pro', 'universal-2'],
@@ -134,8 +131,10 @@ async function fetchDashscopeSentences(url: string): Promise<TimedSentence[]> {
 }
 
 async function assemblyRequest(path: string): Promise<Response> {
+  const credential = await assemblyAiKey({ existingJob: true });
+  if (!credential) throw new Error('AssemblyAI is not configured');
   return fetch(`${ASSEMBLY_BASE}/${path}`, {
-    headers: { Authorization: assemblyKey() },
+    headers: { Authorization: credential },
     cache: 'no-store',
     signal: AbortSignal.timeout(15_000),
   });
@@ -204,11 +203,17 @@ async function saveTranscripts(recording: Recording, taskId: string, sentences: 
   const source = taskId.startsWith(ASSEMBLY_TASK_PREFIX) ? 'assemblyai' : 'aliyun';
   const prefix = `${source}-${recording.id}-`;
 
-  await prisma.$transaction([
-    prisma.meetingTranscript.deleteMany({
+  await prisma.$transaction(async (tx) => {
+    const completed = await tx.recording.updateMany({
+      where: { id: recording.id, sttTaskId: taskId, sttStatus: 'ALIGNING' },
+      data: { sttStatus: 'SUCCEEDED', sttError: null },
+    });
+    if (!completed.count) return;
+
+    await tx.meetingTranscript.deleteMany({
       where: { meetingId: recording.meetingId, sourceId: { startsWith: prefix } },
-    }),
-    prisma.meetingTranscript.createMany({
+    });
+    await tx.meetingTranscript.createMany({
       data: aligned.map((sentence, idx) => ({
         meetingId: recording.meetingId,
         speakerName: sentence.speakerName,
@@ -217,17 +222,13 @@ async function saveTranscripts(recording: Recording, taskId: string, sentences: 
         offsetSeconds: Math.max(0, Math.floor(sentence.startMs / 1000)),
         sourceId: `${prefix}${idx}`,
       })),
-    }),
-    prisma.recording.update({
-      where: { id: recording.id },
-      data: { sttStatus: 'SUCCEEDED', sttError: null },
-    }),
-  ]);
+    });
+  });
 }
 
-async function markFailed(recordingId: number, err: unknown, clearTask = false): Promise<void> {
-  await prisma.recording.update({
-    where: { id: recordingId },
+async function markFailed(recordingId: number, taskId: string, err: unknown, clearTask = false): Promise<void> {
+  await prisma.recording.updateMany({
+    where: { id: recordingId, sttTaskId: taskId, sttStatus: { not: 'SUCCEEDED' } },
     data: {
       sttStatus: 'FAILED',
       sttError: (err instanceof Error ? err.message : String(err)).slice(0, 2000),
@@ -272,7 +273,7 @@ export function transcribeStateOf(recording: Recording): TranscribeState {
  * claimAndSubmit — 抢占后向 AssemblyAI 提交新任务。
  * 已有 taskId 的失败不走这里，避免丢掉可继续的识别结果。
  */
-async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
+async function claimAndSubmit(recording: Recording, regenerate = false): Promise<TranscribeState> {
   // 抢占时间同时是本次提交的凭证：之后的写入只在凭证未被别的提交取代时生效
   const claimedAt = new Date();
   const staleBefore = new Date(claimedAt.getTime() - SUBMIT_STALE_MS);
@@ -284,6 +285,11 @@ async function claimAndSubmit(recording: Recording): Promise<TranscribeState> {
         { sttStatus: null },
         { sttStatus: 'FAILED', sttTaskId: null },
         { sttStatus: 'SUBMITTING', sttStartedAt: { lt: staleBefore } },
+        ...(regenerate && ['SUCCEEDED', 'FAILED'].includes(recording.sttStatus ?? '') ? [{
+          sttStatus: recording.sttStatus,
+          sttTaskId: recording.sttTaskId,
+          sttStartedAt: recording.sttStartedAt,
+        }] : []),
       ],
     },
     data: { sttStatus: 'SUBMITTING', sttStartedAt: claimedAt, sttError: null, sttTaskId: null },
@@ -367,14 +373,14 @@ async function continueTask(recording: Recording): Promise<void> {
   }
 
   if (result.state === 'failed') {
-    await markFailed(recording.id, new Error(result.error), true);
+    await markFailed(recording.id, taskId, new Error(result.error), true);
     return;
   }
 
   // Nobody spoke: the transcription is done and simply empty.
   if (result.state === 'no_speech') {
-    await prisma.recording.update({
-      where: { id: recording.id },
+    await prisma.recording.updateMany({
+      where: { id: recording.id, sttTaskId: taskId, sttStatus: { not: 'SUCCEEDED' } },
       data: { sttStatus: 'SUCCEEDED', sttError: null },
     });
     return;
@@ -399,7 +405,7 @@ async function continueTask(recording: Recording): Promise<void> {
     await saveTranscripts(recording, taskId, await result.loadSentences());
   } catch (err) {
     console.error('[recordingTranscription] save failed', err);
-    await markFailed(recording.id, err);
+    await markFailed(recording.id, taskId, err);
   }
 }
 
@@ -411,18 +417,21 @@ async function continueTask(recording: Recording): Promise<void> {
  * @param recording  已 READY 的录像
  * @returns 提交后的任务状态
  */
-export async function startRecordingTranscription(recording: Recording): Promise<TranscribeState> {
+export async function startRecordingTranscription(
+  recording: Recording,
+  { regenerate = false } = {},
+): Promise<TranscribeState> {
   const status = toSttStatus(recording.sttStatus);
   if (
     status === 'RUNNING' ||
     status === 'QUEUED' ||
     status === 'ALIGNING' ||
     status === 'SUBMITTING' ||
-    (status === 'FAILED' && recording.sttTaskId)
+    (!regenerate && status === 'FAILED' && recording.sttTaskId)
   ) {
     return advanceRecordingTranscription(recording);
   }
-  return claimAndSubmit(recording);
+  return claimAndSubmit(recording, regenerate);
 }
 
 /**

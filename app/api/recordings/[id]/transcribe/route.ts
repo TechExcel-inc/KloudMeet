@@ -7,7 +7,7 @@
  */
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
-import { isRecordingResponse, loadAccessibleRecording } from '@/lib/recordingShare';
+import { isRecordingResponse, loadAccessibleRecording, loadManagedRecording } from '@/lib/recordingShare';
 import {
   advanceRecordingTranscription,
   startRecordingTranscription,
@@ -23,7 +23,10 @@ type Params = { params: Promise<{ id: string }> };
 export async function POST(req: NextRequest, { params }: Params) {
   return runWithLocale(req, async () => {
   try {
-    const loaded = await loadAccessibleRecording(req, (await params).id);
+    const { id } = await params;
+    const body = await req.json().catch(() => null);
+    const regenerate = body?.regenerate === true;
+    const loaded = regenerate ? await loadManagedRecording(req, id) : await loadAccessibleRecording(req, id);
     if (isRecordingResponse(loaded)) return loaded;
     const recording = loaded.recording;
 
@@ -34,6 +37,8 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (hasNoMedia(recording)) {
       return apiJson({ error: 'This recording has no audio file' }, { status: 409 });
     }
+    if (regenerate) return apiJson(await startRecordingTranscription(recording, { regenerate }));
+
     const existing = await prisma.meetingTranscript.count({
       where: { meetingId: recording.meetingId },
     });

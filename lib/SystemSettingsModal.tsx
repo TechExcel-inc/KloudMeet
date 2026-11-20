@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import styles from '../styles/SystemSettingsModal.module.css';
 import { useI18n } from './i18n';
 import { authFetch, authHeaders } from '@/lib/kloudSession';
+import { SpeechSettingsPanel } from './settings/SpeechSettingsPanel';
 import { KloudIntegrationPanel } from './settings/KloudIntegrationPanel';
 
-export type AccountSettingsTab = 'general' | 'kloud' | 'aws' | 'livekit' | 'telnyx';
+export type AccountSettingsTab = 'general' | 'kloud' | 'aws' | 'livekit' | 'telnyx' | 'speech';
 
 interface SystemSettingsModalProps {
   onClose: () => void;
@@ -188,6 +189,12 @@ export function SystemSettingsModal({ onClose, onSave, initialTab, onNotice, inM
             >
               {t('settings.telnyxMessaging')}
             </button>
+            <button
+              className={activeTab === 'speech' ? styles.tabActive : styles.tab}
+              onClick={() => setActiveTab('speech')}
+            >
+              {t('settings.speech')}
+            </button>
           </div>
 
           {/* Main Content Area */}
@@ -202,6 +209,8 @@ export function SystemSettingsModal({ onClose, onSave, initialTab, onNotice, inM
               <div className={styles.staffNote}>{t('settings.staffOnly')}</div>
             ) : (
               <>
+                {activeTab === 'speech' && <SpeechSettingsPanel />}
+
                 {activeTab === 'general' && (
                   <div className={styles.formGroup}>
                     <h3 className={styles.sectionTitle}>{t('settings.generalSettings')}</h3>
@@ -376,8 +385,7 @@ export function SystemSettingsModal({ onClose, onSave, initialTab, onNotice, inM
 
         {/* Footer */}
         <div className={styles.footer}>
-          {activeTab === 'kloud' || canEditPlatform === false ? (
-            // Kloud Integration acts at once; there is nothing to save here.
+          {activeTab === 'kloud' || activeTab === 'speech' || canEditPlatform === false ? (
             <button className={styles.btnOutline} onClick={onClose}>
               {t('settings.close')}
             </button>

@@ -342,3 +342,93 @@
   color: #475569;
   font-size: 0.9rem;
 }
+
+.speechTabs {
+  display: flex;
+  gap: 1rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1rem;
+}
+
+.speechTabs button {
+  padding: 0.65rem 0.25rem;
+  color: #475569;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+}
+
+.speechTabs button[aria-pressed='true'] {
+  color: #4f46e5;
+  border-bottom-color: #4f46e5;
+}
+
+.speechTableWrap {
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.speechTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  color: #334155;
+  text-align: left;
+}
+
+.speechTable th,
+.speechTable td {
+  padding: 0.7rem;
+  vertical-align: middle;
+}
+
+.speechTable thead {
+  background: #f8fafc;
+}
+
+.speechTable tbody tr {
+  border-top: 1px solid #e2e8f0;
+}
+
+.speechTable button {
+  padding: 0.35rem 0.6rem;
+  font-size: inherit;
+}
+
+.speechDialog {
+  color-scheme: light;
+  color: #0f172a;
+  background: white;
+  width: min(32rem, calc(100% - 2rem));
+  padding: 0;
+  margin: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px #0f172a33;
+}
+
+.speechDialog::backdrop {
+  background: #0f172a66;
+}
+
+.speechDialogBody {
+  padding: 1.5rem 2rem;
+}
+
+.speechVendorDetails {
+  display: flex;
+  gap: 2rem;
+  margin: 0 0 1rem;
+  color: #334155;
+}
+
+.speechVendorDetails dt {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.speechVendorDetails dd {
+  margin: 0.25rem 0 0;
+}

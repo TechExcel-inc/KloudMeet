@@ -24,6 +24,8 @@ export interface RecordingTranscribePromptProps {
   onDone: () => void;
   /** Start as the small pill instead of a dialog (the replay works without a transcript) */
   startCollapsed?: boolean;
+  regenerate?: boolean;
+  onClose?: () => void;
 }
 
 function initialPhase(state: TranscribeState, startCollapsed: boolean): Phase {
@@ -32,15 +34,17 @@ function initialPhase(state: TranscribeState, startCollapsed: boolean): Phase {
   return state.status === 'SUCCEEDED' ? 'empty' : 'prompt';
 }
 
-/** 回放页无字幕时：询问是否解析字幕，确认后提交阿里云任务并展示进度 */
+/** 回放页无字幕时：询问是否解析字幕，确认后提交转写任务并展示进度 */
 export function RecordingTranscribePrompt({
   recordingKey,
   initial,
   onDone,
   startCollapsed = false,
+  regenerate = false,
+  onClose,
 }: RecordingTranscribePromptProps) {
   const { t } = useI18n();
-  const [phase, setPhase] = React.useState<Phase>(() => initialPhase(initial, startCollapsed));
+  const [phase, setPhase] = React.useState<Phase>(() => regenerate ? (isSttActive(initial.status) ? 'running' : 'prompt') : initialPhase(initial, startCollapsed));
   const [state, setState] = React.useState<TranscribeState>(initial);
   const [starting, setStarting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);
@@ -60,12 +64,12 @@ export function RecordingTranscribePrompt({
       return;
     }
     if (next.status === 'SUCCEEDED') {
-      setPhase('empty');
+      setPhase(regenerate ? 'hidden' : 'empty');
       onDoneRef.current();
       return;
     }
-    setPhase('prompt');
-  }, []);
+    if (!regenerate || next.status === 'FAILED') setPhase('prompt');
+  }, [regenerate]);
 
   React.useEffect(() => {
     if (phase !== 'running') return;
@@ -112,8 +116,12 @@ export function RecordingTranscribePrompt({
     setState({ status: 'SUBMITTING', progress: 10, error: null });
     setPhase('running');
     try {
-      const res = await fetch(endpoint, { method: 'POST', headers: authHeaders() });
-      if (res.status === 409) {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: authHeaders(regenerate ? { 'Content-Type': 'application/json' } : {}),
+        body: regenerate ? JSON.stringify({ regenerate: true }) : undefined,
+      });
+      if (res.status === 409 && !regenerate) {
         onDoneRef.current();
         setPhase('hidden');
         return;
@@ -152,6 +160,17 @@ export function RecordingTranscribePrompt({
         <button type="button" className={styles.textBtn} onClick={() => setPhase('hidden')}>
           {t('replay.transcribeClose')}
         </button>
+      </div>
+    );
+  }
+
+  if (regenerate && phase === 'running') {
+    return (
+      <div className={styles.card} role="status">
+        <p className={styles.cardText}>
+          {state.status === 'QUEUED' ? t('replay.transcribeQueued') :
+            `${t('replay.transcribeRunning')} ${Math.round(state.progress)}%`}
+        </p>
       </div>
     );
   }
@@ -205,14 +224,14 @@ export function RecordingTranscribePrompt({
     <div className={styles.backdrop} role="dialog" aria-modal="true" aria-labelledby="recording-transcribe-title" aria-describedby="recording-transcribe-desc">
       <div className={styles.dialog}>
         <h3 id="recording-transcribe-title" className={styles.title}>
-          {resuming ? t('replay.transcribeResumeTitle') : t('replay.transcribePromptTitle')}
+          {regenerate ? t('replay.regenerateVoice') : resuming ? t('replay.transcribeResumeTitle') : t('replay.transcribePromptTitle')}
         </h3>
         <p id="recording-transcribe-desc" className={styles.desc}>
-          {resuming ? t('replay.transcribeResumeDesc') : t('replay.transcribePromptDesc')}
+          {regenerate ? t('replay.regenerateVoiceHint') : resuming ? t('replay.transcribeResumeDesc') : t('replay.transcribePromptDesc')}
         </p>
         {error && <p className={styles.error} role="alert">{error}</p>}
         <div className={styles.actions}>
-          <button type="button" className={styles.secondaryBtn} onClick={() => setPhase('collapsed')}>
+          <button type="button" className={styles.secondaryBtn} onClick={() => onClose ? onClose() : setPhase('collapsed')}>
             {t('replay.transcribeLater')}
           </button>
           <button type="button" className={styles.primaryBtn} disabled={starting} onClick={() => void handleStart()}>
@@ -220,7 +239,7 @@ export function RecordingTranscribePrompt({
               ? t('replay.transcribeStarting')
               : resuming
                 ? t('replay.transcribeResume')
-                : t('replay.transcribeStart')}
+                : t(regenerate ? 'replay.regenerateVoice' : 'replay.transcribeStart')}
           </button>
         </div>
       </div>

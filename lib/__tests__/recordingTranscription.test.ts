@@ -33,6 +33,7 @@ const db = vi.hoisted(() => {
   return { state, prisma: { recording } };
 });
 
+vi.mock('@/lib/speechSettings.server', () => ({ assemblyAiKey: async () => process.env.ASSEMBLYAI_API_KEY }));
 vi.mock('@/lib/db', () => ({ prisma: db.prisma }));
 vi.mock('@aws-sdk/client-s3', () => ({
   S3Client: class {},
@@ -123,6 +124,22 @@ describe('submitting a recording', () => {
     expect(row().sttTaskId).toBe('assemblyai:task-1');
   });
 
+  it('claims a finished legacy job for fresh AssemblyAI transcription', async () => {
+    db.state.row.sttStatus = 'SUCCEEDED';
+    db.state.row.sttTaskId = 'legacy-task';
+    const original = { ...row() };
+    const submit = startRecordingTranscription(original, { regenerate: true });
+    await vi.waitFor(() => expect(submissions).toBe(1));
+    expect(db.state.row.sttTaskId).toBeNull();
+
+    const duplicate = await startRecordingTranscription(original, { regenerate: true });
+    expect(duplicate.status).toBe('SUBMITTING');
+    expect(submissions).toBe(1);
+    release();
+    expect((await submit).status).toBe('RUNNING');
+    expect(row().sttTaskId).toBe('assemblyai:task-1');
+  });
+
   it('is not submitted again while a slow submission is still in progress', async () => {
     db.state.row.sttStatus = 'SUBMITTING';
     db.state.row.sttStartedAt = new Date(Date.now() - 10 * 60 * 1000);
@@ -186,7 +203,7 @@ describe('advanceRecordingTranscription', () => {
       recording: { findUnique: vi.fn().mockResolvedValue(current), findUniqueOrThrow, updateMany: claim, update: vi.fn() },
       recordingSpeakInterval: { findMany: vi.fn().mockResolvedValue([]) },
       meetingTranscript: { deleteMany: vi.fn(), createMany },
-      $transaction: vi.fn().mockResolvedValue(undefined),
+      $transaction: vi.fn(async (write: (client: typeof prisma) => Promise<void>) => write(prisma)),
     });
     vi.stubEnv('ASSEMBLYAI_API_KEY', 'test-key');
     vi.stubGlobal('fetch', fetchMock);

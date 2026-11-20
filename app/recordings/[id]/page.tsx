@@ -8,6 +8,7 @@ import type { Locale } from '@/lib/i18n';
 import { HelpModal } from '@/lib/HelpModal';
 import { authHeaders, getKloudSessionBearer } from '@/lib/kloudSession';
 import { recordingReplayPath } from '@/lib/recordingReplayPath';
+import { ReplayMeetingDialog } from '@/lib/ReplayMeetingDialog';
 import { RecordingTranscribePrompt } from '@/lib/RecordingTranscribePrompt';
 import { IDLE_TRANSCRIBE, isSttActive, type TranscribeState } from '@/lib/recordingTranscribeState';
 import { skipPaused } from '@/lib/recordingControls';
@@ -120,6 +121,7 @@ interface ReplayData {
     createdAt: string;
     recordedBy: { fullName: string | null; username: string } | null;
     canManage: boolean;
+    shareKey: string;
     /** 已登录且能观看时为 true，用于弹出解析字幕 */
     canTranscribe?: boolean;
     /** 旧版服务端不返回该字段 */
@@ -135,6 +137,7 @@ interface ReplayData {
     id: number;
     kloudMeetingId: number | null;
     title: string | null;
+    description: string | null;
     roomName: string;
     status: string;
     actualStartedAt: string | null;
@@ -916,6 +919,12 @@ function InfoPanel({
         <h3 className={s.infoLabel}>{t('replay.meetingTitle')}</h3>
         <p className={s.infoValue}>{meeting.title || meeting.roomName}</p>
       </div>
+      {meeting.description && (
+        <div className={s.infoRow}>
+          <h3 className={s.infoLabel}>{t('replay.meetingDescription')}</h3>
+          <p className={s.infoValue}>{meeting.description}</p>
+        </div>
+      )}
       {meeting.actualStartedAt && (
         <div className={s.infoRow}>
           <h3 className={s.infoLabel}>{t('replay.startTime')}</h3>
@@ -1018,7 +1027,8 @@ export default function ReplayPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
-  const [videoFit, setVideoFit] = useState<'width' | 'height'>('width');
+  const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
+  const [regenerateTranscript, setRegenerateTranscript] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   // AI Taking Notes replay: what the stage shows. null = not chosen yet (the presentation when there is one).
   const [stageMode, setStageMode] = useState<NotesStageMode | null>(null);
@@ -1031,6 +1041,7 @@ export default function ReplayPage() {
   );
 
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1106,6 +1117,7 @@ export default function ReplayPage() {
   }, [id, t, reloadKey]);
 
   const handleTranscribeDone = useCallback(() => {
+    setRegenerateTranscript(false);
     setReloadKey((k) => k + 1);
     setActiveTab('transcript');
   }, []);
@@ -1281,7 +1293,7 @@ export default function ReplayPage() {
   /** 有逐条字幕数据时才展示摘要/逐字稿/信息侧栏及章节卡片等「其余」区域 */
   const hasTranscripts = transcripts.some((tr) => (tr.content || '').trim().length > 0);
   const sttStatus = recording.transcribe?.status ?? null;
-  const unfinished = isSttActive(sttStatus) || sttStatus === 'FAILED';
+  const transcriptRunning = isSttActive(sttStatus);
   const canAskTranscribe = recording.canTranscribe === true || recording.canManage || sessionOn;
 
   function secsToHMS(secs: number): string {
@@ -1343,7 +1355,6 @@ export default function ReplayPage() {
   const tab = activeTab ?? (summaryItems.length > 0 ? 'summary' : 'transcript');
   const canManage = recording.canManage === true;
 
-  // Header line under the title: (shared by) · when · how long · meeting code · who
   const hostName = meeting?.createdBy ? meeting.createdBy.fullName || meeting.createdBy.username : '';
   const sharerName = recording.recordedBy
     ? recording.recordedBy.fullName || recording.recordedBy.username
@@ -1369,20 +1380,10 @@ export default function ReplayPage() {
     : recording.durationSeconds
       ? fmtTime(recording.durationSeconds)
       : '';
-  const metaParts = [
-    !canManage && sharerName ? t('replay.sharedBy', { name: sharerName }) : '',
-    metaWhen,
-    metaLength,
-    // The code lets people join a personal room, so only the owner sees it
-    canManage && meeting?.roomName ? t('replay.metaCode', { code: meeting.roomName.replace(/_\d+$/, '') }) : '',
-  ].filter(Boolean);
-  const openInfo = () => {
-    setPanelVisible(true);
-    setActiveTab('info');
-  };
+  const viewPath = recordingReplayPath(recording.shareKey || id);
   const copyPageLink = async () => {
     try {
-      await navigator.clipboard.writeText(window.location.href);
+      await navigator.clipboard.writeText(new URL(viewPath, window.location.origin).href);
       setLinkCopied(true);
       setTimeout(() => setLinkCopied(false), 2000);
     } catch {
@@ -1391,7 +1392,6 @@ export default function ReplayPage() {
   };
 
   const showPanel = hasTranscripts && panelVisible;
-  const videoClass = !hasTranscripts ? s.videoSolo : videoFit === 'height' ? s.videoTall : '';
   const livedoc = recording.livedoc ?? null;
   const notesOnly = !!recording.notesOnly;
   const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
@@ -1417,33 +1417,9 @@ export default function ReplayPage() {
       <header className={s.header}>
         <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
           <Chevron dir="left" />
-          <span className={s.backLabel}>{t('replay.back')}</span>
         </Link>
         <div className={s.titleBlock}>
           <h1 className={s.title} title={meetingTitle}>{meetingTitle}</h1>
-          {(metaParts.length > 0 || participants.length > 0) && (
-            <div className={s.meta}>
-              {metaParts.map((part, i) => (
-                <React.Fragment key={i}>
-                  {i > 0 && <span className={s.metaSep} aria-hidden="true" />}
-                  <span>{part}</span>
-                </React.Fragment>
-              ))}
-              {participants.length > 0 && (
-                <>
-                  {metaParts.length > 0 && <span className={s.metaSep} aria-hidden="true" />}
-                  <button type="button" className={s.peopleBtn} onClick={openInfo} title={t('replay.participants')}>
-                    <span className={s.stack} aria-hidden="true">
-                      {participants.slice(0, 3).map((p) => (
-                        <Avatar key={p.id} name={p.displayName} className={s.stackAvatar} />
-                      ))}
-                    </span>
-                    {t('replay.metaPeople', { n: participants.length })}
-                  </button>
-                </>
-              )}
-            </div>
-          )}
         </div>
         <div className={s.headerRight}>
           {/* Panel toggle */}
@@ -1552,6 +1528,33 @@ export default function ReplayPage() {
                 >
                   {t('replay.back')}
                 </button>
+                {canManage && meeting && (
+                  <button type="button" role="menuitem" className={s.menuItem} onClick={() => {
+                    setAvatarMenuOpen(false);
+                    setMeetingDialog('edit');
+                  }}>{t('common.edit')}</button>
+                )}
+                <button type="button" role="menuitem" className={s.menuItem} onClick={() => {
+                  setAvatarMenuOpen(false);
+                  setMeetingDialog('link');
+                }}>{t('replay.accessUrl')}</button>
+                <button type="button" role="menuitem" className={s.menuItem} onClick={() => {
+                  setAvatarMenuOpen(false);
+                  const stage = stageRef.current;
+                  if (stage?.requestFullscreen) void stage.requestFullscreen().catch(() => undefined);
+                  else (videoRef.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)
+                    ?.webkitEnterFullscreen?.();
+                  resumeClock();
+                }}>{t('replay.playFullscreen')}</button>
+                {canManage && recording.hasMedia !== false && (
+                  <button type="button" role="menuitem" className={s.menuItem}
+                    disabled={regenerateTranscript || transcriptRunning}
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                      setRegenerateTranscript(true);
+                    }}
+                  >{t('replay.regenerateVoice')}</button>
+                )}
                 {/* AI Taking Notes kept no audio: there is nothing to download */}
                 {recording.hasMedia !== false && (
                 <a
@@ -1602,16 +1605,14 @@ export default function ReplayPage() {
       {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
-          <div className={hasTranscripts ? s.videoCard : `${s.videoCard} ${s.videoCardFill}`}>
+          <div ref={stageRef} className={s.videoCard}>
             {livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
                 mediaRef={videoRef}
                 viewerName={userInfo?.displayName || ''}
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
-                fill={!hasTranscripts}
-                fillClass={s.livedocFill}
-                boxClass={notesOnly && hasTranscripts ? s.notesStage : undefined}
+                boxClass={notesOnly ? s.notesStage : undefined}
                 shots={recording.shots ?? []}
                 coverWithShots={notesOnly}
               >
@@ -1635,7 +1636,7 @@ export default function ReplayPage() {
               </div>
             )}
             {(presenting || captioning) && (
-              <div className={hasTranscripts ? s.notesReplay : s.notesReplayFill}>
+              <div className={s.notesReplay}>
                 <NotesReplayStage
                   meetingTitle={meetingTitle}
                   meetingMeta={[metaWhen, metaLength].filter(Boolean).join(' · ')}
@@ -1680,7 +1681,7 @@ export default function ReplayPage() {
                     ? { height: 56, minHeight: 56, maxHeight: 56, flex: '0 0 56px', aspectRatio: 'auto' }
                     : undefined
               }
-              className={`${s.video}${videoClass && !livedoc ? ` ${videoClass}` : ''}`}
+              className={s.video}
               onLoadedMetadata={(e) => {
                 if (!notesOnly) return;
                 e.currentTarget.muted = true;
@@ -1706,32 +1707,6 @@ export default function ReplayPage() {
             )}
             {!livedoc && !noteShot && !presenting && !captioning && !playing && (
               <ReplayPlayButton onPlay={resumeClock} />
-            )}
-            {/* Fit toggle (not for LiveDoc Full: its stage has a fixed shape) */}
-            {!livedoc && !noteShot && !notesOnly && (
-            <button
-              type="button"
-              className={s.fitBtn}
-              onClick={() => setVideoFit(videoFit === 'width' ? 'height' : 'width')}
-              title={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
-              aria-label={videoFit === 'width' ? t('replay.fitHeight') : t('replay.fitWidth')}
-            >
-              {videoFit === 'width' ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="15 3 21 3 21 9" />
-                  <polyline points="9 21 3 21 3 15" />
-                  <line x1="21" y1="3" x2="14" y2="10" />
-                  <line x1="3" y1="21" x2="10" y2="14" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polyline points="3 8 3 3 8 3" />
-                  <polyline points="21 16 21 21 16 21" />
-                  <line x1="3" y1="3" x2="10" y2="10" />
-                  <line x1="21" y1="21" x2="14" y2="14" />
-                </svg>
-              )}
-            </button>
             )}
           </div>
 
@@ -1846,14 +1821,45 @@ export default function ReplayPage() {
         )}
       </main>
 
-      {/* Not for AI Taking Notes: its transcript was written during the meeting and no audio is left */}
-      {canAskTranscribe && recording.hasMedia !== false && meeting && (!hasTranscripts || unfinished) && (
-        <RecordingTranscribePrompt
+      {canAskTranscribe && recording.hasMedia !== false && meeting && (
+        regenerateTranscript || (canManage && hasTranscripts && transcriptRunning) ? (
+          <RecordingTranscribePrompt
+            key="regenerate"
+            recordingKey={id}
+            initial={recording.transcribe ?? IDLE_TRANSCRIBE}
+            regenerate
+            onDone={handleTranscribeDone}
+            onClose={() => {
+              setRegenerateTranscript(false);
+              if (transcriptRunning) setReloadKey((key) => key + 1);
+            }}
+          />
+        ) : !hasTranscripts ? (
+          <RecordingTranscribePrompt
+            key="generate"
+            recordingKey={id}
+            initial={recording.transcribe ?? IDLE_TRANSCRIBE}
+            onDone={handleTranscribeDone}
+            startCollapsed={!!livedoc}
+          />
+        ) : null
+      )}
+
+      {meetingDialog && (
+        <ReplayMeetingDialog
+          key={meetingDialog}
+          mode={meetingDialog}
+          title={meetingTitle}
+          description={meeting?.description ?? ''}
           recordingKey={id}
-          initial={recording.transcribe ?? IDLE_TRANSCRIBE}
-          onDone={handleTranscribeDone}
-          // LiveDoc Full replays play without a transcript: offer it, don't block the stage
-          startCollapsed={!!livedoc}
+          viewPath={viewPath}
+          onClose={() => setMeetingDialog(null)}
+          onSaved={(details) => {
+            setData((current) => current?.meeting
+              ? { ...current, meeting: { ...current.meeting, ...details } }
+              : current);
+            setMeetingDialog(null);
+          }}
         />
       )}
 

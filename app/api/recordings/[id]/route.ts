@@ -19,7 +19,22 @@ export async function PATCH(
     const loaded = await loadManagedRecording(req, id);
     if (isRecordingResponse(loaded)) return loaded;
 
-    const visibility = readVisibility(await req.json().catch(() => null));
+    const body = await req.json().catch(() => null);
+    if (body?.action === 'edit-meeting') {
+      const title = typeof body.title === 'string' ? body.title.trim() : '';
+      const description = typeof body.description === 'string' ? body.description.trim() : null;
+      if (!title || title.length > 191 || description === null || description.length > 191) {
+        return apiJson({ error: 'Invalid meeting name or description' }, { status: 400 });
+      }
+      const meeting = await prisma.meeting.update({
+        where: { id: loaded.recording.meetingId },
+        data: { title, description: description || null, modifiedAt: new Date() },
+        select: { title: true, description: true },
+      });
+      return apiJson(meeting);
+    }
+
+    const visibility = readVisibility(body);
     if (!visibility) {
       return apiJson({ error: 'Invalid visibility' }, { status: 400 });
     }
