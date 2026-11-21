@@ -25,7 +25,7 @@ type Draft = Omit<WritingBrief, 'minutes'> & {
 };
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, scriptHostRef, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
@@ -33,6 +33,7 @@ export function ReplayWritingPanel({
   activeWriting?: string;
   onSmartPlay: (id: string, presentation: MeetingPresentation) => void;
   onReturn: () => void;
+  onSelectionChange: (presentation: MeetingPresentation | null) => void;
   scriptHostRef: (element: HTMLDivElement | null) => void;
   legacy?: ReactNode;
   legacyFocus?: number;
@@ -75,6 +76,13 @@ export function ReplayWritingPanel({
   const canCreate = canManage && hasTranscript;
   const current = writings.find(item => item.id === selected);
   const presenting = Boolean(current && activeWriting === current.id);
+
+  const selectedPresentation = current?.presentation ?? null;
+  useEffect(() => {
+    onSelectionChange(selectedPresentation);
+  }, [onSelectionChange, selectedPresentation]);
+
+  useEffect(() => () => onSelectionChange(null), [onSelectionChange]);
 
   const load = useCallback(async (signal: AbortSignal) => {
     const response = await authFetch(endpoint, { cache: 'no-store', signal });
@@ -193,10 +201,11 @@ export function ReplayWritingPanel({
             const voice = event.target.value;
             if (isWritingVoice(voice)) setDraft({ ...draft, voice });
           }}>
-            {WRITING_VOICES.map(voice => <option key={voice} value={voice}>{t(`replay.write.voice.${voice}`)}</option>)}
+            {WRITING_VOICES.map(voice => <option key={voice} value={voice}>{t(`replay.write.voice.${voice}`)} · {t(`replay.write.voiceStyle.${voice}`)}</option>)}
           </select>
           <ChevronDown aria-hidden="true" />
         </span>
+        <small className={s.muted}>{t(`replay.write.voiceStyle.${draft.voice}`)}</small>
       </label>
     );
   }

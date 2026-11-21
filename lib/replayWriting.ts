@@ -109,3 +109,36 @@ export function writingSpeakers(
   }
   return [...speakers];
 }
+
+/** Intersect meeting speaker lanes with the source moments covered by a write. */
+export function writingSpeakerLanes<T extends { segments: [number, number][] }>(
+  slides: readonly Pick<PresentationSlide, 'startSec' | 'endSec'>[],
+  lanes: readonly T[],
+  meetingSeconds: number,
+): T[] {
+  const ranges = slides.flatMap(({ startSec, endSec }): [number, number][] => {
+    if (startSec === null || startSec < 0 || startSec >= meetingSeconds) return [];
+    const end = Math.min(meetingSeconds, Math.max(startSec + 1, endSec ?? startSec));
+    return [[startSec, end]];
+  }).sort(([a], [b]) => a - b);
+
+  function merge(segments: [number, number][]): [number, number][] {
+    const merged: [number, number][] = [];
+    for (const [start, end] of segments) {
+      const last = merged[merged.length - 1];
+      if (last && start <= last[1]) last[1] = Math.max(last[1], end);
+      else merged.push([start, end]);
+    }
+    return merged;
+  }
+
+  const covered = merge(ranges);
+  return lanes.flatMap(lane => {
+    const overlaps = lane.segments.flatMap(([a, b]) => covered.flatMap(([start, end]): [number, number][] => {
+      const from = Math.max(a, start);
+      const to = Math.min(b, end);
+      return from < to ? [[from, to]] : [];
+    })).sort(([a], [b]) => a - b);
+    return overlaps.length ? [{ ...lane, segments: merge(overlaps) }] : [];
+  });
+}

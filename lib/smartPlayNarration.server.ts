@@ -178,3 +178,26 @@ export async function smartPlayNarration(
     url: await getSignedUrl(storage, new GetObjectCommand(item), { expiresIn: 3600 }),
   };
 }
+
+
+/** Prepare each section with the saved voice, reusing every matching stored clip. */
+export async function prepareSmartPlayVoice(
+  recordingId: number,
+  presentation: { language: string; slides: readonly { narration: string }[] },
+  voice: WritingVoice,
+) {
+  const sections = [...new Set(presentation.slides.map(slide => slide.narration).filter(text => text.trim()))];
+  for (let index = 0; index < sections.length; index += 3) {
+    const results = await Promise.allSettled(sections.slice(index, index + 3).map(async narration => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const result = await smartPlayNarration(recordingId, narration, presentation.language, true, { voice });
+        if (result !== 'busy') return;
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+      throw new Error('Narration is busy');
+    }));
+    if (results.some(result => result.status === 'rejected')) {
+      console.warn('[smart-play] Some clips could not be prepared during the voice change');
+    }
+  }
+}

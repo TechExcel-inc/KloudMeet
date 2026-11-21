@@ -2357,6 +2357,13 @@
   color: var(--km-text-muted);
 }
 
+.writingSpeakerChartTitle {
+  margin: 12px 14px 0;
+  color: var(--km-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 .writingContent,
 .writingNotice {
   padding: 16px;

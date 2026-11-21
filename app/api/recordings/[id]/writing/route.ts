@@ -4,6 +4,7 @@ import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse, loadManagedRecording } from '@/lib/recordingShare';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { prepareSmartPlayVoice } from '@/lib/smartPlayNarration.server';
 import { readPresentation } from '@/lib/meetingPresentation';
 import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
 import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting, WRITING_STALE_MS } from '@/lib/replayWriting.server';
@@ -110,6 +111,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         where: { recordingId_id: key },
         data: { ...details, voice, content: { ...presentation, title: details.name } as unknown as Prisma.InputJsonValue },
       });
+      if (row.voice !== voice) {
+        after(() => prepareSmartPlayVoice(recording.id, presentation, voice));
+      }
       return apiJson({ writings: await loadWritings(recording.id) }, { headers });
     } catch {
       return apiJson({ error: 'Could not save AI Write' }, { status: 500, headers });

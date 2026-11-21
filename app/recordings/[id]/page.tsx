@@ -19,6 +19,7 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { SmartPlay } from '@/lib/SmartPlay';
+import { writingSpeakerLanes } from '@/lib/replayWriting';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
@@ -997,6 +998,7 @@ export default function ReplayPage() {
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
   const [captionsOpen, setCaptionsOpen] = useState(true);
+  const [selectedWrite, setSelectedWrite] = useState<MeetingPresentation | null>(null);
   const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation } | null>(null);
   const [scriptHost, setScriptHost] = useState<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
@@ -1306,6 +1308,8 @@ export default function ReplayPage() {
     recording.durationSeconds ??
     (transcripts.length ? Math.max(...transcripts.map((row) => row.offsetSeconds ?? 0)) + 60 : 300);
 
+  const chartWrite = smartPlay?.presentation ?? selectedWrite;
+  const writeSpeakerSegments = chartWrite ? writingSpeakerLanes(chartWrite.slides, realSpeakerSegments, realDuration) : [];
   const tabs = [
     { key: 'transcript', label: t('replay.tabTranscript') },
     { key: 'summary', label: t('replay.write.tab') },
@@ -1684,7 +1688,14 @@ export default function ReplayPage() {
             </ReplayTransport>}
           </div>
 
-          {!smartPlay && hasTranscripts && (
+          {chartWrite ? (
+            <section className={s.card} aria-label={t('replay.write.speakerChart')}>
+              <h2 className={s.writingSpeakerChartTitle}>{t('replay.write.speakerChart')}</h2>
+              {writeSpeakerSegments.length ? (
+                <SpeakerSegmentTimeline speakers={writeSpeakerSegments} duration={realDuration} onSeek={seekTo} />
+              ) : <p className={s.writingNotice}>{t('replay.write.noSpeakerChart')}</p>}
+            </section>
+          ) : hasTranscripts && (
             <StageViews
               chapters={realChapters}
               speakers={realSpeakerSegments}
@@ -1723,7 +1734,7 @@ export default function ReplayPage() {
                     pauseClock();
                     setSmartPlay({ writingId, presentation: recap });
                   }}
-                  onReturn={() => setSmartPlay(null)}
+                  onReturn={() => setSmartPlay(null)} onSelectionChange={setSelectedWrite}
                   legacyFocus={chapterFocus?.n}
                   legacy={summaryItems.length > 0 ? (
                     <SummaryPanel items={summaryItems} currentTime={currentTime} onSeek={seekTo}

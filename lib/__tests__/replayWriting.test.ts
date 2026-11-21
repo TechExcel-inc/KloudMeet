@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingTranscript } from '@/lib/replayWriting';
+import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
 const transcript = [
@@ -25,6 +25,18 @@ describe('AI Write presentations', () => {
     expect(writingSpeakers({ startSec: 10, endSec: 18 }, lines)).toEqual(['Avery', 'Casey']);
     expect(writingSpeakers({ startSec: 10, endSec: null }, lines)).toEqual(['Avery']);
     expect(writingSpeakers({ startSec: null, endSec: null }, lines)).toEqual([]);
+  });
+
+  it('rebuilds the speaker chart for each write and counts overlapping source ranges once', () => {
+    const lanes: { name: string; segments: [number, number][] }[] = [
+      { name: 'Avery', segments: [[2, 7], [5, 10]] },
+      { name: 'Casey', segments: [[12, 20]] },
+    ];
+    expect(writingSpeakerLanes([{ startSec: 4, endSec: 7 }, { startSec: 6, endSec: 8 }], lanes, 30))
+      .toEqual([{ name: 'Avery', segments: [[4, 8]] }]);
+    expect(writingSpeakerLanes([{ startSec: 14, endSec: 18 }], lanes, 30))
+      .toEqual([{ name: 'Casey', segments: [[14, 18]] }]);
+    expect(writingSpeakerLanes([{ startSec: null, endSec: null }], lanes, 30)).toEqual([]);
   });
 
   it('uses text only for ungrounded sections and advances through screenshots within grounded sections', () => {
