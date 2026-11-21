@@ -2137,6 +2137,18 @@
   cursor: default;
 }
 
+.writingRepairPreview {
+  max-height: 32vh;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding-inline-start: 24px;
+  overflow-wrap: anywhere;
+}
+
+.writingRepairPreview p {
+  margin: 4px 0 12px;
+}
+
 .writingDeleteNote {
   margin: 0;
   overflow-wrap: anywhere;

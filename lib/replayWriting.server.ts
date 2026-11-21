@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { Prisma, type Recording, type RecordingWriting } from '@prisma/client';
 import { prisma } from '@/lib/db';
@@ -11,6 +12,12 @@ const WRITER_PROMPT = `Write a meeting recap and spoken presentation in the lang
 For every reference to a person by name, in headings, narration and metadata, use only their [[speaker:...]] token from the verified attendee roster. Never output a literal personal name. Match an alternate spelling only when the surrounding dialogue clearly identifies the attendee. If a name does not match the roster or the identity is uncertain, use a neutral reference such as "a colleague" or omit the name. Do not turn people merely mentioned into speakers. For each section return "sourceLineIds" with the transcript line IDs that directly support the content. Cite only supporting lines, excluding unrelated speakers who happen to talk nearby.
 Use exact transcript timestamps for the start and end of each section when available, with null if unknown. Keep each section focused on one part of the meeting so the corresponding screenshots can play during narration. Use at most 40 sections, each with one concise paragraph of at most 130 English words or 250 CJK characters. Capture decisions, reasoning, examples and follow-ups where relevant. Use the requested time as a target. If the source cannot support it, write a shorter recap without padding, repeating or inventing details. No markdown.`;
 
+export function writingRevision(writing: ReplayWriting): string {
+  return createHash('sha256').update(JSON.stringify([
+    writing.name, writing.description, writing.voice, writing.minutes, writing.presentation,
+  ])).digest('hex');
+}
+
 export function writingState(row: RecordingWriting): ReplayWriting | null {
   if (!isWritingLength(row.minutes)) return null;
   const presentation = row.status === 'READY' ? readPresentation(row.content) : null;
@@ -18,7 +25,9 @@ export function writingState(row: RecordingWriting): ReplayWriting | null {
     ? row.content.sourceId : undefined;
   return {
     id: row.id,
-    sourceId: !presentation && isWritingId(sourceId) ? sourceId : undefined,
+    sourceId: isWritingId(sourceId) ? sourceId : undefined,
+    canApplyRepair: Boolean(presentation && isWritingId(sourceId) && row.content &&
+      typeof row.content === 'object' && 'sourceRevision' in row.content && typeof row.content.sourceRevision === 'string'),
     name: row.name ?? presentation?.title ?? '',
     description: row.description ?? '',
     voice: isWritingVoice(row.voice) ? row.voice : DEFAULT_WRITING_VOICE,
@@ -83,7 +92,7 @@ export async function generateReplayWriting(
   startedAt: Date,
   memberId: number,
   lines: Awaited<ReturnType<typeof loadWritingTranscript>>,
-  options: { auto: boolean; fromPrompt: boolean; source?: MeetingPresentation | null },
+  options: { auto: boolean; fromPrompt: boolean; source?: { id: string; revision: string; presentation: MeetingPresentation } },
 ) {
   const { id, name, description, minutes } = writing;
   const held = { recordingId: recording.id, id, startedAt, status: 'GENERATING' };
@@ -100,7 +109,7 @@ export async function generateReplayWriting(
       ? 'Also return JSON fields "title" with a concise, specific name and "description" with a one-sentence description of the result. Use the language of the write.'
       : '';
     const prior = options.source
-      ? `\nExisting AI Write (draft to revise, not a source of facts):\n${JSON.stringify(options.source.slides.map(({ title, narration }) => ({ title, narration }))).slice(0, 20000)}`
+      ? `\nExisting AI Write (draft to revise, not a source of facts):\n${JSON.stringify(options.source.presentation.slides.map(({ title, narration }) => ({ title, narration }))).slice(0, 20000)}`
       : '';
     const revision = options.source
       ? 'Revise the existing draft according to the writing brief. Preserve its focus and supported facts. Verify names and terms against the transcript. Avoid guessing. Always list unresolved personal names in a JSON "reviewTerms" array of strings without reading them aloud. Include other uncertain terms if asked. Distinguish proposed actions from completed actions. If someone is asked to notify an unverified contact, preserve the action and describe the contact neutrally.'

@@ -31,6 +31,7 @@ export interface ReplayWriting extends WritingBrief {
   id: string;
   voice: WritingVoice;
   sourceId?: string;
+  canApplyRepair?: boolean;
   status: 'GENERATING' | 'READY' | 'FAILED';
   presentation: MeetingPresentation | null;
 }

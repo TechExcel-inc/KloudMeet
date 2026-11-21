@@ -19,7 +19,7 @@ type Draft = Omit<WritingBrief, 'minutes'> & {
   id: string;
   voice: WritingVoice;
   minutes: WritingLength | 'auto';
-  mode: 'new' | 'edit' | 'improve' | 'delete';
+  mode: 'new' | 'edit' | 'improve' | 'delete' | 'apply';
   sourceId?: string;
   checks: ImprovementOption[];
 };
@@ -162,7 +162,7 @@ export function ReplayWritingPanel({
       voice: item?.voice ?? DEFAULT_WRITING_VOICE,
       mode,
       checks,
-      sourceId: mode === 'improve' ? item?.sourceId ?? item?.id : undefined,
+      sourceId: mode === 'improve' ? (item?.presentation ? item.id : item?.sourceId) : undefined,
     });
   }
 
@@ -173,17 +173,18 @@ export function ReplayWritingPanel({
     try {
       const editing = entry.mode === 'edit';
       const deleting = entry.mode === 'delete';
+      const applying = entry.mode === 'apply';
       const response = await authFetch(endpoint, {
-        method: deleting ? 'DELETE' : editing ? 'PATCH' : 'POST',
+        method: deleting ? 'DELETE' : editing || applying ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(deleting ? { id: entry.id } : editing
+        body: JSON.stringify(applying ? { id: entry.id, applyRepair: true } : deleting ? { id: entry.id } : editing
           ? { id: entry.id, name: entry.name, description: entry.description, voice: entry.voice }
           : { id: entry.id, prompt: entry.description, minutes: entry.minutes, voice: entry.voice, sourceId: entry.sourceId }),
       });
       if (!response.ok) throw new Error('Could not save AI Write');
-      const { writings: saved }: { writings: ReplayWriting[] } = await response.json();
+      const { writings: saved, selectedId }: { writings: ReplayWriting[]; selectedId?: string } = await response.json();
       setWritings(saved);
-      selectWrite(deleting ? (saved.find(item => item.status === 'READY') ?? saved[0])?.id ?? (legacy ? 'legacy' : '') : entry.id);
+      selectWrite(deleting ? (saved.find(item => item.status === 'READY') ?? saved[0])?.id ?? (legacy ? 'legacy' : '') : selectedId ?? entry.id);
     } catch {
       setRequestFailed(true);
     } finally {
@@ -219,7 +220,12 @@ export function ReplayWritingPanel({
 
   const writeName = (item: ReplayWriting) => item.name || t(item.id.startsWith('legacy-') ? 'replay.write.legacyName' : 'replay.write.newTitle', { n: item.minutes });
 
-  const validDraft = draft && (draft.mode === 'delete' ||
+  const repairOriginal = draft?.mode === 'apply' ? writings.find(item => item.id === current?.sourceId) : undefined;
+  const repairSpeakers = draft?.mode === 'apply'
+    ? [...new Map(current?.presentation?.slides.flatMap(slide =>
+      slide.attribution ? [[slide.attribution.key, slide.attribution.name] as const] : [])).values()]
+    : [];
+  const validDraft = draft && (draft.mode === 'delete' || draft.mode === 'apply' ||
     (draft.mode === 'edit' ? draft.name.trim() : draft.description.trim()));
 
   return (
@@ -278,6 +284,11 @@ export function ReplayWritingPanel({
               onClick={() => current && openDraft(current, current, 'improve', ['speakers', 'review'])}>
               <Sparkles aria-hidden="true" /><span>{t('replay.write.repairSpeakers')}</span>
             </button>
+            {current?.canApplyRepair && <button type="button"
+              disabled={!writings.some(item => item.id === current.sourceId && item.presentation)}
+              onClick={() => openDraft(current, current, 'apply')}>
+              <Check aria-hidden="true" /><span>{t('replay.write.applyRepair')}</span>
+            </button>}
             <button type="button" disabled={!current || current.status === 'GENERATING'}
               className={s.writingDanger} onClick={() => current && openDraft({ ...current, name: writeName(current) }, current, 'delete')}>
               <Trash2 aria-hidden="true" /><span>{t('replay.write.delete')}</span></button>
@@ -295,12 +306,39 @@ export function ReplayWritingPanel({
           if (validDraft) void save(draft);
         }}>
           <div className={s.writingDialogHeader}>
-            <h2 id="ai-write-dialog-title">{t(draft.mode === 'improve' ? 'replay.write.improve' : draft.mode === 'delete' ? 'replay.write.deleteTitle' : draft.mode === 'edit' ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
+            <h2 id="ai-write-dialog-title">{t(draft.mode === 'apply' ? 'replay.write.applyRepair' : draft.mode === 'improve' ? 'replay.write.improve' : draft.mode === 'delete' ? 'replay.write.deleteTitle' : draft.mode === 'edit' ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
             <button type="button" className={s.tab} aria-label={t('replay.write.close')} disabled={submitting}
               onClick={() => selectWrite(selected)}><X aria-hidden="true" /></button>
           </div>
           <fieldset className={s.writingFields} disabled={submitting}>
-            {draft.mode === 'delete' ? <p className={s.writingDeleteNote}>
+            {draft.mode === 'apply' ? <>
+              <p className={s.writingDeleteNote}>{t('replay.write.applyRepairConfirm', {
+                name: repairOriginal ? writeName(repairOriginal) : '',
+              })}</p>
+              {repairSpeakers.length > 0 && <p className={s.muted}>
+                {t('replay.write.repairSpeakerCount', { n: repairSpeakers.length })}{' '}{repairSpeakers.join(', ')}
+              </p>}
+              <details open>
+                <summary>{t('replay.write.reviewRepairedPassages')}</summary>
+                <ol className={s.writingRepairPreview}>
+                  {current?.presentation?.slides.map((slide, index) => (
+                    <li key={index}><strong>{slide.title}</strong><p>{slide.narration}</p></li>
+                  ))}
+                </ol>
+              </details>
+              {repairOriginal?.presentation && <details>
+                <summary>{t('replay.write.reviewOriginalPassages')}</summary>
+                <ol className={s.writingRepairPreview}>
+                  {repairOriginal.presentation.slides.map((slide, index) => (
+                    <li key={index}><strong>{slide.title}</strong><p>{slide.narration}</p></li>
+                  ))}
+                </ol>
+              </details>}
+              {Boolean(current?.presentation?.reviewTerms?.length) && <div>
+                <strong>{t('replay.write.reviewTerms')}</strong>
+                <ul>{current?.presentation?.reviewTerms?.map(term => <li key={term}>{term}</li>)}</ul>
+              </div>}
+            </> : draft.mode === 'delete' ? <p className={s.writingDeleteNote}>
               {t('replay.write.deleteConfirm', { name: draft.name })}
             </p> : draft.mode === 'improve' ? <>
               <p className={s.muted}>{t('replay.write.improveCopy')}</p>
@@ -367,14 +405,14 @@ export function ReplayWritingPanel({
             </>}
           </fieldset>
           {requestFailed && <p className={s.writingDialogError} role="alert">
-            {t(draft.mode === 'delete' ? 'replay.write.deleteFailed' : draft.mode === 'edit' ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
+            {t(draft.mode === 'apply' ? 'replay.write.applyRepairFailed' : draft.mode === 'delete' ? 'replay.write.deleteFailed' : draft.mode === 'edit' ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
           </p>}
           <div className={s.writingActions}>
             <button type="button" className={s.tab} data-cancel disabled={submitting}
               onClick={() => selectWrite(selected)}>{t('replay.write.cancel')}</button>
             <button type="submit" className={draft.mode === 'delete' ? s.writingDeleteButton : s.primaryBtn}
               disabled={submitting || !validDraft}>
-              {t(submitting ? 'replay.write.saving' : draft.mode === 'delete' ? 'replay.write.delete' : draft.mode === 'edit' ? 'replay.write.save' : draft.mode === 'improve' ? 'replay.write.createImproved' : 'replay.write.generate')}
+              {t(submitting ? 'replay.write.saving' : draft.mode === 'apply' ? 'replay.write.applyRepair' : draft.mode === 'delete' ? 'replay.write.delete' : draft.mode === 'edit' ? 'replay.write.save' : draft.mode === 'improve' ? 'replay.write.createImproved' : 'replay.write.generate')}
             </button>
           </div>
         </form>

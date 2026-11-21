@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { after, type NextRequest } from 'next/server';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 import { checkAiSummaryQuota } from '@/lib/billing/limits';
@@ -5,9 +6,9 @@ import { authorizeRecordingView, findRecordingByKey, isRecordingResponse, loadMa
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { prepareSmartPlayVoice } from '@/lib/smartPlayNarration.server';
-import { readPresentation } from '@/lib/meetingPresentation';
+import { readPresentation, type MeetingPresentation } from '@/lib/meetingPresentation';
 import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
-import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting, WRITING_STALE_MS } from '@/lib/replayWriting.server';
+import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting, writingRevision, writingState, WRITING_STALE_MS } from '@/lib/replayWriting.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -69,12 +70,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
       }
       const source = sourceId === undefined ? undefined :
-        current.find(item => item.id === sourceId && item.id !== id)?.presentation;
-      if (sourceId !== undefined && !source) {
+        current.find(item => item.id === sourceId && item.id !== id);
+      if (sourceId !== undefined && !source?.presentation) {
         return apiJson({ error: 'AI Write to improve not found' }, { status: 404, headers });
       }
       const startedAt = await claimWriting(recording.id, writing, isWritingId(sourceId) ? sourceId : undefined);
-      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), source }));
+      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), source: source?.presentation ? { id: source.id, revision: writingRevision(source), presentation: source.presentation } : undefined }));
       return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
     } catch {
       return apiJson({ error: 'Could not start AI Write' }, { status: 500, headers });
@@ -89,12 +90,65 @@ function readDetails(body: { name?: unknown; description?: unknown } | null) {
   return { name, description };
 }
 
+function repairedContent(presentation: MeetingPresentation, title: string) {
+  const content = { ...presentation, title } as MeetingPresentation & { sourceId?: string; sourceRevision?: string };
+  delete content.sourceId;
+  delete content.sourceRevision;
+  return content;
+}
+
+async function applyRepair(recordingId: number, repairId: string) {
+  return prisma.$transaction(async tx => {
+    const key = (id: string) => ({ recordingId_id: { recordingId, id } });
+    const repair = await tx.recordingWriting.findUnique({ where: key(repairId) });
+    const draft = repair?.status === 'READY' ? readPresentation(repair.content) : null;
+    const provenance = repair?.content && typeof repair.content === 'object' && !Array.isArray(repair.content)
+      ? repair.content : null;
+    if (!repair || !draft || !provenance || !isWritingId(provenance.sourceId) ||
+      provenance.sourceId === repairId || typeof provenance.sourceRevision !== 'string') return null;
+    const original = await tx.recordingWriting.findUnique({ where: key(provenance.sourceId) });
+    const prior = original && writingState(original);
+    if (!original || !prior?.presentation || writingRevision(prior) !== provenance.sourceRevision) return null;
+
+    const backupName = `${prior.name.slice(0, WRITING_NAME_LIMIT - 20)} (before repair)`;
+    await tx.recordingWriting.create({
+      data: {
+        recordingId, id: randomUUID(), name: backupName, description: original.description,
+        minutes: original.minutes, voice: original.voice, status: 'READY',
+        content: repairedContent(prior.presentation, backupName) as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const repaired = repairedContent(draft, prior.name);
+    await tx.recordingWriting.update({
+      where: key(original.id),
+      data: { content: repaired as unknown as Prisma.InputJsonValue },
+    });
+    await tx.recordingWriting.update({
+      where: key(repairId),
+      data: { content: { ...repaired, title: draft.title } as unknown as Prisma.InputJsonValue },
+    });
+    return { id: original.id, presentation: repaired, voice: prior.voice };
+  }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   return runWithLocale(req, async () => {
     const loaded = await loadManagedRecording(req, (await params).id);
     if (isRecordingResponse(loaded)) return loaded;
     const { recording } = loaded;
     const body = await req.json().catch(() => null);
+    if (body?.applyRepair === true && isWritingId(body.id)) {
+      if (recording.status !== 'READY') return apiJson({ error: 'Recording is not ready' }, { status: 409, headers });
+      try {
+        const applied = await applyRepair(recording.id, body.id);
+        if (!applied) return apiJson({ error: 'The original changed or this repair was already applied' }, { status: 409, headers });
+        after(() => prepareSmartPlayVoice(recording.id, applied.presentation, applied.voice));
+        return apiJson({ writings: await loadWritings(recording.id), selectedId: applied.id }, { headers });
+      } catch {
+        return apiJson({ error: 'Could not apply AI Write repair' }, { status: 500, headers });
+      }
+    }
     const details = readDetails(body);
     const { id, voice } = body ?? {};
     if (!details || !isWritingId(id) || !isWritingVoice(voice)) {
