@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import { formatClock, narrationTokens } from '@/lib/notesReplay/captions';
 import { speakSeconds, type MeetingPresentation } from '@/lib/meetingPresentation';
-import { writingShot, writingSourceSeconds, type WritingLength } from '@/lib/replayWriting';
+import { writingShot, writingSourceSeconds } from '@/lib/replayWriting';
 import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
@@ -18,10 +18,10 @@ type Selection = { index: number; fraction: number; revision: number; refresh?: 
 type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
-  recordingKey, minutes, presentation, shots, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
+  recordingKey, writingId, presentation, shots, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
 }: {
   recordingKey: string;
-  minutes: WritingLength;
+  writingId: string;
   presentation: MeetingPresentation;
   shots: ShareShot[];
   liveDoc: LiveDocReplayInfo | null;
@@ -74,7 +74,7 @@ export function SmartPlay({
         const response = await authFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ minutes, section: index, poll: refresh || attempt > 0 }),
+          body: JSON.stringify({ writingId, section: index, poll: refresh || attempt > 0 }),
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
         });
         if (response.status === 202) {
@@ -95,7 +95,7 @@ export function SmartPlay({
     clips.current.set(index, request);
     void request.catch(() => { if (clips.current.get(index) === request) clips.current.delete(index); });
     return request;
-  }, [recordingKey, minutes]);
+  }, [recordingKey, writingId]);
 
   useEffect(() => {
     const requests = clipRequests.current;

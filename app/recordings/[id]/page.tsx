@@ -19,7 +19,6 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { SmartPlay } from '@/lib/SmartPlay';
-import type { WritingLength } from '@/lib/replayWriting';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
@@ -998,7 +997,7 @@ export default function ReplayPage() {
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
   const [captionsOpen, setCaptionsOpen] = useState(true);
-  const [smartPlay, setSmartPlay] = useState<{ minutes: WritingLength; presentation: MeetingPresentation } | null>(null);
+  const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation } | null>(null);
   const [scriptHost, setScriptHost] = useState<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
@@ -1579,7 +1578,7 @@ export default function ReplayPage() {
           <div ref={stageRef} className={s.videoCard} data-fullscreen={fullscreen ?? undefined}
           >
             {smartPlay && (
-              <SmartPlay key={`${id}:${smartPlay.minutes}`} recordingKey={id} minutes={smartPlay.minutes}
+              <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} liveDoc={livedoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
                 captionsOpen={captionsOpen} onJump={seekTo}
@@ -1719,10 +1718,10 @@ export default function ReplayPage() {
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
                   canManage={canManage} hasTranscript={hasTranscripts}
-                  activeWriting={smartPlay?.minutes} scriptHostRef={setScriptHost}
-                  onSmartPlay={(minutes, recap) => {
+                  activeWriting={smartPlay?.writingId} scriptHostRef={setScriptHost}
+                  onSmartPlay={(writingId, recap) => {
                     pauseClock();
-                    setSmartPlay({ minutes, presentation: recap });
+                    setSmartPlay({ writingId, presentation: recap });
                   }}
                   onReturn={() => setSmartPlay(null)}
                   legacyFocus={chapterFocus?.n}

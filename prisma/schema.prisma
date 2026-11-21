@@ -394,13 +394,17 @@ model Recording {
 /// One media file of a livedoc_full recording (voice, a screen share), placed on the LiveDoc timeline.
 model RecordingWriting {
   recordingId Int
+  id          String    @db.VarChar(36)
   minutes     Int
+  name        String?   @db.VarChar(200)
+  description String?   @db.Text
+  voice       String    @default("marin") @db.VarChar(16)
   status      String    @db.VarChar(20)
   content     Json?
   startedAt   DateTime  @default(now())
   recording   Recording @relation(fields: [recordingId], references: [id], onDelete: Cascade, map: "RecordingWriting_recordingId_fkey")
 
-  @@id([recordingId, minutes])
+  @@id([recordingId, id])
 }
 
 model RecordingSection {

@@ -2,7 +2,7 @@ import { after, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse } from '@/lib/recordingShare';
-import { isWritingLength } from '@/lib/replayWriting';
+import { DEFAULT_WRITING_VOICE, isWritingId, isWritingLength, isWritingVoice } from '@/lib/replayWriting';
 import { readPresentation } from '@/lib/meetingPresentation';
 import { smartPlayNarration } from '@/lib/smartPlayNarration.server';
 
@@ -19,16 +19,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const access = await authorizeRecordingView(request, recording);
       if (isRecordingResponse(access)) return access;
       const input = await request.json().catch(() => null);
-      if (!isWritingLength(input?.minutes) || !Number.isInteger(input?.section) || input.section < 0) {
+      const writingId = input?.writingId ?? (isWritingLength(input?.minutes) ? `legacy-${input.minutes}` : null);
+      if (!isWritingId(writingId) || !Number.isInteger(input?.section) || input.section < 0) {
         return apiJson({ error: 'Invalid narration section' }, { status: 400, headers });
       }
       const writing = await prisma.recordingWriting.findUnique({
-        where: { recordingId_minutes: { recordingId: recording.id, minutes: input.minutes } },
+        where: { recordingId_id: { recordingId: recording.id, id: writingId } },
       });
       const presentation = writing?.status === 'READY' ? readPresentation(writing.content) : null;
       const slide = presentation?.slides[input.section];
       if (!presentation || !slide?.narration.trim()) return apiJson({ error: 'Narration section not found' }, { status: 404, headers });
       const clip = await smartPlayNarration(recording.id, slide.narration, presentation.language, access.memberId !== null, {
+        voice: isWritingVoice(writing?.voice) ? writing.voice : DEFAULT_WRITING_VOICE,
         poll: input.poll === true,
         background: (wait) => after(wait),
       });

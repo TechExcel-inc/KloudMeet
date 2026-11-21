@@ -1920,13 +1920,113 @@
   margin-top: 16px;
 }
 
-.writingTabs {
+.writingToolbar {
   display: flex;
   flex: none;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 8px 12px;
+  align-items: end;
+  gap: 8px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--km-border);
+}
+
+.writingToolbar label {
+  flex: 1;
+  min-width: 0;
+}
+
+.writingToolbar button {
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+.writingToolbar label,
+.writingFields label {
+  display: grid;
+  gap: 4px;
+  color: var(--km-text-muted);
+}
+
+.writingToolbar select,
+.writingFields input,
+.writingFields textarea,
+.writingFields select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 8px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-sm);
+  background: var(--km-surface);
+  color: var(--km-text);
+  font: inherit;
+}
+
+.writingToolbar select {
+  text-overflow: ellipsis;
+}
+
+.writingFields {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.writingFields textarea {
+  resize: vertical;
+}
+
+.writingSettings {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+  gap: 8px;
+}
+
+.writingHeading,
+.writingActions {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.writingHeading h2,
+.writingSuggestions button,
+.writingContent p {
+  overflow-wrap: anywhere;
+}
+
+.writingActions {
+  justify-content: flex-end;
+}
+
+.writingSuggestions {
+  display: grid;
+  gap: 8px;
+}
+
+.writingSuggestions button {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-sm);
+  background: var(--km-surface);
+  color: var(--km-text);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.writingSuggestions button:hover {
+  border-color: var(--km-primary);
+}
+
+.writingSuggestions span {
+  color: var(--km-text-muted);
 }
 
 .writingContent,
@@ -1946,36 +2046,6 @@
 
 .writingContent section p {
   line-height: 1.6;
-}
-
-.writingChoices {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  margin: 0 0 16px;
-  border: 0;
-}
-
-.writingChoices label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 42px;
-  padding: 8px 10px;
-  border: 1px solid var(--km-border);
-  border-radius: var(--km-radius-sm);
-  cursor: pointer;
-}
-
-.writingChoices label:has(input:checked) {
-  border-color: var(--km-primary);
-}
-
-.writingChoices small {
-  margin-inline-start: auto;
-  color: var(--km-text-muted);
 }
 
 .visuallyHidden {

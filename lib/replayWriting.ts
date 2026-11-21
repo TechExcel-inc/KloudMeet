@@ -5,8 +5,30 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 export const WRITING_LENGTHS = [3, 5, 10, 20] as const;
 export type WritingLength = (typeof WRITING_LENGTHS)[number];
 
-export interface ReplayWriting {
+export const WRITING_VOICES = ['marin', 'cedar'] as const;
+export type WritingVoice = (typeof WRITING_VOICES)[number];
+export const DEFAULT_WRITING_VOICE: WritingVoice = 'marin';
+export const WRITING_NAME_LIMIT = 200;
+export const WRITING_DESCRIPTION_LIMIT = 1500;
+export const WRITING_SECTION_LIMIT = 2400;
+
+export function isWritingVoice(value: unknown): value is WritingVoice {
+  return WRITING_VOICES.some(voice => voice === value);
+}
+
+export function isWritingId(value: unknown): value is string {
+  return typeof value === 'string' && /^(?:legacy-(?:3|5|10|20)|[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12})$/i.test(value);
+}
+
+export interface WritingBrief {
+  name: string;
+  description: string;
   minutes: WritingLength;
+}
+
+export interface ReplayWriting extends WritingBrief {
+  id: string;
+  voice: WritingVoice;
   status: 'GENERATING' | 'READY' | 'FAILED';
   presentation: MeetingPresentation | null;
 }
