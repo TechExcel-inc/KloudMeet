@@ -1,3 +1,4 @@
+import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { GetObjectCommand } from '@aws-sdk/client-s3';
@@ -88,7 +89,7 @@ export async function GET(
               // Every line, so long meetings keep their whole transcript; only what the page shows
               transcripts: {
                 orderBy: { captionTime: 'asc' },
-                select: { id: true, speakerName: true, content: true, captionTime: true, offsetSeconds: true, sourceId: true },
+                select: { id: true, speakerName: true, speakerMemberId: true, content: true, captionTime: true, offsetSeconds: true, sourceId: true },
               },
             },
           },
@@ -192,6 +193,7 @@ export async function GET(
     }
 
     const transcripts = recording.meeting?.transcripts ?? [];
+    const resolveSpeaker = replaySpeakerResolver(recording.meeting?.participants ?? []);
     const regenerated = transcripts.filter((row) => row.sourceId?.startsWith(`assemblyai-${recording.id}-`));
 
     return apiJson({
@@ -246,7 +248,11 @@ export async function GET(
             summary: recording.meeting.summary
               ? await withInternalNote(recording.meeting.summary, access.memberId)
               : null,
-            transcripts: (regenerated.length ? regenerated : transcripts).map(({ sourceId, ...row }) => row),
+            transcripts: (regenerated.length ? regenerated : transcripts).map(row => {
+              const speaker = resolveSpeaker(row);
+              return { id: row.id, speakerName: speaker.name, speakerKey: speaker.key,
+                content: row.content, captionTime: row.captionTime, offsetSeconds: row.offsetSeconds };
+            }),
           }
         : null,
     });

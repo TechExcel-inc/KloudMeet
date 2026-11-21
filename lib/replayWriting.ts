@@ -38,25 +38,36 @@ export function isWritingLength(value: unknown): value is WritingLength {
   return WRITING_LENGTHS.some((minutes) => minutes === value);
 }
 
-export function writingTranscript(lines: SummaryTranscriptLine[], budget = 55_000): string {
-  const rows = lines.map((line) => `[${line.offsetSeconds ?? '?'}] ${line.speakerName}: ${line.content.trim().slice(0, 2000)}`);
+export type WritingTranscriptLine = SummaryTranscriptLine & { id?: number; speakerKey?: string };
+
+export function writingTranscript(lines: WritingTranscriptLine[], budget = 55_000): string {
+  const rows = lines.map((line) => `[${line.offsetSeconds ?? '?'}] ${line.id === undefined ? '' : `[line ${line.id}] `}${line.speakerName}: ${line.content.trim().slice(0, 2000)}`);
   const stride = Math.max(1, Math.ceil(rows.reduce((size, row) => size + row.length + 1, 0) / budget));
   return rows.filter((_, index) => index % stride === 0).join('\n').slice(0, budget);
 }
 
-export function buildReplayWriting(raw: unknown, lines: SummaryTranscriptLine[], meetingTitle: string): MeetingPresentation | null {
+export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string): MeetingPresentation | null {
   if (!raw || typeof raw !== 'object' || !('sections' in raw) || !Array.isArray(raw.sections)) return null;
   const clean = (value: unknown, limit: number) => typeof value === 'string' ? stripEmoji(value).trim().slice(0, limit) : '';
   const offsets = lines.flatMap((line) => line.offsetSeconds === null ? [] : [line.offsetSeconds]).sort((a, b) => a - b);
+  const byId = new Map(lines.flatMap(line => line.id === undefined ? [] : [[line.id, line] as const]));
   const slides = raw.sections.slice(0, 42).flatMap((section: Record<string, unknown> | null): PresentationSlide[] => {
     if (!section || typeof section !== 'object') return [];
     const title = clean(section.title, 140);
     const narration = clean(section.text, WRITING_SECTION_LIMIT);
     if (!title || !narration) return [];
-    const startSec = snapToTranscript(section.startSec, offsets);
-    const endSec = snapToTranscript(section.endSec, offsets);
+    const sourceLineIds = Array.isArray(section.sourceLineIds)
+      ? [...new Set(section.sourceLineIds.filter((id): id is number => Number.isSafeInteger(id) && byId.has(id)))].slice(0, 120)
+      : [];
+    const sourceTimes = sourceLineIds.flatMap(id => {
+      const time = byId.get(id)?.offsetSeconds;
+      return time == null ? [] : [time];
+    });
+    const startSec = sourceTimes.length ? Math.min(...sourceTimes) : snapToTranscript(section.startSec, offsets);
+    const endSec = sourceTimes.length ? Math.max(...sourceTimes) : snapToTranscript(section.endSec, offsets);
     return [{
       kind: 'topic', title, narration, bullets: [], speaker: null, quote: null,
+      ...(byId.size ? { sourceLineIds } : {}),
       startSec, endSec: startSec !== null && endSec !== null && endSec >= startSec ? endSec : startSec,
       importance: 3,
       // Keep slides long enough for the narration at normal speed, including a short transition.
@@ -94,20 +105,26 @@ export function writingShot(
 }
 
 
-/** Names recorded in the transcript for this section's source time range. */
-export function writingSpeakers(
-  slide: Pick<PresentationSlide, 'startSec' | 'endSec'>,
-  transcript: readonly SummaryTranscriptLine[],
-): string[] {
+type WritingSource = Pick<PresentationSlide, 'startSec' | 'endSec' | 'sourceLineIds'>;
+
+export function writingSourceLines<T extends WritingTranscriptLine>(slide: WritingSource, transcript: readonly T[]): T[] {
+  if (Array.isArray(slide.sourceLineIds)) {
+    const ids = new Set(slide.sourceLineIds);
+    return transcript.filter(line => line.id !== undefined && ids.has(line.id));
+  }
   const { startSec, endSec } = slide;
   if (startSec === null) return [];
-  const speakers = new Set<string>();
-  for (const line of transcript) {
-    if (line.offsetSeconds === null || line.offsetSeconds < startSec || line.offsetSeconds > (endSec ?? startSec)) continue;
+  return transcript.filter(line => line.offsetSeconds !== null && line.offsetSeconds >= startSec &&
+    line.offsetSeconds <= (endSec ?? startSec));
+}
+
+export function writingSpeakers(slide: WritingSource, transcript: readonly WritingTranscriptLine[]): string[] {
+  const speakers = new Map<string, string>();
+  for (const line of writingSourceLines(slide, transcript)) {
     const name = line.speakerName.trim();
-    if (name && line.content.trim()) speakers.add(name);
+    if (name && line.content.trim()) speakers.set(line.speakerKey ?? name, name);
   }
-  return [...speakers];
+  return [...speakers.values()];
 }
 
 /** Intersect meeting speaker lanes with the source moments covered by a write. */

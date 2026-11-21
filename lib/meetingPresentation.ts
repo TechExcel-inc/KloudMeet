@@ -49,6 +49,10 @@ export interface PresentationSlide {
   /** The stretch of the real meeting a topic covers */
   startSec: number | null;
   endSec: number | null;
+  /** Replay AI Write evidence. Older slides are grounded by time only. */
+  sourceLineIds?: number[];
+  /** Set by the writing service that actually authored the section. */
+  author?: 'ead-pilot';
   /** 1 (background) to 5 (a decision, a commitment, a number): what the short version keeps */
   importance: number;
   /** Seconds the slide plays at normal pace */

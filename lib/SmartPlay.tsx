@@ -9,8 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import { formatClock, narrationTokens } from '@/lib/notesReplay/captions';
 import { speakSeconds, type MeetingPresentation } from '@/lib/meetingPresentation';
-import { writingShot, writingSourceSeconds, writingSpeakers } from '@/lib/replayWriting';
-import type { SummaryTranscriptLine } from '@/lib/meetingSummary';
+import { writingShot, writingSourceSeconds, writingSpeakers, type WritingTranscriptLine } from '@/lib/replayWriting';
 import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
@@ -25,7 +24,7 @@ export function SmartPlay({
   writingId: string;
   presentation: MeetingPresentation;
   shots: ShareShot[];
-  transcript: readonly SummaryTranscriptLine[];
+  transcript: readonly WritingTranscriptLine[];
   liveDoc: LiveDocReplayInfo | null;
   viewerName: string;
   scriptHost: HTMLElement | null;
@@ -259,6 +258,7 @@ export function SmartPlay({
         <div className={s.smartStageHeader}>
           <div className={s.smartSpeakerContext}>
             <span>{t('replay.write.aiVoice')}</span>
+            {slide.author === 'ead-pilot' && <span>{t('replay.write.eadAuthor')}</span>}
             {originalSpeakers.length > 0 && <span className={s.smartOriginalSpeakers}>
               {t('replay.write.originalSpeakers')}{' '}{originalSpeakers.join(', ')}
             </span>}

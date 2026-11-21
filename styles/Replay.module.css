@@ -2357,6 +2357,12 @@
   color: var(--km-text-muted);
 }
 
+.writingContributor {
+  margin: 0 14px 12px;
+  color: var(--km-text-muted);
+  font-size: 12px;
+}
+
 .writingSpeakerChartTitle {
   margin: 12px 14px 0;
   color: var(--km-text-muted);

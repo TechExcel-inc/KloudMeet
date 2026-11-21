@@ -19,7 +19,7 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { SmartPlay } from '@/lib/SmartPlay';
-import { writingSpeakerLanes } from '@/lib/replayWriting';
+import { writingSpeakerLanes, writingSourceLines } from '@/lib/replayWriting';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
@@ -103,6 +103,7 @@ function InternalNote({ generation }: { generation: NonNullable<SummaryHead['gen
 interface Transcript {
   id: number;
   speakerName: string;
+  speakerKey?: string;
   content: string;
   captionTime: string;
   offsetSeconds: number | null;
@@ -267,6 +268,7 @@ interface ChapterCard {
 }
 
 interface SpeakerSegment {
+  key?: string;
   name: string;
   color: string;
   segments: [number, number][];
@@ -445,7 +447,7 @@ function SpeakerSegmentTimeline({
       {speakers.map((sp, i) => {
         const share = Math.round((spoken[i] / total) * 100);
         return (
-          <div key={sp.name} className={s.lane}>
+          <div key={sp.key ?? sp.name} className={s.lane}>
             <div className={s.laneName} title={t('replay.talkShare', { name: sp.name, pct: share })}>
               <Avatar name={sp.name} className={s.dot} />
               <span className={s.laneLabel}>{sp.name}</span>
@@ -1287,29 +1289,36 @@ export default function ReplayPage() {
     if (name && avatarTones[name] === undefined) avatarTones[name] = Object.keys(avatarTones).length % TONE_COUNT;
   }
 
-  const realSpeakerSegments: SpeakerSegment[] = (() => {
-    if (!transcripts.length) return [];
-    const acc: Record<string, [number, number][]> = {};
-    for (const row of transcripts) {
-      if (row.offsetSeconds === null || row.offsetSeconds === undefined) continue;
-      const start = row.offsetSeconds;
-      const dur = Math.min(30, Math.max(1.5, row.content.length * 0.25));
-      if (!acc[row.speakerName]) acc[row.speakerName] = [];
-      acc[row.speakerName].push([start, start + dur]);
+  function speakerSegments(rows: readonly Transcript[]): SpeakerSegment[] {
+    const bySpeaker = new Map<string, SpeakerSegment>();
+    for (const row of rows) {
+      if (row.offsetSeconds == null || !row.speakerName.trim() || !row.content.trim()) continue;
+      const key = row.speakerKey ?? row.speakerName;
+      let lane = bySpeaker.get(key);
+      if (!lane) {
+        lane = { key, name: row.speakerName, color: speakerColor(row.speakerName, avatarTones), segments: [] };
+        bySpeaker.set(key, lane);
+      }
+      const duration = Math.min(30, Math.max(1.5, row.content.length * 0.25));
+      lane.segments.push([row.offsetSeconds, row.offsetSeconds + duration]);
     }
-    return Object.entries(acc).map(([name, segs]) => ({
-      name,
-      color: speakerColor(name, avatarTones),
-      segments: segs,
-    }));
-  })();
+    return [...bySpeaker.values()];
+  }
 
   const realDuration =
     recording.durationSeconds ??
     (transcripts.length ? Math.max(...transcripts.map((row) => row.offsetSeconds ?? 0)) + 60 : 300);
 
   const chartWrite = smartPlay?.presentation ?? selectedWrite;
-  const writeSpeakerSegments = chartWrite ? writingSpeakerLanes(chartWrite.slides, realSpeakerSegments, realDuration) : [];
+  const sourceRows = chartWrite ? new Map(
+    chartWrite.slides.flatMap(slide => writingSourceLines(slide, transcripts)).map(row => [row.id, row]),
+  ) : null;
+  const writeSpeakerSegments = sourceRows
+    ? writingSpeakerLanes([{ startSec: 0, endSec: realDuration }], speakerSegments([...sourceRows.values()]), realDuration)
+    : [];
+  const eadContributor = chartWrite?.slides.some(slide => slide.author === 'ead-pilot');
+  const realSpeakerSegments = chartWrite ? [] : speakerSegments(transcripts);
+
   const tabs = [
     { key: 'transcript', label: t('replay.tabTranscript') },
     { key: 'summary', label: t('replay.write.tab') },
@@ -1694,6 +1703,7 @@ export default function ReplayPage() {
               {writeSpeakerSegments.length ? (
                 <SpeakerSegmentTimeline speakers={writeSpeakerSegments} duration={realDuration} onSeek={seekTo} />
               ) : <p className={s.writingNotice}>{t('replay.write.noSpeakerChart')}</p>}
+              {eadContributor && <p className={s.writingContributor}>{t('replay.write.eadAuthor')}</p>}
             </section>
           ) : hasTranscripts && (
             <StageViews

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
+import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
 const transcript = [
@@ -37,6 +38,31 @@ describe('AI Write presentations', () => {
     expect(writingSpeakerLanes([{ startSec: 14, endSec: 18 }], lanes, 30))
       .toEqual([{ name: 'Casey', segments: [[14, 18]] }]);
     expect(writingSpeakerLanes([{ startSec: null, endSec: null }], lanes, 30)).toEqual([]);
+  });
+
+  it('uses account identity and cited transcript lines instead of nearby speech', () => {
+    const resolve = replaySpeakerResolver([
+      { id: 1, displayName: 'guifu', teamMember: { id: 101, fullName: 'Gui Fu', username: 'guifu' } },
+      { id: 2, displayName: 'David', teamMember: { id: 102, fullName: 'David Lin', username: 'david' } },
+      { id: 3, displayName: 'David', teamMember: { id: 103, fullName: 'David Chen', username: 'dchen' } },
+    ]);
+    expect(resolve({ speakerMemberId: 101, speakerName: '贵妇' })).toEqual({ key: 'member:101', name: 'Gui Fu' });
+    expect(resolve({ speakerName: ' GUIFU ' })).toEqual({ key: 'member:101', name: 'Gui Fu' });
+    expect(resolve({ speakerName: 'David' })).toEqual({ key: 'transcript:david', name: 'David' });
+
+    const lines = [
+      { id: 1, speakerName: 'Gui Fu', speakerKey: 'member:101', offsetSeconds: 10, content: 'VM storage is fixed.' },
+      { id: 2, speakerName: 'David Lin', speakerKey: 'member:102', offsetSeconds: 11, content: 'I worked on something else.' },
+      { id: 3, speakerName: 'Gui Fu', speakerKey: 'member:101', offsetSeconds: 12, content: 'We moved the VM.' },
+    ];
+    const write = buildReplayWriting({ sections: [{
+      title: 'VM work', text: 'Gui Fu fixed VM storage and moved the VM.',
+      startSec: 10, endSec: 12, sourceLineIds: [1, 3, 999, 3], author: 'ead-pilot',
+    }] }, lines, 'Meeting');
+    expect(write?.slides[0].sourceLineIds).toEqual([1, 3]);
+    expect(write?.slides[0].author).toBeUndefined();
+    expect(writingSpeakers(write!.slides[0], lines)).toEqual(['Gui Fu']);
+    expect(writingSpeakers(write!.slides[0], [lines[1]])).toEqual([]);
   });
 
   it('uses text only for ungrounded sections and advances through screenshots within grounded sections', () => {
