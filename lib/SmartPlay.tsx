@@ -148,8 +148,8 @@ export function SmartPlay({
   const sourceSeconds = writingSourceSeconds(slide, progress);
   const availableLiveDoc = liveDocFailed ? null : liveDoc;
   const shot = writingShot(shots, slide, progress);
-  const timestamps = useMemo(() => slides.reduce<number[]>((starts, part, index) => {
   const originalSpeakers = useMemo(() => writingSpeakers(slide, transcript), [slide, transcript]);
+  const timestamps = useMemo(() => slides.reduce<number[]>((starts, part, index) => {
     starts.push(starts[index] + (durations[index] ?? part.seconds));
     return starts;
   }, [0]), [slides, durations]);
