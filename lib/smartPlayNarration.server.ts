@@ -138,13 +138,17 @@ export async function smartPlayNarration(
   };
 
   let stored = await head();
+  let job = generating.get(item.Key);
+  if (!stored && !job) {
+    // A HEAD begun before an upload can return 404 after the job leaves the map.
+    stored = await head();
+    job = generating.get(item.Key);
+  }
   if (!stored) {
+    if (options.poll && !job && canGenerate) return 'failed';
     if (!canGenerate) return 'sign-in';
-    let job = generating.get(item.Key);
     if (job && (options.poll || options.background)) return 'preparing';
     if (!job) {
-      // Only a deliberate start or retry can launch synthesis. Polls never start another charge.
-      if (options.poll) return 'failed';
       if (generating.size >= 8) return 'busy';
       job = (async () => {
         const wav = await synthesize(narration, language);

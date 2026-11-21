@@ -33,13 +33,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
         background: (wait) => after(wait),
       });
       if (clip === 'preparing') return apiJson({ status: 'preparing' }, { status: 202, headers });
-      if (clip === 'failed') return apiJson({ error: 'Could not prepare OpenAI narration' }, { status: 502, headers });
+      if (clip === 'failed') return apiJson({ error: 'Could not prepare OpenAI narration', code: 'NARRATION_NOT_READY' }, { status: 502, headers });
       if (clip === 'sign-in') return apiJson({ error: 'Sign in to prepare the narration' }, { status: 401, headers });
       if (clip === 'busy') return apiJson({ error: 'Narration is busy' }, { status: 503, headers });
       return apiJson(clip, { headers });
     } catch (error) {
       console.warn('[smart-play] narration failed', error instanceof Error ? error.name : 'UnknownError');
-      return apiJson({ error: 'OpenAI narration is temporarily unavailable' }, { status: 502, headers });
+      return apiJson({ error: 'Could not access narration audio' }, { status: 502, headers });
     }
   });
 }

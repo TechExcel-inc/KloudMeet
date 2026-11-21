@@ -14,7 +14,8 @@ import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
 type Narration = { url: string; seconds: number };
-type Selection = { index: number; fraction: number; revision: number };
+type Selection = { index: number; fraction: number; revision: number; refresh?: boolean };
+type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
   recordingKey, minutes, presentation, shots, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
@@ -52,7 +53,7 @@ export function SmartPlay({
   const [liveDocFailed, setLiveDocFailed] = useState(false);
   const [videoFailed, setVideoFailed] = useState(false);
   const onLiveDocFailure = useCallback(() => setLiveDocFailed(true), []);
-  const [error, setError] = useState<'signIn' | 'unavailable' | null>(null);
+  const [error, setError] = useState<NarrationError | null>(null);
   const slides = presentation.slides;
   const slide = slides[selection.index];
   const tokens = useMemo(() => narrationTokens(slide.narration), [slide.narration]);
@@ -62,7 +63,7 @@ export function SmartPlay({
     return { boundaries, total };
   }, [tokens]);
 
-  const requestClip = useCallback((index: number) => {
+  const requestClip = useCallback((index: number, refresh = false) => {
     const existing = clips.current.get(index);
     if (existing) return existing;
     const endpoint = `/api/recordings/${encodeURIComponent(recordingKey)}/writing/narration`;
@@ -73,19 +74,23 @@ export function SmartPlay({
         const response = await authFetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ minutes, section: index, poll: attempt > 0 }),
+          body: JSON.stringify({ minutes, section: index, poll: refresh || attempt > 0 }),
           signal: AbortSignal.any([controller.signal, AbortSignal.timeout(12_000)]),
         });
         if (response.status === 202) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, 1500));
           continue;
         }
-        if (!response.ok) throw new Error(response.status === 401 ? 'signIn' : 'unavailable');
+        if (!response.ok) {
+          if (response.status === 401) throw new Error('signIn');
+          const failure = await response.json().catch(() => null);
+          throw new Error(!refresh && failure?.code === 'NARRATION_NOT_READY' ? 'generation' : 'playback');
+        }
         const value = await response.json();
-        if (typeof value.url !== 'string' || !Number.isFinite(value.seconds) || value.seconds <= 0) throw new Error('unavailable');
+        if (typeof value.url !== 'string' || !Number.isFinite(value.seconds) || value.seconds <= 0) throw new Error('playback');
         return value as Narration;
       }
-      throw new Error('unavailable');
+      throw new Error('playback');
     })().finally(() => clipRequests.current.delete(controller));
     clips.current.set(index, request);
     void request.catch(() => { if (clips.current.get(index) === request) clips.current.delete(index); });
@@ -108,14 +113,15 @@ export function SmartPlay({
     setClip(null);
     setError(null);
     setSeconds(0);
-    void requestClip(selection.index).then((loaded) => {
+    void requestClip(selection.index, selection.refresh).then((loaded) => {
       if (!current) return;
       setDurations((values) => ({ ...values, [selection.index]: loaded.seconds }));
       setClip(loaded);
     }).catch((failure: unknown) => {
       if (!current) return;
       setBuffering(false);
-      setError(failure instanceof Error && failure.message === 'signIn' ? 'signIn' : 'unavailable');
+      const reason = failure instanceof Error ? failure.message : '';
+      setError(reason === 'signIn' || reason === 'generation' ? reason : 'playback');
     });
     return () => { current = false; };
   }, [requestClip, selection]);
@@ -171,14 +177,19 @@ export function SmartPlay({
 
   useEffect(syncReplayVisual, [syncReplayVisual]);
 
-  function select(index: number, fraction = 0) {
+  function select(index: number, fraction = 0, refresh = false) {
     audio.current?.pause();
     setClip(null);
     setSeconds(0);
     setPlaying(false);
     setEnded(false);
     setSeekId((id) => id + 1);
-    setSelection((prior) => ({ index, fraction, revision: prior.revision + 1 }));
+    setSelection((prior) => ({ index, fraction, revision: prior.revision + 1, refresh }));
+  }
+
+  function retryNarration(refresh: boolean) {
+    clips.current.delete(selection.index);
+    select(selection.index, progress, refresh);
   }
 
   function seek(time: number) {
@@ -253,11 +264,12 @@ export function SmartPlay({
         {!playing && clip && !buffering && !error && <ReplayPlayButton onPlay={toggle} />}
         {(buffering || error) && (
           <div className={s.smartNotice} role={error ? 'alert' : 'status'}>
-            {t(error ? (error === 'signIn' ? 'replay.write.voiceSignIn' : 'replay.write.voiceUnavailable') : 'replay.write.preparingVoice')}
-            {error === 'unavailable' && <button type="button" className={s.iconBtn} onClick={() => {
-              clips.current.delete(selection.index);
+            {t(error === 'signIn' ? 'replay.write.voiceSignIn' :
+              error === 'generation' ? 'replay.write.voiceGenerationFailed' :
+              error === 'playback' ? 'replay.write.voicePlaybackFailed' : 'replay.write.preparingVoice')}
+            {error && error !== 'signIn' && <button type="button" className={s.iconBtn} onClick={() => {
               wantsPlayback.current = true;
-              select(selection.index, progress);
+              retryNarration(error === 'playback' && (selection.refresh === true || !!clip));
             }}>{t('replay.write.retry')}</button>}
           </div>
         )}
@@ -285,7 +297,19 @@ export function SmartPlay({
         onSeeked={(event) => { setBuffering(false); setSeconds(event.currentTarget.currentTime); }}
         onWaiting={() => setBuffering(true)} onCanPlay={() => setBuffering(false)}
         onPlaying={() => { setBuffering(false); setPlaying(true); }} onPause={() => setPlaying(false)}
-        onError={() => { if (clip) { setPlaying(false); setBuffering(false); setError('unavailable'); } }}
+        onError={(event) => {
+          if (!clip) return;
+          const media = event.currentTarget;
+          if (media.getAttribute('src') !== clip.url ||
+              (media.currentSrc && media.currentSrc !== new URL(clip.url, document.baseURI).href)) return;
+          if (!selection.refresh) {
+            retryNarration(true);
+            return;
+          }
+          setPlaying(false);
+          setBuffering(false);
+          setError('playback');
+        }}
         onEnded={() => {
           setPlaying(false);
           if (selection.index + 1 < slides.length) select(selection.index + 1);

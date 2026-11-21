@@ -2,11 +2,12 @@ import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { smartPlayNarration } from '@/lib/smartPlayNarration.server';
 
-const { stored, sent, connections, voice } = vi.hoisted(() => ({
+const { stored, sent, connections, voice, cache } = vi.hoisted(() => ({
   stored: new Map<string, Buffer>(),
   sent: [] as Array<{ type: string; item?: { content: Array<{ text: string }> } }>,
   connections: { count: 0 },
   voice: { hold: false, finish: undefined as (() => void) | undefined },
+  cache: { afterMiss: undefined as (() => Promise<void>) | undefined },
 }));
 
 vi.mock('ws', () => ({
@@ -49,7 +50,10 @@ vi.mock('@/lib/objectStore', () => ({
         return {};
       }
       const body = stored.get(Key);
-      if (!body) throw { $metadata: { httpStatusCode: 404 } };
+      if (!body) {
+        await cache.afterMiss?.();
+        throw { $metadata: { httpStatusCode: 404 } };
+      }
       return { ContentLength: body.length };
     },
   }),
@@ -67,6 +71,7 @@ beforeEach(() => {
   connections.count = 0;
   voice.hold = false;
   voice.finish = undefined;
+  cache.afterMiss = undefined;
 });
 
 afterEach(() => {
@@ -118,4 +123,21 @@ it('uses the dedicated speech endpoint and does not start a Realtime session whe
     body: expect.stringContaining('"voice":"marin"'),
   }));
   expect(connections.count).toBe(0);
+});
+
+it('returns stored audio when an older HEAD misses just before the upload finishes', async () => {
+  voice.hold = true;
+  const tasks: Array<() => Promise<void>> = [];
+  const args = [1, 'A section saved during polling.', 'en', true] as const;
+  await expect(smartPlayNarration(...args, {
+    background: (task) => tasks.push(task),
+  })).resolves.toBe('preparing');
+  await vi.waitFor(() => expect(voice.finish).toBeDefined());
+  cache.afterMiss = async () => {
+    cache.afterMiss = undefined;
+    voice.finish!();
+    await tasks[0]();
+  };
+  await expect(smartPlayNarration(...args, { poll: true })).resolves.toMatchObject({ seconds: 1 });
+  expect(connections.count).toBe(1);
 });
