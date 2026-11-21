@@ -9,7 +9,7 @@ import { useI18n } from '@/lib/i18n';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import { formatClock, narrationTokens } from '@/lib/notesReplay/captions';
 import { speakSeconds, type MeetingPresentation } from '@/lib/meetingPresentation';
-import { writingShot, writingSourceSeconds, writingSpeakers, type WritingTranscriptLine } from '@/lib/replayWriting';
+import { writingShot, writingSourceSeconds, writingSpeakers, writingNarrationSpeakerLanes, type WritingTranscriptLine } from '@/lib/replayWriting';
 import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
@@ -18,7 +18,7 @@ type Selection = { index: number; fraction: number; revision: number; refresh?: 
 type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
-  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
+  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl, autoPlay, chartHost, renderSpeakerChart,
 }: {
   recordingKey: string;
   writingId: string;
@@ -32,6 +32,9 @@ export function SmartPlay({
   children: ReactNode;
   onJump: (seconds: number) => void;
   visualVideoUrl?: string;
+  autoPlay: boolean;
+  chartHost: HTMLElement | null;
+  renderSpeakerChart: (lanes: ReturnType<typeof writingNarrationSpeakerLanes>, duration: number, onSeek: (time: number) => void) => ReactNode;
 }) {
   const { t } = useI18n();
   const clipRequests = useRef(new Set<AbortController>());
@@ -41,7 +44,7 @@ export function SmartPlay({
   const activeToken = useRef<HTMLElement>(null);
   const clips = useRef(new Map<number, Promise<Narration>>());
   const didPreload = useRef(new Set<number>());
-  const wantsPlayback = useRef(true);
+  const wantsPlayback = useRef(autoPlay);
   const [selection, setSelection] = useState<Selection>({ index: 0, fraction: 0, revision: 0 });
   const [clip, setClip] = useState<Narration | null>(null);
   const [seconds, setSeconds] = useState(0);
@@ -144,6 +147,7 @@ export function SmartPlay({
 
   const progress = clip ? Math.min(1, seconds / clip.seconds) : selection.fraction;
   const tokenIndex = timing.boundaries.findIndex((boundary) => boundary > progress * timing.total);
+  const cueIndex = tokenIndex === -1 ? tokens.length - 1 : tokenIndex;
   const sourceSeconds = writingSourceSeconds(slide, progress);
   const availableLiveDoc = liveDocFailed ? null : liveDoc;
   const shot = writingShot(shots, slide, progress);
@@ -153,6 +157,8 @@ export function SmartPlay({
     return starts;
   }, [0]), [slides, durations]);
   const totalSeconds = timestamps[slides.length];
+  const speakerLanes = useMemo(() => writingNarrationSpeakerLanes(slides, transcript, timestamps),
+    [slides, transcript, timestamps]);
   const sectionSeconds = timestamps[selection.index + 1] - timestamps[selection.index];
   const elapsed = timestamps[selection.index] + progress * sectionSeconds;
   const sourceSpan = Math.max(0, (slide.endSec ?? 0) - (slide.startSec ?? 0));
@@ -252,8 +258,8 @@ export function SmartPlay({
         ) : (!availableLiveDoc || sourceSeconds === null) && !showReplayVisual && (
           <div className={s.smartTextVisual}><h3>{slide.title}</h3></div>
         )}
-        {captionsOpen && playing && tokenIndex >= 0 && (
-          <div className={s.smartCue}>{tokens.slice(Math.max(0, tokenIndex - 5), tokenIndex + 12).join('')}</div>
+        {captionsOpen && cueIndex >= 0 && (
+          <div className={s.smartCue}>{tokens.slice(Math.max(0, cueIndex - 5), cueIndex + 12).join('')}</div>
         )}
         <div className={s.smartStageHeader}>
           <div className={s.smartSpeakerContext}>
@@ -282,6 +288,7 @@ export function SmartPlay({
           </div>
         )}
       </div>
+      {chartHost && createPortal(renderSpeakerChart(speakerLanes, totalSeconds, seek), chartHost)}
       {scriptHost && createPortal(slides.map((part, index) => (
         <section key={index} ref={index === selection.index ? activeText : undefined} aria-current={index === selection.index || undefined}>
           <h3><button type="button" onClick={() => select(index)}>{part.title}</button></h3>

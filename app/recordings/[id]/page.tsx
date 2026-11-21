@@ -19,7 +19,6 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 import { ReplayPeople } from '@/lib/ReplayPeople';
 import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { SmartPlay } from '@/lib/SmartPlay';
-import { writingSpeakerLanes, writingSourceLines } from '@/lib/replayWriting';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
 import { ReplayTransport } from '@/lib/ReplayTransport';
@@ -1000,8 +999,9 @@ export default function ReplayPage() {
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
   const [captionsOpen, setCaptionsOpen] = useState(true);
-  const [selectedWrite, setSelectedWrite] = useState<MeetingPresentation | null>(null);
-  const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation } | null>(null);
+  const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation; autoPlay: boolean } | null>(null);
+  const selectedWriteId = useRef<string | null>(null);
+  const [chartHost, setChartHost] = useState<HTMLDivElement | null>(null);
   const [scriptHost, setScriptHost] = useState<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
@@ -1191,6 +1191,21 @@ export default function ReplayPage() {
     else enterFullscreen();
   };
 
+  const selectWritingPlayback = useCallback((writingId: string | null, recap: MeetingPresentation | null) => {
+    if (selectedWriteId.current === writingId) {
+      if (recap) setSmartPlay(previous => previous && previous.presentation !== recap
+        ? { ...previous, presentation: recap } : previous);
+      return;
+    }
+    selectedWriteId.current = writingId;
+    if (writingId && recap) {
+      pauseClock();
+      setSmartPlay({ writingId, presentation: recap, autoPlay: false });
+    } else {
+      setSmartPlay(null);
+    }
+  }, [pauseClock]);
+
   const seekTo = useCallback((secs: number) => {
     setSmartPlay(null);
     if (videoRef.current) {
@@ -1309,15 +1324,7 @@ export default function ReplayPage() {
     recording.durationSeconds ??
     (transcripts.length ? Math.max(...transcripts.map((row) => row.offsetSeconds ?? 0)) + 60 : 300);
 
-  const chartWrite = smartPlay?.presentation ?? selectedWrite;
-  const sourceRows = chartWrite ? new Map(
-    chartWrite.slides.flatMap(slide => writingSourceLines(slide, transcripts)).map(row => [row.id, row]),
-  ) : null;
-  const writeSpeakerSegments = sourceRows
-    ? writingSpeakerLanes([{ startSec: 0, endSec: realDuration }], speakerSegments([...sourceRows.values()]), realDuration)
-    : [];
-  const eadContributor = chartWrite?.slides.some(slide => slide.author === 'ead-pilot');
-  const realSpeakerSegments = chartWrite ? [] : speakerSegments(transcripts);
+  const realSpeakerSegments = smartPlay ? [] : speakerSegments(transcripts);
 
   const tabs = [
     { key: 'transcript', label: t('replay.tabTranscript') },
@@ -1594,7 +1601,19 @@ export default function ReplayPage() {
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={livedoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
-                captionsOpen={captionsOpen} onJump={seekTo}
+                captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost}
+                renderSpeakerChart={(lanes, duration, onSeek) => (
+                  <section className={s.card} aria-label={t('replay.write.speakerChart')}>
+                    <h2 className={s.writingSpeakerChartTitle}>{t('replay.write.speakerChart')}</h2>
+                    {lanes.length ? (
+                      <SpeakerSegmentTimeline speakers={lanes.map(lane => ({
+                        ...lane, color: speakerColor(lane.name, avatarTones),
+                      }))} duration={duration} onSeek={onSeek} />
+                    ) : <p className={s.writingNotice}>{t('replay.write.noSpeakerChart')}</p>}
+                    {smartPlay.presentation.slides.some(slide => slide.author === 'ead-pilot') &&
+                      <p className={s.writingContributor}>{t('replay.write.eadAuthor')}</p>}
+                  </section>
+                )}
                 visualVideoUrl={recording.hasMedia !== false && !notesOnly ? recording.streamUrl ?? undefined : undefined}>
                 {playerButtons}
               </SmartPlay>
@@ -1697,15 +1716,7 @@ export default function ReplayPage() {
             </ReplayTransport>}
           </div>
 
-          {chartWrite ? (
-            <section className={s.card} aria-label={t('replay.write.speakerChart')}>
-              <h2 className={s.writingSpeakerChartTitle}>{t('replay.write.speakerChart')}</h2>
-              {writeSpeakerSegments.length ? (
-                <SpeakerSegmentTimeline speakers={writeSpeakerSegments} duration={realDuration} onSeek={seekTo} />
-              ) : <p className={s.writingNotice}>{t('replay.write.noSpeakerChart')}</p>}
-              {eadContributor && <p className={s.writingContributor}>{t('replay.write.eadAuthor')}</p>}
-            </section>
-          ) : hasTranscripts && (
+          {smartPlay ? <div ref={setChartHost} /> : hasTranscripts && (
             <StageViews
               chapters={realChapters}
               speakers={realSpeakerSegments}
@@ -1742,9 +1753,9 @@ export default function ReplayPage() {
                   activeWriting={smartPlay?.writingId} scriptHostRef={setScriptHost}
                   onSmartPlay={(writingId, recap) => {
                     pauseClock();
-                    setSmartPlay({ writingId, presentation: recap });
+                    setSmartPlay({ writingId, presentation: recap, autoPlay: true });
                   }}
-                  onReturn={() => setSmartPlay(null)} onSelectionChange={setSelectedWrite}
+                  onReturn={() => setSmartPlay(null)} onSelectionChange={selectWritingPlayback}
                   legacyFocus={chapterFocus?.n}
                   legacy={summaryItems.length > 0 ? (
                     <SummaryPanel items={summaryItems} currentTime={currentTime} onSeek={seekTo}

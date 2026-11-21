@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
+import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingNarrationSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
 import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
@@ -63,6 +63,19 @@ describe('AI Write presentations', () => {
     expect(write?.slides[0].author).toBeUndefined();
     expect(writingSpeakers(write!.slides[0], lines)).toEqual(['Gui Fu']);
     expect(writingSpeakers(write!.slides[0], [lines[1]])).toEqual([]);
+  });
+
+  it('puts the original speakers on the AI timeline in the selected write’s section order', () => {
+    const lines = transcript.map((line, index) => ({ ...line, id: index + 1 }));
+    const avery = { startSec: 10, endSec: 10, sourceLineIds: [1] };
+    const casey = { startSec: 18, endSec: 18, sourceLineIds: [2] };
+    expect(writingNarrationSpeakerLanes([casey, avery], lines, [0, 5, 12])).toEqual([
+      { key: 'Casey', name: 'Casey', segments: [[0, 5]] },
+      { key: 'Avery', name: 'Avery', segments: [[5, 12]] },
+    ]);
+    expect(writingNarrationSpeakerLanes([avery], lines, [0, 7])).toEqual([
+      { key: 'Avery', name: 'Avery', segments: [[0, 7]] },
+    ]);
   });
 
   it('uses text only for ungrounded sections and advances through screenshots within grounded sections', () => {

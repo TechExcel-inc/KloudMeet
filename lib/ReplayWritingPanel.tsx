@@ -33,7 +33,7 @@ export function ReplayWritingPanel({
   activeWriting?: string;
   onSmartPlay: (id: string, presentation: MeetingPresentation) => void;
   onReturn: () => void;
-  onSelectionChange: (presentation: MeetingPresentation | null) => void;
+  onSelectionChange: (id: string | null, presentation: MeetingPresentation | null) => void;
   scriptHostRef: (element: HTMLDivElement | null) => void;
   legacy?: ReactNode;
   legacyFocus?: number;
@@ -79,10 +79,8 @@ export function ReplayWritingPanel({
 
   const selectedPresentation = current?.presentation ?? null;
   useEffect(() => {
-    onSelectionChange(selectedPresentation);
-  }, [onSelectionChange, selectedPresentation]);
-
-  useEffect(() => () => onSelectionChange(null), [onSelectionChange]);
+    onSelectionChange(selectedPresentation ? selected : null, selectedPresentation);
+  }, [onSelectionChange, selected, selectedPresentation]);
 
   const load = useCallback(async (signal: AbortSignal) => {
     const response = await authFetch(endpoint, { cache: 'no-store', signal });
@@ -141,7 +139,6 @@ export function ReplayWritingPanel({
   }, [load, pending, submitting]);
 
   function selectWrite(id: string) {
-    if (activeWriting && id !== activeWriting) onReturn();
     if (picker.current) picker.current.open = false;
     setSelected(id);
     setDraft(undefined);

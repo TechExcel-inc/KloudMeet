@@ -159,3 +159,40 @@ export function writingSpeakerLanes<T extends { segments: [number, number][] }>(
     return overlaps.length ? [{ ...lane, segments: merge(overlaps) }] : [];
   });
 }
+
+/** Project the source speakers onto the narrated sections, in playback order. */
+export function writingNarrationSpeakerLanes(
+  slides: readonly WritingSource[],
+  transcript: readonly WritingTranscriptLine[],
+  timestamps: readonly number[],
+): { key: string; name: string; segments: [number, number][] }[] {
+  const lanes = new Map<string, { key: string; name: string; segments: [number, number][] }>();
+  slides.forEach((slide, index) => {
+    const start = timestamps[index];
+    const end = timestamps[index + 1];
+    if (!(end > start)) return;
+    const source = writingSourceLines(slide, transcript).filter(line => line.speakerName.trim() && line.content.trim());
+    const offsets = [...new Set(source.flatMap(line => line.offsetSeconds == null ? [] : [line.offsetSeconds]))]
+      .sort((a, b) => a - b);
+    const sourceStart = Math.min(slide.startSec ?? Infinity, offsets[0] ?? Infinity);
+    const lastOffset = offsets[offsets.length - 1] ?? sourceStart;
+    const sourceEnd = Math.max(slide.endSec ?? -Infinity, lastOffset + 1);
+    const project = (time: number) => start + (end - start) * (time - sourceStart) / (sourceEnd - sourceStart);
+    for (const line of source) {
+      const name = line.speakerName.trim();
+      const key = line.speakerKey ?? name;
+      const lane = lanes.get(key) ?? { key, name, segments: [] };
+      const time = line.offsetSeconds;
+      if (time == null && offsets.length) continue;
+      const next = time == null ? undefined : offsets.find(offset => offset > time);
+      const from = time == null || time === offsets[0] ? start : project(time);
+      const to = next === undefined ? end : project(next);
+      if (to > from) {
+        lane.segments.push([from, to]);
+        lanes.set(key, lane);
+      }
+    }
+  });
+  const total = timestamps[timestamps.length - 1] ?? 0;
+  return writingSpeakerLanes([{ startSec: 0, endSec: total }], [...lanes.values()], total);
+}
