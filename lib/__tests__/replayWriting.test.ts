@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReplayWriting, writingShot, writingSourceSeconds, writingTranscript } from '@/lib/replayWriting';
+import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingTranscript } from '@/lib/replayWriting';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
 const transcript = [
@@ -17,6 +17,14 @@ describe('AI Write presentations', () => {
     expect(writing?.slides[0]).toMatchObject({ narration: text, startSec: 10, endSec: 18 });
     expect(presentationPlan(writing!).totalSeconds).toBeGreaterThan(4);
     expect(writingTranscript(transcript)).toContain('[18] Casey:');
+  });
+
+  it('shows distinct original speakers with transcript lines in the section range', () => {
+    const lines = [...transcript, { ...transcript[0], offsetSeconds: 12 },
+      { ...transcript[1], offsetSeconds: null, speakerName: 'Unknown time' }];
+    expect(writingSpeakers({ startSec: 10, endSec: 18 }, lines)).toEqual(['Avery', 'Casey']);
+    expect(writingSpeakers({ startSec: 10, endSec: null }, lines)).toEqual(['Avery']);
+    expect(writingSpeakers({ startSec: null, endSec: null }, lines)).toEqual([]);
   });
 
   it('uses text only for ungrounded sections and advances through screenshots within grounded sections', () => {

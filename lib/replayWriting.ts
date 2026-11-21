@@ -5,7 +5,7 @@ import { shotAt, type ShareShot } from '@/lib/shareShot';
 export const WRITING_LENGTHS = [3, 5, 10, 20] as const;
 export type WritingLength = (typeof WRITING_LENGTHS)[number];
 
-export const WRITING_VOICES = ['marin', 'cedar'] as const;
+export const WRITING_VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'] as const;
 export type WritingVoice = (typeof WRITING_VOICES)[number];
 export const DEFAULT_WRITING_VOICE: WritingVoice = 'marin';
 export const WRITING_NAME_LIMIT = 200;
@@ -91,4 +91,21 @@ export function writingShot(
 ): ShareShot | null {
   const seconds = writingSourceSeconds(slide, progress);
   return seconds === null ? null : shotAt(shots, seconds * 1000);
+}
+
+
+/** Names recorded in the transcript for this section's source time range. */
+export function writingSpeakers(
+  slide: Pick<PresentationSlide, 'startSec' | 'endSec'>,
+  transcript: readonly SummaryTranscriptLine[],
+): string[] {
+  const { startSec, endSec } = slide;
+  if (startSec === null) return [];
+  const speakers = new Set<string>();
+  for (const line of transcript) {
+    if (line.offsetSeconds === null || line.offsetSeconds < startSec || line.offsetSeconds > (endSec ?? startSec)) continue;
+    const name = line.speakerName.trim();
+    if (name && line.content.trim()) speakers.add(name);
+  }
+  return [...speakers];
 }

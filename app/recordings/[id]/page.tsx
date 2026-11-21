@@ -1579,7 +1579,7 @@ export default function ReplayPage() {
           >
             {smartPlay && (
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
-                presentation={smartPlay.presentation} shots={recording.shots ?? []} liveDoc={livedoc}
+                presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={livedoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
                 captionsOpen={captionsOpen} onJump={seekTo}
                 visualVideoUrl={recording.hasMedia !== false && !notesOnly ? recording.streamUrl ?? undefined : undefined}>

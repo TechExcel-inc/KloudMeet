@@ -2438,6 +2438,17 @@
   pointer-events: none;
 }
 
+.smartSpeakerContext {
+  display: grid;
+  justify-items: start;
+  gap: 4px;
+  min-width: 0;
+}
+
+.smartOriginalSpeakers {
+  overflow-wrap: anywhere;
+}
+
 .smartStageHeader span {
   padding: 5px 8px;
   border-radius: 6px;

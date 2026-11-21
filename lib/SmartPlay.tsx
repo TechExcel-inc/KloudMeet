@@ -9,7 +9,8 @@ import { useI18n } from '@/lib/i18n';
 import { LiveDocReplayStage, type LiveDocReplayInfo } from '@/lib/LiveDocReplayStage';
 import { formatClock, narrationTokens } from '@/lib/notesReplay/captions';
 import { speakSeconds, type MeetingPresentation } from '@/lib/meetingPresentation';
-import { writingShot, writingSourceSeconds } from '@/lib/replayWriting';
+import { writingShot, writingSourceSeconds, writingSpeakers } from '@/lib/replayWriting';
+import type { SummaryTranscriptLine } from '@/lib/meetingSummary';
 import type { ShareShot } from '@/lib/shareShot';
 import s from '@/styles/Replay.module.css';
 
@@ -18,12 +19,13 @@ type Selection = { index: number; fraction: number; revision: number; refresh?: 
 type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
-  recordingKey, writingId, presentation, shots, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
+  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl,
 }: {
   recordingKey: string;
   writingId: string;
   presentation: MeetingPresentation;
   shots: ShareShot[];
+  transcript: readonly SummaryTranscriptLine[];
   liveDoc: LiveDocReplayInfo | null;
   viewerName: string;
   scriptHost: HTMLElement | null;
@@ -147,6 +149,7 @@ export function SmartPlay({
   const availableLiveDoc = liveDocFailed ? null : liveDoc;
   const shot = writingShot(shots, slide, progress);
   const timestamps = useMemo(() => slides.reduce<number[]>((starts, part, index) => {
+  const originalSpeakers = useMemo(() => writingSpeakers(slide, transcript), [slide, transcript]);
     starts.push(starts[index] + (durations[index] ?? part.seconds));
     return starts;
   }, [0]), [slides, durations]);
@@ -254,7 +257,12 @@ export function SmartPlay({
           <div className={s.smartCue}>{tokens.slice(Math.max(0, tokenIndex - 5), tokenIndex + 12).join('')}</div>
         )}
         <div className={s.smartStageHeader}>
-          <span>{t('replay.write.aiVoice')}</span>
+          <div className={s.smartSpeakerContext}>
+            <span>{t('replay.write.aiVoice')}</span>
+            {originalSpeakers.length > 0 && <span className={s.smartOriginalSpeakers}>
+              {t('replay.write.originalSpeakers')}{' '}{originalSpeakers.join(', ')}
+            </span>}
+          </div>
           {slide.startSec !== null && (
             <button type="button" className={s.smartJump} onClick={() => onJump(slide.startSec!)}>
               {t('replay.present.jump', { time: formatClock(slide.startSec) })}

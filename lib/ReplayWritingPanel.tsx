@@ -298,8 +298,9 @@ export function ReplayWritingPanel({
                     <input type="checkbox" checked={draft.checks.includes(option)} onChange={event => {
                       const instruction = t(`replay.write.improvement.${option}.prompt`);
                       const checked = event.target.checked;
-                      const lines = draft.description.split('\n').filter(line => line !== instruction);
-                      const description = checked ? [...lines.filter(Boolean), instruction].join('\n') : lines.join('\n');
+                      const paragraphs = draft.description.trim()
+                        .split(/\n[ \t]*\n/).filter(paragraph => paragraph && paragraph !== instruction);
+                      const description = (checked ? [...paragraphs, instruction] : paragraphs).join('\n\n');
                       if (description.length > WRITING_DESCRIPTION_LIMIT) return;
                       setDraft({ ...draft, description, checks: checked ? [...draft.checks, option] :
                         draft.checks.filter(check => check !== option) });
