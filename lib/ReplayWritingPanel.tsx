@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Layers, Pencil, Play, Plus, X, Check } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Plus, X, Check, Menu, Sparkles, Trash2 } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -12,11 +12,16 @@ import {
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import s from '@/styles/Replay.module.css';
 
+const improvementOptions = ['speakers', 'terms', 'review'] as const;
+type ImprovementOption = (typeof improvementOptions)[number];
+
 type Draft = Omit<WritingBrief, 'minutes'> & {
   id: string;
   voice: WritingVoice;
   minutes: WritingLength | 'auto';
-  editing: boolean;
+  mode: 'new' | 'edit' | 'improve' | 'delete';
+  sourceId?: string;
+  checks: ImprovementOption[];
 };
 
 export function ReplayWritingPanel({
@@ -44,20 +49,21 @@ export function ReplayWritingPanel({
   const [submitting, setSubmitting] = useState(false);
   const dialog = useRef<HTMLDialogElement>(null);
   const picker = useRef<HTMLDetailsElement>(null);
+  const actions = useRef<HTMLDetailsElement>(null);
   const draftOpen = Boolean(draft);
 
   useEffect(() => {
     const element = dialog.current;
     if (!draftOpen || !element) return;
     element.showModal();
-    element.querySelector<HTMLElement>('textarea[required], input[required]')?.focus();
+    element.querySelector<HTMLElement>('textarea[required], input[required], input[type=checkbox]:enabled, [data-cancel]')?.focus();
     return () => element.close();
   }, [draftOpen]);
 
   useEffect(() => {
     function closePicker(event: PointerEvent) {
-      if (picker.current && event.target instanceof Node && !picker.current.contains(event.target)) {
-        picker.current.open = false;
+      for (const menu of [picker.current, actions.current]) {
+        if (menu && event.target instanceof Node && !menu.contains(event.target)) menu.open = false;
       }
     }
     document.addEventListener('pointerdown', closePicker);
@@ -134,16 +140,22 @@ export function ReplayWritingPanel({
     setRequestFailed(false);
   }
 
-  function openDraft(brief?: WritingBrief, item?: ReplayWriting) {
+  function openDraft(brief?: WritingBrief, item?: ReplayWriting, mode: Draft['mode'] = item?.presentation ? 'edit' : 'new') {
+    if (actions.current) {
+      actions.current.open = false;
+      actions.current.querySelector('summary')?.focus();
+    }
     if (activeWriting) onReturn();
     setRequestFailed(false);
     setDraft({
-      id: item?.id ?? crypto.randomUUID(),
+      id: mode === 'improve' && item?.presentation ? crypto.randomUUID() : item?.id ?? crypto.randomUUID(),
       name: brief?.name ?? '',
-      description: brief?.description ?? '',
-      minutes: item?.presentation ? item.minutes : 'auto',
+      description: mode === 'improve' && item?.presentation ? '' : brief?.description ?? '',
+      minutes: item && (item.presentation || item.sourceId) ? item.minutes : 'auto',
       voice: item?.voice ?? DEFAULT_WRITING_VOICE,
-      editing: Boolean(item?.presentation),
+      mode,
+      checks: [],
+      sourceId: mode === 'improve' ? item?.sourceId ?? item?.id : undefined,
     });
   }
 
@@ -152,16 +164,19 @@ export function ReplayWritingPanel({
     setSubmitting(true);
     setRequestFailed(false);
     try {
+      const editing = entry.mode === 'edit';
+      const deleting = entry.mode === 'delete';
       const response = await authFetch(endpoint, {
-        method: entry.editing ? 'PATCH' : 'POST',
+        method: deleting ? 'DELETE' : editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry.editing
+        body: JSON.stringify(deleting ? { id: entry.id } : editing
           ? { id: entry.id, name: entry.name, description: entry.description, voice: entry.voice }
-          : { id: entry.id, prompt: entry.description, minutes: entry.minutes, voice: entry.voice }),
+          : { id: entry.id, prompt: entry.description, minutes: entry.minutes, voice: entry.voice, sourceId: entry.sourceId }),
       });
       if (!response.ok) throw new Error('Could not save AI Write');
-      setWritings((await response.json()).writings);
-      selectWrite(entry.id);
+      const { writings: saved }: { writings: ReplayWriting[] } = await response.json();
+      setWritings(saved);
+      selectWrite(deleting ? (saved.find(item => item.status === 'READY') ?? saved[0])?.id ?? (legacy ? 'legacy' : '') : entry.id);
     } catch {
       setRequestFailed(true);
     } finally {
@@ -196,39 +211,66 @@ export function ReplayWritingPanel({
 
   const writeName = (item: ReplayWriting) => item.name || t(item.id.startsWith('legacy-') ? 'replay.write.legacyName' : 'replay.write.newTitle', { n: item.minutes });
 
+  const validDraft = draft && (draft.mode === 'delete' ||
+    (draft.mode === 'edit' ? draft.name.trim() : draft.description.trim()));
+
   return (
     <div className={s.tabBody}>
       <div className={s.writingToolbar}>
         {writings.length || legacy ? (
-          <details ref={picker} className={s.writingPicker} onKeyDown={event => {
+          <details ref={picker} className={s.writingPicker + ' ' + s.writingSavedPicker} onKeyDown={event => {
             if (event.key === 'Escape' && event.currentTarget.open) {
               event.currentTarget.open = false;
               event.currentTarget.querySelector('summary')?.focus();
             }
           }}>
-            <summary className={s.writingIconLabel}><Layers aria-hidden="true" />
-              <span>{t('replay.write.savedWrites')}</span><ChevronDown aria-hidden="true" />
+            <summary className={s.writingSavedTrigger}>
+              <span>
+                <span className={s.writingPickerLabel}>{t('replay.write.select')}</span>
+                <span className={s.writingPickerTitle}>
+                  {current ? writeName(current) : t(selected === 'legacy' ? 'replay.write.meetingNotes' : 'replay.write.selectPlaceholder')}
+                </span>
+              </span>
+              <ChevronDown aria-hidden="true" />
             </summary>
             <div className={s.writingMenu}>
               {writings.map(item => (
                 <button key={item.id} type="button" aria-current={selected === item.id ? 'true' : undefined}
                   onClick={() => { selectWrite(item.id); picker.current?.querySelector('summary')?.focus(); }}>
-                  <span><strong>{writeName(item)}</strong>
-                    {item.description && <small>{item.description}</small>}
-                  </span>
+                  <span>{writeName(item)}</span>
                   {selected === item.id && <Check aria-hidden="true" />}
                 </button>
               ))}
               {legacy && <button type="button" aria-current={selected === 'legacy' ? 'true' : undefined}
                 onClick={() => { selectWrite('legacy'); picker.current?.querySelector('summary')?.focus(); }}>
-                <strong>{t('replay.write.meetingNotes')}</strong>
+                <span>{t('replay.write.meetingNotes')}</span>
                 {selected === 'legacy' && <Check aria-hidden="true" />}
               </button>}
             </div>
           </details>
         ) : <span className={s.muted}>{t('replay.write.noSaved')}</span>}
-        {canCreate && <button type="button" className={s.writingNew + ' ' + s.writingIconLabel}
-          onClick={() => openDraft()}><Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>}
+        {canManage && <details ref={actions} className={s.writingPicker + ' ' + s.writingActionPicker}
+          onKeyDown={event => {
+            if (event.key === 'Escape' && event.currentTarget.open) {
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector('summary')?.focus();
+            }
+          }}>
+          <summary className={s.writingNew + ' ' + s.writingIconLabel} aria-label={t('replay.write.actions')}>
+            <Menu aria-hidden="true" />
+          </summary>
+          <div className={s.writingMenu + ' ' + s.writingActionMenu}>
+            <button type="button" disabled={!current?.presentation}
+              onClick={() => current && openDraft(current, current, 'edit')}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>
+            <button type="button" disabled={!canCreate} onClick={() => openDraft()}>
+              <Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>
+            <button type="button" disabled={!current?.presentation || !canCreate}
+              onClick={() => current && openDraft(current, current, 'improve')}><Sparkles aria-hidden="true" /><span>{t('replay.write.improve')}</span></button>
+            <button type="button" disabled={!current || current.status === 'GENERATING'}
+              className={s.writingDanger} onClick={() => current && openDraft({ ...current, name: writeName(current) }, current, 'delete')}>
+              <Trash2 aria-hidden="true" /><span>{t('replay.write.delete')}</span></button>
+          </div>
+        </details>}
       </div>
 
       {draft && <dialog ref={dialog} className={s.writingDialog} aria-labelledby="ai-write-dialog-title"
@@ -238,15 +280,44 @@ export function ReplayWritingPanel({
         }}>
         <form onSubmit={event => {
           event.preventDefault();
-          if (draft.editing ? draft.name.trim() : draft.description.trim()) void save(draft);
+          if (validDraft) void save(draft);
         }}>
           <div className={s.writingDialogHeader}>
-            <h2 id="ai-write-dialog-title">{t(draft.editing ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
+            <h2 id="ai-write-dialog-title">{t(draft.mode === 'improve' ? 'replay.write.improve' : draft.mode === 'delete' ? 'replay.write.deleteTitle' : draft.mode === 'edit' ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
             <button type="button" className={s.tab} aria-label={t('replay.write.close')} disabled={submitting}
               onClick={() => selectWrite(selected)}><X aria-hidden="true" /></button>
           </div>
           <fieldset className={s.writingFields} disabled={submitting}>
-            {draft.editing ? <>
+            {draft.mode === 'delete' ? <p className={s.writingDeleteNote}>
+              {t('replay.write.deleteConfirm', { name: draft.name })}
+            </p> : draft.mode === 'improve' ? <>
+              <p className={s.muted}>{t('replay.write.improveCopy')}</p>
+              <div className={s.writingChecks}>
+                {improvementOptions.map(option => (
+                  <label key={option}>
+                    <input type="checkbox" checked={draft.checks.includes(option)} onChange={event => {
+                      const instruction = t(`replay.write.improvement.${option}.prompt`);
+                      const checked = event.target.checked;
+                      const lines = draft.description.split('\n').filter(line => line !== instruction);
+                      const description = checked ? [...lines.filter(Boolean), instruction].join('\n') : lines.join('\n');
+                      if (description.length > WRITING_DESCRIPTION_LIMIT) return;
+                      setDraft({ ...draft, description, checks: checked ? [...draft.checks, option] :
+                        draft.checks.filter(check => check !== option) });
+                    }} />
+                    <span>{t(`replay.write.improvement.${option}`)}</span>
+                  </label>
+                ))}
+                <label className={s.writingComingSoon}>
+                  <input type="checkbox" disabled />
+                  <span>{t('replay.write.improvement.shared')}</span>
+                </label>
+              </div>
+              <label>{t('replay.write.improvementPrompt')}
+                <textarea rows={5} maxLength={WRITING_DESCRIPTION_LIMIT} value={draft.description}
+                  placeholder={t('replay.write.improvementHint')}
+                  onChange={event => setDraft({ ...draft, description: event.target.value })} />
+              </label>
+            </> : draft.mode === 'edit' ? <>
               <label>{t('replay.write.name')}
                 <input required maxLength={WRITING_NAME_LIMIT} value={draft.name}
                   onChange={event => setDraft({ ...draft, name: event.target.value })} />
@@ -283,14 +354,14 @@ export function ReplayWritingPanel({
             </>}
           </fieldset>
           {requestFailed && <p className={s.writingDialogError} role="alert">
-            {t(draft.editing ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
+            {t(draft.mode === 'delete' ? 'replay.write.deleteFailed' : draft.mode === 'edit' ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
           </p>}
           <div className={s.writingActions}>
-            <button type="button" className={s.tab} disabled={submitting}
+            <button type="button" className={s.tab} data-cancel disabled={submitting}
               onClick={() => selectWrite(selected)}>{t('replay.write.cancel')}</button>
-            <button type="submit" className={s.primaryBtn}
-              disabled={submitting || !(draft.editing ? draft.name.trim() : draft.description.trim())}>
-              {t(submitting ? 'replay.write.saving' : draft.editing ? 'replay.write.save' : 'replay.write.generate')}
+            <button type="submit" className={draft.mode === 'delete' ? s.writingDeleteButton : s.primaryBtn}
+              disabled={submitting || !validDraft}>
+              {t(submitting ? 'replay.write.saving' : draft.mode === 'delete' ? 'replay.write.delete' : draft.mode === 'edit' ? 'replay.write.save' : draft.mode === 'improve' ? 'replay.write.createImproved' : 'replay.write.generate')}
             </button>
           </div>
         </form>
@@ -300,8 +371,6 @@ export function ReplayWritingPanel({
         <div className={s.scroll + ' ' + s.writingContent}>
           <div className={s.writingHeading}>
             <h2>{writeName(current)}</h2>
-            {canManage && <button type="button" className={s.tab + ' ' + s.writingIconLabel}
-              onClick={() => openDraft(current, current)}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>}
           </div>
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
@@ -314,6 +383,12 @@ export function ReplayWritingPanel({
           ) : current.presentation.slides.map((slide, index) => (
             <section key={index}><h3>{slide.title}</h3><p>{slide.narration}</p></section>
           ))}
+          {!presenting && Boolean(current.presentation.reviewTerms?.length) && (
+            <section className={s.writingReview}>
+              <h3>{t('replay.write.reviewTerms')}</h3>
+              <ul>{current.presentation.reviewTerms?.map(term => <li key={term}>{term}</li>)}</ul>
+            </section>
+          )}
           <p className={s.muted}>{t('replay.aiNote')}</p>
         </div>
       ) : current?.status === 'GENERATING' ? (
@@ -323,7 +398,7 @@ export function ReplayWritingPanel({
           {current?.status === 'FAILED' && <>
             <p role="alert">{t('replay.write.failed')}</p>
             {canCreate && <button type="button" className={s.tab}
-              onClick={() => openDraft({ ...current, name: writeName(current) }, current)}>{t('replay.write.retry')}</button>}
+              onClick={() => openDraft({ ...current, name: writeName(current) }, current, current.sourceId ? 'improve' : 'new')}>{t('replay.write.retry')}</button>}
           </>}
           {canCreate && !hasSavedWrite ? (
             <>

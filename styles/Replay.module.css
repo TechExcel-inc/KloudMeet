@@ -2030,13 +2030,147 @@
   background: color-mix(in srgb, var(--km-primary) 12%, var(--km-surface));
 }
 
-.writingMenu small {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  margin-top: 2px;
+.writingSavedPicker {
+  flex: 1;
+}
+
+.writingSavedPicker .writingSavedTrigger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 11px;
+  border: 1px solid var(--km-border);
+}
+
+.writingSavedTrigger > span {
+  min-width: 0;
+}
+
+.writingPickerLabel,
+.writingPickerTitle {
+  display: block;
+  line-height: 1.35;
+}
+
+.writingPickerLabel {
+  font-size: 11px;
   color: var(--km-text-muted);
+}
+
+.writingPickerTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--km-text);
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.writingSavedTrigger svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.writingSavedPicker .writingMenu {
+  width: min(100%, 350px);
+}
+
+.writingSavedPicker .writingMenu button {
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.writingActionPicker {
+  margin-inline-start: auto;
+}
+
+.writingActionMenu {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  width: max-content;
+  max-width: calc(100vw - 30px);
+}
+
+.writingActionMenu button {
+  justify-content: flex-start;
+  white-space: nowrap;
+}
+
+.writingActionMenu button:disabled {
+  opacity: .45;
+  cursor: default;
+  background: transparent;
+}
+
+.writingActionMenu .writingDanger {
+  color: light-dark(#b72236, #ff9ca7);
+}
+
+.writingChecks {
+  display: grid;
+  gap: 4px;
+}
+
+.writingFields .writingChecks label {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 0;
+  color: var(--km-text);
+  cursor: pointer;
+}
+
+.writingFields .writingChecks input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 2px 0 0;
+  padding: 0;
+  accent-color: var(--km-primary);
+}
+
+.writingFields .writingChecks .writingComingSoon {
+  color: var(--km-text-muted);
+  cursor: default;
+}
+
+.writingDeleteNote {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.writingDeleteButton {
+  padding: 9px 14px;
+  border: 0;
+  border-radius: var(--km-radius-sm);
+  background: #b72236;
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.writingDeleteButton:hover:not(:disabled) {
+  background: #981d2e;
+}
+
+.writingDeleteButton:disabled {
+  opacity: .6;
+}
+
+.writingReview {
+  padding: 12px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-sm);
+  overflow-wrap: anywhere;
+}
+
+.writingReview ul {
+  margin: 0;
+  padding-inline-start: 20px;
 }
 
 .writingDialog {
@@ -2176,6 +2310,11 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.writingHeading h2 {
+  font-size: 17px;
+  font-weight: 500;
 }
 
 .writingHeading h2,

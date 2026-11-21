@@ -6,7 +6,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { readPresentation } from '@/lib/meetingPresentation';
 import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
-import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting } from '@/lib/replayWriting.server';
+import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting, WRITING_STALE_MS } from '@/lib/replayWriting.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (isRecordingResponse(loaded)) return loaded;
     const { recording, memberId } = loaded;
     const body = await req.json().catch(() => null);
-    const { id, minutes, voice } = body ?? {};
+    const { id, minutes, voice, sourceId } = body ?? {};
     const details = readDetails(body);
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
     const writing = isWritingId(id) && isWritingVoice(voice) && (minutes === 'auto' || isWritingLength(minutes)) &&
@@ -67,8 +67,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (!writing) {
         return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
       }
-      const startedAt = await claimWriting(recording.id, writing);
-      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt) }));
+      const source = sourceId === undefined ? undefined :
+        current.find(item => item.id === sourceId && item.id !== id)?.presentation;
+      if (sourceId !== undefined && !source) {
+        return apiJson({ error: 'AI Write to improve not found' }, { status: 404, headers });
+      }
+      const startedAt = await claimWriting(recording.id, writing, isWritingId(sourceId) ? sourceId : undefined);
+      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), source }));
       return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
     } catch {
       return apiJson({ error: 'Could not start AI Write' }, { status: 500, headers });
@@ -108,6 +113,33 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return apiJson({ writings: await loadWritings(recording.id) }, { headers });
     } catch {
       return apiJson({ error: 'Could not save AI Write' }, { status: 500, headers });
+    }
+  });
+}
+
+export async function DELETE(req: NextRequest, { params }: Params) {
+  return runWithLocale(req, async () => {
+    const loaded = await loadManagedRecording(req, (await params).id);
+    if (isRecordingResponse(loaded)) return loaded;
+    const { recording } = loaded;
+    const body = await req.json().catch(() => null);
+    if (!isWritingId(body?.id)) return apiJson({ error: 'Invalid AI Write' }, { status: 400, headers });
+    if (recording.status !== 'READY') return apiJson({ error: 'Recording is not ready' }, { status: 409, headers });
+
+    try {
+      const where = { recordingId: recording.id, id: body.id };
+      const deleted = await prisma.recordingWriting.deleteMany({
+        where: { ...where, OR: [
+          { status: { not: 'GENERATING' } },
+          { status: 'GENERATING', startedAt: { lte: new Date(Date.now() - WRITING_STALE_MS) } },
+        ] },
+      });
+      if (!deleted.count && await prisma.recordingWriting.findUnique({ where: { recordingId_id: where } })) {
+        return apiJson({ error: 'AI Write is still being generated' }, { status: 409, headers });
+      }
+      return apiJson({ writings: await loadWritings(recording.id) }, { headers });
+    } catch {
+      return apiJson({ error: 'Could not delete AI Write' }, { status: 500, headers });
     }
   });
 }

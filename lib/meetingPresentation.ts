@@ -65,6 +65,7 @@ export interface MeetingPresentation {
   /** Length of the meeting itself, in seconds */
   meetingSeconds: number;
   slides: PresentationSlide[];
+  reviewTerms?: string[];
 }
 
 /** What the replay page gets about a meeting's presentation. */

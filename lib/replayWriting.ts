@@ -29,6 +29,7 @@ export interface WritingBrief {
 export interface ReplayWriting extends WritingBrief {
   id: string;
   voice: WritingVoice;
+  sourceId?: string;
   status: 'GENERATING' | 'READY' | 'FAILED';
   presentation: MeetingPresentation | null;
 }
