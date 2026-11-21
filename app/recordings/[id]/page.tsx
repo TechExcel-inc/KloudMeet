@@ -1003,6 +1003,7 @@ export default function ReplayPage() {
   const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation; autoPlay: boolean } | null>(null);
   const selectedWriteId = useRef<string | null>(null);
   const [chartHost, setChartHost] = useState<HTMLDivElement | null>(null);
+  const [playbackHost, setPlaybackHost] = useState<HTMLDivElement | null>(null);
   const [scriptHost, setScriptHost] = useState<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState<'native' | 'fallback' | null>(null);
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
@@ -1602,7 +1603,7 @@ export default function ReplayPage() {
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={livedoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
-                captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost}
+                captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
                 renderSpeakerChart={(lanes, duration, onSeek) => (
                   <section className={s.card} aria-label={t('replay.write.speakerChart')}>
                     <h2 className={s.writingSpeakerChartTitle}>{t('replay.write.speakerChart')}</h2>
@@ -1759,7 +1760,7 @@ export default function ReplayPage() {
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
                   canManage={canManage} hasTranscript={hasTranscripts}
-                  activeWriting={smartPlay?.writingId} scriptHostRef={setScriptHost}
+                  activeWriting={smartPlay?.writingId} scriptHostRef={setScriptHost} playbackHostRef={setPlaybackHost}
                   onSmartPlay={(writingId, recap) => {
                     pauseClock();
                     setSmartPlay({ writingId, presentation: recap, autoPlay: true });

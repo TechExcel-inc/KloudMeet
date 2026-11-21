@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { Pause, Play } from 'lucide-react';
 import { ReplayTransport } from '@/lib/ReplayTransport';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import { authFetch } from '@/lib/kloudSession';
@@ -18,7 +19,7 @@ type Selection = { index: number; fraction: number; revision: number; refresh?: 
 type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
-  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl, autoPlay, chartHost, renderSpeakerChart,
+  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl, autoPlay, chartHost, playbackHost, renderSpeakerChart,
 }: {
   recordingKey: string;
   writingId: string;
@@ -34,6 +35,7 @@ export function SmartPlay({
   visualVideoUrl?: string;
   autoPlay: boolean;
   chartHost: HTMLElement | null;
+  playbackHost: HTMLElement | null;
   renderSpeakerChart: (lanes: ReturnType<typeof writingNarrationSpeakerLanes>, duration: number, onSeek: (time: number) => void) => ReactNode;
 }) {
   const { t } = useI18n();
@@ -288,6 +290,14 @@ export function SmartPlay({
           </div>
         )}
       </div>
+      {playbackHost && createPortal(
+        <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel}
+          onClick={toggle} disabled={!clip || Boolean(error)}>
+          {playing ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+          <span>{t(playing ? 'replay.write.aiPause' : 'replay.write.aiPlay')}</span>
+        </button>,
+        playbackHost,
+      )}
       {chartHost && createPortal(renderSpeakerChart(speakerLanes, totalSeconds, seek), chartHost)}
       {scriptHost && createPortal(slides.map((part, index) => (
         <section key={index} ref={index === selection.index ? activeText : undefined} aria-current={index === selection.index || undefined}>

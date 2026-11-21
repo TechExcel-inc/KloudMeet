@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Pencil, Play, Plus, X, Check, Menu, Sparkles, Trash2 } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2 } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -25,7 +25,7 @@ type Draft = Omit<WritingBrief, 'minutes'> & {
 };
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, playbackHostRef, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
@@ -35,6 +35,7 @@ export function ReplayWritingPanel({
   onReturn: () => void;
   onSelectionChange: (id: string | null, presentation: MeetingPresentation | null) => void;
   scriptHostRef: (element: HTMLDivElement | null) => void;
+  playbackHostRef: (element: HTMLDivElement | null) => void;
   legacy?: ReactNode;
   legacyFocus?: number;
 }) {
@@ -263,7 +264,7 @@ export function ReplayWritingPanel({
             </div>
           </details>
         ) : <span className={s.muted}>{t('replay.write.noSaved')}</span>}
-        {canManage && <details ref={actions} className={s.writingPicker + ' ' + s.writingActionPicker}
+        {(canManage || presenting) && <details ref={actions} className={s.writingPicker + ' ' + s.writingActionPicker}
           onKeyDown={event => {
             if (event.key === 'Escape' && event.currentTarget.open) {
               event.currentTarget.open = false;
@@ -274,24 +275,33 @@ export function ReplayWritingPanel({
             <Menu aria-hidden="true" />
           </summary>
           <div className={s.writingMenu + ' ' + s.writingActionMenu}>
-            <button type="button" disabled={!current?.presentation}
-              onClick={() => current && openDraft(current, current, 'edit')}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>
-            <button type="button" disabled={!canCreate} onClick={() => openDraft()}>
-              <Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>
-            <button type="button" disabled={!current?.presentation || !canCreate}
-              onClick={() => current && openDraft(current, current, 'improve')}><Sparkles aria-hidden="true" /><span>{t('replay.write.improve')}</span></button>
-            <button type="button" disabled={!current?.presentation || !canCreate}
-              onClick={() => current && openDraft(current, current, 'improve', ['speakers', 'review'])}>
-              <Sparkles aria-hidden="true" /><span>{t('replay.write.repairSpeakers')}</span>
-            </button>
-            {current?.canApplyRepair && <button type="button"
-              disabled={!writings.some(item => item.id === current.sourceId && item.presentation)}
-              onClick={() => openDraft(current, current, 'apply')}>
-              <Check aria-hidden="true" /><span>{t('replay.write.applyRepair')}</span>
-            </button>}
-            <button type="button" disabled={!current || current.status === 'GENERATING'}
-              className={s.writingDanger} onClick={() => current && openDraft({ ...current, name: writeName(current) }, current, 'delete')}>
-              <Trash2 aria-hidden="true" /><span>{t('replay.write.delete')}</span></button>
+            {presenting && <button type="button" onClick={() => {
+              if (actions.current) {
+                actions.current.open = false;
+                actions.current.querySelector('summary')?.focus();
+              }
+              onReturn();
+            }}><Undo2 aria-hidden="true" /><span>{t('replay.write.originalPlayback')}</span></button>}
+            {canManage && <>
+              <button type="button" disabled={!current?.presentation}
+                onClick={() => current && openDraft(current, current, 'edit')}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>
+              <button type="button" disabled={!canCreate} onClick={() => openDraft()}>
+                <Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>
+              <button type="button" disabled={!current?.presentation || !canCreate}
+                onClick={() => current && openDraft(current, current, 'improve')}><Sparkles aria-hidden="true" /><span>{t('replay.write.improve')}</span></button>
+              <button type="button" disabled={!current?.presentation || !canCreate}
+                onClick={() => current && openDraft(current, current, 'improve', ['speakers', 'review'])}>
+                <Sparkles aria-hidden="true" /><span>{t('replay.write.repairSpeakers')}</span>
+              </button>
+              {current?.canApplyRepair && <button type="button"
+                disabled={!writings.some(item => item.id === current.sourceId && item.presentation)}
+                onClick={() => openDraft(current, current, 'apply')}>
+                <Check aria-hidden="true" /><span>{t('replay.write.applyRepair')}</span>
+              </button>}
+              <button type="button" disabled={!current || current.status === 'GENERATING'}
+                className={s.writingDanger} onClick={() => current && openDraft({ ...current, name: writeName(current) }, current, 'delete')}>
+                <Trash2 aria-hidden="true" /><span>{t('replay.write.delete')}</span></button>
+            </>}
           </div>
         </details>}
       </div>
@@ -425,10 +435,11 @@ export function ReplayWritingPanel({
           </div>
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
-          <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {
-            if (presenting) onReturn();
-            else if (current.presentation) onSmartPlay(current.id, current.presentation);
-          }}>{!presenting && <Play aria-hidden="true" />}<span>{t(presenting ? 'replay.write.originalPlayback' : 'replay.write.smartPlay')}</span></button>
+          {presenting ? <div ref={playbackHostRef} /> : (
+            <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {
+              if (current.presentation) onSmartPlay(current.id, current.presentation);
+            }}><Play aria-hidden="true" /><span>{t('replay.write.aiPlay')}</span></button>
+          )}
           {presenting ? (
             <div ref={scriptHostRef} className={s.smartScript} aria-label={t('replay.write.script')} />
           ) : current.presentation.slides.map((slide, index) => (

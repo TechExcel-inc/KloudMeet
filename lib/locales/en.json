@@ -1174,6 +1174,8 @@
   "replay.write.meetingNotes": "Meeting notes",
   "replay.write.new": "New recap",
   "replay.write.loadFailed": "Couldn’t load AI Writes.",
+  "replay.write.aiPlay": "AI Play",
+  "replay.write.aiPause": "Pause AI playback",
   "replay.write.smartPlay": "Smart Play",
   "replay.write.writing": "Writing your recap…",
   "replay.write.failed": "This AI Write couldn’t be generated.",
