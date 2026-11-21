@@ -1,3 +1,4 @@
+import { isAttendeeSpeakerKey } from '@/lib/replaySpeakerIdentity';
 import { meetingLanguage, PRESENTATION_VERSION, speakSeconds, type MeetingPresentation, type PresentationSlide } from '@/lib/meetingPresentation';
 import { snapToTranscript, stripEmoji, type SummaryTranscriptLine } from '@/lib/meetingSummary';
 import { shotAt, type ShareShot } from '@/lib/shareShot';
@@ -38,17 +39,30 @@ export function isWritingLength(value: unknown): value is WritingLength {
   return WRITING_LENGTHS.some((minutes) => minutes === value);
 }
 
-export type WritingTranscriptLine = SummaryTranscriptLine & { id?: number; speakerKey?: string };
+export type WritingTranscriptLine = SummaryTranscriptLine & { id?: number; speakerKey?: string; verifiedAttendee?: boolean };
 
-export function writingTranscript(lines: WritingTranscriptLine[], budget = 55_000): string {
-  const rows = lines.map((line) => `[${line.offsetSeconds ?? '?'}] ${line.id === undefined ? '' : `[line ${line.id}] `}${line.speakerName}: ${line.content.trim().slice(0, 2000)}`);
+export function writingTranscript(lines: WritingTranscriptLine[], budget = 55_000, useAttendeeTokens = false): string {
+  const rows = lines.map((line) => `[${line.offsetSeconds ?? '?'}] ${line.id === undefined ? '' : `[line ${line.id}] `}${useAttendeeTokens ? (line.verifiedAttendee && isAttendeeSpeakerKey(line.speakerKey) ? `[[speaker:${line.speakerKey}]]` : 'Unidentified speaker') : line.speakerName}: ${line.content.trim().slice(0, 2000)}`);
   const stride = Math.max(1, Math.ceil(rows.reduce((size, row) => size + row.length + 1, 0) / budget));
   return rows.filter((_, index) => index % stride === 0).join('\n').slice(0, budget);
 }
 
+export function writingAttendeeRoster(lines: readonly WritingTranscriptLine[]) {
+  return new Map(lines.flatMap(line => line.verifiedAttendee && isAttendeeSpeakerKey(line.speakerKey)
+    ? [[line.speakerKey, line.speakerName] as const] : []));
+}
+
+export function resolveWritingNames(text: string, roster: ReadonlyMap<string, string>, language: string): string {
+  const unnamed = { zh: '一位与会者', ja: '参加者の一人', ko: '한 참석자' }[language] ?? 'an attendee';
+  return text.replace(/\[\[speaker:([^\]\n]*)\]\]/gi, (_, key: string) => roster.get(key.trim()) ?? unnamed);
+}
+
 export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string): MeetingPresentation | null {
   if (!raw || typeof raw !== 'object' || !('sections' in raw) || !Array.isArray(raw.sections)) return null;
-  const clean = (value: unknown, limit: number) => typeof value === 'string' ? stripEmoji(value).trim().slice(0, limit) : '';
+  const language = meetingLanguage(lines);
+  const roster = writingAttendeeRoster(lines);
+  const clean = (value: unknown, limit: number) => typeof value === 'string'
+    ? stripEmoji(resolveWritingNames(value, roster, language)).trim().slice(0, limit) : '';
   const offsets = lines.flatMap((line) => line.offsetSeconds === null ? [] : [line.offsetSeconds]).sort((a, b) => a - b);
   const byId = new Map(lines.flatMap(line => line.id === undefined ? [] : [[line.id, line] as const]));
   const slides = raw.sections.slice(0, 42).flatMap((section: Record<string, unknown> | null): PresentationSlide[] => {
@@ -79,7 +93,7 @@ export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[],
   return {
     version: PRESENTATION_VERSION,
     title: 'title' in raw ? clean(raw.title, 140) || meetingTitle : meetingTitle,
-    language: meetingLanguage(lines),
+    language,
     speakers: [],
     meetingSeconds: offsets[offsets.length - 1] ?? 0,
     slides,
@@ -121,6 +135,7 @@ export function writingSourceLines<T extends WritingTranscriptLine>(slide: Writi
 export function writingSpeakers(slide: WritingSource, transcript: readonly WritingTranscriptLine[]): string[] {
   const speakers = new Map<string, string>();
   for (const line of writingSourceLines(slide, transcript)) {
+    if (line.verifiedAttendee === false) continue;
     const name = line.speakerName.trim();
     if (name && line.content.trim()) speakers.set(line.speakerKey ?? name, name);
   }
@@ -171,7 +186,7 @@ export function writingNarrationSpeakerLanes(
     const start = timestamps[index];
     const end = timestamps[index + 1];
     if (!(end > start)) return;
-    const source = writingSourceLines(slide, transcript).filter(line => line.speakerName.trim() && line.content.trim());
+    const source = writingSourceLines(slide, transcript).filter(line => line.content.trim());
     const offsets = [...new Set(source.flatMap(line => line.offsetSeconds == null ? [] : [line.offsetSeconds]))]
       .sort((a, b) => a - b);
     const sourceStart = Math.min(slide.startSec ?? Infinity, offsets[0] ?? Infinity);
@@ -180,6 +195,7 @@ export function writingNarrationSpeakerLanes(
     const project = (time: number) => start + (end - start) * (time - sourceStart) / (sourceEnd - sourceStart);
     for (const line of source) {
       const name = line.speakerName.trim();
+      if (!name || line.verifiedAttendee === false) continue;
       const key = line.speakerKey ?? name;
       const lane = lanes.get(key) ?? { key, name, segments: [] };
       const time = line.offsetSeconds;

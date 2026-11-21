@@ -103,6 +103,7 @@ interface Transcript {
   id: number;
   speakerName: string;
   speakerKey?: string;
+  verifiedAttendee?: boolean;
   content: string;
   captionTime: string;
   offsetSeconds: number | null;
@@ -1610,8 +1611,16 @@ export default function ReplayPage() {
                         ...lane, color: speakerColor(lane.name, avatarTones),
                       }))} duration={duration} onSeek={onSeek} />
                     ) : <p className={s.writingNotice}>{t('replay.write.noSpeakerChart')}</p>}
-                    {smartPlay.presentation.slides.some(slide => slide.author === 'ead-pilot') &&
-                      <p className={s.writingContributor}>{t('replay.write.eadAuthor')}</p>}
+                    <div className={s.lanes}>
+                      <div className={s.lane}>
+                        <div className={s.laneName}>
+                          <Avatar name="EAD Pilot" className={s.dot} />
+                          <span className={s.laneLabel}>EAD Pilot</span>
+                        </div>
+                        <span className={s.muted}>{t(smartPlay.presentation.slides.some(slide => slide.author === 'ead-pilot')
+                          ? 'replay.write.eadAuthor' : 'replay.write.eadAgent')}</span>
+                      </div>
+                    </div>
                   </section>
                 )}
                 visualVideoUrl={recording.hasMedia !== false && !notesOnly ? recording.streamUrl ?? undefined : undefined}>

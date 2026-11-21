@@ -250,7 +250,7 @@ export async function GET(
               : null,
             transcripts: (regenerated.length ? regenerated : transcripts).map(row => {
               const speaker = resolveSpeaker(row);
-              return { id: row.id, speakerName: speaker.name, speakerKey: speaker.key,
+              return { id: row.id, speakerName: speaker.name, speakerKey: speaker.key, verifiedAttendee: speaker.verifiedAttendee,
                 content: row.content, captionTime: row.captionTime, offsetSeconds: row.offsetSeconds };
             }),
           }

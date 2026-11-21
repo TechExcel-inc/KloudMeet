@@ -46,9 +46,9 @@ describe('AI Write presentations', () => {
       { id: 2, displayName: 'David', teamMember: { id: 102, fullName: 'David Lin', username: 'david' } },
       { id: 3, displayName: 'David', teamMember: { id: 103, fullName: 'David Chen', username: 'dchen' } },
     ]);
-    expect(resolve({ speakerMemberId: 101, speakerName: '贵妇' })).toEqual({ key: 'member:101', name: 'Gui Fu' });
-    expect(resolve({ speakerName: ' GUIFU ' })).toEqual({ key: 'member:101', name: 'Gui Fu' });
-    expect(resolve({ speakerName: 'David' })).toEqual({ key: 'transcript:david', name: 'David' });
+    expect(resolve({ speakerMemberId: 101, speakerName: '贵妇' })).toEqual({ key: 'member:101', name: 'guifu', verifiedAttendee: true });
+    expect(resolve({ speakerName: ' GUIFU ' })).toEqual({ key: 'member:101', name: 'guifu', verifiedAttendee: true });
+    expect(resolve({ speakerName: 'David' })).toEqual({ key: 'transcript:david', name: 'David', verifiedAttendee: false });
 
     const lines = [
       { id: 1, speakerName: 'Gui Fu', speakerKey: 'member:101', offsetSeconds: 10, content: 'VM storage is fixed.' },
@@ -63,6 +63,24 @@ describe('AI Write presentations', () => {
     expect(write?.slides[0].author).toBeUndefined();
     expect(writingSpeakers(write!.slides[0], lines)).toEqual(['Gui Fu']);
     expect(writingSpeakers(write!.slides[0], [lines[1]])).toEqual([]);
+  });
+
+  it('renders only verified attendee tokens and excludes unverified people from the speaker chart', () => {
+    const lines = [
+      { ...transcript[0], id: 1, speakerKey: 'member:1', speakerName: 'avery', verifiedAttendee: true },
+      { ...transcript[1], id: 2, speakerKey: 'transcript:uncertain', verifiedAttendee: false },
+    ];
+    expect(writingTranscript(lines, 55000, true)).toContain('[[speaker:member:1]]');
+    expect(writingTranscript(lines, 55000, true)).toContain('Unidentified speaker');
+    const writing = buildReplayWriting({ title: 'Update from [[speaker:member:1]]', sections: [{
+      title: 'Update from [[speaker:member:1]]',
+      text: '[[speaker:member:1]] shared an update with [[speaker:member:99]].',
+      sourceLineIds: [1, 2],
+    }] }, lines, 'Meeting');
+    expect(writing?.title).toBe('Update from avery');
+    expect(writing?.slides[0].narration).toBe('avery shared an update with an attendee.');
+    expect(writingSpeakers(writing!.slides[0], lines)).toEqual(['avery']);
+    expect(writingNarrationSpeakerLanes(writing!.slides, lines, [0, 10]).map(lane => lane.name)).toEqual(['avery']);
   });
 
   it('puts the original speakers on the AI timeline in the selected write’s section order', () => {
