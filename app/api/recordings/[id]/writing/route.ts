@@ -4,8 +4,8 @@ import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse, loadManagedRecording } from '@/lib/recordingShare';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
-import { readPresentation, speakSeconds } from '@/lib/meetingPresentation';
-import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT, WRITING_SECTION_LIMIT } from '@/lib/replayWriting';
+import { readPresentation } from '@/lib/meetingPresentation';
+import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
 import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting } from '@/lib/replayWriting.server';
 
 export const runtime = 'nodejs';
@@ -37,8 +37,11 @@ export async function POST(req: NextRequest, { params }: Params) {
     const body = await req.json().catch(() => null);
     const { id, minutes, voice } = body ?? {};
     const details = readDetails(body);
-    const writing = details?.description && isWritingId(id) && isWritingLength(minutes) && isWritingVoice(voice)
-      ? { id, minutes, voice, ...details }
+    const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+    const writing = isWritingId(id) && isWritingVoice(voice) && (minutes === 'auto' || isWritingLength(minutes)) &&
+      (prompt ? prompt.length <= WRITING_DESCRIPTION_LIMIT : Boolean(details?.description))
+      ? { id, minutes: minutes === 'auto' ? 3 as const : minutes, voice,
+          name: details?.name ?? '', description: prompt || details?.description || '' }
       : null;
     const recommending = body?.recommend === true;
     if (!recommending && !writing) {
@@ -65,7 +68,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
       }
       const startedAt = await claimWriting(recording.id, writing);
-      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines));
+      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt) }));
       return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
     } catch {
       return apiJson({ error: 'Could not start AI Write' }, { status: 500, headers });
@@ -87,8 +90,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { recording } = loaded;
     const body = await req.json().catch(() => null);
     const details = readDetails(body);
-    const { id, voice, sections } = body ?? {};
-    if (!details || !isWritingId(id) || !isWritingVoice(voice) || !Array.isArray(sections)) {
+    const { id, voice } = body ?? {};
+    if (!details || !isWritingId(id) || !isWritingVoice(voice)) {
       return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
     }
     if (recording.status !== 'READY') return apiJson({ error: 'Recording is not ready' }, { status: 409, headers });
@@ -98,20 +101,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const row = await prisma.recordingWriting.findUnique({ where: { recordingId_id: key } });
       const presentation = row?.status === 'READY' ? readPresentation(row.content) : null;
       if (!row || !presentation) return apiJson({ error: 'AI Write not found' }, { status: 404, headers });
-      if (sections.length !== presentation.slides.length || sections.some(section =>
-        typeof section?.title !== 'string' || !section.title.trim() || section.title.length > 140 ||
-        typeof section?.narration !== 'string' || !section.narration.trim() || section.narration.length > WRITING_SECTION_LIMIT)) {
-        return apiJson({ error: 'Invalid AI Write sections' }, { status: 400, headers });
-      }
-      const slides = presentation.slides.map((slide, index) => {
-        const title = sections[index].title.trim();
-        const narration = sections[index].narration.trim();
-        const seconds = narration === slide.narration ? slide.seconds : Math.max(4, Math.ceil(speakSeconds(narration) + 2));
-        return { ...slide, title, narration, seconds };
-      });
       await prisma.recordingWriting.update({
         where: { recordingId_id: key },
-        data: { ...details, voice, content: { ...presentation, title: details.name, slides } as unknown as Prisma.InputJsonValue },
+        data: { ...details, voice, content: { ...presentation, title: details.name } as unknown as Prisma.InputJsonValue },
       });
       return apiJson({ writings: await loadWritings(recording.id) }, { headers });
     } catch {

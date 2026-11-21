@@ -1,20 +1,22 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { ChevronDown, Layers, Pencil, Play, Plus, X, Check } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import {
   DEFAULT_WRITING_VOICE, WRITING_DESCRIPTION_LIMIT, WRITING_LENGTHS, WRITING_NAME_LIMIT,
-  WRITING_SECTION_LIMIT, WRITING_VOICES, isWritingLength, isWritingVoice,
-  type ReplayWriting, type WritingBrief, type WritingVoice,
+  WRITING_VOICES, isWritingLength, isWritingVoice,
+  type ReplayWriting, type WritingBrief, type WritingVoice, type WritingLength,
 } from '@/lib/replayWriting';
-import type { MeetingPresentation, PresentationSlide } from '@/lib/meetingPresentation';
+import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import s from '@/styles/Replay.module.css';
 
-type Draft = WritingBrief & {
+type Draft = Omit<WritingBrief, 'minutes'> & {
   id: string;
   voice: WritingVoice;
-  sections?: Pick<PresentationSlide, 'title' | 'narration'>[];
+  minutes: WritingLength | 'auto';
+  editing: boolean;
 };
 
 export function ReplayWritingPanel({
@@ -40,6 +42,28 @@ export function ReplayWritingPanel({
   const [selected, setSelected] = useState(activeWriting ?? (legacy && (legacyFocus || !canManage) ? 'legacy' : ''));
   const [draft, setDraft] = useState<Draft>();
   const [submitting, setSubmitting] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const picker = useRef<HTMLDetailsElement>(null);
+  const draftOpen = Boolean(draft);
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (!draftOpen || !element) return;
+    element.showModal();
+    element.querySelector<HTMLElement>('textarea[required], input[required]')?.focus();
+    return () => element.close();
+  }, [draftOpen]);
+
+  useEffect(() => {
+    function closePicker(event: PointerEvent) {
+      if (picker.current && event.target instanceof Node && !picker.current.contains(event.target)) {
+        picker.current.open = false;
+      }
+    }
+    document.addEventListener('pointerdown', closePicker);
+    return () => document.removeEventListener('pointerdown', closePicker);
+  }, []);
+
   const pending = writings.some(item => item.status === 'GENERATING');
   const hasSavedWrite = writings.some(item => item.status !== 'FAILED');
   const canCreate = canManage && hasTranscript;
@@ -104,6 +128,7 @@ export function ReplayWritingPanel({
 
   function selectWrite(id: string) {
     if (activeWriting && id !== activeWriting) onReturn();
+    if (picker.current) picker.current.open = false;
     setSelected(id);
     setDraft(undefined);
     setRequestFailed(false);
@@ -116,9 +141,9 @@ export function ReplayWritingPanel({
       id: item?.id ?? crypto.randomUUID(),
       name: brief?.name ?? '',
       description: brief?.description ?? '',
-      minutes: brief?.minutes ?? 3,
+      minutes: item?.presentation ? item.minutes : 'auto',
       voice: item?.voice ?? DEFAULT_WRITING_VOICE,
-      sections: item?.presentation?.slides.map(({ title, narration }) => ({ title, narration })),
+      editing: Boolean(item?.presentation),
     });
   }
 
@@ -128,9 +153,11 @@ export function ReplayWritingPanel({
     setRequestFailed(false);
     try {
       const response = await authFetch(endpoint, {
-        method: entry.sections ? 'PATCH' : 'POST',
+        method: entry.editing ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entry),
+        body: JSON.stringify(entry.editing
+          ? { id: entry.id, name: entry.name, description: entry.description, voice: entry.voice }
+          : { id: entry.id, prompt: entry.description, minutes: entry.minutes, voice: entry.voice }),
       });
       if (!response.ok) throw new Error('Could not save AI Write');
       setWritings((await response.json()).writings);
@@ -142,6 +169,23 @@ export function ReplayWritingPanel({
     }
   }
 
+  function voiceField() {
+    if (!draft) return null;
+    return (
+      <label>{t('replay.write.voice')}
+        <span className={s.writingSelect}>
+          <select value={draft.voice} onChange={event => {
+            const voice = event.target.value;
+            if (isWritingVoice(voice)) setDraft({ ...draft, voice });
+          }}>
+            {WRITING_VOICES.map(voice => <option key={voice} value={voice}>{t(`replay.write.voice.${voice}`)}</option>)}
+          </select>
+          <ChevronDown aria-hidden="true" />
+        </span>
+      </label>
+    );
+  }
+
   if (loading) return <p className={s.writingNotice} role="status">{t('replay.loading')}</p>;
   if (loadFailed) return (
     <div className={s.tabBody}>
@@ -150,109 +194,121 @@ export function ReplayWritingPanel({
     </div>
   );
 
-  const writeName = (item: ReplayWriting) => item.name || t('replay.write.legacyName', { n: item.minutes });
+  const writeName = (item: ReplayWriting) => item.name || t(item.id.startsWith('legacy-') ? 'replay.write.legacyName' : 'replay.write.newTitle', { n: item.minutes });
 
   return (
     <div className={s.tabBody}>
       <div className={s.writingToolbar}>
-        <label>
-          {t('replay.write.select')}
-          <select value={draft && !draft.sections ? '' : selected} disabled={submitting || (!writings.length && !legacy)}
-            title={current && writeName(current)} onChange={event => selectWrite(event.target.value)}>
-            <option value="" disabled={Boolean(writings.length || legacy)}>
-              {t(writings.length || legacy ? 'replay.write.selectPlaceholder' : 'replay.write.noSaved')}
-            </option>
-            {writings.map(item => <option key={item.id} value={item.id}>{writeName(item)}</option>)}
-            {legacy && <option value="legacy">{t('replay.write.meetingNotes')}</option>}
-          </select>
-        </label>
-        {canCreate && <button type="button" className={s.tab} disabled={submitting}
-          onClick={() => openDraft()}>{t('replay.write.add')}</button>}
+        {writings.length || legacy ? (
+          <details ref={picker} className={s.writingPicker} onKeyDown={event => {
+            if (event.key === 'Escape' && event.currentTarget.open) {
+              event.currentTarget.open = false;
+              event.currentTarget.querySelector('summary')?.focus();
+            }
+          }}>
+            <summary className={s.writingIconLabel}><Layers aria-hidden="true" />
+              <span>{t('replay.write.savedWrites')}</span><ChevronDown aria-hidden="true" />
+            </summary>
+            <div className={s.writingMenu}>
+              {writings.map(item => (
+                <button key={item.id} type="button" aria-current={selected === item.id ? 'true' : undefined}
+                  onClick={() => { selectWrite(item.id); picker.current?.querySelector('summary')?.focus(); }}>
+                  <span><strong>{writeName(item)}</strong>
+                    {item.description && <small>{item.description}</small>}
+                  </span>
+                  {selected === item.id && <Check aria-hidden="true" />}
+                </button>
+              ))}
+              {legacy && <button type="button" aria-current={selected === 'legacy' ? 'true' : undefined}
+                onClick={() => { selectWrite('legacy'); picker.current?.querySelector('summary')?.focus(); }}>
+                <strong>{t('replay.write.meetingNotes')}</strong>
+                {selected === 'legacy' && <Check aria-hidden="true" />}
+              </button>}
+            </div>
+          </details>
+        ) : <span className={s.muted}>{t('replay.write.noSaved')}</span>}
+        {canCreate && <button type="button" className={s.writingNew + ' ' + s.writingIconLabel}
+          onClick={() => openDraft()}><Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>}
       </div>
 
-      {draft ? (
-        <form className={s.scroll + ' ' + s.writingContent} onSubmit={event => {
+      {draft && <dialog ref={dialog} className={s.writingDialog} aria-labelledby="ai-write-dialog-title"
+        onCancel={event => {
           event.preventDefault();
-          if (draft.name.trim() && (draft.sections || draft.description.trim())) void save(draft);
+          if (!submitting) selectWrite(selected);
         }}>
-          <h2>{t(draft.sections ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
+        <form onSubmit={event => {
+          event.preventDefault();
+          if (draft.editing ? draft.name.trim() : draft.description.trim()) void save(draft);
+        }}>
+          <div className={s.writingDialogHeader}>
+            <h2 id="ai-write-dialog-title">{t(draft.editing ? 'replay.write.editTitle' : 'replay.write.newTitle')}</h2>
+            <button type="button" className={s.tab} aria-label={t('replay.write.close')} disabled={submitting}
+              onClick={() => selectWrite(selected)}><X aria-hidden="true" /></button>
+          </div>
           <fieldset className={s.writingFields} disabled={submitting}>
-            <label>{t('replay.write.name')}
-              <input required maxLength={WRITING_NAME_LIMIT} value={draft.name}
-                onChange={event => setDraft({ ...draft, name: event.target.value })} />
-            </label>
-            <label>{t('replay.write.description')}
-              <textarea required={!draft.sections} rows={2} maxLength={WRITING_DESCRIPTION_LIMIT}
-                placeholder={t('replay.write.descriptionHint')} value={draft.description}
-                onChange={event => setDraft({ ...draft, description: event.target.value })} />
-            </label>
-            {draft.sections && <div className={s.writingFields}>
-              <h3>{t('replay.write.content')}</h3>
-              {draft.sections.map((section, index) => (
-                <div key={index} className={s.writingFields}>
-                  <label>{t('replay.write.sectionTitle', { n: index + 1 })}
-                    <input required maxLength={140} value={section.title} onChange={event => {
-                      const title = event.target.value;
-                      setDraft({ ...draft, sections: draft.sections?.map((part, i) => i === index ? { ...part, title } : part) });
-                    }} />
+            {draft.editing ? <>
+              <label>{t('replay.write.name')}
+                <input required maxLength={WRITING_NAME_LIMIT} value={draft.name}
+                  onChange={event => setDraft({ ...draft, name: event.target.value })} />
+              </label>
+              <label>{t('replay.write.description')}
+                <textarea rows={2} maxLength={WRITING_DESCRIPTION_LIMIT} value={draft.description}
+                  onChange={event => setDraft({ ...draft, description: event.target.value })} />
+              </label>
+              {voiceField()}
+            </> : <>
+              <label>{t('replay.write.prompt')}
+                <textarea required rows={4} maxLength={WRITING_DESCRIPTION_LIMIT} value={draft.description}
+                  placeholder={t('replay.write.promptExample')}
+                  onChange={event => setDraft({ ...draft, description: event.target.value })} />
+              </label>
+              <details className={s.writingOptions}>
+                <summary>{t('replay.write.playbackSettings')}</summary>
+                <div className={s.writingSettings}>
+                  <label>{t('replay.write.length')}
+                    <span className={s.writingSelect}>
+                      <select value={draft.minutes} onChange={event => {
+                        const minutes = event.target.value === 'auto' ? 'auto' : Number(event.target.value);
+                        if (minutes === 'auto' || isWritingLength(minutes)) setDraft({ ...draft, minutes });
+                      }}>
+                        <option value="auto">{t('replay.write.autoLength')}</option>
+                        {WRITING_LENGTHS.map(minutes => <option key={minutes} value={minutes}>{t('replay.minutes', { n: minutes })}</option>)}
+                      </select>
+                      <ChevronDown aria-hidden="true" />
+                    </span>
                   </label>
-                  <label>{t('replay.write.sectionText', { n: index + 1 })}
-                    <textarea required rows={4} maxLength={WRITING_SECTION_LIMIT} value={section.narration}
-                      onChange={event => {
-                        const narration = event.target.value;
-                        setDraft({ ...draft, sections: draft.sections?.map((part, i) => i === index ? { ...part, narration } : part) });
-                      }} />
-                  </label>
+                  {voiceField()}
                 </div>
-              ))}
-            </div>}
-            <div className={s.writingSettings}>
-              {!draft.sections && <label>{t('replay.write.length')}
-                <select value={draft.minutes} onChange={event => {
-                  const minutes = Number(event.target.value);
-                  if (isWritingLength(minutes)) setDraft({ ...draft, minutes });
-                }}>
-                  {WRITING_LENGTHS.map(minutes => <option key={minutes} value={minutes}>{t('replay.minutes', { n: minutes })}</option>)}
-                </select>
-              </label>}
-              <label>{t('replay.write.voice')}
-                <select value={draft.voice} onChange={event => {
-                  const voice = event.target.value;
-                  if (isWritingVoice(voice)) setDraft({ ...draft, voice });
-                }}>
-                  {WRITING_VOICES.map(voice => <option key={voice} value={voice}>{t(`replay.write.voice.${voice}`)}</option>)}
-                </select>
-              </label>
-              <label>{t('replay.write.writer')}
-                <select defaultValue="kloud">
-                  <option value="kloud">AI Write</option>
-                  <option value="ead" disabled>{t('replay.write.eadSoon')}</option>
-                </select>
-              </label>
-            </div>
-            <div className={s.writingActions}>
-              <button type="button" className={s.tab} onClick={() => selectWrite(selected)}>{t('replay.write.cancel')}</button>
-              <button type="submit" className={s.primaryBtn}
-                disabled={!draft.name.trim() || (!draft.sections && !draft.description.trim()) ||
-                  draft.sections?.some(section => !section.title.trim() || !section.narration.trim())}>
-                {t(submitting ? 'replay.write.saving' : draft.sections ? 'replay.write.save' : 'replay.write.generate')}
-              </button>
-            </div>
+              </details>
+            </>}
           </fieldset>
+          {requestFailed && <p className={s.writingDialogError} role="alert">
+            {t(draft.editing ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
+          </p>}
+          <div className={s.writingActions}>
+            <button type="button" className={s.tab} disabled={submitting}
+              onClick={() => selectWrite(selected)}>{t('replay.write.cancel')}</button>
+            <button type="submit" className={s.primaryBtn}
+              disabled={submitting || !(draft.editing ? draft.name.trim() : draft.description.trim())}>
+              {t(submitting ? 'replay.write.saving' : draft.editing ? 'replay.write.save' : 'replay.write.generate')}
+            </button>
+          </div>
         </form>
-      ) : selected === 'legacy' ? legacy : current?.presentation ? (
+      </dialog>}
+
+      {selected === 'legacy' ? legacy : current?.presentation ? (
         <div className={s.scroll + ' ' + s.writingContent}>
           <div className={s.writingHeading}>
             <h2>{writeName(current)}</h2>
-            {canManage && <button type="button" className={s.tab}
-              onClick={() => openDraft(current, current)}>{t('replay.write.edit')}</button>}
+            {canManage && <button type="button" className={s.tab + ' ' + s.writingIconLabel}
+              onClick={() => openDraft(current, current)}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>}
           </div>
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
-          <button type="button" className={s.primaryBtn} onClick={() => {
+          <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {
             if (presenting) onReturn();
             else if (current.presentation) onSmartPlay(current.id, current.presentation);
-          }}>{t(presenting ? 'replay.write.originalPlayback' : 'replay.write.smartPlay')}</button>
+          }}>{!presenting && <Play aria-hidden="true" />}<span>{t(presenting ? 'replay.write.originalPlayback' : 'replay.write.smartPlay')}</span></button>
           {presenting ? (
             <div ref={scriptHostRef} className={s.smartScript} aria-label={t('replay.write.script')} />
           ) : current.presentation.slides.map((slide, index) => (
@@ -261,7 +317,7 @@ export function ReplayWritingPanel({
           <p className={s.muted}>{t('replay.aiNote')}</p>
         </div>
       ) : current?.status === 'GENERATING' ? (
-        <p className={s.writingNotice} role="status">{t('replay.write.generating', { name: writeName(current) })}</p>
+        <p className={s.writingNotice} role="status">{current.name ? t('replay.write.generating', { name: current.name }) : t('replay.write.writing')}</p>
       ) : (
         <div className={s.scroll + ' ' + s.writingContent}>
           {current?.status === 'FAILED' && <>
@@ -290,9 +346,6 @@ export function ReplayWritingPanel({
           ) : !current && <p>{t(hasTranscript ? 'replay.write.emptyViewer' : 'replay.write.noTranscript')}</p>}
         </div>
       )}
-      {requestFailed && <p className={s.writingNotice} role="alert">
-        {t(draft?.sections ? 'replay.write.saveFailed' : 'replay.write.startFailed')}
-      </p>}
     </div>
   );
 }

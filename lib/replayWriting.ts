@@ -50,7 +50,7 @@ export function buildReplayWriting(raw: unknown, lines: SummaryTranscriptLine[],
   const slides = raw.sections.slice(0, 42).flatMap((section: Record<string, unknown> | null): PresentationSlide[] => {
     if (!section || typeof section !== 'object') return [];
     const title = clean(section.title, 140);
-    const narration = clean(section.text, 2400);
+    const narration = clean(section.text, WRITING_SECTION_LIMIT);
     if (!title || !narration) return [];
     const startSec = snapToTranscript(section.startSec, offsets);
     const endSec = snapToTranscript(section.endSec, offsets);

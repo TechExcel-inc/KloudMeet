@@ -1923,47 +1923,232 @@
 .writingToolbar {
   display: flex;
   flex: none;
-  align-items: end;
+  align-items: center;
   gap: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--km-border);
 }
 
-.writingToolbar label {
-  flex: 1;
-  min-width: 0;
-}
-
-.writingToolbar button {
-  min-height: 36px;
+.writingIconLabel {
+  display: inline-flex;
+  flex: none;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   white-space: nowrap;
 }
 
-.writingToolbar label,
-.writingFields label {
-  display: grid;
-  gap: 4px;
+.writingIconLabel svg,
+.writingMenu svg,
+.writingDialogHeader svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  display: block;
+}
+
+.writingNew {
+  margin-inline-start: auto;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: var(--km-radius-sm);
+  background: color-mix(in srgb, var(--km-primary) 15%, var(--km-surface));
+  color: var(--km-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.writingNew:hover {
+  background: color-mix(in srgb, var(--km-primary) 24%, var(--km-surface));
+}
+
+.writingPicker {
+  position: relative;
+  min-width: 0;
+}
+
+.writingPicker summary,
+.writingOptions summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.writingPicker summary::-webkit-details-marker,
+.writingOptions summary::-webkit-details-marker {
+  display: none;
+}
+
+.writingPicker summary {
+  padding: 7px 9px;
+  border-radius: var(--km-radius-sm);
   color: var(--km-text-muted);
 }
 
-.writingToolbar select,
+.writingPicker summary:hover,
+.writingPicker[open] summary {
+  background: color-mix(in srgb, var(--km-primary) 10%, var(--km-surface));
+  color: var(--km-text);
+}
+
+.writingMenu {
+  position: absolute;
+  z-index: 3;
+  inset-inline-start: 0;
+  top: calc(100% + 5px);
+  width: min(300px, calc(100vw - 58px));
+  max-height: min(280px, 45vh);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 4px;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-md);
+  background: var(--km-surface);
+  box-shadow: 0 12px 28px #0004;
+}
+
+.writingMenu button {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--km-radius-sm);
+  background: transparent;
+  color: var(--km-text);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.writingMenu button:hover,
+.writingMenu button[aria-current] {
+  background: color-mix(in srgb, var(--km-primary) 12%, var(--km-surface));
+}
+
+.writingMenu small {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  color: var(--km-text-muted);
+}
+
+.writingDialog {
+  width: min(445px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  padding: 0;
+  border: 1px solid var(--km-border);
+  border-radius: var(--km-radius-lg);
+  background: var(--km-surface);
+  color: var(--km-text);
+  box-shadow: 0 20px 60px #0005;
+}
+
+.writingDialog::backdrop {
+  background: #15112380;
+}
+
+.writingDialog form {
+  padding: 18px;
+}
+
+.writingDialogHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.writingDialogHeader h2 {
+  margin: 0;
+  font-size: 21px;
+  letter-spacing: -.02em;
+}
+
+.writingFields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: var(--km-text-muted);
+}
+
 .writingFields input,
 .writingFields textarea,
 .writingFields select {
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  min-height: 36px;
-  padding: 6px 8px;
+  min-height: 38px;
+  padding: 8px 11px;
   border: 1px solid var(--km-border);
   border-radius: var(--km-radius-sm);
-  background: var(--km-surface);
+  background: color-mix(in srgb, var(--km-text) 3%, var(--km-surface));
   color: var(--km-text);
   font: inherit;
 }
 
-.writingToolbar select {
+.writingSelect {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+:global(html[data-theme='dark']) .writingSelect select {
+  color-scheme: dark;
+}
+
+:global(html[data-theme='light']) .writingSelect select {
+  color-scheme: light;
+}
+
+.writingSelect select {
+  display: block;
+  appearance: none;
+  padding-inline-end: 36px;
   text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.writingSelect svg {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--km-text-muted);
+  pointer-events: none;
+}
+
+.writingOptions summary {
+  color: var(--km-text-muted);
+  padding-block: 4px;
+}
+
+.writingOptions summary::before {
+  content: '›';
+  display: inline-block;
+  margin-inline-end: 7px;
+}
+
+.writingOptions[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.writingOptions[open] summary {
+  margin-bottom: 6px;
+}
+
+.writingDialogError {
+  margin: 8px 0 0;
 }
 
 .writingFields {
@@ -1981,14 +2166,14 @@
 
 .writingSettings {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr));
   gap: 8px;
 }
 
 .writingHeading,
 .writingActions {
   display: flex;
-  align-items: start;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
 }
@@ -2001,6 +2186,10 @@
 
 .writingActions {
   justify-content: flex-end;
+  align-items: center;
+  padding-top: 12px;
+  margin-top: 14px;
+  border-top: 1px solid var(--km-border);
 }
 
 .writingSuggestions {
