@@ -1,4 +1,4 @@
-type ReplayAttendee = {
+export type ReplayAttendee = {
   id: number;
   displayName: string;
   teamMember: { id: number; fullName: string | null; username: string } | null;

@@ -5,6 +5,7 @@ import { checkAiSummaryQuota } from '@/lib/billing/limits';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse, loadManagedRecording } from '@/lib/recordingShare';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
+import { loadReplaySpokenNames } from '@/lib/replaySpokenNames.server';
 import { prepareSmartPlayVoice } from '@/lib/smartPlayNarration.server';
 import { readPresentation, type MeetingPresentation } from '@/lib/meetingPresentation';
 import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
@@ -143,7 +144,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       try {
         const applied = await applyRepair(recording.id, body.id);
         if (!applied) return apiJson({ error: 'The original changed or this repair was already applied' }, { status: 409, headers });
-        after(() => prepareSmartPlayVoice(recording.id, applied.presentation, applied.voice));
+        after(async () => {
+          const speak = await loadReplaySpokenNames(recording.meetingId, applied.presentation.language);
+          await prepareSmartPlayVoice(recording.id, applied.presentation, applied.voice, speak);
+        });
         return apiJson({ writings: await loadWritings(recording.id), selectedId: applied.id }, { headers });
       } catch {
         return apiJson({ error: 'Could not apply AI Write repair' }, { status: 500, headers });
@@ -166,7 +170,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         data: { ...details, voice, content: { ...presentation, title: details.name } as unknown as Prisma.InputJsonValue },
       });
       if (row.voice !== voice) {
-        after(() => prepareSmartPlayVoice(recording.id, presentation, voice));
+        after(async () => {
+          const speak = await loadReplaySpokenNames(recording.meetingId, presentation.language);
+          await prepareSmartPlayVoice(recording.id, presentation, voice, speak);
+        });
       }
       return apiJson({ writings: await loadWritings(recording.id) }, { headers });
     } catch {

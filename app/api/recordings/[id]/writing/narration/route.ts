@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse } from '@/lib/recordingShare';
 import { DEFAULT_WRITING_VOICE, isWritingId, isWritingLength, isWritingVoice } from '@/lib/replayWriting';
+import { loadReplaySpokenNames } from '@/lib/replaySpokenNames.server';
 import { readPresentation } from '@/lib/meetingPresentation';
 import { smartPlayNarration } from '@/lib/smartPlayNarration.server';
 
@@ -29,11 +30,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const presentation = writing?.status === 'READY' ? readPresentation(writing.content) : null;
       const slide = presentation?.slides[input.section];
       if (!presentation || !slide?.narration.trim()) return apiJson({ error: 'Narration section not found' }, { status: 404, headers });
-      const clip = await smartPlayNarration(recording.id, slide.narration, presentation.language, access.memberId !== null, {
-        voice: isWritingVoice(writing?.voice) ? writing.voice : DEFAULT_WRITING_VOICE,
+      const speak = await loadReplaySpokenNames(recording.meetingId, presentation.language);
+      const narration = speak(slide);
+      const canGenerate = access.memberId !== null;
+      const voice = isWritingVoice(writing?.voice) ? writing.voice : DEFAULT_WRITING_VOICE;
+      let clip = await smartPlayNarration(recording.id, narration, presentation.language, canGenerate, {
+        voice,
         poll: input.poll === true,
         background: (wait) => after(wait),
       });
+      if (clip === 'sign-in' && narration !== slide.narration) {
+        clip = await smartPlayNarration(recording.id, slide.narration, presentation.language, false, { voice });
+      }
       if (clip === 'preparing') return apiJson({ status: 'preparing' }, { status: 202, headers });
       if (clip === 'failed') return apiJson({ error: 'Could not prepare OpenAI narration', code: 'NARRATION_NOT_READY' }, { status: 502, headers });
       if (clip === 'sign-in') return apiJson({ error: 'Sign in to prepare the narration' }, { status: 401, headers });

@@ -1,3 +1,4 @@
+import type { PresentationSlide } from '@/lib/meetingPresentation';
 import { DEFAULT_WRITING_VOICE, type WritingVoice } from '@/lib/replayWriting';
 import { createHash } from 'node:crypto';
 import { HeadObjectCommand, GetObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3';
@@ -183,10 +184,11 @@ export async function smartPlayNarration(
 /** Prepare each section with the saved voice, reusing every matching stored clip. */
 export async function prepareSmartPlayVoice(
   recordingId: number,
-  presentation: { language: string; slides: readonly { narration: string }[] },
+  presentation: { language: string; slides: readonly Pick<PresentationSlide, 'narration' | 'nameMentions' | 'attribution'>[] },
   voice: WritingVoice,
+  spokenText: (slide: Pick<PresentationSlide, 'narration' | 'nameMentions' | 'attribution'>) => string = slide => slide.narration,
 ) {
-  const sections = [...new Set(presentation.slides.map(slide => slide.narration).filter(text => text.trim()))];
+  const sections = [...new Set(presentation.slides.map(spokenText).filter(text => text.trim()))];
   for (let index = 0; index < sections.length; index += 3) {
     const results = await Promise.allSettled(sections.slice(index, index + 3).map(async narration => {
       for (let attempt = 0; attempt < 3; attempt++) {

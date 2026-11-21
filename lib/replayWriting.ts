@@ -53,9 +53,24 @@ export function writingAttendeeRoster(lines: readonly WritingTranscriptLine[]) {
     ? [[line.speakerKey, line.speakerName] as const] : []));
 }
 
-export function resolveWritingNames(text: string, roster: ReadonlyMap<string, string>, language: string): string {
+function renderWritingNames(text: string, roster: ReadonlyMap<string, string>, language: string) {
   const unnamed = { zh: '一位与会者', ja: '参加者の一人', ko: '한 참석자' }[language] ?? 'an attendee';
-  return text.replace(/\[\[speaker:([^\]\n]*)\]\]/gi, (_, key: string) => roster.get(key.trim()) ?? unnamed);
+  const mentions: NonNullable<PresentationSlide['nameMentions']> = [];
+  let rendered = '';
+  let cursor = 0;
+  for (const match of text.matchAll(/\[\[speaker:([^\]\n]*)\]\]/gi)) {
+    const key = match[1].trim();
+    const name = roster.get(key);
+    rendered += text.slice(cursor, match.index);
+    if (name) mentions.push({ key, start: rendered.length, end: rendered.length + name.length });
+    rendered += name ?? unnamed;
+    cursor = match.index + match[0].length;
+  }
+  return { text: rendered + text.slice(cursor), mentions };
+}
+
+export function resolveWritingNames(text: string, roster: ReadonlyMap<string, string>, language: string): string {
+  return renderWritingNames(text, roster, language).text;
 }
 
 export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string, requireAttribution = false): MeetingPresentation | null {
@@ -69,7 +84,9 @@ export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[],
   const slides = raw.sections.slice(0, 42).flatMap((section: Record<string, unknown> | null): PresentationSlide[] => {
     if (!section || typeof section !== 'object') return [];
     const topic = clean(section.title, 140);
-    const narration = clean(section.text, WRITING_SECTION_LIMIT);
+    const rendered = renderWritingNames(typeof section.text === 'string' ? stripEmoji(section.text).trim() : '', roster, language);
+    const narration = rendered.text.slice(0, WRITING_SECTION_LIMIT);
+    const nameMentions = rendered.mentions.filter(mention => mention.end <= narration.length);
     if (!topic || !narration) return [];
     const sourceLineIds = Array.isArray(section.sourceLineIds)
       ? [...new Set(section.sourceLineIds.filter((id): id is number => Number.isSafeInteger(id) && byId.has(id)))].slice(0, 120)
@@ -88,7 +105,7 @@ export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[],
     const endSec = sourceTimes.length ? Math.max(...sourceTimes) : snapToTranscript(section.endSec, offsets);
     return [{
       kind: 'topic', title, narration, bullets: [], speaker: attribution?.name ?? null, quote: null,
-      ...(byId.size ? { sourceLineIds } : {}),
+      ...(byId.size ? { sourceLineIds, nameMentions } : {}),
       ...(requireAttribution || 'speakerKey' in section ? { attribution } : {}),
       startSec, endSec: startSec !== null && endSec !== null && endSec >= startSec ? endSec : startSec,
       importance: 3,

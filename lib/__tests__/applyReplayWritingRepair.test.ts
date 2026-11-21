@@ -13,6 +13,7 @@ vi.mock('next/server', async importOriginal => ({
   ...await importOriginal<typeof import('next/server')>(),
   after: (task: () => void) => task(),
 }));
+vi.mock('@/lib/replaySpokenNames.server', () => ({ loadReplaySpokenNames: async () => (text: string) => text }));
 vi.mock('@/lib/smartPlayNarration.server', () => ({ prepareSmartPlayVoice: prepare }));
 vi.mock('@/lib/recordingShare', () => ({
   loadManagedRecording: async () => ({ recording: { id: 1, status: 'READY' } }),
@@ -75,7 +76,7 @@ describe('Apply speaker repair to the original AI Write', () => {
     expect(applied.voice).toBe('marin');
     const backup = [...rows.values()].find(row => row.id !== originalId && row.id !== repairId)!;
     expect(writingState(backup)?.presentation?.slides[0].title).toContain('贵妇');
-    expect(prepare).toHaveBeenCalledWith(1, expect.objectContaining({ title: 'Standup' }), 'marin');
+    await vi.waitFor(() => expect(prepare).toHaveBeenCalledWith(1, expect.objectContaining({ title: 'Standup' }), 'marin', expect.any(Function)));
     expect((await apply()).status).toBe(409);
     expect(rows.size).toBe(3);
   });
