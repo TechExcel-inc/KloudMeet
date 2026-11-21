@@ -83,6 +83,29 @@ describe('AI Write presentations', () => {
     expect(writingNarrationSpeakerLanes(writing!.slides, lines, [0, 10]).map(lane => lane.name)).toEqual(['avery']);
   });
 
+  it('places verified handoffs on the narration timeline and rejects unsupported speaker claims', () => {
+    const lines = [
+      { ...transcript[0], id: 1, speakerKey: 'member:1', speakerName: 'tierenz', verifiedAttendee: true },
+      { ...transcript[1], id: 2, speakerKey: 'member:2', speakerName: 'guifu', verifiedAttendee: true },
+    ];
+    const writing = buildReplayWriting({ sections: [
+      { title: 'Shutdown plan', text: '[[speaker:member:1]] said a shutdown might be needed.',
+        speakerKey: 'member:1', sourceLineIds: [1] },
+      { title: 'Reply', text: '[[speaker:member:2]] said the shutdown would be fine.',
+        speakerKey: 'member:2', sourceLineIds: [2] },
+      { title: 'Unverified', text: 'A colleague should be notified.', speakerKey: 'member:1', sourceLineIds: [2] },
+      { title: 'Transition', text: 'The discussion then ended.', sourceLineIds: [1, 2] },
+    ] }, lines, 'Meeting', true);
+    const slides = writing!.slides;
+    expect(slides[0].title).toBe('tierenz：Shutdown plan');
+    expect(slides[1].narration).toBe('guifu said the shutdown would be fine.');
+    expect(slides.map(slide => writingSpeakers(slide, lines))).toEqual([['tierenz'], ['guifu'], [], []]);
+    expect(writingNarrationSpeakerLanes(slides, lines, [0, 8, 12, 15, 18])).toEqual([
+      { key: 'member:1', name: 'tierenz', segments: [[0, 8]] },
+      { key: 'member:2', name: 'guifu', segments: [[8, 12]] },
+    ]);
+  });
+
   it('puts the original speakers on the AI timeline in the selected write’s section order', () => {
     const lines = transcript.map((line, index) => ({ ...line, id: index + 1 }));
     const avery = { startSec: 10, endSec: 10, sourceLineIds: [1] };

@@ -145,7 +145,7 @@ export function ReplayWritingPanel({
     setRequestFailed(false);
   }
 
-  function openDraft(brief?: WritingBrief, item?: ReplayWriting, mode: Draft['mode'] = item?.presentation ? 'edit' : 'new') {
+  function openDraft(brief?: WritingBrief, item?: ReplayWriting, mode: Draft['mode'] = item?.presentation ? 'edit' : 'new', checks: ImprovementOption[] = []) {
     if (actions.current) {
       actions.current.open = false;
       actions.current.querySelector('summary')?.focus();
@@ -155,11 +155,13 @@ export function ReplayWritingPanel({
     setDraft({
       id: mode === 'improve' && item?.presentation ? crypto.randomUUID() : item?.id ?? crypto.randomUUID(),
       name: brief?.name ?? '',
-      description: mode === 'improve' && item?.presentation ? '' : brief?.description ?? '',
+      description: mode === 'improve' && item?.presentation
+        ? checks.map(check => t(`replay.write.improvement.${check}.prompt`)).join('\n\n')
+        : brief?.description ?? '',
       minutes: item && (item.presentation || item.sourceId) ? item.minutes : 'auto',
       voice: item?.voice ?? DEFAULT_WRITING_VOICE,
       mode,
-      checks: [],
+      checks,
       sourceId: mode === 'improve' ? item?.sourceId ?? item?.id : undefined,
     });
   }
@@ -272,6 +274,10 @@ export function ReplayWritingPanel({
               <Plus aria-hidden="true" /><span>{t('replay.write.newButton')}</span></button>
             <button type="button" disabled={!current?.presentation || !canCreate}
               onClick={() => current && openDraft(current, current, 'improve')}><Sparkles aria-hidden="true" /><span>{t('replay.write.improve')}</span></button>
+            <button type="button" disabled={!current?.presentation || !canCreate}
+              onClick={() => current && openDraft(current, current, 'improve', ['speakers', 'review'])}>
+              <Sparkles aria-hidden="true" /><span>{t('replay.write.repairSpeakers')}</span>
+            </button>
             <button type="button" disabled={!current || current.status === 'GENERATING'}
               className={s.writingDanger} onClick={() => current && openDraft({ ...current, name: writeName(current) }, current, 'delete')}>
               <Trash2 aria-hidden="true" /><span>{t('replay.write.delete')}</span></button>

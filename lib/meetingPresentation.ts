@@ -51,6 +51,8 @@ export interface PresentationSlide {
   endSec: number | null;
   /** Replay AI Write evidence. Older slides are grounded by time only. */
   sourceLineIds?: number[];
+  /** One attendee whose remarks this narration passage represents, or null for AI transitions. */
+  attribution?: { key: string; name: string } | null;
   /** Set by the writing service that actually authored the section. */
   author?: 'ead-pilot';
   /** 1 (background) to 5 (a decision, a commitment, a number): what the short version keeps */

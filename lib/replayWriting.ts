@@ -57,7 +57,7 @@ export function resolveWritingNames(text: string, roster: ReadonlyMap<string, st
   return text.replace(/\[\[speaker:([^\]\n]*)\]\]/gi, (_, key: string) => roster.get(key.trim()) ?? unnamed);
 }
 
-export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string): MeetingPresentation | null {
+export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string, requireAttribution = false): MeetingPresentation | null {
   if (!raw || typeof raw !== 'object' || !('sections' in raw) || !Array.isArray(raw.sections)) return null;
   const language = meetingLanguage(lines);
   const roster = writingAttendeeRoster(lines);
@@ -67,12 +67,18 @@ export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[],
   const byId = new Map(lines.flatMap(line => line.id === undefined ? [] : [[line.id, line] as const]));
   const slides = raw.sections.slice(0, 42).flatMap((section: Record<string, unknown> | null): PresentationSlide[] => {
     if (!section || typeof section !== 'object') return [];
-    const title = clean(section.title, 140);
+    const topic = clean(section.title, 140);
     const narration = clean(section.text, WRITING_SECTION_LIMIT);
-    if (!title || !narration) return [];
+    if (!topic || !narration) return [];
     const sourceLineIds = Array.isArray(section.sourceLineIds)
       ? [...new Set(section.sourceLineIds.filter((id): id is number => Number.isSafeInteger(id) && byId.has(id)))].slice(0, 120)
       : [];
+    const key = typeof section.speakerKey === 'string' ? section.speakerKey : '';
+    const name = roster.get(key);
+    const attribution = name && sourceLineIds.some(id => byId.get(id)?.speakerKey === key)
+      ? { key, name } : null;
+    const title = attribution && ![`${attribution.name}：`, `${attribution.name}:`].some(prefix => topic.startsWith(prefix))
+      ? `${attribution.name}：${topic}`.slice(0, 140) : topic;
     const sourceTimes = sourceLineIds.flatMap(id => {
       const time = byId.get(id)?.offsetSeconds;
       return time == null ? [] : [time];
@@ -80,8 +86,9 @@ export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[],
     const startSec = sourceTimes.length ? Math.min(...sourceTimes) : snapToTranscript(section.startSec, offsets);
     const endSec = sourceTimes.length ? Math.max(...sourceTimes) : snapToTranscript(section.endSec, offsets);
     return [{
-      kind: 'topic', title, narration, bullets: [], speaker: null, quote: null,
+      kind: 'topic', title, narration, bullets: [], speaker: attribution?.name ?? null, quote: null,
       ...(byId.size ? { sourceLineIds } : {}),
+      ...(requireAttribution || 'speakerKey' in section ? { attribution } : {}),
       startSec, endSec: startSec !== null && endSec !== null && endSec >= startSec ? endSec : startSec,
       importance: 3,
       // Keep slides long enough for the narration at normal speed, including a short transition.
@@ -119,7 +126,7 @@ export function writingShot(
 }
 
 
-type WritingSource = Pick<PresentationSlide, 'startSec' | 'endSec' | 'sourceLineIds'>;
+type WritingSource = Pick<PresentationSlide, 'startSec' | 'endSec' | 'sourceLineIds' | 'attribution'>;
 
 export function writingSourceLines<T extends WritingTranscriptLine>(slide: WritingSource, transcript: readonly T[]): T[] {
   if (Array.isArray(slide.sourceLineIds)) {
@@ -133,6 +140,7 @@ export function writingSourceLines<T extends WritingTranscriptLine>(slide: Writi
 }
 
 export function writingSpeakers(slide: WritingSource, transcript: readonly WritingTranscriptLine[]): string[] {
+  if (slide.attribution !== undefined) return slide.attribution ? [slide.attribution.name] : [];
   const speakers = new Map<string, string>();
   for (const line of writingSourceLines(slide, transcript)) {
     if (line.verifiedAttendee === false) continue;
@@ -186,6 +194,15 @@ export function writingNarrationSpeakerLanes(
     const start = timestamps[index];
     const end = timestamps[index + 1];
     if (!(end > start)) return;
+    if (slide.attribution !== undefined) {
+      const speaker = slide.attribution;
+      if (speaker) {
+        const lane = lanes.get(speaker.key) ?? { ...speaker, segments: [] };
+        lane.segments.push([start, end]);
+        lanes.set(speaker.key, lane);
+      }
+      return;
+    }
     const source = writingSourceLines(slide, transcript).filter(line => line.content.trim());
     const offsets = [...new Set(source.flatMap(line => line.offsetSeconds == null ? [] : [line.offsetSeconds]))]
       .sort((a, b) => a - b);
