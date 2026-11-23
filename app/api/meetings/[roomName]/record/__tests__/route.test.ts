@@ -153,6 +153,15 @@ describe('starting AI Notes Only', () => {
     expect(egress.startWebEgress.mock.calls[0][1]).toBeInstanceOf(StreamOutput);
   });
 
+  it('keeps AI Notes Only when a later start requests Full Recording', async () => {
+    await start('ai_notes');
+    const duplicate = await start('full');
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.body).toMatchObject({ alreadyActive: true, state: { active: true, mode: 'ai_notes' } });
+    expect(egress.startWebEgress).toHaveBeenCalledTimes(1);
+    expect(db.state.recordings).toHaveLength(1);
+  });
+
   it('records an audio file when the server is set to keep one', async () => {
     process.env.AI_NOTES_CAPTURE = 'file';
     const { body } = await start('ai_notes');

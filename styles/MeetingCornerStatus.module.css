@@ -39,6 +39,16 @@
   backdrop-filter: blur(8px);
 }
 
+.rec {
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.rec:active {
+  cursor: grabbing;
+}
+
 /* Phone: centred on the row of 44px round buttons at the top right, and icons only: "Recording"
    is its red dot, the weak connection its signal bars. */
 .cornerPhone {
@@ -66,7 +76,6 @@
 
 .cornerPhone .recButton {
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
 }
 
 .recDot {
@@ -90,7 +99,6 @@
   font: inherit;
   font-size: 13px;
   font-weight: 500;
-  cursor: pointer;
   transition: background 0.15s ease;
 }
 

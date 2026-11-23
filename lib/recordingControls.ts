@@ -29,7 +29,7 @@ export function recordingModeOf(value: unknown): RecordingMode {
 
 /** 广播或接口里带来的录制状态，模式一律收成当前两种。 */
 export function coerceRecordingState(state: RecordingState): RecordingState {
-  return { ...state, mode: recordingModeOf(state.mode) };
+  return { ...state, mode: visibleRecordingMode(state) };
 }
 
 /** Pre-join Recording choice (Meeting.recordingOption). */

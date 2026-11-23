@@ -166,7 +166,7 @@ export async function POST(
         if (!isRecordingMode(body.mode)) return apiJson({ error: 'Unknown recording mode' }, { status: 400 });
         if (!mayRecord) return apiJson({ error: 'You cannot change the recording' }, { status: 403 });
         // 两种录的不是同一种文件：一种只录音频，一种录视频。换的话要先停。
-        if (active && recordingModeOf(active.mode) !== body.mode) {
+        if (active && stateOf(meeting, active).mode !== body.mode) {
           return apiJson({ error: 'Stop the recording to switch mode', code: 'MODE_NEEDS_RESTART' }, { status: 409 });
         }
         data.recordingMode = body.mode;
@@ -260,6 +260,10 @@ export async function POST(
       
       return apiJson({ success: true, message: 'Stopping recording', state: { ...stateOf(meeting, null) } });
     }
+
+    // A late or duplicate start must not replace an already running session.
+    const running = await findActiveRecording(meeting.id);
+    if (running) return apiJson({ success: true, state: stateOf(meeting, running), alreadyActive: true });
 
     // Otherwise, START recording
     // Billing: refuse to start once the recorder's replay hours are used up (402 BILLING_LIMIT).

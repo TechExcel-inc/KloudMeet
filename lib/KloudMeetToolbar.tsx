@@ -2898,6 +2898,7 @@ export function KloudMeetToolbar({
           canControlRecording={canRecord}
           controlsOpen={activeSheet === 'recording'}
           onOpenRecordingControls={() => openSheet('recording')}
+          onRecordingDragStart={() => { if (activeSheet === 'recording') setActiveSheet(null); }}
           recordingButtonRef={recordMenuBtnRef}
           besideLeftRail={activeView === 'liveDoc'}
         />
@@ -3790,6 +3791,7 @@ function ActiveSheetContent({
                     type="button"
                     role="radio"
                     aria-checked={mode === m}
+                    disabled={Boolean(rec?.active)}
                     data-recording-mode={m}
                     className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
                     onMouseDown={(e) => e.preventDefault()}

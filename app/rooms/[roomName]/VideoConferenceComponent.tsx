@@ -293,7 +293,7 @@ export function VideoConferenceComponent(props: {
   /** Bumped whenever recording state is chosen locally, so a slower status fetch cannot put Full Recording back. */
   const recordingEpochRef = React.useRef(0);
   const recordingModeRef = React.useRef(recordingState.mode);
-  recordingModeRef.current = recordingState.mode;
+  const recordingTransitionRef = React.useRef(false);
   const setIsRecording = React.useCallback(
     (on: boolean) =>
       setRecordingState((s) => ({ ...s, active: on, paused: on ? s.paused : false })),
@@ -353,9 +353,12 @@ export function VideoConferenceComponent(props: {
       return;
     }
 
+    if (recordingTransitionRef.current) return;
     const chosen = mode ?? recordingModeRef.current;
+    const previous = recordingState;
+    recordingTransitionRef.current = true;
+    recordingEpochRef.current += 1;
     try {
-      recordingEpochRef.current += 1;
       if (action === 'start') {
         recordingModeRef.current = chosen;
         setRecordingState((s) => ({ ...s, active: true, paused: false, mode: chosen }));
@@ -386,11 +389,11 @@ export function VideoConferenceComponent(props: {
 
       const data = await res.json();
       if (res.ok) {
-        startedRecordingHereRef.current = action === 'start';
+        if (action === 'stop' || !data.alreadyActive) startedRecordingHereRef.current = action === 'start';
         applyRecordingState(data.state, true);
       }
       if (!res.ok) {
-        setIsRecording(action === 'stop'); // revert
+        applyRecordingState(previous, false);
         const toastEl = document.createElement('div');
         // Billing: plan limit reached (402 BILLING_LIMIT) — explain why instead of a raw error.
         toastEl.textContent =
@@ -408,7 +411,7 @@ export function VideoConferenceComponent(props: {
       }
     } catch (e) {
       console.error(e);
-      setIsRecording(action === 'stop');
+      applyRecordingState(previous, false);
       const toastEl = document.createElement('div');
       toastEl.textContent =
         t('toolbar.recordNetworkError') || 'Network error while toggling recording';
@@ -431,6 +434,8 @@ export function VideoConferenceComponent(props: {
             syncTranscript?: boolean;
           },
     ) => {
+      if (recordingTransitionRef.current) return;
+      const epoch = recordingEpochRef.current;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
       const showError = (text: string) => {
         const toastEl = document.createElement('div');
@@ -457,7 +462,9 @@ export function VideoConferenceComponent(props: {
           );
           return;
         }
-        applyRecordingState(data.state, true);
+        if (!recordingTransitionRef.current && recordingEpochRef.current === epoch) {
+          applyRecordingState(data.state, true);
+        }
       } catch {
         showError(t('toolbar.recordNetworkError') || 'Network error while toggling recording');
       }
@@ -2863,10 +2870,9 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === RECORDING_STATE_MSG && msg.state) {
           // Someone started / stopped / paused recording or changed its settings
-          recordingEpochRef.current += 1;
-          const next = coerceRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) });
-          recordingModeRef.current = next.mode;
-          setRecordingState(next);
+          if (!recordingTransitionRef.current) {
+            applyRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) }, false);
+          }
         } else if (msg.type === 'CAPTIONS_ON') {
           // Host/Co-host 开启了全局字幕 — 本地启动识别
           setCaptionsOpenRef.current?.(true);
@@ -2901,6 +2907,7 @@ export function VideoConferenceComponent(props: {
     isLocalScreenShare,
     isLocalControlOperator,
     applyHostHands,
+    applyRecordingState,
     buildCorrection,
     t,
   ]);
@@ -3577,7 +3584,7 @@ export function VideoConferenceComponent(props: {
     fetch(`/api/meetings/${roomSeg}/record`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (cancelled || recordingEpochRef.current !== epoch || !data?.state) return;
+        if (cancelled || recordingTransitionRef.current || recordingEpochRef.current !== epoch || !data?.state) return;
         const next = coerceRecordingState(data.state as RecordingState);
         recordingModeRef.current = next.mode;
         setRecordingState(next);
