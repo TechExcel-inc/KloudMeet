@@ -573,7 +573,7 @@
   "toolbar.askHostForCaptions": "ホストに字幕をオンにするよう依頼してください",
   "toolbar.recordingModeLabel": "録画する内容",
   "toolbar.recordingMode.ai_notes": "AI 議事録のみ",
-  "toolbar.recordingMode.ai_notesHint": "映像は録らず、会議全体の要約を作ります",
+  "toolbar.recordingMode.ai_notesHint": "AI アシスタントがメモを取ります",
   "toolbar.recordingMode.ai_notesLiveHint": "AI アシスタントがメモを取ります",
   "toolbar.recordingMode.full": "フル録画",
   "toolbar.recordingMode.fullHint": "会議の映像を録画",

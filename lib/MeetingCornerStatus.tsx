@@ -87,7 +87,8 @@ export function MeetingCornerStatus({
 
   if ((!isRecording && !weak) || typeof document === 'undefined') return null;
 
-  const recLabel = notesOnly
+  const notes = mode === 'ai_notes' || notesOnly;
+  const recLabel = notes
     ? paused ? t('toolbar.notesPaused') : t('toolbar.takingNotes')
     : paused ? t('toolbar.recordingPaused') : t('toolbar.recording');
   const typeLabel = t(`toolbar.recordingMode.${mode}`);

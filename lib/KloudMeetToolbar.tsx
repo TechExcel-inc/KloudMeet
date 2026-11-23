@@ -3515,13 +3515,13 @@ function ActiveSheetContent({
               </svg>
               <span className={styles.actionSheetItemLabel}>
                 {isRecording
-                  ? t(recordingControls?.state && takesNotesOnly(recordingControls.state) ? 'toolbar.stopNotes' : 'toolbar.stopRecording')
+                  ? t(visibleRecordingMode(recordingControls?.state) === 'ai_notes' ? 'toolbar.stopNotes' : 'toolbar.stopRecording')
                   : t('toolbar.record')}
               </span>
               {isRecording && (
                 <span className={styles.recStatus}>
                   <span className={styles.recStatusDot} aria-hidden="true" />
-                  {t(recordingControls?.state && takesNotesOnly(recordingControls.state) ? 'toolbar.takingNotes' : 'toolbar.recording')}
+                  {t(visibleRecordingMode(recordingControls?.state) === 'ai_notes' ? 'toolbar.takingNotes' : 'toolbar.recording')}
                 </span>
               )}
             </button>
@@ -3765,8 +3765,7 @@ function ActiveSheetContent({
           const rec: RecordingState | undefined = recordingControls?.state;
           const paused = !!rec?.paused;
           const mode: RecordingMode = visibleRecordingMode(rec);
-          // AI Taking Notes keeps no recording, so its controls don't say "recording"
-          const notes = !!rec && takesNotesOnly(rec);
+          const notes = mode === 'ai_notes';
           const policyTitle = recordingControls?.canChangePolicy
             ? undefined
             : t('toolbar.recordingHostSetting');
@@ -3821,7 +3820,7 @@ function ActiveSheetContent({
                     >
                       <span>{t(`toolbar.recordingMode.${m}`)}</span>
                       <span style={{ fontSize: 11, opacity: 0.6 }}>
-                        {t(m === 'ai_notes' && rec?.notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
+                        {t(m === 'ai_notes' ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
                       </span>
                     </span>
                   </button>

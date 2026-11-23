@@ -59,7 +59,7 @@ export function MeetingReadyModal({ isDesktop, onClose }: MeetingReadyModalProps
 }
 
 /** 开始云录制前的同意确认，并选择录制模式 */
-export function RecordConsentModal({ mode, notesLive = false, onModeChange, onClose, onStart }: RecordConsentModalProps) {
+export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: RecordConsentModalProps) {
   const { t } = useI18n();
   return (
     <div className="kloud-modal-overlay" onMouseDown={onClose}>
@@ -91,7 +91,7 @@ export function RecordConsentModal({ mode, notesLive = false, onModeChange, onCl
                 <span>
                   {t(`toolbar.recordingMode.${m}`)}
                   <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
-                    {t(m === 'ai_notes' && notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
+                    {t(m === 'ai_notes' ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
                   </span>
                 </span>
               </label>
