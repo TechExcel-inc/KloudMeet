@@ -1679,10 +1679,17 @@ export default function ReplayPage() {
               </div>
             )}
             {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
-            {!smartPlay && notesReplay && !presenting && !captioning && (
-              <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
-                {t('replay.present.modePresentation')}
-              </button>
+            {!smartPlay && (
+              <div className={s.stageCorner}>
+                <span className={s.stageType}>
+                  {t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full')}
+                </span>
+                {notesReplay && !presenting && !captioning && (
+                  <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
+                    {t('replay.present.modePresentation')}
+                  </button>
+                )}
+              </div>
             )}
             <video
               ref={videoRef}
