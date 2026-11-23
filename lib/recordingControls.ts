@@ -66,6 +66,18 @@ export function takesNotesOnly(state: Pick<RecordingState, 'mode' | 'notesLive'>
   return state.mode === 'ai_notes' && state.notesLive === true;
 }
 
+/**
+ * visibleRecordingMode — the type the meeting should show.
+ * A live notes session keeps no file; that is AI Notes Only even if an older row still says full.
+ */
+export function visibleRecordingMode(
+  state: Pick<RecordingState, 'mode' | 'notesLive' | 'active'> | undefined,
+): RecordingMode {
+  if (!state) return 'full';
+  if (state.active && state.notesLive === true) return 'ai_notes';
+  return recordingModeOf(state.mode);
+}
+
 export const IDLE_RECORDING_STATE: RecordingState = {
   active: false,
   paused: false,

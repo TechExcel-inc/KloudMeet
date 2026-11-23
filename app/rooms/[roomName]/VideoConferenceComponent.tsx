@@ -290,6 +290,10 @@ export function VideoConferenceComponent(props: {
   // changes it broadcasts RECORDING_STATE). Before, only the person recording knew.
   const [recordingState, setRecordingState] = React.useState<RecordingState>(IDLE_RECORDING_STATE);
   const isRecording = recordingState.active;
+  /** Bumped whenever recording state is chosen locally, so a slower status fetch cannot put Full Recording back. */
+  const recordingEpochRef = React.useRef(0);
+  const recordingModeRef = React.useRef(recordingState.mode);
+  recordingModeRef.current = recordingState.mode;
   const setIsRecording = React.useCallback(
     (on: boolean) =>
       setRecordingState((s) => ({ ...s, active: on, paused: on ? s.paused : false })),
@@ -301,7 +305,9 @@ export function VideoConferenceComponent(props: {
   const applyRecordingState = React.useCallback(
     (state: RecordingState | undefined | null, broadcast: boolean) => {
       if (!state) return;
+      recordingEpochRef.current += 1;
       const next = coerceRecordingState(state);
+      recordingModeRef.current = next.mode;
       setRecordingState(next);
       if (broadcast) broadcastRecordingStateRef.current(next);
     },
@@ -315,7 +321,7 @@ export function VideoConferenceComponent(props: {
   // Screen-share takeover dialog
   const [showShareTakeoverDialog, setShowShareTakeoverDialog] = React.useState(false);
 
-  const handleToggleRecording = async (action: 'start' | 'stop') => {
+  const handleToggleRecording = async (action: 'start' | 'stop', mode?: RecordingMode) => {
     // Get user from localStorage → fallback sessionStorage → fallback cookie
     let dbUser: { id?: string } = {};
     try {
@@ -347,8 +353,15 @@ export function VideoConferenceComponent(props: {
       return;
     }
 
+    const chosen = mode ?? recordingModeRef.current;
     try {
-      setIsRecording(action === 'start');
+      recordingEpochRef.current += 1;
+      if (action === 'start') {
+        recordingModeRef.current = chosen;
+        setRecordingState((s) => ({ ...s, active: true, paused: false, mode: chosen }));
+      } else {
+        setIsRecording(false);
+      }
       const pageUrlStr = window.location.href;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
 
@@ -366,7 +379,7 @@ export function VideoConferenceComponent(props: {
         body: JSON.stringify({
           action,
           pageUrl: pageUrlStr,
-          mode: recordingState.mode,
+          mode: chosen,
           livedocToken,
         }),
       });
@@ -2850,7 +2863,10 @@ export function VideoConferenceComponent(props: {
           }
         } else if (msg.type === RECORDING_STATE_MSG && msg.state) {
           // Someone started / stopped / paused recording or changed its settings
-          setRecordingState(coerceRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) }));
+          recordingEpochRef.current += 1;
+          const next = coerceRecordingState({ ...IDLE_RECORDING_STATE, ...(msg.state as RecordingState) });
+          recordingModeRef.current = next.mode;
+          setRecordingState(next);
         } else if (msg.type === 'CAPTIONS_ON') {
           // Host/Co-host 开启了全局字幕 — 本地启动识别
           setCaptionsOpenRef.current?.(true);
@@ -3557,10 +3573,14 @@ export function VideoConferenceComponent(props: {
     const token = connectionDetailsRef.current?.participantToken;
     if (!roomSeg || !token) return;
     let cancelled = false;
+    const epoch = recordingEpochRef.current;
     fetch(`/api/meetings/${roomSeg}/record`, { headers: { Authorization: `Bearer ${token}` } })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (!cancelled && data?.state) setRecordingState(coerceRecordingState(data.state as RecordingState));
+        if (cancelled || recordingEpochRef.current !== epoch || !data?.state) return;
+        const next = coerceRecordingState(data.state as RecordingState);
+        recordingModeRef.current = next.mode;
+        setRecordingState(next);
       })
       .catch(() => undefined);
     return () => {
@@ -4550,11 +4570,16 @@ export function VideoConferenceComponent(props: {
             <RecordConsentModal
               mode={recordingState.mode}
               notesLive={recordingState.notesLive === true}
-              onModeChange={(m) => setRecordingState((st) => ({ ...st, mode: m }))}
+              onModeChange={(m) => {
+                recordingEpochRef.current += 1;
+                recordingModeRef.current = m;
+                setRecordingState((st) => ({ ...st, mode: m }));
+              }}
               onClose={() => setShowRecordPopup(false)}
               onStart={() => {
+                const mode = recordingModeRef.current;
                 setShowRecordPopup(false);
-                handleToggleRecording('start');
+                void handleToggleRecording('start', mode);
               }}
             />
           )}

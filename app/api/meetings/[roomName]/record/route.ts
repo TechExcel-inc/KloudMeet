@@ -54,7 +54,9 @@ function meetingHasLivedoc(meeting: MeetingRow): boolean {
 
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
   // 正在录的这场用它自己的模式；否则用会议上下一次会用的模式。旧的四种在这里折成两种。
-  const mode = active?.mode ?? meeting.recordingMode;
+  // 不落文件的就是 AI Notes Only，避免旧行 mode 仍是默认 full 时，菜单总是停在完整录制。
+  const stored = recordingModeOf(active?.mode ?? meeting.recordingMode);
+  const mode = active && hasNoMedia(active) ? 'ai_notes' : stored;
   const livedoc = active?.kind === 'livedoc_full';
   return {
     active: !!active,

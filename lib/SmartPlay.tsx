@@ -19,7 +19,7 @@ type Selection = { index: number; fraction: number; revision: number; refresh?: 
 type NarrationError = 'signIn' | 'generation' | 'playback';
 
 export function SmartPlay({
-  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, scriptHost, captionsOpen, children, onJump, visualVideoUrl, autoPlay, chartHost, playbackHost, renderSpeakerChart,
+  recordingKey, writingId, presentation, shots, transcript, liveDoc, viewerName, notesOnly = false, scriptHost, captionsOpen, children, onJump, visualVideoUrl, autoPlay, chartHost, playbackHost, renderSpeakerChart,
 }: {
   recordingKey: string;
   writingId: string;
@@ -28,6 +28,8 @@ export function SmartPlay({
   transcript: readonly WritingTranscriptLine[];
   liveDoc: LiveDocReplayInfo | null;
   viewerName: string;
+  /** AI Notes Only 或完整录制，显示在 AI 旁白说明上方 */
+  notesOnly?: boolean;
   scriptHost: HTMLElement | null;
   captionsOpen: boolean;
   children: ReactNode;
@@ -265,6 +267,7 @@ export function SmartPlay({
         )}
         <div className={s.smartStageHeader}>
           <div className={s.smartSpeakerContext}>
+            <span>{t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full')}</span>
             <span>{t('replay.write.aiVoice')}</span>
             {slide.author === 'ead-pilot' && <span>{t('replay.write.eadAuthor')}</span>}
             {originalSpeakers.length > 0 && <span className={s.smartOriginalSpeakers}>

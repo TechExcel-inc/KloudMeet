@@ -4,6 +4,7 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { ConnectionQuality, ParticipantEvent, type Room } from 'livekit-client';
 import { useI18n } from './i18n';
+import type { RecordingMode } from './recordingControls';
 import styles from '../styles/MeetingCornerStatus.module.css';
 
 /** The weak-connection hint stays this long after the connection recovers, so it doesn't flicker. */
@@ -48,6 +49,8 @@ export interface MeetingCornerStatusProps {
   room: Room | undefined;
   isRecording: boolean;
   paused: boolean;
+  /** What is being recorded right now: shown beside the recording status. */
+  mode?: RecordingMode;
   /** AI Taking Notes with no audio kept: the chip says so instead of "Recording" */
   notesOnly?: boolean;
   /** Host / co-host: the chip opens the recording controls. Everyone else sees a status. */
@@ -70,6 +73,7 @@ export function MeetingCornerStatus({
   room,
   isRecording,
   paused,
+  mode = 'full',
   notesOnly = false,
   canControlRecording,
   controlsOpen,
@@ -86,6 +90,8 @@ export function MeetingCornerStatus({
   const recLabel = notesOnly
     ? paused ? t('toolbar.notesPaused') : t('toolbar.takingNotes')
     : paused ? t('toolbar.recordingPaused') : t('toolbar.recording');
+  const typeLabel = t(`toolbar.recordingMode.${mode}`);
+  const recName = `${recLabel}, ${typeLabel}`;
   const recClass = `${styles.rec} ${paused ? styles.recPaused : ''}`;
 
   return createPortal(
@@ -102,19 +108,21 @@ export function MeetingCornerStatus({
             onClick={onOpenRecordingControls}
             aria-haspopup="menu"
             aria-expanded={controlsOpen}
-            aria-label={phone ? recLabel : undefined}
-            title={t('toolbar.recordingControls')}
+            aria-label={recName}
+            title={typeLabel}
           >
             <span className={styles.recDot} aria-hidden="true" />
             <span className={styles.recLabel}>{recLabel}</span>
+            <span className={styles.recType}>{typeLabel}</span>
             <svg className={styles.chevron} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
         ) : (
-          <span className={recClass} role="status" aria-label={phone ? recLabel : undefined} title={phone ? recLabel : undefined}>
+          <span className={recClass} role="status" aria-label={recName} title={typeLabel}>
             <span className={styles.recDot} aria-hidden="true" />
             <span className={styles.recLabel}>{recLabel}</span>
+            <span className={styles.recType}>{typeLabel}</span>
           </span>
         ))}
       {weak && (

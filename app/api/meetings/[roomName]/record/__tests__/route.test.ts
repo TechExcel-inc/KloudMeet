@@ -224,4 +224,19 @@ describe('recording state for the meeting', () => {
     process.env.AI_NOTES_CAPTURE = 'file';
     expect(await state()).toMatchObject({ active: true, notesLive: true });
   });
+
+  it('reports AI Notes Only when a live notes row still has the old full mode', async () => {
+    db.state.recordings.push({
+      id: 7,
+      status: 'PROCESSING',
+      storageProvider: 'NONE',
+      mode: 'full',
+      deletedAt: null,
+      pausedAt: null,
+      kind: 'screen_share',
+    });
+    const request = new NextRequest('https://meet.kloud.cn/api/meetings/room-1/record', { headers: { authorization: 'Bearer x' } });
+    const body = (await (await GET(request, params)).json()) as { state: Row };
+    expect(body.state).toMatchObject({ active: true, mode: 'ai_notes', notesLive: true });
+  });
 });

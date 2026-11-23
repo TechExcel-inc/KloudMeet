@@ -7,7 +7,7 @@ import styles from '../styles/KloudMeetToolbar.module.css';
 import { useIsLandscape, useToolbarIsMobile } from './useToolbarIsMobile';
 import { ShareFullscreenButton } from './ShareFullscreenButton';
 import { TILES_PER_PAGE_OPTIONS, type GalleryPrefs } from './galleryPrefs';
-import { RECORDING_MODES, takesNotesOnly, type RecordingMode, type RecordingState } from './recordingControls';
+import { RECORDING_MODES, takesNotesOnly, visibleRecordingMode, type RecordingMode, type RecordingState } from './recordingControls';
 import type { LiveDocAiTab } from './liveDocAiProtocol';
 import { useI18n, LOCALE_OPTIONS } from './i18n';
 import type { Locale } from './i18n';
@@ -482,6 +482,8 @@ export function KloudMeetToolbar({
 
   type ActionSheetType = 'views' | 'more' | 'exit' | 'recording' | 'speaker' | null;
   const [activeSheet, setActiveSheet] = useState<ActionSheetType>(null);
+  /** False for the click that opened the recording menu, so that click cannot select a mode. */
+  const [recordingMenuArmed, setRecordingMenuArmed] = useState(false);
   const activeSheetRef = useRef<ActionSheetType>(null);
   activeSheetRef.current = activeSheet;
   const visibleRef = useRef(visible);
@@ -820,8 +822,26 @@ export function KloudMeetToolbar({
     if (sheet !== null) {
       onOpenSheet?.(); // closes Chat & Attendee in parent synchronously
     }
+    if (sheet === 'recording') setRecordingMenuArmed(false);
     setActiveSheet(sheet);
   };
+
+  useEffect(() => {
+    if (activeSheet !== 'recording') return;
+    const id = window.setTimeout(() => setRecordingMenuArmed(true), 0);
+    return () => window.clearTimeout(id);
+  }, [activeSheet]);
+
+  useLayoutEffect(() => {
+    if (activeSheet !== 'recording') return;
+    const pin = () => {
+      const list = document.querySelector('[data-recording-scroll]');
+      if (list instanceof HTMLElement) list.scrollTop = 0;
+    };
+    pin();
+    const frame = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(frame);
+  }, [activeSheet]);
 
   const handleToggleChat = () => {
     closeInviteMenu();
@@ -2776,7 +2796,7 @@ export function KloudMeetToolbar({
                 ✕
               </button>
             </div>
-            <div className={styles.actionSheetList}>
+            <div className={styles.actionSheetList} data-recording-scroll={activeSheet === 'recording' ? '' : undefined}>
               <ActiveSheetContent
                 activeSheet={activeSheet}
                 activeView={activeView}
@@ -2814,6 +2834,7 @@ export function KloudMeetToolbar({
                 onOpenDesktopApp={onOpenDesktopApp}
                 isMobile={isMobile}
                 canShowOperatorMenus={canShowOperatorMenus}
+                recordingMenuArmed={recordingMenuArmed}
               />
             </div>
           </div>
@@ -2872,6 +2893,7 @@ export function KloudMeetToolbar({
           room={maybeRoom}
           isRecording={!!isRecording}
           paused={!!recordingState?.paused}
+          mode={visibleRecordingMode(recordingState)}
           notesOnly={!!recordingState && takesNotesOnly(recordingState)}
           canControlRecording={canRecord}
           controlsOpen={activeSheet === 'recording'}
@@ -2984,7 +3006,7 @@ export function KloudMeetToolbar({
                   ) : desktopAnchorBubbleKind === 'attendee' && attendeePanelSlot ? (
                     <div className={styles.toolbarBubblePanelBody}>{attendeePanelSlot}</div>
                   ) : (
-                    <div className={styles.toolbarBubbleList}>
+                    <div className={styles.toolbarBubbleList} data-recording-scroll={activeSheet === 'recording' ? '' : undefined}>
                       <ActiveSheetContent
                         activeSheet={activeSheet}
                         activeView={activeView}
@@ -3025,6 +3047,7 @@ export function KloudMeetToolbar({
                         canDocumentPip={canDocumentPip}
                         documentPipEnabled={documentPipEnabled}
                         onToggleDocumentPip={onToggleDocumentPip}
+                        recordingMenuArmed={recordingMenuArmed}
                       />
                     </div>
                   )}
@@ -3235,6 +3258,7 @@ function ActiveSheetContent({
   canDocumentPip = false,
   documentPipEnabled = false,
   onToggleDocumentPip,
+  recordingMenuArmed = false,
 }: any) {
   const { t, locale, setLocale } = useI18n();
   const [langOpen, setLangOpen] = useState(false);
@@ -3740,7 +3764,7 @@ function ActiveSheetContent({
         (() => {
           const rec: RecordingState | undefined = recordingControls?.state;
           const paused = !!rec?.paused;
-          const mode: RecordingMode = rec?.mode ?? 'full';
+          const mode: RecordingMode = visibleRecordingMode(rec);
           // AI Taking Notes keeps no recording, so its controls don't say "recording"
           const notes = !!rec && takesNotesOnly(rec);
           const policyTitle = recordingControls?.canChangePolicy
@@ -3748,6 +3772,66 @@ function ActiveSheetContent({
             : t('toolbar.recordingHostSetting');
           return (
             <>
+              <div
+                style={{
+                  padding: '8px 16px',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: '#9ca3af',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {t('toolbar.cloudRecordingMode')}
+              </div>
+              <div role="radiogroup" aria-label={t('toolbar.cloudRecordingMode')}>
+                {RECORDING_MODES.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    role="radio"
+                    aria-checked={mode === m}
+                    data-recording-mode={m}
+                    className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      // The click that opened this menu must not change the type.
+                      if (!recordingMenuArmed || m === mode) return;
+                      recordingControls?.onSettings?.({ mode: m });
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 16,
+                        flex: 'none',
+                        display: 'inline-flex',
+                        justifyContent: 'center',
+                      }}
+                      aria-hidden="true"
+                    >
+                      {mode === m ? '✓' : ''}
+                    </span>
+                    <span
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 2,
+                      }}
+                    >
+                      <span>{t(`toolbar.recordingMode.${m}`)}</span>
+                      <span style={{ fontSize: 11, opacity: 0.6 }}>
+                        {t(m === 'ai_notes' && rec?.notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              <div
+                style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '8px 16px' }}
+              />
+
               <button
                 className={styles.actionSheetItem}
                 onClick={() => {
@@ -3797,57 +3881,6 @@ function ActiveSheetContent({
                 </svg>
                 {t('toolbar.liveTranscript')}
               </button>
-
-              <div
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  color: '#9ca3af',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
-                  marginTop: '4px',
-                }}
-              >
-                {t('toolbar.cloudRecordingMode')}
-              </div>
-              <div role="radiogroup" aria-label={t('toolbar.cloudRecordingMode')}>
-                {RECORDING_MODES.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    role="radio"
-                    aria-checked={mode === m}
-                    className={`${styles.actionSheetItem} ${mode === m ? styles.active : ''}`}
-                    onClick={() => recordingControls?.onSettings?.({ mode: m })}
-                  >
-                    <span
-                      style={{
-                        width: 16,
-                        flex: 'none',
-                        display: 'inline-flex',
-                        justifyContent: 'center',
-                      }}
-                      aria-hidden="true"
-                    >
-                      {mode === m ? '✓' : ''}
-                    </span>
-                    <span
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        gap: 2,
-                      }}
-                    >
-                      <span>{t(`toolbar.recordingMode.${m}`)}</span>
-                      <span style={{ fontSize: 11, opacity: 0.6 }}>
-                        {t(m === 'ai_notes' && rec?.notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
-                      </span>
-                    </span>
-                  </button>
-                ))}
-              </div>
 
               <label
                 className={styles.actionSheetItem}

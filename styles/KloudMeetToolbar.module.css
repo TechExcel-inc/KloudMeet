@@ -1858,6 +1858,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  overflow-anchor: none;
 }
 .actionSheetItem {
   display: flex;
@@ -2302,6 +2303,8 @@
   overflow-x: hidden;
   min-height: 0;
   scrollbar-gutter: auto;
+  /* Opening the menu must not anchor the scroll on the last mode (Full Recording). */
+  overflow-anchor: none;
 }
 
 /* Menu rows: 44px, flush, hover tint */

@@ -1602,7 +1602,7 @@ export default function ReplayPage() {
             {smartPlay && (
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={livedoc}
-                viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
+                viewerName={userInfo?.displayName || ''} notesOnly={notesOnly} scriptHost={scriptHost}
                 captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
                 renderSpeakerChart={(lanes, duration, onSeek) => (
                   <section className={s.card} aria-label={t('replay.write.speakerChart')}>

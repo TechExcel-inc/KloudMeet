@@ -3,6 +3,7 @@ import {
   canControlRecording,
   closePause,
   recordingModeOf,
+  visibleRecordingMode,
   memberMayRecord,
   memberMayReportRoles,
   parseMeetingRoles,
@@ -21,6 +22,15 @@ describe('recordingModeOf', () => {
     expect(recordingModeOf('speaker')).toBe('full');
     expect(recordingModeOf('follow')).toBe('full');
     expect(recordingModeOf(null)).toBe('full');
+  });
+});
+
+describe('visibleRecordingMode', () => {
+  it('shows AI Notes Only for a live notes session whose stored mode is still full', () => {
+    expect(visibleRecordingMode({ active: true, mode: 'full', notesLive: true })).toBe('ai_notes');
+    expect(visibleRecordingMode({ active: true, mode: 'ai_notes', notesLive: false })).toBe('ai_notes');
+    expect(visibleRecordingMode({ active: true, mode: 'full', notesLive: false })).toBe('full');
+    expect(visibleRecordingMode(undefined)).toBe('full');
   });
 });
 

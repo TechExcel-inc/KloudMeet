@@ -59,7 +59,13 @@
   padding: 0;
 }
 
+.recType {
+  color: var(--km-stage-muted, #9aa0a6);
+  font-weight: 600;
+}
+
 .cornerPhone .recLabel,
+.cornerPhone .recType,
 .cornerPhone .chevron {
   display: none;
 }
