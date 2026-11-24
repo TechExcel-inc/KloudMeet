@@ -189,17 +189,21 @@ export async function prepareSmartPlayVoice(
   spokenText: (slide: Pick<PresentationSlide, 'narration' | 'nameMentions' | 'attribution'>) => string = slide => slide.narration,
 ) {
   const sections = [...new Set(presentation.slides.map(spokenText).filter(text => text.trim()))];
+  let complete = sections.length > 0;
   for (let index = 0; index < sections.length; index += 3) {
     const results = await Promise.allSettled(sections.slice(index, index + 3).map(async narration => {
       for (let attempt = 0; attempt < 3; attempt++) {
         const result = await smartPlayNarration(recordingId, narration, presentation.language, true, { voice });
-        if (result !== 'busy') return;
+        if (typeof result !== 'string') return;
+        if (result !== 'busy') throw new Error('Narration could not be prepared');
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
       throw new Error('Narration is busy');
     }));
     if (results.some(result => result.status === 'rejected')) {
+      complete = false;
       console.warn('[smart-play] Some clips could not be prepared during the voice change');
     }
   }
+  return complete;
 }

@@ -2,7 +2,7 @@ import { after, type NextRequest } from 'next/server';
 import { prisma } from '@/lib/db';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 import { authorizeRecordingView, findRecordingByKey, isRecordingResponse } from '@/lib/recordingShare';
-import { DEFAULT_WRITING_VOICE, isWritingId, isWritingLength, isWritingVoice } from '@/lib/replayWriting';
+import { DEFAULT_WRITING_VOICE, isWritingId, isWritingLength, isWritingVoice, NOTES_AUDIO_ID } from '@/lib/replayWriting';
 import { loadReplaySpokenNames } from '@/lib/replaySpokenNames.server';
 import { readPresentation } from '@/lib/meetingPresentation';
 import { smartPlayNarration } from '@/lib/smartPlayNarration.server';
@@ -21,7 +21,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       if (isRecordingResponse(access)) return access;
       const input = await request.json().catch(() => null);
       const writingId = input?.writingId ?? (isWritingLength(input?.minutes) ? `legacy-${input.minutes}` : null);
-      if (!isWritingId(writingId) || !Number.isInteger(input?.section) || input.section < 0) {
+      const notesAudio = writingId === NOTES_AUDIO_ID;
+      if ((!notesAudio && !isWritingId(writingId)) || !Number.isInteger(input?.section) || input.section < 0) {
         return apiJson({ error: 'Invalid narration section' }, { status: 400, headers });
       }
       const writing = await prisma.recordingWriting.findUnique({
@@ -30,9 +31,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const presentation = writing?.status === 'READY' ? readPresentation(writing.content) : null;
       const slide = presentation?.slides[input.section];
       if (!presentation || !slide?.narration.trim()) return apiJson({ error: 'Narration section not found' }, { status: 404, headers });
-      const speak = await loadReplaySpokenNames(recording.meetingId, presentation.language);
-      const narration = speak(slide);
-      const canGenerate = access.memberId !== null;
+      const narration = notesAudio ? slide.narration : (await loadReplaySpokenNames(recording.meetingId, presentation.language))(slide);
+      const canGenerate = !notesAudio && access.memberId !== null;
       const voice = isWritingVoice(writing?.voice) ? writing.voice : DEFAULT_WRITING_VOICE;
       let clip = await smartPlayNarration(recording.id, narration, presentation.language, canGenerate, {
         voice,
@@ -44,6 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       }
       if (clip === 'preparing') return apiJson({ status: 'preparing' }, { status: 202, headers });
       if (clip === 'failed') return apiJson({ error: 'Could not prepare OpenAI narration', code: 'NARRATION_NOT_READY' }, { status: 502, headers });
+      if (notesAudio && clip === 'sign-in') return apiJson({ error: 'Could not access narration audio' }, { status: 502, headers });
       if (clip === 'sign-in') return apiJson({ error: 'Sign in to prepare the narration' }, { status: 401, headers });
       if (clip === 'busy') return apiJson({ error: 'Narration is busy' }, { status: 503, headers });
       return apiJson(clip, { headers });

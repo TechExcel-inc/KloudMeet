@@ -8,13 +8,36 @@ export type WritingLength = (typeof WRITING_LENGTHS)[number];
 
 export const WRITING_VOICES = ['marin', 'cedar', 'alloy', 'ash', 'ballad', 'coral', 'echo', 'sage', 'shimmer', 'verse'] as const;
 export type WritingVoice = (typeof WRITING_VOICES)[number];
+export const WRITING_LANGUAGES = ['auto', 'en', 'zh', 'ko', 'ja'] as const;
+export type WritingLanguage = (typeof WRITING_LANGUAGES)[number];
+export const DEFAULT_WRITING_LANGUAGE: WritingLanguage = 'auto';
 export const DEFAULT_WRITING_VOICE: WritingVoice = 'marin';
+export const NOTES_AUDIO_ID = 'notes-audio';
+export const WRITING_SUGGESTIONS_ID = 'writing-suggestions';
+export type NotesAudio = {
+  status: 'GENERATING' | 'READY' | 'FAILED';
+  voice: WritingVoice;
+  language?: WritingLanguage;
+  revision: string;
+  presentation: MeetingPresentation | null;
+};
 export const WRITING_NAME_LIMIT = 200;
 export const WRITING_DESCRIPTION_LIMIT = 1500;
 export const WRITING_SECTION_LIMIT = 2400;
 
 export function isWritingVoice(value: unknown): value is WritingVoice {
   return WRITING_VOICES.some(voice => voice === value);
+}
+
+export function isWritingLanguage(value: unknown): value is WritingLanguage {
+  return WRITING_LANGUAGES.some(language => language === value);
+}
+
+export function writingLanguageOf(content: unknown): WritingLanguage {
+  if (content && typeof content === 'object' && 'languagePreference' in content && isWritingLanguage(content.languagePreference)) {
+    return content.languagePreference;
+  }
+  return DEFAULT_WRITING_LANGUAGE;
 }
 
 export function isWritingId(value: unknown): value is string {
@@ -27,13 +50,25 @@ export interface WritingBrief {
   minutes: WritingLength;
 }
 
+export type WritingSuggestion = WritingBrief & { id: string };
+
 export interface ReplayWriting extends WritingBrief {
   id: string;
   voice: WritingVoice;
+  language?: WritingLanguage;
+  prompt?: string;
   sourceId?: string;
   canApplyRepair?: boolean;
   status: 'GENERATING' | 'READY' | 'FAILED';
   presentation: MeetingPresentation | null;
+}
+
+export function availableWritingSuggestions(suggestions: readonly WritingSuggestion[], writings: readonly ReplayWriting[]) {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, ' ');
+  const ids = new Set(writings.map(writing => writing.id));
+  const names = new Set(writings.map(writing => normalize(writing.name)));
+  const prompts = new Set(writings.map(writing => normalize(writing.prompt ?? writing.description)));
+  return suggestions.filter(item => !ids.has(item.id) && !names.has(normalize(item.name)) && !prompts.has(normalize(item.description)));
 }
 
 export function isWritingLength(value: unknown): value is WritingLength {
@@ -73,9 +108,8 @@ export function resolveWritingNames(text: string, roster: ReadonlyMap<string, st
   return renderWritingNames(text, roster, language).text;
 }
 
-export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string, requireAttribution = false): MeetingPresentation | null {
+export function buildReplayWriting(raw: unknown, lines: WritingTranscriptLine[], meetingTitle: string, requireAttribution = false, language = meetingLanguage(lines)): MeetingPresentation | null {
   if (!raw || typeof raw !== 'object' || !('sections' in raw) || !Array.isArray(raw.sections)) return null;
-  const language = meetingLanguage(lines);
   const roster = writingAttendeeRoster(lines);
   const clean = (value: unknown, limit: number) => typeof value === 'string'
     ? stripEmoji(resolveWritingNames(value, roster, language)).trim().slice(0, limit) : '';

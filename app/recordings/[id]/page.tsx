@@ -21,6 +21,8 @@ import { CaptionIcon, ReplayCaption } from '@/lib/ReplayCaption';
 import { SmartPlay } from '@/lib/SmartPlay';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
 import { ReplayWritingPanel } from '@/lib/ReplayWritingPanel';
+import { NotesAudioControls } from '@/lib/NotesAudioControls';
+import { NOTES_AUDIO_ID, type NotesAudio } from '@/lib/replayWriting';
 import { ReplayTransport } from '@/lib/ReplayTransport';
 import { ReplayPlayButton } from '@/lib/ReplayPlayButton';
 import type { PresenceEvent } from '@/lib/livedoc/presence';
@@ -119,6 +121,7 @@ interface ReplayData {
     streamUrl: string | null;
     /** AI Notes Only：回放不放声音，只留进度 */
     notesOnly?: boolean;
+    notesAudio?: NotesAudio | null;
     /** False for AI Taking Notes: no audio was kept, and streamUrl is a silent playback clock */
     hasMedia?: boolean;
     /** AI Taking Notes: the AI presentation of the meeting (made when the session ended) */
@@ -795,10 +798,12 @@ function TranscriptPanel({
   transcripts,
   currentTime,
   onSeek,
+  notesAudioControls,
 }: {
   transcripts: Transcript[];
   currentTime: number;
   onSeek: (secs: number) => void;
+  notesAudioControls?: React.ReactNode;
 }) {
   const { t } = useI18n();
   const [search, setSearch] = useState('');
@@ -834,6 +839,7 @@ function TranscriptPanel({
 
   return (
     <div className={s.tabBody}>
+      {notesAudioControls}
       <label className={s.search}>
         <SearchGlyph />
         <input
@@ -1000,7 +1006,13 @@ export default function ReplayPage() {
   const [sessionOn, setSessionOn] = useState(false);
   const [panelVisible, setPanelVisible] = useState(true);
   const [captionsOpen, setCaptionsOpen] = useState(true);
-  const [smartPlay, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation; autoPlay: boolean } | null>(null);
+  const [writingPlayback, setSmartPlay] = useState<{ writingId: string; presentation: MeetingPresentation; autoPlay: boolean } | null>(null);
+  const [notesAudioUpdate, setNotesAudioUpdate] = useState<{ key: string; audio: NotesAudio | null }>();
+  const [originalTimelineKey, setOriginalTimelineKey] = useState<string | null>(null);
+  const notesAudio = notesAudioUpdate && notesAudioUpdate.key === id ? notesAudioUpdate.audio : data?.recording.notesAudio ?? null;
+  const notesAudioPlayback = originalTimelineKey !== id && notesAudio?.status === 'READY' && notesAudio.presentation
+    ? { writingId: NOTES_AUDIO_ID, presentation: notesAudio.presentation, autoPlay: false } : null;
+  const smartPlay = writingPlayback ?? notesAudioPlayback;
   const selectedWriteId = useRef<string | null>(null);
   const [chartHost, setChartHost] = useState<HTMLDivElement | null>(null);
   const [playbackHost, setPlaybackHost] = useState<HTMLDivElement | null>(null);
@@ -1103,6 +1115,31 @@ export default function ReplayPage() {
     setActiveTab('transcript');
   }, []);
 
+  const notesAudioPending = notesAudio?.status === 'GENERATING';
+  useEffect(() => {
+    if (!id || !notesAudioPending) return;
+    const controller = new AbortController();
+    let timer: number;
+    const poll = async () => {
+      try {
+        const res = await fetch(`/api/recordings/${encodeURIComponent(id)}/notes-audio`, {
+          headers: authHeaders(), cache: 'no-store', signal: controller.signal,
+        });
+        if (res.ok) {
+          const { notesAudio: audio } = await res.json() as { notesAudio: NotesAudio | null };
+          if (controller.signal.aborted) return;
+          setNotesAudioUpdate({ key: id, audio });
+          if (audio?.status !== 'GENERATING') return;
+        }
+      } catch {
+        // Keep polling while the saved narration is being prepared.
+      }
+      if (!controller.signal.aborted) timer = window.setTimeout(poll, 3000);
+    };
+    timer = window.setTimeout(poll, 3000);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [id, notesAudioPending]);
+
   // The presentation arrives with the page; while one is being made, ask again until it is done.
   const loadedPresentation = data?.recording.presentation;
   useEffect(() => {
@@ -1154,6 +1191,11 @@ export default function ReplayPage() {
   const pauseClock = useCallback(() => {
     videoRef.current?.pause();
   }, []);
+
+  const playingNotesAudio = smartPlay?.writingId === NOTES_AUDIO_ID;
+  useEffect(() => {
+    if (playingNotesAudio) pauseClock();
+  }, [pauseClock, playingNotesAudio]);
 
   const resumeClock = useCallback(() => {
     const media = videoRef.current;
@@ -1212,12 +1254,13 @@ export default function ReplayPage() {
 
   const seekTo = useCallback((secs: number) => {
     setSmartPlay(null);
+    setOriginalTimelineKey(id);
     if (videoRef.current) {
       videoRef.current.currentTime = secs;
       void videoRef.current.play().catch(() => undefined);
       setPlaying(true);
     }
-  }, []);
+  }, [id]);
 
   // 点击章节卡片：跳转视频 + 切换到摘要面板 + 展开并滚动到对应项
   const handleChapterSelect = useCallback(
@@ -1335,7 +1378,7 @@ export default function ReplayPage() {
     { key: 'summary', label: t('replay.write.tab') },
     { key: 'info', label: t('replay.tabInfo') },
   ] as const;
-  const tab = activeTab ?? (summaryItems.length > 0 ? 'summary' : 'transcript');
+  const tab = activeTab ?? (notesAudio || recording.notesOnly || recording.hasMedia === false || summaryItems.length === 0 ? 'transcript' : 'summary');
   const canManage = recording.canManage === true;
 
   const avatarPhotos: Record<string, string> = Object.fromEntries(
@@ -1372,7 +1415,7 @@ export default function ReplayPage() {
   const noteShot = showLiveDocStage ? null : shotAt(recording.shots ?? [], currentTime * 1000);
   const notesMode = stageMode;
   const presenting = notesPlayback && notesMode === 'presentation';
-  const showCaptionOverlay = !notesPlayback && hasTranscripts;
+  const showCaptionOverlay = !presenting && hasTranscripts;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1383,7 +1426,7 @@ export default function ReplayPage() {
 
   const playerButtons = (
     <>
-      {!notesPlayback && (hasTranscripts || smartPlay) && (
+      {(smartPlay ? !notesPlayback : showCaptionOverlay) && (
         <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
           aria-label={t('replay.closedCaptions')}
           title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
@@ -1603,7 +1646,7 @@ export default function ReplayPage() {
         <section className={s.stage}>
           <div className={s.videoCard} data-fullscreen={fullscreen ?? undefined}>
             {smartPlay && (
-              <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
+              <SmartPlay key={`${id}:${smartPlay.writingId}:${smartPlay.writingId === NOTES_AUDIO_ID ? notesAudio?.revision : ''}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={linkedLiveDoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
                 captionsOpen={!notesPlayback && captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
@@ -1766,7 +1809,7 @@ export default function ReplayPage() {
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
                   canManage={canManage} hasTranscript={hasTranscripts}
-                  activeWriting={smartPlay?.writingId} scriptHostRef={setScriptHost} playbackHostRef={setPlaybackHost}
+                  activeWriting={writingPlayback?.writingId} scriptHostRef={setScriptHost} playbackHostRef={setPlaybackHost}
                   onSmartPlay={(writingId, recap) => {
                     pauseClock();
                     setSmartPlay({ writingId, presentation: recap, autoPlay: true });
@@ -1781,7 +1824,24 @@ export default function ReplayPage() {
                 />
               )}
               {tab === 'transcript' && (
-                <TranscriptPanel transcripts={transcripts} currentTime={currentTime} onSeek={seekTo} />
+                <TranscriptPanel transcripts={transcripts} currentTime={currentTime} onSeek={seekTo}
+                  notesAudioControls={notesPlayback && (
+                    <NotesAudioControls key={`${id}:${notesAudio?.voice ?? ''}:${notesAudio?.language ?? ''}`} recordingKey={id} audio={notesAudio}
+                      canManage={canManage} hasTranscript={hasTranscripts} selected={playingNotesAudio}
+                      onChange={audio => {
+                        pauseClock();
+                        setSmartPlay(null);
+                        setOriginalTimelineKey(null);
+                        setNotesAudioUpdate({ key: id, audio });
+                      }}
+                      onTogglePlayback={() => {
+                        pauseClock();
+                        setSmartPlay(null);
+                        setOriginalTimelineKey(playingNotesAudio ? id : null);
+                      }}
+                    />
+                  )}
+                />
               )}
               {tab === 'info' && <InfoPanel meeting={meeting} recording={recording} />}
             </div>

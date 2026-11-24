@@ -22,6 +22,7 @@ import {
   isRecordingResponse,
 } from '@/lib/recordingShare';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
+import { loadNotesAudio } from '@/lib/replayWriting.server';
 
 const s3 = storeClient();
 
@@ -112,6 +113,7 @@ export async function GET(
     let streamUrl: string | null = null;
     const noMedia = hasNoMedia(recording);
     const notesOnly = recordingModeOf(recording.mode) === 'ai_notes';
+    const notesAudio = noMedia || notesOnly ? await loadNotesAudio(recording.id).catch(() => null) : null;
     if (noMedia) {
       // AI Taking Notes kept no audio: replay keeps time with a silent file of the session's length.
       const lastLine = recording.meeting?.transcripts.reduce((max, line) => Math.max(max, line.offsetSeconds ?? 0), 0) ?? 0;
@@ -219,6 +221,7 @@ export async function GET(
         createdAt: recording.createdAt,
         streamUrl,
         notesOnly,
+        notesAudio,
         recordedBy: recording.teamMember,
         transcribe: transcribeStateOf(recording),
         livedoc,

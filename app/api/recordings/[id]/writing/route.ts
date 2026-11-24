@@ -8,8 +8,8 @@ import { prisma } from '@/lib/db';
 import { loadReplaySpokenNames } from '@/lib/replaySpokenNames.server';
 import { prepareSmartPlayVoice } from '@/lib/smartPlayNarration.server';
 import { readPresentation, type MeetingPresentation } from '@/lib/meetingPresentation';
-import { isWritingId, isWritingLength, isWritingVoice, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
-import { claimWriting, generateReplayWriting, loadWritings, loadWritingTranscript, recommendWriting, writingRevision, writingState, WRITING_STALE_MS } from '@/lib/replayWriting.server';
+import { DEFAULT_WRITING_LANGUAGE, isWritingId, isWritingLanguage, isWritingLength, isWritingVoice, writingLanguageOf, WRITING_DESCRIPTION_LIMIT, WRITING_NAME_LIMIT } from '@/lib/replayWriting';
+import { claimWriting, generateReplayWriting, loadWritings, loadWritingSuggestions, loadWritingTranscript, recommendWriting, saveWritingSuggestions, writingRevision, writingState, WRITING_STALE_MS } from '@/lib/replayWriting.server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,7 +38,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (isRecordingResponse(loaded)) return loaded;
     const { recording, memberId } = loaded;
     const body = await req.json().catch(() => null);
-    const { id, minutes, voice, sourceId } = body ?? {};
+    const { id, minutes, voice, sourceId, language: requestedLanguage } = body ?? {};
     const details = readDetails(body);
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
     const writing = isWritingId(id) && isWritingVoice(voice) && (minutes === 'auto' || isWritingLength(minutes)) &&
@@ -47,17 +47,23 @@ export async function POST(req: NextRequest, { params }: Params) {
           name: details?.name ?? '', description: prompt || details?.description || '' }
       : null;
     const recommending = body?.recommend === true;
-    if (!recommending && !writing) {
+    const regenerating = body?.regenerate === true;
+    if (!recommending && (!writing || (requestedLanguage !== undefined && !isWritingLanguage(requestedLanguage)))) {
       return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
     }
     if (recording.status !== 'READY') return apiJson({ error: 'Recording is not ready' }, { status: 409, headers });
 
     try {
       const current = await loadWritings(recording.id);
-      if (recommending && current.some(item => item.status !== 'FAILED')) {
-        return apiJson({ suggestions: [] }, { headers });
+      if (recommending) {
+        const saved = await loadWritingSuggestions(recording.id);
+        if (saved) return apiJson({ suggestions: saved }, { headers });
       }
-      if (writing && current.some(item => item.id === writing.id && item.status !== 'FAILED')) {
+      const existing = current.find(item => item.id === writing?.id);
+      if (regenerating && (!existing || existing.sourceId || sourceId !== undefined)) {
+        return apiJson({ error: 'AI Write cannot be regenerated' }, { status: 409, headers });
+      }
+      if (existing && (existing.status === 'GENERATING' || (existing.status === 'READY' && !regenerating))) {
         return apiJson({ writings: current }, { headers });
       }
       const quota = await checkAiSummaryQuota(memberId);
@@ -65,7 +71,8 @@ export async function POST(req: NextRequest, { params }: Params) {
       const lines = await loadWritingTranscript(recording);
       if (!lines.length) return apiJson({ error: 'A transcript is required for AI Write' }, { status: 409, headers });
       if (recommending) {
-        return apiJson({ suggestions: await recommendWriting(lines, recording.durationSeconds) }, { headers });
+        const briefs = await recommendWriting(lines, recording.durationSeconds, current);
+        return apiJson({ suggestions: await saveWritingSuggestions(recording.id, briefs) }, { headers });
       }
       if (!writing) {
         return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
@@ -75,8 +82,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       if (sourceId !== undefined && !source?.presentation) {
         return apiJson({ error: 'AI Write to improve not found' }, { status: 404, headers });
       }
-      const startedAt = await claimWriting(recording.id, writing, isWritingId(sourceId) ? sourceId : undefined);
-      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), source: source?.presentation ? { id: source.id, revision: writingRevision(source), presentation: source.presentation } : undefined }));
+      const language = isWritingLanguage(requestedLanguage) ? requestedLanguage : existing?.language ?? source?.language ?? DEFAULT_WRITING_LANGUAGE;
+      const startedAt = await claimWriting(recording.id, writing, isWritingId(sourceId) ? sourceId : undefined, regenerating, language);
+      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), language, source: source?.presentation ? { id: source.id, revision: writingRevision(source), presentation: source.presentation } : undefined }));
       return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
     } catch {
       return apiJson({ error: 'Could not start AI Write' }, { status: 500, headers });
@@ -91,10 +99,12 @@ function readDetails(body: { name?: unknown; description?: unknown } | null) {
   return { name, description };
 }
 
-function repairedContent(presentation: MeetingPresentation, title: string) {
-  const content = { ...presentation, title } as MeetingPresentation & { sourceId?: string; sourceRevision?: string };
+function repairedContent(presentation: MeetingPresentation, title: string, originalPrompt?: string) {
+  const content = { ...presentation, title } as MeetingPresentation & { sourceId?: string; sourceRevision?: string; originalPrompt?: string };
   delete content.sourceId;
   delete content.sourceRevision;
+  if (originalPrompt) content.originalPrompt = originalPrompt;
+  else delete content.originalPrompt;
   return content;
 }
 
@@ -116,11 +126,11 @@ async function applyRepair(recordingId: number, repairId: string) {
       data: {
         recordingId, id: randomUUID(), name: backupName, description: original.description,
         minutes: original.minutes, voice: original.voice, status: 'READY',
-        content: repairedContent(prior.presentation, backupName) as unknown as Prisma.InputJsonValue,
+        content: repairedContent(prior.presentation, backupName, prior.prompt) as unknown as Prisma.InputJsonValue,
       },
     });
 
-    const repaired = repairedContent(draft, prior.name);
+    const repaired = repairedContent(draft, prior.name, prior.prompt);
     await tx.recordingWriting.update({
       where: key(original.id),
       data: { content: repaired as unknown as Prisma.InputJsonValue },
@@ -154,8 +164,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       }
     }
     const details = readDetails(body);
-    const { id, voice } = body ?? {};
-    if (!details || !isWritingId(id) || !isWritingVoice(voice)) {
+    const { id, voice, language: requestedLanguage } = body ?? {};
+    if (!details || !isWritingId(id) || !isWritingVoice(voice) || (requestedLanguage !== undefined && !isWritingLanguage(requestedLanguage))) {
       return apiJson({ error: 'Invalid AI Write settings' }, { status: 400, headers });
     }
     if (recording.status !== 'READY') return apiJson({ error: 'Recording is not ready' }, { status: 409, headers });
@@ -165,6 +175,23 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const row = await prisma.recordingWriting.findUnique({ where: { recordingId_id: key } });
       const presentation = row?.status === 'READY' ? readPresentation(row.content) : null;
       if (!row || !presentation) return apiJson({ error: 'AI Write not found' }, { status: 404, headers });
+      if (isWritingLanguage(requestedLanguage) && requestedLanguage !== writingLanguageOf(row.content)) {
+        const existing = writingState(row);
+        if (!existing) return apiJson({ error: 'AI Write has invalid settings' }, { status: 409, headers });
+        const quota = await checkAiSummaryQuota(loaded.memberId);
+        if (quota) return quota;
+        const lines = await loadWritingTranscript(recording);
+        if (!lines.length) return apiJson({ error: 'A transcript is required to change the AI Write language' }, { status: 409, headers });
+        const writing = { id, ...details, description: existing.prompt || details.description, voice, minutes: existing.minutes };
+        const startedAt = await claimWriting(recording.id, writing, undefined, true, requestedLanguage);
+        const metadata = row.content && typeof row.content === 'object' && !Array.isArray(row.content) ? row.content : null;
+        if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, loaded.memberId, lines, {
+          auto: false, fromPrompt: false, language: requestedLanguage,
+          edit: { presentation, description: details.description, originalPrompt: existing.prompt, sourceId: existing.sourceId,
+            sourceRevision: typeof metadata?.sourceRevision === 'string' ? metadata.sourceRevision : undefined },
+        }));
+        return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
+      }
       await prisma.recordingWriting.update({
         where: { recordingId_id: key },
         data: { ...details, voice, content: { ...presentation, title: details.name } as unknown as Prisma.InputJsonValue },

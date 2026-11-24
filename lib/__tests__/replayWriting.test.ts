@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildReplayWriting, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingNarrationSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
+import { availableWritingSuggestions, buildReplayWriting, writingLanguageOf, writingShot, writingSourceSeconds, writingSpeakers, writingSpeakerLanes, writingNarrationSpeakerLanes, writingTranscript } from '@/lib/replayWriting';
 import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { presentationPlan } from '@/lib/meetingPresentation';
 
@@ -9,6 +9,27 @@ const transcript = [
 ];
 
 describe('AI Write presentations', () => {
+  it('keeps automatic language for legacy settings and uses the specified output language for narration', () => {
+    expect(writingLanguageOf({ language: 'en' })).toBe('auto');
+    expect(writingLanguageOf({ languagePreference: 'ko' })).toBe('ko');
+    const writing = buildReplayWriting({
+      sections: [{ title: '출시 일정', text: '출시일을 금요일로 변경합니다.', startSec: 10, endSec: 18 }],
+    }, transcript, 'Meeting', false, 'ko');
+    expect(writing).toMatchObject({ language: 'ko', slides: [{ narration: '출시일을 금요일로 변경합니다.', startSec: 10, endSec: 18 }] });
+  });
+  it('keeps remaining suggestions and hides generated suggestions even after they are renamed', () => {
+    const suggestions = [
+      { id: 'recap', name: 'Meeting recap', description: 'Summarize the meeting.', minutes: 5 as const },
+      { id: 'legacy', name: 'Action items', description: 'List next steps.', minutes: 3 as const },
+      { id: 'risks', name: 'Open risks', description: 'Identify unresolved risks.', minutes: 3 as const },
+    ];
+    const saved = { voice: 'marin' as const, status: 'READY' as const, presentation: null };
+    expect(availableWritingSuggestions(suggestions, [
+      { ...suggestions[0], ...saved, name: 'Renamed recap', description: 'A generated description.' },
+      { ...suggestions[1], ...saved, id: 'earlier-write', name: 'Action  Items' },
+    ])).toEqual([suggestions[2]]);
+  });
+
   it('uses the written paragraph verbatim as narration and grounds its timestamp', () => {
     const text = 'Avery moved the launch to Friday, and Casey will update the launch checklist.';
     const writing = buildReplayWriting({

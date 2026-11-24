@@ -4,9 +4,10 @@ import { PATCH } from '@/app/api/recordings/[id]/writing/route';
 import { writingRevision, writingState } from '@/lib/replayWriting.server';
 import { buildReplayWriting } from '@/lib/replayWriting';
 
-const { rows, prepare } = vi.hoisted(() => ({
+const { rows, prepare, write } = vi.hoisted(() => ({
   rows: new Map<string, RecordingWriting>(),
   prepare: vi.fn(),
+  write: vi.fn(),
 }));
 
 vi.mock('next/server', async importOriginal => ({
@@ -15,8 +16,11 @@ vi.mock('next/server', async importOriginal => ({
 }));
 vi.mock('@/lib/replaySpokenNames.server', () => ({ loadReplaySpokenNames: async () => (text: string) => text }));
 vi.mock('@/lib/smartPlayNarration.server', () => ({ prepareSmartPlayVoice: prepare }));
+vi.mock('@/lib/meetingSummaryServer', () => ({ callSummaryAI: write }));
+vi.mock('@/lib/billing/limits', () => ({ checkAiSummaryQuota: async () => null }));
+vi.mock('@/lib/billing/usage', () => ({ meterSafely: async () => undefined, meterAiSummary: async () => undefined }));
 vi.mock('@/lib/recordingShare', () => ({
-  loadManagedRecording: async () => ({ recording: { id: 1, status: 'READY' } }),
+  loadManagedRecording: async () => ({ recording: { id: 1, meetingId: 5, status: 'READY' }, memberId: 7 }),
   isRecordingResponse: () => false,
 }));
 vi.mock('@/lib/db', () => {
@@ -28,8 +32,18 @@ vi.mock('@/lib/db', () => {
       const id = where.recordingId_id.id;
       rows.set(id, { ...rows.get(id)!, ...data });
     },
+    updateMany: async ({ where, data }: { where: { id: string; status?: string; startedAt?: Date }; data: Partial<RecordingWriting> }) => {
+      const row = rows.get(where.id);
+      if (!row || (where.status && row.status !== where.status) || (where.startedAt && row.startedAt !== where.startedAt)) return { count: 0 };
+      rows.set(row.id, { ...row, ...data });
+      return { count: 1 };
+    },
   };
-  return { prisma: { recordingWriting, $transaction: (run: (tx: { recordingWriting: typeof recordingWriting }) => unknown) =>
+  return { prisma: { recordingWriting,
+    meeting: { findUniqueOrThrow: async () => ({ title: 'Standup', roomName: 'room' }) },
+    meetingTranscript: { findMany: async () => [{ id: 1, speakerName: 'Sam', speakerMemberId: null, content: '需要关机。', offsetSeconds: 10 }] },
+    meetingParticipant: { findMany: async () => [] },
+    $transaction: (run: (tx: { recordingWriting: typeof recordingWriting }) => unknown) =>
     run({ recordingWriting }) } };
 });
 
@@ -86,5 +100,19 @@ describe('Apply speaker repair to the original AI Write', () => {
     expect((await apply()).status).toBe(409);
     expect(rows.size).toBe(2);
     expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('changes the spoken language on the same saved write and persists the edit', async () => {
+    write.mockResolvedValueOnce({ raw: { sections: [{ title: 'Shutting down', text: 'The system needs to be shut down.', startSec: 10, endSec: 10 }] } });
+    const request = new Request('https://example.test/recording', {
+      method: 'PATCH', body: JSON.stringify({ id: originalId, name: 'Standup', description: 'Shutdown plan', voice: 'cedar', language: 'en' }),
+    });
+    const response = await PATCH(request as Parameters<typeof PATCH>[0], { params: Promise.resolve({ id: 'recording' }) });
+    expect(response.status).toBe(202);
+    await vi.waitFor(() => expect(writingState(rows.get(originalId)!)).toMatchObject({
+      id: originalId, status: 'READY', language: 'en', voice: 'cedar', description: 'Shutdown plan',
+      presentation: { language: 'en', slides: [{ narration: 'The system needs to be shut down.' }] },
+    }));
+    expect(write).toHaveBeenCalledWith(expect.stringContaining('narration in English'), expect.any(String), expect.any(Number));
   });
 });

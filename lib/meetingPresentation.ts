@@ -144,7 +144,7 @@ const record = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
 
 /** 'zh' | 'ja' | 'ko' | 'en' from what the meeting was spoken in. */
-export function meetingLanguage(lines: SummaryTranscriptLine[]): string {
+export function meetingLanguage(lines: SummaryTranscriptLine[]): 'en' | 'zh' | 'ko' | 'ja' {
   const sample = lines.slice(0, 400).map((line) => line.content).join('');
   const count = (pattern: RegExp) => (sample.match(pattern) ?? []).length;
   const kana = count(/[぀-ヿ]/g);
