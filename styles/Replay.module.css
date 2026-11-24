@@ -2714,3 +2714,18 @@
 @media (prefers-reduced-motion: reduce) {
   .writingSpinner { animation: none; }
 }
+
+.writingPdfAttachment {
+  margin-bottom: 12px;
+}
+
+.writingPdfAttachment button {
+  max-width: 100%;
+}
+
+.writingPdfAttachment span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

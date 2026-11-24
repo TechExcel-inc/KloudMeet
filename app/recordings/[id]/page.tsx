@@ -1808,7 +1808,7 @@ export default function ReplayPage() {
             <div className={s.tabBody} role="tabpanel">
               {tab === 'summary' && (
                 <ReplayWritingPanel key={id} recordingKey={id}
-                  canManage={canManage} hasTranscript={hasTranscripts} shots={recording.shots ?? []}
+                  canManage={canManage} hasTranscript={hasTranscripts}
                   activeWriting={writingPlayback?.writingId} scriptHostRef={setScriptHost} playbackHostRef={setPlaybackHost}
                   onSmartPlay={(writingId, recap) => {
                     pauseClock();

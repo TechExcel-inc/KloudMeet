@@ -198,10 +198,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         }));
         return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
       }
-      await prisma.recordingWriting.update({
-        where: { recordingId_id: key },
-        data: { ...details, voice, content: { ...presentation, title: details.name } as unknown as Prisma.InputJsonValue },
+      const metadata = row.content as Prisma.InputJsonObject;
+      const updated = await prisma.recordingWriting.updateMany({
+        where: { ...key, status: 'READY', content: { equals: metadata } },
+        data: { ...details, voice, content: { ...metadata, title: details.name } },
       });
+      if (!updated.count) return apiJson({ error: 'AI Write changed. Try again.' }, { status: 409, headers });
       if (row.voice !== voice) {
         after(async () => {
           const speak = await loadReplaySpokenNames(recording.meetingId, presentation.language);

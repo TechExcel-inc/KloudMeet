@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown, Paperclip } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import {
@@ -11,8 +11,6 @@ import {
 } from '@/lib/replayWriting';
 import { WritingLanguageSelect } from '@/lib/WritingLanguageSelect';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
-import type { ShareShot } from '@/lib/shareShot';
-import { printReplayWriting } from '@/lib/printReplayWriting';
 import s from '@/styles/Replay.module.css';
 
 const improvementOptions = ['speakers', 'terms', 'review'] as const;
@@ -30,12 +28,11 @@ type Draft = Omit<WritingBrief, 'minutes'> & {
 };
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, shots, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, playbackHostRef, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, playbackHostRef, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
   hasTranscript: boolean;
-  shots: ShareShot[];
   activeWriting?: string;
   onSmartPlay: (id: string, presentation: MeetingPresentation) => void;
   onReturn: () => void;
@@ -53,8 +50,8 @@ export function ReplayWritingPanel({
   const [requestFailed, setRequestFailed] = useState(false);
   const [suggestions, setSuggestions] = useState<WritingSuggestion[]>();
   const [suggestionFailed, setSuggestionFailed] = useState(false);
-  const [exporting, setExporting] = useState(false);
-  const [exportFailed, setExportFailed] = useState(false);
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState(false);
   const [selected, setSelected] = useState(activeWriting ?? (legacy && (legacyFocus || !canManage) ? 'legacy' : ''));
   const [draft, setDraft] = useState<Draft>();
   const [chooser, setChooser] = useState(false);
@@ -162,7 +159,7 @@ export function ReplayWritingPanel({
     if (picker.current) picker.current.open = false;
     setSelected(id);
     setChooser(false);
-    setExportFailed(false);
+    setPdfError(false);
     setDraft(undefined);
     setRequestFailed(false);
   }
@@ -267,19 +264,37 @@ export function ReplayWritingPanel({
     </>;
   }
 
-  async function exportPdf(presentation: MeetingPresentation, title: string) {
-    setExportFailed(false);
-    setExporting(true);
+  async function transferPdf(item: ReplayWriting, generate = false) {
+    if (pdfBusy) return;
+    const preview = generate ? null : window.open('about:blank', '_blank');
+    if (!generate && !preview) {
+      setPdfError(true);
+      return;
+    }
+    if (preview) preview.opener = null;
+    setPdfBusy(true);
+    setPdfError(false);
     try {
-      await printReplayWriting(presentation, title, shots, {
-        screenshot: t('replay.write.pdfScreenshot'),
-        unavailable: t('replay.write.pdfScreenshotUnavailable'),
-        review: t('replay.write.reviewTerms'),
-      });
+      const query = new URLSearchParams({ write: item.id });
+      const response = await authFetch(`${endpoint}/pdf?${query}`, generate ? { method: 'POST' } : undefined);
+      if (!response.ok) throw new Error('PDF transfer failed');
+      if (generate) {
+        const { name } = await response.json();
+        setWritings(items => items.map(entry => entry.id === item.id ? { ...entry, pdfName: name } : entry));
+      } else if (preview && !preview.closed) {
+        const url = URL.createObjectURL(await response.blob());
+        preview.location.replace(url);
+        const cleanup = window.setInterval(() => {
+          if (!preview.closed) return;
+          window.clearInterval(cleanup);
+          URL.revokeObjectURL(url);
+        }, 5000);
+      }
     } catch {
-      setExportFailed(true);
+      preview?.close();
+      setPdfError(true);
     } finally {
-      setExporting(false);
+      setPdfBusy(false);
     }
   }
 
@@ -343,6 +358,7 @@ export function ReplayWritingPanel({
                 <button key={item.id} type="button" aria-current={selected === item.id ? 'true' : undefined}
                   onClick={() => { selectWrite(item.id); picker.current?.querySelector('summary')?.focus(); }}>
                   <span>{writeName(item)}</span>
+                  {item.pdfName && <Paperclip role="img" aria-label={t('replay.write.pdfAttachment')} />}
                   {selected === item.id && <Check aria-hidden="true" />}
                 </button>
               ))}
@@ -372,13 +388,10 @@ export function ReplayWritingPanel({
               }
               onReturn();
             }}><Undo2 aria-hidden="true" /><span>{t('replay.write.originalPlayback')}</span></button>}
-            {current?.presentation && <button type="button" disabled={exporting} onClick={() => {
-              if (actions.current) {
-                actions.current.open = false;
-                actions.current.querySelector('summary')?.focus();
-              }
-              if (current.presentation) void exportPdf(current.presentation, writeName(current));
-            }}><FileDown aria-hidden="true" /><span>{t('replay.write.exportPdf')}</span></button>}
+            {canManage && current?.presentation && !current.pdfName && <button type="button" disabled={pdfBusy} onClick={() => {
+              closeActions();
+              void transferPdf(current, true);
+            }}><FileDown aria-hidden="true" /><span>{t('replay.write.savePdfToLiveDoc')}</span></button>}
             {canManage && <>
               <button type="button" disabled={!current?.presentation}
                 onClick={() => current && openDraft(current, current, 'edit')}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>
@@ -402,7 +415,8 @@ export function ReplayWritingPanel({
           </div>
         </details>}
       </div>}
-      {exportFailed && <p role="alert" className={s.writingNotice}>{t('replay.write.exportFailed')}</p>}
+      {pdfBusy && <p className={s.writingNotice} role="status">{t('replay.write.pdfWorking')}</p>}
+      {pdfError && <p className={s.writingNotice} role="alert">{t('replay.write.pdfTransferFailed')}</p>}
 
       {dialogOpen && <dialog ref={dialog} className={s.writingDialog} aria-labelledby="ai-write-dialog-title"
         onCancel={event => {
@@ -569,6 +583,13 @@ export function ReplayWritingPanel({
           </div>
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
+          {current.pdfName && <div className={s.writingPdfAttachment}>
+            <button type="button" className={s.tab + ' ' + s.writingIconLabel} disabled={pdfBusy}
+              onClick={() => void transferPdf(current)}>
+              <Paperclip aria-hidden="true" /><span>{current.pdfName}</span>
+              <FileDown aria-hidden="true" />
+            </button>
+          </div>}
           {presenting ? <div ref={playbackHostRef} /> : (
             <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {
               if (current.presentation) onSmartPlay(current.id, current.presentation);

@@ -61,6 +61,7 @@ export interface ReplayWriting extends WritingBrief {
   prompt?: string;
   sourceId?: string;
   canApplyRepair?: boolean;
+  pdfName?: string;
   status: 'GENERATING' | 'READY' | 'FAILED';
   presentation: MeetingPresentation | null;
 }
