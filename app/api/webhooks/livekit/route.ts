@@ -12,7 +12,7 @@ import {
 import { onRecordingReady } from '@/lib/billing/limits';
 import { meterCaptions, meterSafely } from '@/lib/billing/usage';
 import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
-import { startRecordingTranscription } from '@/lib/recordingTranscription';
+import { startAutomaticRecordingTranscription } from '@/lib/recordingTranscription';
 import { hasNoMedia } from '@/lib/liveNotes';
 import { finishLiveNotes } from '@/lib/liveNotesServer';
 import { closePendingLivedocAttachment, finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
@@ -133,15 +133,9 @@ export async function POST(request: NextRequest) {
             ...ready,
             durationSeconds: ready.durationSeconds === null ? null : Math.max(0, ready.durationSeconds - paused),
           });
-          // Sync transcript: transcribe now unless the meeting already has a live-caption transcript.
-          if (ready.syncTranscript) {
-            const captionLines = await prisma.meetingTranscript.count({ where: { meetingId: ready.meetingId } });
-            if (captionLines === 0) {
-              await startRecordingTranscription(ready).catch((err) =>
-                console.error('[webhook] sync transcript failed to start', ready.id, err),
-              );
-            }
-          }
+          await startAutomaticRecordingTranscription(ready).catch((err) =>
+            console.error('[webhook] sync transcript failed to start', ready.id, err),
+          );
         }
       }
     }

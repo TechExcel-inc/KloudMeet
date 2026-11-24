@@ -1362,18 +1362,17 @@ export default function ReplayPage() {
   const viewPath = recordingReplayPath(recording.shareKey || id);
   const showPanel = panelVisible;
   const linkedLiveDoc = recording.livedoc ?? null;
-  const livedoc = linkedLiveDoc && linkedLiveDoc.recordingId !== failedLiveDocReplay
-    && currentTime * 1000 + linkedLiveDoc.offsetMs >= 0 ? linkedLiveDoc : null;
   const notesOnly = !!recording.notesOnly;
-  const recordingType = t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full');
-  const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
-  // AI Taking Notes kept no audio or video: the stage shows the AI presentation, or the meeting's
-  // own timeline with the transcript as captions (a LiveDoc or shared screenshot, when there is one).
   const notesReplay = recording.hasMedia === false;
+  const notesPlayback = notesOnly || notesReplay;
+  const livedoc = linkedLiveDoc && linkedLiveDoc.recordingId !== failedLiveDocReplay
+    && (notesPlayback || currentTime * 1000 + linkedLiveDoc.offsetMs >= 0) ? linkedLiveDoc : null;
+  const showLiveDocStage = notesPlayback || !!livedoc;
+  const recordingType = t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full');
+  const noteShot = showLiveDocStage ? null : shotAt(recording.shots ?? [], currentTime * 1000);
   const notesMode = stageMode;
-  const presenting = notesReplay && notesMode === 'presentation';
-  const captioning = (notesReplay || notesOnly) && !presenting && !livedoc && !noteShot;
-  const showCaptionOverlay = !presenting && !captioning && hasTranscripts;
+  const presenting = notesPlayback && notesMode === 'presentation';
+  const showCaptionOverlay = !notesPlayback && hasTranscripts;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
     sp.segments.some(([a, b]) => currentTime >= a && currentTime < b),
@@ -1384,7 +1383,7 @@ export default function ReplayPage() {
 
   const playerButtons = (
     <>
-      {(showCaptionOverlay || smartPlay) && (
+      {!notesPlayback && (hasTranscripts || smartPlay) && (
         <button type="button" className={s.replayControl} aria-pressed={captionsOpen}
           aria-label={t('replay.closedCaptions')}
           title={t(captionsOpen ? 'replay.captionCollapse' : 'replay.captionExpand')}
@@ -1607,7 +1606,7 @@ export default function ReplayPage() {
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
                 presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={linkedLiveDoc}
                 viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
-                captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
+                captionsOpen={!notesPlayback && captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
                 renderSpeakerChart={(lanes, duration, onSeek) => (
                   <section className={s.card} aria-label={t('replay.write.speakerChart')}>
                     <h2 className={s.writingSpeakerChartTitle}>{t('replay.write.speakerChart')}</h2>
@@ -1632,8 +1631,9 @@ export default function ReplayPage() {
                 {playerButtons}
               </SmartPlay>
             )}
-            {!smartPlay && livedoc && !presenting && (
+            {!smartPlay && showLiveDocStage && !presenting && (
               <LiveDocReplayStage
+                key={linkedLiveDoc?.recordingId ?? id}
                 info={livedoc}
                 onFailure={onLiveDocFailure}
                 mediaRef={videoRef}
@@ -1641,9 +1641,9 @@ export default function ReplayPage() {
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
                 boxClass={s.notesStage}
                 shots={recording.shots ?? []}
-                coverWithShots={notesOnly}
+                coverWithShots={notesPlayback}
               >
-                {recording.presence && recording.presence.length > 0 && (
+                {livedoc && recording.presence && recording.presence.length > 0 && (
                   <ReplayPeople
                     events={recording.presence}
                     atMs={currentTime * 1000 + livedoc.offsetMs}
@@ -1660,7 +1660,7 @@ export default function ReplayPage() {
                 {!playing && <ReplayPlayButton onPlay={resumeClock} />}
               </div>
             )}
-            {!smartPlay && (presenting || captioning) && (
+            {!smartPlay && presenting && (
               <div className={s.notesReplay}>
                 <NotesReplayStage
                   meetingTitle={meetingTitle}
@@ -1680,11 +1680,10 @@ export default function ReplayPage() {
                   onRegenerate={regeneratePresentation}
                   speakerColor={(name) => speakerColor(name, avatarTones)}
                 />
-                {captioning && !playing && <ReplayPlayButton onPlay={resumeClock} />}
               </div>
             )}
             {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
-            {!smartPlay && notesReplay && !presenting && !captioning && (
+            {!smartPlay && notesPlayback && !presenting && (
               <div className={s.stageCorner}>
                 <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
                   {t('replay.present.modePresentation')}
@@ -1697,7 +1696,7 @@ export default function ReplayPage() {
               playsInline
               disablePictureInPicture={notesReplay}
               muted={notesOnly}
-              className={smartPlay || presenting || livedoc || noteShot || captioning ? s.notesClock : s.video}
+              className={smartPlay || presenting || showLiveDocStage || noteShot ? s.notesClock : s.video}
               onLoadedMetadata={(e) => {
                 if (!notesOnly) return;
                 e.currentTarget.muted = true;
@@ -1722,7 +1721,7 @@ export default function ReplayPage() {
               <ReplayCaption lines={transcripts} time={currentTime} lift
                 open={captionsOpen} />
             )}
-            {!smartPlay && !livedoc && !noteShot && !presenting && !captioning && !playing && (
+            {!smartPlay && !showLiveDocStage && !noteShot && !playing && (
               <ReplayPlayButton onPlay={resumeClock} />
             )}
             {!smartPlay && <ReplayTransport mediaRef={videoRef} time={currentTime} expectedDuration={realDuration}
@@ -1790,7 +1789,16 @@ export default function ReplayPage() {
         )}
       </main>
 
-      {canAskTranscribe && recording.hasMedia !== false && meeting && (
+      {(canAskTranscribe || (notesOnly && transcriptRunning)) && recording.hasMedia !== false && meeting && (
+        notesOnly && transcriptRunning && !regenerateTranscript ? (
+          <RecordingTranscribePrompt
+            key="auto-notes"
+            recordingKey={id}
+            initial={recording.transcribe ?? IDLE_TRANSCRIBE}
+            autoFollow
+            onDone={handleTranscribeDone}
+          />
+        ) :
         regenerateTranscript || (canManage && hasTranscripts && transcriptRunning) ? (
           <RecordingTranscribePrompt
             key="regenerate"

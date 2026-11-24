@@ -692,8 +692,7 @@
   min-height: 0;
 }
 
-/* AI Taking Notes replay (no media file): the AI presentation or the caption stage. The stage
-   sizes its own text from this box (container queries), so the box must have a real height. */
+/* The AI presentation uses container queries, so its stage needs a real height. */
 .notesReplay {
   position: relative;
   width: 100%;

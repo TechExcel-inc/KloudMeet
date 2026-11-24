@@ -582,7 +582,7 @@
   "toolbar.askHostForCaptions": "Ask the host to turn on captions",
   "toolbar.recordingModeLabel": "What to record",
   "toolbar.recordingMode.ai_notes": "AI Notes Only",
-  "toolbar.recordingMode.ai_notesHint": "AI assistant takes notes",
+  "toolbar.recordingMode.ai_notesHint": "Saves meeting audio and transcribes it afterwards",
   "toolbar.recordingMode.ai_notesLiveHint": "AI assistant takes notes",
   "toolbar.recordingMode.full": "Full Recording",
   "toolbar.recordingMode.fullHint": "Records the meeting video",

@@ -24,6 +24,7 @@ export interface RecordingTranscribePromptProps {
   onDone: () => void;
   /** Start as the small pill instead of a dialog (the replay works without a transcript) */
   startCollapsed?: boolean;
+  autoFollow?: boolean;
   regenerate?: boolean;
   onClose?: () => void;
 }
@@ -40,11 +41,15 @@ export function RecordingTranscribePrompt({
   initial,
   onDone,
   startCollapsed = false,
+  autoFollow = false,
   regenerate = false,
   onClose,
 }: RecordingTranscribePromptProps) {
   const { t } = useI18n();
-  const [phase, setPhase] = React.useState<Phase>(() => regenerate ? (isSttActive(initial.status) ? 'running' : 'prompt') : initialPhase(initial, startCollapsed));
+  const [phase, setPhase] = React.useState<Phase>(() => {
+    if ((regenerate || autoFollow) && isSttActive(initial.status)) return 'running';
+    return regenerate ? 'prompt' : initialPhase(initial, startCollapsed);
+  });
   const [state, setState] = React.useState<TranscribeState>(initial);
   const [starting, setStarting] = React.useState(false);
   const [requestError, setRequestError] = React.useState<string | null>(null);

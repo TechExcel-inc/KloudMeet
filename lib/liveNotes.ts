@@ -25,9 +25,9 @@ const TEXT_MAX = 4000;
 /** A sentence longer than this is a clock error, not speech. */
 const SENTENCE_MAX_MS = 10 * 60 * 1000;
 
-/** True when AI Notes Only should transcribe live and keep no file (the default). */
+/** Opt in to live transcription without keeping an audio file. */
 export function liveNotesEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return (env.AI_NOTES_CAPTURE || 'live').trim().toLowerCase() !== 'file';
+  return env.AI_NOTES_CAPTURE?.trim().toLowerCase() === 'live';
 }
 
 export function hasNoMedia(recording: { storageProvider: string }): boolean {

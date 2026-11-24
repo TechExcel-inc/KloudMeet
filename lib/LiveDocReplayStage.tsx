@@ -61,7 +61,7 @@ export function LiveDocReplayStage({
   boxClass,
   children,
 }: {
-  info: LiveDocReplayInfo;
+  info: LiveDocReplayInfo | null;
   mediaRef?: React.RefObject<HTMLVideoElement | null>;
   clock?: LiveDocReplayClock;
   onFailure?: (recordingId: number) => void;
@@ -70,11 +70,11 @@ export function LiveDocReplayStage({
   shots?: ShareShot[];
   /** 有共享截图的时间段用图片盖住活文档，不再让共享视频挡住 */
   coverWithShots?: boolean;
-  /** 无字幕时占满剩余高度，把下方声音控制条留在可视区域内 */
+  /** 占满容器高度 */
   fill?: boolean;
   /** fill 时的布局类（桌面限高、窄屏改回 16:9） */
   fillClass?: string;
-  /** 有字幕时的布局类：和普通回放视频一样高，下面留出章节 */
+  /** 与普通回放视频同高，下面留出章节 */
   boxClass?: string;
   /** 叠在舞台上的回放浮层（参会人） */
   children?: React.ReactNode;
@@ -90,27 +90,30 @@ export function LiveDocReplayStage({
   const clockRef = React.useRef(clock);
   clockRef.current = clock;
   const lastClock = React.useRef<{ seconds: number; seekId: number; playing: boolean } | undefined>(undefined);
-
-
-  React.useEffect(() => {
-    if (error) onFailure?.(info.recordingId);
-  }, [error, info.recordingId, onFailure]);
+  const recordingId = info?.recordingId;
+  const kloudMeetingId = info?.kloudMeetingId;
+  const offsetMs = info?.offsetMs ?? 0;
 
   React.useEffect(() => {
-    if (!onFailure || ready) return;
-    const timer = window.setTimeout(() => onFailure(info.recordingId), 15000);
+    if (error && recordingId) onFailure?.(recordingId);
+  }, [error, recordingId, onFailure]);
+
+  React.useEffect(() => {
+    if (!onFailure || ready || !recordingId) return;
+    const timer = window.setTimeout(() => onFailure(recordingId), 15000);
     return () => window.clearTimeout(timer);
-  }, [info.recordingId, ready, onFailure]);
+  }, [recordingId, ready, onFailure]);
 
   // LiveDoc plugin in replay mode, signed in as this viewer's LiveDoc guest
   React.useEffect(() => {
+    if (!recordingId || !kloudMeetingId) return;
     let cancelled = false;
     (async () => {
       try {
         const token = await createOrUpdateInstantAccount(viewerName || 'Viewer');
         await syncLivedocLessonMember({
           userToken: token,
-          livedocInstanceId: String(info.kloudMeetingId),
+          livedocInstanceId: String(kloudMeetingId),
         }).catch(() => undefined);
         let settings: LiveDocRuntimeSettings | null = null;
         if (process.env.NODE_ENV === 'development') {
@@ -122,8 +125,8 @@ export function LiveDocReplayStage({
             debugUrl: typeof data.livedoc_debug_url === 'string' ? data.livedoc_debug_url : '',
           };
         }
-        const base = buildLiveDocIframeSrc(String(info.kloudMeetingId), token, locale === 'zh' ? 0 : 1, settings);
-        if (!cancelled) setSrc(`${base}&replay=${encodeURIComponent(String(info.recordingId))}`);
+        const base = buildLiveDocIframeSrc(String(kloudMeetingId), token, locale === 'zh' ? 0 : 1, settings);
+        if (!cancelled) setSrc(`${base}&replay=${encodeURIComponent(String(recordingId))}`);
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       }
@@ -131,7 +134,7 @@ export function LiveDocReplayStage({
     return () => {
       cancelled = true;
     };
-  }, [info.kloudMeetingId, info.recordingId, viewerName, locale]);
+  }, [kloudMeetingId, recordingId, viewerName, locale]);
 
   const postTime = React.useCallback(
     (seek: boolean) => {
@@ -142,13 +145,13 @@ export function LiveDocReplayStage({
       const seconds = external?.seconds ?? media?.currentTime ?? 0;
       const playing = external?.playing ?? (media ? !media.paused : false);
       const rate = external?.rate ?? media?.playbackRate ?? 1;
-      const ms = Math.max(0, Math.round(seconds * 1000 + info.offsetMs));
+      const ms = Math.round(seconds * 1000 + offsetMs);
       frame.contentWindow.postMessage(
-        { type: 'Kloud-ReplayTime', ms, playing, rate, seek },
+        { type: 'Kloud-ReplayTime', ms: Math.max(0, ms), playing: playing && ms >= 0, rate, seek },
         new URL(src).origin,
       );
     },
-    [mediaRef, info.offsetMs, src],
+    [mediaRef, offsetMs, src],
   );
 
   // The plugin reports when it has loaded the recording
@@ -184,7 +187,7 @@ export function LiveDocReplayStage({
       media.removeEventListener('seeked', onSeeked);
       window.clearInterval(timer);
     };
-  }, [mediaRef, info.offsetMs, postTime]);
+  }, [mediaRef, postTime]);
 
   React.useEffect(() => {
     if (!clock) return;
@@ -196,13 +199,14 @@ export function LiveDocReplayStage({
   }, [clock, postTime]);
 
   const playbackMs = clock ? clock.seconds * 1000 : mediaMs;
-  const onscreenMs = playbackMs + info.offsetMs;
+  const onscreenMs = playbackMs + offsetMs;
+  const showDocument = !!info && onscreenMs >= 0;
   // Screen share: full view while one was on, kept on the clock (muted: the voice is the media)
   const shot = shotAt(shots, playbackMs);
   const screen =
     shot && coverWithShots
       ? null
-      : (info.screens.find((sc) => onscreenMs >= sc.startMs && (sc.endMs === null || onscreenMs < sc.endMs)) ?? null);
+      : (info?.screens.find((sc) => onscreenMs >= sc.startMs && (sc.endMs === null || onscreenMs < sc.endMs)) ?? null);
   const shownShot = screen ? null : shot;
   React.useEffect(() => {
     const video = screenRef.current;
@@ -217,13 +221,13 @@ export function LiveDocReplayStage({
   }, [screen, onscreenMs, mediaRef, clock]);
 
   return (
-    <div className={fill ? fillClass : boxClass} style={fill ? stageFillStyle : boxClass ? stageBoxStyle : stageStyle}>
-      {src && (
+    <div role="region" aria-label="LiveDoc" className={fill ? fillClass : boxClass} style={fill ? stageFillStyle : boxClass ? stageBoxStyle : stageStyle}>
+      {info && src && (
         <iframe
           ref={iframeRef}
           src={src}
           title="LiveDoc replay"
-          style={{ ...fillStyle, border: 0, visibility: screen || shownShot ? 'hidden' : 'visible' }}
+          style={{ ...fillStyle, border: 0, visibility: !showDocument || screen || shownShot ? 'hidden' : 'visible' }}
           allow="autoplay *; fullscreen *"
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
@@ -235,9 +239,9 @@ export function LiveDocReplayStage({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={shownShot.url} alt="" style={{ ...fillStyle, objectFit: 'contain', background: '#000', zIndex: 2 }} />
       )}
-      {(!ready || error) && !screen && !shownShot && (
+      {!screen && !shownShot && (!showDocument || !ready || error) && (
         <div style={{ ...fillStyle, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#cbd5e1', fontSize: 14 }}>
-          {error ? `${t('livedoc.errorTitle')}: ${error}` : t('livedoc.loading')}
+          {!showDocument ? 'LiveDoc' : error ? `${t('livedoc.errorTitle')}: ${error}` : t('livedoc.loading')}
         </div>
       )}
       {speaker && (

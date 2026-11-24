@@ -573,7 +573,7 @@
   "toolbar.askHostForCaptions": "호스트에게 자막을 켜 달라고 요청하세요",
   "toolbar.recordingModeLabel": "녹화할 내용",
   "toolbar.recordingMode.ai_notes": "AI 회의록만",
-  "toolbar.recordingMode.ai_notesHint": "AI 비서가 메모합니다",
+  "toolbar.recordingMode.ai_notesHint": "회의 음성을 저장하고 종료 후 자동으로 텍스트로 변환합니다",
   "toolbar.recordingMode.ai_notesLiveHint": "AI 비서가 메모합니다",
   "toolbar.recordingMode.full": "전체 녹화",
   "toolbar.recordingMode.fullHint": "회의 영상을 녹화",

@@ -1,8 +1,10 @@
-import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { Recording } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import { assemblyAiKey } from '@/lib/speechSettings.server';
+import { storeClient } from '@/lib/objectStore';
+import { recordingModeOf } from '@/lib/recordingControls';
 import {
   alignSpeakTranscript,
   SPEAK_LAG_MS,
@@ -22,13 +24,7 @@ const SAVE_STALE_MS = 60 * 1000;
 /** DashScope's answer for a file it processed but found no speech in: done, not failed */
 const NO_SPEECH = 'SUCCESS_WITH_NO_VALID_FRAGMENT';
 
-const s3 = new S3Client({
-  region: process.env.S3_REGION || 'us-west-1',
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY || '',
-    secretAccessKey: process.env.S3_SECRET || '',
-  },
-});
+const s3 = storeClient();
 
 function field(value: unknown, key: string): unknown {
   return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined;
@@ -432,6 +428,16 @@ export async function startRecordingTranscription(
     return advanceRecordingTranscription(recording);
   }
   return claimAndSubmit(recording, regenerate);
+}
+
+/** File-backed AI Notes always transcribes the recorded audio, including speech outside live captions. */
+export async function startAutomaticRecordingTranscription(recording: Recording): Promise<void> {
+  if (recordingModeOf(recording.mode) !== 'ai_notes') {
+    if (!recording.syncTranscript) return;
+    const captionLines = await prisma.meetingTranscript.count({ where: { meetingId: recording.meetingId } });
+    if (captionLines > 0) return;
+  }
+  await startRecordingTranscription(recording);
 }
 
 /**

@@ -321,7 +321,7 @@ export async function POST(
 
     const mode = isRecordingMode(body.mode) ? body.mode : recordingModeOf(meeting.recordingMode);
     // AI Taking Notes: speech becomes text while the meeting runs and no file is written
-    // (lib/liveNotes.ts). AI_NOTES_CAPTURE=file keeps the old audio file instead.
+    // (lib/liveNotes.ts). AI_NOTES_CAPTURE=live opts into this path.
     // If a live notes session of this meeting just ended in failure (its recorder broke before
     // any notes), don't try the same thing again: record the audio file as before.
     const brokeRecently = mode === 'ai_notes' && liveNotesEnabled()

@@ -12,6 +12,7 @@ interface MeetingReadyModalProps {
 }
 
 interface RecordConsentModalProps {
+  notesLive: boolean;
   onClose: () => void;
   /** 确认开始录制 */
   onStart: (mode: RecordingMode) => void;
@@ -54,7 +55,7 @@ export function MeetingReadyModal({ isDesktop, onClose }: MeetingReadyModalProps
 }
 
 /** 开始云录制前的同意确认，并选择录制模式 */
-export function RecordConsentModal({ onClose, onStart }: RecordConsentModalProps) {
+export function RecordConsentModal({ notesLive, onClose, onStart }: RecordConsentModalProps) {
   const { t } = useI18n();
   const [mode, setMode] = React.useState<RecordingMode>('ai_notes');
   return (
@@ -86,7 +87,7 @@ export function RecordConsentModal({ onClose, onStart }: RecordConsentModalProps
                 <span>
                   {t(`toolbar.recordingMode.${m}`)}
                   <span style={{ display: 'block', fontSize: '12px', color: '#6b7280' }}>
-                    {t(m === 'ai_notes' ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
+                    {t(m === 'ai_notes' && notesLive ? 'toolbar.recordingMode.ai_notesLiveHint' : `toolbar.recordingMode.${m}Hint`)}
                   </span>
                 </span>
               </label>

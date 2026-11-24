@@ -8,6 +8,8 @@ import { onRecordingReady } from '@/lib/billing/limits';
 import { hasNoMedia } from '@/lib/liveNotes';
 import { finishLiveNotes } from '@/lib/liveNotesServer';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
+import { recordingModeOf } from '@/lib/recordingControls';
+import { startAutomaticRecordingTranscription } from '@/lib/recordingTranscription';
 import { apiJson, runWithLocale } from '@/lib/apiMsg';
 
 const LIVEKIT_URL = process.env.LIVEKIT_URL || '';
@@ -86,6 +88,11 @@ export async function GET(request: NextRequest) {
           // Billing (no-op when disabled): same metering as egress_ended; rec:<id> is idempotent.
           await onRecordingReady(ready);
           updatedCount++;
+          if (recordingModeOf(ready.mode) === 'ai_notes') {
+            await startAutomaticRecordingTranscription(ready).catch((err) =>
+              console.error('[account recordings sync] transcript failed to start', ready.id, err),
+            );
+          }
         } else if (newStatus === 'FAILED') {
           await prisma.recording.update({
             where: { id: rec.id },

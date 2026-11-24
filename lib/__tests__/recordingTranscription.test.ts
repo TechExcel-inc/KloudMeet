@@ -30,7 +30,7 @@ const db = vi.hoisted(() => {
     findUnique: async () => ({ ...state.row }),
     findUniqueOrThrow: async () => ({ ...state.row }),
   };
-  return { state, prisma: { recording } };
+  return { state, prisma: { recording, meetingTranscript: { count: vi.fn(async () => 1) } } };
 });
 
 vi.mock('@/lib/speechSettings.server', () => ({ assemblyAiKey: async () => process.env.ASSEMBLYAI_API_KEY }));
@@ -47,6 +47,7 @@ vi.mock('@aws-sdk/s3-request-presigner', () => ({
 import {
   SUBMIT_STALE_MS,
   advanceRecordingTranscription,
+  startAutomaticRecordingTranscription,
   startRecordingTranscription,
   transcribeStateOf,
 } from '@/lib/recordingTranscription';
@@ -122,6 +123,15 @@ describe('submitting a recording', () => {
     const state = await submit;
     expect(state.status).toBe('RUNNING');
     expect(row().sttTaskId).toBe('assemblyai:task-1');
+  });
+
+  it('automatically submits AI Notes audio even when transcript sync is off and captions exist', async () => {
+    Object.assign(db.state.row, { mode: 'ai_notes', syncTranscript: false, meetingId: 2 });
+    const submit = startAutomaticRecordingTranscription(row());
+    await vi.waitFor(() => expect(submissions).toBe(1));
+    release();
+    await submit;
+    expect(db.state.row).toMatchObject({ sttStatus: 'RUNNING', sttTaskId: 'assemblyai:task-1' });
   });
 
   it('claims a finished legacy job for fresh AssemblyAI transcription', async () => {

@@ -1,12 +1,12 @@
 # AI Taking Notes
 
-AI Notes Only no longer records audio. While the meeting runs, the room's audio goes to the
-real-time recognizer and comes back as text; nothing is written to storage. When the session
-ends, an AI presentation of the meeting is generated so it is ready when the replay is opened.
+By default, AI Notes Only records the room's audio without video. After the audio file is ready,
+AssemblyAI transcribes it and SkyMeet uses the recorded speaking intervals to match speakers.
+`AI_NOTES_CAPTURE=live` instead opts into the file-free Fun-ASR flow described below.
 
 Full Recording is unchanged, and so are recordings made before this change.
 
-## How it works
+## How live capture works
 
 1. **Start** (`app/api/meetings/[roomName]/record/route.ts`). The recorder (LiveKit web egress
    loading the meeting page as a bot) is started with a stream output that has no destination,
@@ -30,7 +30,7 @@ Full Recording is unchanged, and so are recordings made before this change.
 6. **Replay** (`app/recordings/[id]/page.tsx`, `lib/NotesReplayStage.tsx`). There is no media
    file, so the player keeps time with a silent audio file of the session's length
    (`GET /api/recordings/silence`). The stage shows either the AI presentation or the full
-   timeline with the transcript as captions.
+   timeline in the LiveDoc stage. The transcript is available in the side panel.
 
 ## Deploying
 
@@ -38,14 +38,15 @@ Full Recording is unchanged, and so are recordings made before this change.
   works and simply has no AI presentation.
 - The Fun-ASR relay must be restarted with the app: it now passes on each sentence's times and
   waits for the last sentence when a stream is finished.
-- `DASHSCOPE_API_KEY` is required (as for live captions). `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`
+- Configure and enable AssemblyAI for the default file transcription. `DASHSCOPE_API_KEY` is
+  required for live capture. `DEEPSEEK_API_KEY` or `OPENAI_API_KEY`
   is required for the summary and presentation (as for AI summaries today).
 
 ## Settings
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AI_NOTES_CAPTURE` | `live` | `file` goes back to recording an audio file and transcribing it afterwards |
+| `AI_NOTES_CAPTURE` | `file` | `live` transcribes during the meeting without keeping an audio file |
 | `AI_NOTES_LANGUAGE` | empty | A language hint for the recognizer (`zh`, `en`, `ja`, `ko`). Empty lets it detect the language; it accepts only one hint |
 | `DASHSCOPE_WS_URL` | DashScope's public address | The recognizer's WebSocket address, if a workspace address should be used |
 

@@ -4644,6 +4644,7 @@ export function VideoConferenceComponent(props: {
           {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
           {showRecordPopup && canRecordHere && (
             <RecordConsentModal
+              notesLive={recordingState.notesLive === true}
               onClose={() => setShowRecordPopup(false)}
               onStart={(mode) => {
                 setShowRecordPopup(false);

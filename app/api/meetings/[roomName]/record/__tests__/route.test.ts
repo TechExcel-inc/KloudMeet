@@ -113,7 +113,7 @@ const start = (mode: string) => post({ action: 'start', mode, pageUrl: 'https://
 const attach = () => post({ action: 'attach-livedoc', recordingId: 1, livedocInstanceId: '42', livedocToken: 'token' });
 
 beforeEach(() => {
-  delete process.env.AI_NOTES_CAPTURE;
+  process.env.AI_NOTES_CAPTURE = 'live';
   db.state.meeting = {
     id: 3, roomName: 'room-1', createdByMemberId: 11, meetingRoles: null, kloudMeetingId: null,
     recordingMode: 'full', recordingHostOnly: true, recordingSyncTranscript: true,
@@ -220,11 +220,12 @@ describe('starting AI Notes Only', () => {
     expect(db.state.recordings).toHaveLength(1);
   });
 
-  it('records an audio file when the server is set to keep one', async () => {
-    process.env.AI_NOTES_CAPTURE = 'file';
+  it('records an audio file by default', async () => {
+    delete process.env.AI_NOTES_CAPTURE;
     const { body } = await start('ai_notes');
     expect(egress.startWebEgress).toHaveBeenCalledTimes(1);
     expect(egress.startWebEgress.mock.calls[0][1]).toBeInstanceOf(EncodedFileOutput);
+    expect(egress.startWebEgress.mock.calls[0][2]).toEqual({ audioOnly: true, videoOnly: false });
     expect(db.state.recordings[0].storageProvider).toBe('S3');
     expect(body.state?.notesLive).toBe(false);
   });
@@ -285,7 +286,7 @@ describe('recording state for the meeting', () => {
     expect(await state()).toMatchObject({ active: false, notesLive: true });
     process.env.AI_NOTES_CAPTURE = 'file';
     expect(await state()).toMatchObject({ active: false, notesLive: false });
-    delete process.env.AI_NOTES_CAPTURE;
+    process.env.AI_NOTES_CAPTURE = 'live';
     await start('ai_notes');
     // A running session answers for itself, whatever the setting is now.
     process.env.AI_NOTES_CAPTURE = 'file';

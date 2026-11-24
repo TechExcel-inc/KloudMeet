@@ -1909,11 +1909,6 @@
   width: 100%;
 }
 
-.actionSheetItem[data-recording-mode][aria-checked='false'] {
-  background: #fff;
-  color: #111827;
-}
-
 /* Destructive rows (End meeting for everyone / Stop recording) */
 .actionSheetItemDanger,
 .actionSheetItemDanger:hover {

@@ -111,6 +111,7 @@ export async function GET(
     // 生成 S3 预签名播放 URL（1小时有效期）
     let streamUrl: string | null = null;
     const noMedia = hasNoMedia(recording);
+    const notesOnly = recordingModeOf(recording.mode) === 'ai_notes';
     if (noMedia) {
       // AI Taking Notes kept no audio: replay keeps time with a silent file of the session's length.
       const lastLine = recording.meeting?.transcripts.reduce((max, line) => Math.max(max, line.offsetSeconds ?? 0), 0) ?? 0;
@@ -185,9 +186,10 @@ export async function GET(
     // AI Taking Notes: the AI presentation of the meeting. It is made when the session ends; if
     // that didn't happen (the server restarted meanwhile), opening the replay starts it.
     let presentation: PresentationState = NO_PRESENTATION;
-    if (noMedia) {
+    if (noMedia || notesOnly) {
       presentation = await loadPresentation(recording.meetingId);
-      if (presentation.status === 'NONE' && (recording.meeting?.transcripts.length ?? 0) > 0) {
+      if (presentation.status === 'NONE' && (noMedia || recording.sttStatus === 'SUCCEEDED')
+        && (recording.meeting?.transcripts.length ?? 0) > 0) {
         schedulePresentation(recording.meetingId, { memberId: recording.teamMemberId });
         presentation = { status: 'GENERATING', content: null };
       }
@@ -216,7 +218,7 @@ export async function GET(
         status: recording.status,
         createdAt: recording.createdAt,
         streamUrl,
-        notesOnly: recordingModeOf(recording.mode) === 'ai_notes',
+        notesOnly,
         recordedBy: recording.teamMember,
         transcribe: transcribeStateOf(recording),
         livedoc,

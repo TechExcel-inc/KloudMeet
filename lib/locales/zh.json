@@ -573,7 +573,7 @@
   "toolbar.askHostForCaptions": "请主持人开启字幕",
   "toolbar.recordingModeLabel": "录制内容",
   "toolbar.recordingMode.ai_notes": "仅 AI 纪要",
-  "toolbar.recordingMode.ai_notesHint": "AI 助手记笔记",
+  "toolbar.recordingMode.ai_notesHint": "保存会议音频，会后自动转写",
   "toolbar.recordingMode.ai_notesLiveHint": "AI 助手记笔记",
   "toolbar.recordingMode.full": "完整录制",
   "toolbar.recordingMode.fullHint": "录下会议上的整段画面",

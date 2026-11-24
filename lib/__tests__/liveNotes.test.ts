@@ -16,8 +16,8 @@ import { parseByteRange, silentWavChunks, silentWavHeader, silentWavSize } from 
 const sentence = { stream: 1_700_000_000_000, id: 3, startMs: 1_700_000_004_000, endMs: 1_700_000_006_500, text: ' hello ' };
 
 describe('live notes settings', () => {
-  it('takes live notes unless the server is set to keep a file', () => {
-    expect(liveNotesEnabled({})).toBe(true);
+  it('takes live notes only when explicitly enabled', () => {
+    expect(liveNotesEnabled({})).toBe(false);
     expect(liveNotesEnabled({ AI_NOTES_CAPTURE: 'live' })).toBe(true);
     expect(liveNotesEnabled({ AI_NOTES_CAPTURE: ' File ' })).toBe(false);
   });
