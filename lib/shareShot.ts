@@ -55,9 +55,10 @@ export function shotAt(shots: readonly ShareShot[], ms: number): ShareShot | nul
   return found;
 }
 
-/** 截图相对这个起点存毫秒：有活文档用它的时间轴，否则用录制创建时间。 */
+/** 截图起点在同一次录制中保持固定。旧录制可能在创建记录之前就启动了活文档。 */
 export function shotAnchor(recording: { livedocStartedAt: Date | null; createdAt: Date }): Date {
-  return recording.livedocStartedAt ?? recording.createdAt;
+  const { livedocStartedAt, createdAt } = recording;
+  return livedocStartedAt && livedocStartedAt < createdAt ? livedocStartedAt : createdAt;
 }
 
 /** shotOffset — 某个时刻在截图时间轴上的毫秒 */

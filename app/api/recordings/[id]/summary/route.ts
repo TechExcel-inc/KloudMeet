@@ -11,7 +11,7 @@ import { parsePauseSpans, pauseRangesInMedia, recordingModeOf } from '@/lib/reco
 import { hasNoMedia, silenceUrl } from '@/lib/liveNotes';
 import { NO_PRESENTATION, type PresentationState } from '@/lib/meetingPresentation';
 import { loadPresentation, schedulePresentation } from '@/lib/meetingPresentationServer';
-import { SHOT_KIND, type ShareShot } from '@/lib/shareShot';
+import { SHOT_KIND, shotAnchor, type ShareShot } from '@/lib/shareShot';
 import { finishScreenSections } from '@/lib/livedoc/screenSections';
 import { isPresenceKind, type PresenceEvent } from '@/lib/livedoc/presence';
 import { isInternalMember } from '@/lib/internalStaff.server';
@@ -127,6 +127,7 @@ export async function GET(
       }
     }
 
+    const mediaStart = recording.mediaStartedAt ?? recording.createdAt;
     // LiveDoc Full Recording: the replay shows LiveDoc (Kloud's saved actions) and the screen
     // shares on the voice's clock. Kloud time (ms) = media time (ms) + offsetMs.
     let livedoc: {
@@ -136,10 +137,9 @@ export async function GET(
       screens: Array<{ url: string; startMs: number; endMs: number | null }>;
     } | null = null;
     if (recording.kind === 'livedoc_full' && recording.livedocRecordingId && recording.meeting?.kloudMeetingId) {
-      const offsetMs =
-        recording.mediaStartedAt && recording.livedocStartedAt
-          ? recording.mediaStartedAt.getTime() - recording.livedocStartedAt.getTime()
-          : 0;
+      const offsetMs = recording.livedocStartedAt
+        ? mediaStart.getTime() - recording.livedocStartedAt.getTime()
+        : 0;
       const screens = [];
       for (const section of recording.sections) {
         if (section.kind !== 'screen' || section.startMs === null) continue;
@@ -163,6 +163,7 @@ export async function GET(
     }
 
     const shots: ShareShot[] = [];
+    const shotOffsetMs = shotAnchor(recording).getTime() - mediaStart.getTime();
     for (const section of recording.sections) {
       if (section.kind !== SHOT_KIND || section.startMs === null) continue;
       try {
@@ -173,8 +174,8 @@ export async function GET(
         );
         shots.push({
           url,
-          startMs: onPlayClock(recording, section.startMs),
-          endMs: section.endMs === null ? null : onPlayClock(recording, section.endMs),
+          startMs: section.startMs + shotOffsetMs,
+          endMs: section.endMs === null ? null : section.endMs + shotOffsetMs,
         });
       } catch (e) {
         console.error('[replay summary] S3 presign failed for shot', section.id, e);
@@ -262,22 +263,6 @@ export async function GET(
   }
 
   });
-}
-
-/**
- * 截图入库时相对活文档起点（没有则相对录制创建时间）。
- * 回放时钟：有活文档就是那条时间轴，否则是声音文件自己的时间。
- */
-function onPlayClock(
-  recording: { kind: string; livedocStartedAt: Date | null; createdAt: Date; mediaStartedAt: Date | null },
-  startMs: number,
-): number {
-  const stored = recording.livedocStartedAt ?? recording.createdAt;
-  const shown =
-    recording.kind === 'livedoc_full' && recording.livedocStartedAt
-      ? recording.livedocStartedAt
-      : recording.mediaStartedAt ?? recording.createdAt;
-  return startMs - (shown.getTime() - stored.getTime());
 }
 
 /** LiveDoc Full presence. Missing table (SQL not applied yet) leaves the replay without the people window. */

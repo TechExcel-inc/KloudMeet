@@ -8,7 +8,7 @@ import type { RecordingState } from './recordingControls';
 
 /**
  * LiveDoc Full Recording: tells this page's LiveDoc plugin when recording starts and stops.
- * The page that started it also "announces" (the plugin then records the view mode and the open
+ * The page that attached it also "announces" (the plugin then records the view mode and the open
  * document and page, so the replay knows what was on stage from the first second).
  * A plugin that loads later (late joiner, LiveDoc opened later) is told again once it is ready.
  *
@@ -18,12 +18,12 @@ import type { RecordingState } from './recordingControls';
  */
 export function useLivedocRecordingBridge({
   state,
-  startedHereRef,
+  announceRecordingIdRef,
   screenShareOn,
   room,
 }: {
   state: RecordingState;
-  startedHereRef: React.MutableRefObject<boolean>;
+  announceRecordingIdRef: React.MutableRefObject<number | null>;
   screenShareOn: boolean;
   room: Room;
 }) {
@@ -31,7 +31,6 @@ export function useLivedocRecordingBridge({
   const recordingId = state.livedocRecordingId ?? 0;
   const postedRef = React.useRef(false);
   const screenShareOnRef = React.useRef(screenShareOn);
-  screenShareOnRef.current = screenShareOn;
 
   // --- Start / stop recording ---
   React.useEffect(() => {
@@ -41,14 +40,14 @@ export function useLivedocRecordingBridge({
       postToLiveDocIframe({
         type: 'Kloud-RecordingStarted',
         recordingId,
-        announce: startedHereRef.current,
+        announce: announceRecordingIdRef.current === recordingId,
         mode: screenShareOn ? 3 : 0,
       });
     } else if (!recording && postedRef.current) {
       postedRef.current = false;
       postToLiveDocIframe({ type: 'Kloud-RecordingStopped' });
     }
-  }, [recording, recordingId, startedHereRef, screenShareOn]);
+  }, [recording, recordingId, announceRecordingIdRef, screenShareOn]);
 
   // --- Late-join / reload: re-announce when the plugin finishes loading ---
   React.useEffect(() => {

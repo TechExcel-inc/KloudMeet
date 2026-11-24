@@ -290,6 +290,7 @@ export function LiveDocView({
         key={`${livedocInstanceId}-${baseUrl}-${iframeReloadKey}`}
         id="sharedIframePlayer"
         title="LiveDoc"
+        data-livedoc-ready={pluginLoaded ? 'true' : undefined}
         src={src}
         className={styles.iframe}
         allow="clipboard-read; clipboard-write;fullscreen *; autoplay *"

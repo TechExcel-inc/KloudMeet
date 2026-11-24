@@ -1009,8 +1009,10 @@ export default function ReplayPage() {
   const [meetingDialog, setMeetingDialog] = useState<'edit' | 'link' | null>(null);
   const [regenerateTranscript, setRegenerateTranscript] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  // AI Taking Notes replay: what the stage shows. null = not chosen yet (the presentation when there is one).
-  const [stageMode, setStageMode] = useState<NotesStageMode | null>(null);
+  // AI Taking Notes opens on the meeting timeline. The viewer can switch to the presentation.
+  const [stageMode, setStageMode] = useState<NotesStageMode>('timeline');
+  const [failedLiveDocReplay, setFailedLiveDocReplay] = useState<LiveDocReplayInfo['recordingId'] | null>(null);
+  const onLiveDocFailure = useCallback((recordingId: number) => setFailedLiveDocReplay(recordingId), []);
   const [presentation, setPresentation] = useState<PresentationState>(NO_PRESENTATION);
   const [regenerating, setRegenerating] = useState(false);
   const [langMenuOpen, setLangMenuOpen] = useState(false);
@@ -1020,7 +1022,7 @@ export default function ReplayPage() {
   );
 
   const videoRef = useRef<HTMLVideoElement>(null);
-  const stageRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
   const langMenuRef = useRef<HTMLDivElement>(null);
   const avatarMenuRef = useRef<HTMLDivElement>(null);
 
@@ -1161,7 +1163,7 @@ export default function ReplayPage() {
 
   useEffect(() => {
     const onFullscreenChange = () => {
-      setFullscreen((current) => stageRef.current && document.fullscreenElement === stageRef.current
+      setFullscreen((current) => pageRef.current && document.fullscreenElement === pageRef.current
         ? 'native' : current === 'native' ? null : current);
     };
     document.addEventListener('fullscreenchange', onFullscreenChange);
@@ -1178,10 +1180,10 @@ export default function ReplayPage() {
   }, [fullscreen]);
 
   const enterFullscreen = () => {
-    const stage = stageRef.current;
-    if (!stage || fullscreen) return;
-    if (document.fullscreenEnabled && stage.requestFullscreen) {
-      void stage.requestFullscreen().catch(() => setFullscreen('fallback'));
+    const page = pageRef.current;
+    if (!page || fullscreen) return;
+    if (document.fullscreenEnabled && page.requestFullscreen) {
+      void page.requestFullscreen().catch(() => setFullscreen('fallback'));
     } else {
       setFullscreen('fallback');
     }
@@ -1359,16 +1361,18 @@ export default function ReplayPage() {
       : '';
   const viewPath = recordingReplayPath(recording.shareKey || id);
   const showPanel = panelVisible;
-  const livedoc = recording.livedoc ?? null;
+  const linkedLiveDoc = recording.livedoc ?? null;
+  const livedoc = linkedLiveDoc && linkedLiveDoc.recordingId !== failedLiveDocReplay
+    && currentTime * 1000 + linkedLiveDoc.offsetMs >= 0 ? linkedLiveDoc : null;
   const notesOnly = !!recording.notesOnly;
+  const recordingType = t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full');
   const noteShot = livedoc ? null : shotAt(recording.shots ?? [], currentTime * 1000);
   // AI Taking Notes kept no audio or video: the stage shows the AI presentation, or the meeting's
   // own timeline with the transcript as captions (a LiveDoc or shared screenshot, when there is one).
   const notesReplay = recording.hasMedia === false;
-  const notesMode: NotesStageMode =
-    stageMode ?? (presentation.status === 'READY' || presentation.status === 'GENERATING' ? 'presentation' : 'timeline');
+  const notesMode = stageMode;
   const presenting = notesReplay && notesMode === 'presentation';
-  const captioning = notesReplay && !presenting && !livedoc && !noteShot;
+  const captioning = (notesReplay || notesOnly) && !presenting && !livedoc && !noteShot;
   const showCaptionOverlay = !presenting && !captioning && hasTranscripts;
   // SmartCam: whoever is speaking now (from the transcript)
   const speakingNow = realSpeakerSegments.find((sp) =>
@@ -1424,7 +1428,7 @@ export default function ReplayPage() {
 
   return (
     <AvatarContext.Provider value={{ photos: avatarPhotos, tones: avatarTones }}>
-    <div className={s.page}>
+    <div ref={pageRef} className={s.page} data-fullscreen={fullscreen ?? undefined}>
       {/* ── Header ── */}
       <header className={s.header}>
         <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
@@ -1432,6 +1436,7 @@ export default function ReplayPage() {
         </Link>
         <div className={s.titleBlock}>
           <h1 className={s.title} title={meetingTitle}>{meetingTitle}</h1>
+          <span className={s.recordingType}>{recordingType}</span>
         </div>
         <div className={s.headerRight}>
           {/* Help */}
@@ -1588,7 +1593,7 @@ export default function ReplayPage() {
       </header>
 
       {/* Host: people asking to watch (Protected meetings) */}
-      {recording.canManage && (
+      {recording.canManage && !fullscreen && (
         <div style={{ flex: 'none', width: '100%', maxWidth: 1600, margin: '12px auto 0', padding: '0 20px' }}>
           <RecordingRequestsBar recordingKey={id} />
         </div>
@@ -1597,12 +1602,11 @@ export default function ReplayPage() {
       {/* ── Main: watch on the left, read on the right ── */}
       <main className={showPanel ? s.layout : `${s.layout} ${s.layoutWide}`}>
         <section className={s.stage}>
-          <div ref={stageRef} className={s.videoCard} data-fullscreen={fullscreen ?? undefined}
-          >
+          <div className={s.videoCard} data-fullscreen={fullscreen ?? undefined}>
             {smartPlay && (
               <SmartPlay key={`${id}:${smartPlay.writingId}`} recordingKey={id} writingId={smartPlay.writingId}
-                presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={livedoc}
-                viewerName={userInfo?.displayName || ''} notesOnly={notesOnly} scriptHost={scriptHost}
+                presentation={smartPlay.presentation} shots={recording.shots ?? []} transcript={transcripts} liveDoc={linkedLiveDoc}
+                viewerName={userInfo?.displayName || ''} scriptHost={scriptHost}
                 captionsOpen={captionsOpen} onJump={seekTo} autoPlay={smartPlay.autoPlay} chartHost={chartHost} playbackHost={playbackHost}
                 renderSpeakerChart={(lanes, duration, onSeek) => (
                   <section className={s.card} aria-label={t('replay.write.speakerChart')}>
@@ -1631,6 +1635,7 @@ export default function ReplayPage() {
             {!smartPlay && livedoc && !presenting && (
               <LiveDocReplayStage
                 info={livedoc}
+                onFailure={onLiveDocFailure}
                 mediaRef={videoRef}
                 viewerName={userInfo?.displayName || ''}
                 speaker={recording.presence && recording.presence.length > 0 ? null : replaySpeaker}
@@ -1679,16 +1684,11 @@ export default function ReplayPage() {
               </div>
             )}
             {/* The LiveDoc or a shared screenshot has the stage: the presentation is one click away */}
-            {!smartPlay && (
+            {!smartPlay && notesReplay && !presenting && !captioning && (
               <div className={s.stageCorner}>
-                <span className={s.stageType}>
-                  {t(notesOnly ? 'toolbar.recordingMode.ai_notes' : 'toolbar.recordingMode.full')}
-                </span>
-                {notesReplay && !presenting && !captioning && (
-                  <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
-                    {t('replay.present.modePresentation')}
-                  </button>
-                )}
+                <button type="button" className={s.presentBtn} onClick={() => setStageMode('presentation')}>
+                  {t('replay.present.modePresentation')}
+                </button>
               </div>
             )}
             <video

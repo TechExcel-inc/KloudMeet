@@ -8,9 +8,10 @@ import { newShareKey } from '@/lib/recordingShare';
 import { SPEAK_TOKEN_PARAM } from '@/lib/recordingSpeakActivity';
 import { checkReplayQuota } from '@/lib/billing/limits';
 import { verifyParticipant } from '@/lib/livekitParticipantAuth';
-import { endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
+import { closePendingLivedocAttachment, endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
 import { startScreenSectionsForRoom, stopScreenSections } from '@/lib/livedoc/screenSections';
 import { snapshotPresence } from '@/lib/livedoc/presenceRecord';
+import { shotAnchor, shotOffset } from '@/lib/shareShot';
 import {
   closePause,
   isRecordingMode,
@@ -47,11 +48,6 @@ function findActiveRecording(meetingId: number) {
   });
 }
 
-/** 会议开过活文档，AI Notes Only 才能把活文档动作一起录下来。 */
-function meetingHasLivedoc(meeting: MeetingRow): boolean {
-  return !!meeting.kloudMeetingId;
-}
-
 function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingState {
   // 正在录的这场用它自己的模式；否则用会议上下一次会用的模式。旧的四种在这里折成两种。
   // 不落文件的就是 AI Notes Only，避免旧行 mode 仍是默认 full 时，菜单总是停在完整录制。
@@ -60,6 +56,7 @@ function stateOf(meeting: MeetingRow, active: RecordingRow | null): RecordingSta
   const livedoc = active?.kind === 'livedoc_full';
   return {
     active: !!active,
+    recordingId: active?.id,
     paused: !!active?.pausedAt,
     mode: recordingModeOf(mode),
     hostOnly: meeting.recordingHostOnly,
@@ -125,7 +122,6 @@ export async function POST(
 
     const body = await request.json();
     const { action, pageUrl } = body;
-    // LiveDoc Full Recording: the Kloud user token of whoever starts / stops (their LiveDoc login)
     const livedocToken = typeof body.livedocToken === 'string' && body.livedocToken ? body.livedocToken : null;
     const teamMemberId = member.id;
 
@@ -182,6 +178,52 @@ export async function POST(
       return apiJson({ error: 'Only the host can record this meeting', code: 'RECORDING_NOT_ALLOWED' }, { status: 403 });
     }
 
+    if (action === 'attach-livedoc') {
+      const active = await findActiveRecording(meeting.id);
+      if (!active || active.id !== body.recordingId || stateOf(meeting, active).mode !== 'ai_notes') {
+        return apiJson({ state: stateOf(meeting, active) });
+      }
+      if (active.livedocRecordingId) return apiJson({ state: stateOf(meeting, active) });
+      const kloudMeetingId = meeting.kloudMeetingId;
+      if (!livedocToken) return apiJson({ error: 'LiveDoc token not provided' }, { status: 400 });
+      if (!kloudMeetingId || String(kloudMeetingId) !== body.livedocInstanceId) {
+        return apiJson({ pending: true, needsBinding: true }, { status: 202 });
+      }
+
+      // Claim the attachment before calling Kloud so two participants cannot start it twice.
+      const pending = { id: active.id, status: 'PROCESSING', deletedAt: null, livedocRecordingId: null };
+      const claimed = await prisma.recording.updateMany({
+        where: { ...pending, livedocToken: null },
+        data: { livedocToken },
+      });
+      if (!claimed.count) return apiJson({ pending: true }, { status: 202 });
+
+      let livedocRecordingId: number | null = null;
+      let attached = false;
+      try {
+        livedocRecordingId = await startKloudRecording(kloudMeetingId, livedocToken);
+        const data = { kind: 'livedoc_full', livedocRecordingId, livedocStartedAt: new Date() };
+        const updated = await prisma.recording.updateMany({ where: { ...pending, livedocToken }, data });
+        attached = updated.count > 0;
+        if (attached) {
+          await snapshotPresence(roomName).catch((e) => console.error('[meetings record] presence snapshot failed', e));
+          const current = await findActiveRecording(meeting.id);
+          return apiJson({ attached: current?.id === active.id, state: stateOf(meeting, current) });
+        }
+      } catch (e) {
+        console.warn('[meetings record] LiveDoc attachment failed', e);
+      } finally {
+        if (!attached) {
+          if (livedocRecordingId) await endKloudRecording(kloudMeetingId, livedocToken);
+          await prisma.recording.updateMany({
+            where: { id: active.id, livedocRecordingId: null, livedocToken },
+            data: { livedocToken: null },
+          });
+        }
+      }
+      return apiJson({ pending: true }, { status: 202 });
+    }
+
     // The recording page saw a screen share start: record it (also without LiveKit's webhook).
     if (action === 'screen') {
       const active = await findActiveRecording(meeting.id);
@@ -220,6 +262,11 @@ export async function POST(
       if (activeRecordings.length === 0) {
         return apiJson({ error: 'No active recording found' }, { status: 404 });
       }
+
+      const notesRecordings = activeRecordings.filter((rec) => stateOf(meeting, rec).mode === 'ai_notes');
+      if (notesRecordings.length) {
+        await closePendingLivedocAttachment({ id: { in: notesRecordings.map(({ id }) => id) } });
+      }
       
       // AI Taking Notes: let the recorder hand in the sentence being spoken before it is shut down.
       if (activeRecordings.some((rec) => hasNoMedia(rec) && !rec.pausedAt)) {
@@ -241,11 +288,13 @@ export async function POST(
         } catch (e) {
           console.error('Failed to stop egress', rec.storageKey, e);
         }
-        if (rec.kind === 'livedoc_full') {
+        const latest = rec.kind === 'livedoc_full' || stateOf(meeting, rec).mode !== 'ai_notes'
+          ? rec : await prisma.recording.findUnique({ where: { id: rec.id } }) ?? rec;
+        if (latest.kind === 'livedoc_full') {
           await stopScreenSections(rec.id);
-          await finishLivedocRecording(rec, meeting.kloudMeetingId, livedocToken);
+          await finishLivedocRecording(latest, meeting.kloudMeetingId, livedocToken);
         }
-        const openMs = Math.max(0, now.getTime() - (rec.livedocStartedAt ?? rec.createdAt).getTime());
+        const openMs = shotOffset(shotAnchor(latest), now);
         await prisma.recordingSection.updateMany({
           where: { recordingId: rec.id, kind: 'shot', endMs: null },
           data: { endMs: openMs },
@@ -353,21 +402,6 @@ export async function POST(
       return apiJson({ error: 'pageUrl must be this meeting page' }, { status: 400 });
     }
 
-    // AI Notes Only 且会议已有活文档：Kloud 记下活文档动作，媒体只录音频。
-    // 完整录制不走 LiveDoc，网页出口录整段会议画面（共享也在这段视频里）。
-    const livedocFull = mode === 'ai_notes' && meetingHasLivedoc(meeting) && !!livedocToken;
-    let livedocRecordingId: number | null = null;
-    let livedocStartedAt: Date | null = null;
-    if (livedocFull && meeting.kloudMeetingId && livedocToken) {
-      try {
-        livedocRecordingId = await startKloudRecording(meeting.kloudMeetingId, livedocToken);
-      } catch (e) {
-        console.error('[meetings record] Kloud start_recording failed', e);
-        return apiJson({ error: 'LiveDoc recording could not start', code: 'LIVEDOC_RECORDING_FAILED' }, { status: 502 });
-      }
-      livedocStartedAt = new Date();
-    }
-
     const audioOnly = mode === 'ai_notes';
     // Use startWebEgress so that LiveKit runs a headless browser to record exactly what's on the screen
     // Adding ?isBot=true so the frontend component skips the PreJoin waiting room
@@ -378,40 +412,23 @@ export async function POST(
 
     let info;
     let noMedia = false;
-    try {
-      if (wantLiveNotes) {
-        // The recorder needs an output to run, so it gets a stream with no destination: the
-        // page is loaded and plays the room's audio, and nothing is written or sent anywhere.
-        // The page itself sends that audio to the recognizer (lib/useLiveNotesStreamer.ts).
-        try {
-          info = await egressClient.startWebEgress(
-            targetUrl,
-            new StreamOutput({ protocol: StreamProtocol.RTMP, urls: [] }),
-            { audioOnly: true, videoOnly: false },
-          );
-          noMedia = true;
-        } catch (e) {
-          if (!fileOutput) throw e;
-          console.error('[meetings record] live notes recorder failed to start; recording a file instead', e);
-        }
-      }
-      if (!info) {
-        if (!fileOutput) throw new Error('Cloud storage (S3/OSS) configuration is missing');
+    if (wantLiveNotes) {
+      // The recorder gets a stream without a destination. Its page sends audio to the recognizer.
+      try {
         info = await egressClient.startWebEgress(
           targetUrl,
-          fileOutput, // The new standard requires passing the output definition object natively here
-          {
-            audioOnly,
-            videoOnly: false,
-          }
+          new StreamOutput({ protocol: StreamProtocol.RTMP, urls: [] }),
+          { audioOnly: true, videoOnly: false },
         );
+        noMedia = true;
+      } catch (e) {
+        if (!fileOutput) throw e;
+        console.error('[meetings record] live notes recorder failed to start; recording a file instead', e);
       }
-    } catch (e) {
-      // Don't leave Kloud recording a meeting that has no media.
-      if (livedocRecordingId && meeting.kloudMeetingId && livedocToken) {
-        await endKloudRecording(meeting.kloudMeetingId, livedocToken);
-      }
-      throw e;
+    }
+    if (!info) {
+      if (!fileOutput) throw new Error('Cloud storage (S3/OSS) configuration is missing');
+      info = await egressClient.startWebEgress(targetUrl, fileOutput, { audioOnly, videoOnly: false });
     }
 
     // Create tracking record
@@ -428,17 +445,8 @@ export async function POST(
         activityToken,
         mode,
         syncTranscript: meeting.recordingSyncTranscript,
-        ...(livedocFull
-          ? { kind: 'livedoc_full', livedocRecordingId, livedocStartedAt, livedocToken }
-          : {}),
       }
     });
-    // AI Notes Only 的共享由共享者截有变化的画面，不另开一路屏幕视频。
-    if (livedocFull) {
-      await snapshotPresence(roomName).catch((e) =>
-        console.error('[meetings record] presence snapshot failed', e),
-      );
-    }
     if (meeting.recordingMode !== mode) {
       await prisma.meeting.update({ where: { id: meeting.id }, data: { recordingMode: mode } });
     }

@@ -64,7 +64,7 @@ export function LiveDocReplayStage({
   info: LiveDocReplayInfo;
   mediaRef?: React.RefObject<HTMLVideoElement | null>;
   clock?: LiveDocReplayClock;
-  onFailure?: () => void;
+  onFailure?: (recordingId: number) => void;
   viewerName: string;
   speaker: ReplaySpeaker | null;
   shots?: ShareShot[];
@@ -85,7 +85,7 @@ export function LiveDocReplayStage({
   const [src, setSrc] = React.useState<string | null>(null);
   const [ready, setReady] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [kloudMs, setKloudMs] = React.useState(0);
+  const [mediaMs, setMediaMs] = React.useState(0);
   const readyRef = React.useRef(false);
   const clockRef = React.useRef(clock);
   clockRef.current = clock;
@@ -93,8 +93,14 @@ export function LiveDocReplayStage({
 
 
   React.useEffect(() => {
-    if (error) onFailure?.();
-  }, [error, onFailure]);
+    if (error) onFailure?.(info.recordingId);
+  }, [error, info.recordingId, onFailure]);
+
+  React.useEffect(() => {
+    if (!onFailure || ready) return;
+    const timer = window.setTimeout(() => onFailure(info.recordingId), 15000);
+    return () => window.clearTimeout(timer);
+  }, [info.recordingId, ready, onFailure]);
 
   // LiveDoc plugin in replay mode, signed in as this viewer's LiveDoc guest
   React.useEffect(() => {
@@ -171,7 +177,7 @@ export function LiveDocReplayStage({
     };
     media.addEventListener('seeked', onSeeked);
     const timer = window.setInterval(() => {
-      setKloudMs(Math.max(0, media.currentTime * 1000 + info.offsetMs));
+      setMediaMs(media.currentTime * 1000);
       if (readyRef.current) postTime(false);
     }, TICK_MS);
     return () => {
@@ -189,9 +195,10 @@ export function LiveDocReplayStage({
     );
   }, [clock, postTime]);
 
-  const onscreenMs = clock ? Math.max(0, clock.seconds * 1000 + info.offsetMs) : kloudMs;
+  const playbackMs = clock ? clock.seconds * 1000 : mediaMs;
+  const onscreenMs = playbackMs + info.offsetMs;
   // Screen share: full view while one was on, kept on the clock (muted: the voice is the media)
-  const shot = shotAt(shots, onscreenMs);
+  const shot = shotAt(shots, playbackMs);
   const screen =
     shot && coverWithShots
       ? null

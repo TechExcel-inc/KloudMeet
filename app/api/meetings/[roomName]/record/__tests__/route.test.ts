@@ -28,6 +28,8 @@ const db = vi.hoisted(() => {
       update: async ({ data }: { data: Row }) => Object.assign(state.meeting, data),
     },
     recording: {
+      findUnique: async ({ where }: { where: { id: number } }) =>
+        state.recordings.find((row) => row.id === where.id) ?? null,
       findFirst: async ({ where }: { where: Row }) =>
         [...state.recordings].reverse().find((row) =>
           row.status === where.status && !row.deletedAt
@@ -35,12 +37,20 @@ const db = vi.hoisted(() => {
           && (where.createdAt === undefined || (row.createdAt as Date) >= (where.createdAt as { gte: Date }).gte)) ?? null,
       findMany: async ({ where }: { where: Row }) => state.recordings.filter((row) => row.status === where.status),
       create: async ({ data }: { data: Row }) => {
-        const row = { id: state.nextId++, createdAt: new Date(), pausedAt: null, pauseSpans: null, deletedAt: null, kind: 'screen_share', ...data };
+        const row = { id: state.nextId++, createdAt: new Date(), pausedAt: null, pauseSpans: null, deletedAt: null, kind: 'screen_share', livedocRecordingId: null, livedocToken: null, ...data };
         state.recordings.push(row);
         return row;
       },
       update: async ({ where, data }: { where: { id: number }; data: Row }) =>
         Object.assign(state.recordings.find((row) => row.id === where.id)!, data),
+      updateMany: async ({ where, data }: { where: Row; data: Row }) => {
+        const rows = state.recordings.filter((row) => Object.entries(where).every(([key, value]) => {
+          if (value && typeof value === 'object' && 'in' in value) return (value.in as unknown[]).includes(row[key]);
+          return row[key] === value;
+        }));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
+      },
     },
     recordingSection: { updateMany: async () => ({ count: 0 }) },
   };
@@ -72,12 +82,19 @@ vi.mock('@/lib/livekitParticipantAuth', () => ({ verifyParticipant: async () => 
 vi.mock('@/lib/billing/limits', () => ({ checkReplayQuota: async () => null }));
 vi.mock('@/lib/livedoc/kloudRecording', () => ({
   startKloudRecording: vi.fn(), endKloudRecording: vi.fn(), finishLivedocRecording: vi.fn(),
+  closePendingLivedocAttachment: async (scope: Row) => {
+    await db.prisma.recording.updateMany({
+      where: { ...scope, status: 'PROCESSING', livedocRecordingId: null },
+      data: { livedocToken: '' },
+    });
+  },
 }));
 vi.mock('@/lib/livedoc/screenSections', () => ({ startScreenSectionsForRoom: vi.fn(), stopScreenSections: vi.fn() }));
-vi.mock('@/lib/livedoc/presenceRecord', () => ({ snapshotPresence: vi.fn() }));
+vi.mock('@/lib/livedoc/presenceRecord', () => ({ snapshotPresence: vi.fn(async () => undefined) }));
 vi.mock('@/lib/liveNotesServer', () => notes);
 
 import { EncodedFileOutput, StreamOutput } from 'livekit-server-sdk';
+import { endKloudRecording, finishLivedocRecording, startKloudRecording } from '@/lib/livedoc/kloudRecording';
 import { GET, POST } from '../route';
 
 const params = { params: Promise.resolve({ roomName: 'room-1' }) };
@@ -93,6 +110,7 @@ async function post(body: Row) {
 }
 
 const start = (mode: string) => post({ action: 'start', mode, pageUrl: 'https://meet.kloud.cn/rooms/room-1?x=1' });
+const attach = () => post({ action: 'attach-livedoc', recordingId: 1, livedocInstanceId: '42', livedocToken: 'token' });
 
 beforeEach(() => {
   delete process.env.AI_NOTES_CAPTURE;
@@ -107,10 +125,50 @@ beforeEach(() => {
   egress.stopEgress.mockClear();
   notes.askRecorderToFlush.mockClear();
   notes.finishLiveNotes.mockClear();
+  vi.mocked(startKloudRecording).mockReset().mockResolvedValue(73);
+  vi.mocked(endKloudRecording).mockClear();
+  vi.mocked(finishLivedocRecording).mockClear();
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
 describe('starting AI Notes Only', () => {
+  it('starts independently of a bound LiveDoc and retries attaching it on the same notes session', async () => {
+    db.state.meeting.kloudMeetingId = 42;
+    vi.mocked(startKloudRecording).mockRejectedValueOnce(new Error('LiveDoc is not ready'));
+    const started = await post({ action: 'start', mode: 'ai_notes', pageUrl: 'https://meet.kloud.cn/rooms/room-1', livedocToken: 'token' });
+    expect(started.status).toBe(200);
+    expect(started.body.state).toMatchObject({ active: true, recordingId: 1, livedocRecordingId: null });
+    expect(startKloudRecording).not.toHaveBeenCalled();
+
+    expect((await attach()).status).toBe(202);
+    expect(db.state.recordings[0]).toMatchObject({ status: 'PROCESSING', livedocToken: null });
+    const attached = await attach();
+    expect(attached.body).toMatchObject({ attached: true, state: { recordingId: 1, livedocRecordingId: 73, notesLive: true } });
+    expect((await attach()).body.state).toMatchObject({ livedocRecordingId: 73 });
+    expect(startKloudRecording).toHaveBeenCalledTimes(2);
+    expect(egress.startWebEgress).toHaveBeenCalledTimes(1);
+
+    await post({ action: 'stop' });
+    expect(finishLivedocRecording).toHaveBeenCalledWith(expect.objectContaining({ livedocToken: 'token' }), 42, null);
+  });
+
+  it('cleans up an attachment that completes after the recording stops', async () => {
+    await start('ai_notes');
+    expect((await attach()).status).toBe(202);
+    db.state.meeting.kloudMeetingId = 42;
+    let resolveStart!: (id: number) => void;
+    vi.mocked(startKloudRecording).mockImplementationOnce(() => new Promise((resolve) => { resolveStart = resolve; }));
+    const pending = attach();
+    await vi.waitFor(() => expect(startKloudRecording).toHaveBeenCalledTimes(1));
+    expect((await attach()).status).toBe(202);
+    expect((await post({ action: 'stop' })).status).toBe(200);
+    resolveStart(73);
+    expect((await pending).status).toBe(202);
+    expect(endKloudRecording).toHaveBeenCalledWith(42, 'token');
+    expect(db.state.recordings[0]).toMatchObject({ livedocRecordingId: null });
+  });
+
   it('runs the recorder with no file and no stream destination, and marks the session as having no media', async () => {
     const { status, body } = await start('ai_notes');
     expect(status).toBe(200);

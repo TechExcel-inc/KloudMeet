@@ -12,14 +12,9 @@ interface MeetingReadyModalProps {
 }
 
 interface RecordConsentModalProps {
-  /** 当前选中的云录制模式 */
-  mode: RecordingMode;
-  /** AI Notes Only keeps no audio on this server: say so under the option */
-  notesLive?: boolean;
-  onModeChange: (mode: RecordingMode) => void;
   onClose: () => void;
   /** 确认开始录制 */
-  onStart: () => void;
+  onStart: (mode: RecordingMode) => void;
 }
 
 /** 主持人首次入会后的「会议已就绪」弹窗，可复制邀请链接 */
@@ -59,8 +54,9 @@ export function MeetingReadyModal({ isDesktop, onClose }: MeetingReadyModalProps
 }
 
 /** 开始云录制前的同意确认，并选择录制模式 */
-export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: RecordConsentModalProps) {
+export function RecordConsentModal({ onClose, onStart }: RecordConsentModalProps) {
   const { t } = useI18n();
+  const [mode, setMode] = React.useState<RecordingMode>('ai_notes');
   return (
     <div className="kloud-modal-overlay" onMouseDown={onClose}>
       <div className="kloud-modal kloud-modal-center" onMouseDown={e => e.stopPropagation()}>
@@ -76,8 +72,7 @@ export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: Rec
           <p style={{ fontSize: '13px', color: '#4b5563', lineHeight: 1.6, margin: '0 0 16px' }}>
             {t('toolbar.consentNotice')}
           </p>
-          {/* Cloud recording mode: chosen before starting (can change while recording) */}
-          <div role="radiogroup" aria-label={t('toolbar.recordingModeLabel')} style={{ margin: '0 0 20px' }}>
+          <div role="radiogroup" aria-label={t('toolbar.recordingModeLabel')} style={{ margin: '0 0 20px', colorScheme: 'light' }}>
             <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', margin: '0 0 8px' }}>{t('toolbar.recordingModeLabel')}</div>
             {RECORDING_MODES.map((m) => (
               <label key={m} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '6px 0', cursor: 'pointer', fontSize: '13px', color: '#111827' }}>
@@ -85,7 +80,7 @@ export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: Rec
                   type="radio"
                   name="km-recording-mode"
                   checked={mode === m}
-                  onChange={() => onModeChange(m)}
+                  onChange={() => setMode(m)}
                   style={{ marginTop: '2px', accentColor: '#5e5ce6' }}
                 />
                 <span>
@@ -99,7 +94,7 @@ export function RecordConsentModal({ mode, onModeChange, onClose, onStart }: Rec
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button className="kloud-btn-text" onClick={onClose}>{t('common.cancel')}</button>
-            <button className="kloud-btn-primary" onClick={onStart}>{t('toolbar.startRecording')}</button>
+            <button className="kloud-btn-primary" onClick={() => onStart(mode)}>{t('toolbar.startRecording')}</button>
           </div>
         </div>
       </div>

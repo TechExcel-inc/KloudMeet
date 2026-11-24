@@ -43,6 +43,7 @@ export function isRecordingOption(value: unknown): value is RecordingOption {
 /** What everyone in the meeting needs to know about recording. */
 export interface RecordingState {
   active: boolean;
+  recordingId?: number;
   paused: boolean;
   /** ai_notes 只录音频；full 录会议视频 */
   mode: RecordingMode;

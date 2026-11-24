@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/db';
 import {
   buildMeetingServerUrl,
@@ -24,7 +25,7 @@ async function callRecording<T>(
   ensureHostBypassesProxy(url);
   let res: Response;
   try {
-    res = await fetch(url, { method: 'POST', headers: { UserToken: userToken, ...headers } });
+    res = await fetch(url, { method: 'POST', headers: { UserToken: userToken, ...headers }, signal: AbortSignal.timeout(8000) });
   } catch (error) {
     throw new Error(`Kloud ${path} unavailable: ${formatUpstreamFetchError(error)}`);
   }
@@ -39,6 +40,14 @@ export async function startKloudRecording(kloudMeetingId: number, userToken: str
     throw new Error(`Kloud start_recording: ${result.msg ?? 'error'} (code=${result.code})`);
   }
   return result.data;
+}
+
+/** Close the attachment slot while egress is stopping and the recording still says PROCESSING. */
+export async function closePendingLivedocAttachment(scope: Prisma.RecordingWhereInput): Promise<void> {
+  await prisma.recording.updateMany({
+    where: { ...scope, status: 'PROCESSING', livedocRecordingId: null },
+    data: { livedocToken: '' },
+  });
 }
 
 /**

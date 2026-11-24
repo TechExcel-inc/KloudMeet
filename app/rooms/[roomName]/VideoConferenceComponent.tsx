@@ -16,7 +16,9 @@ import { KloudMeetToolbar, ViewMode, WebcamLayoutMode } from '@/lib/KloudMeetToo
 import type { LiveDocDesignItem } from '@/lib/LiveDocAiPanel';
 import { KloudVideoConference } from '@/lib/KloudVideoConference';
 import { HelpModal } from '@/lib/HelpModal';
+import { getLiveDocIframe } from '@/lib/chatProtocol';
 import {
+  bindLivedocToMeeting,
   getLiveDocStageAccount,
   resolveJitsiInstanceId,
   resolveLiveDocEmbedRole,
@@ -289,10 +291,12 @@ export function VideoConferenceComponent(props: {
   // Recording state everyone in the meeting shares (server is the source of truth; whoever
   // changes it broadcasts RECORDING_STATE). Before, only the person recording knew.
   const [recordingState, setRecordingState] = React.useState<RecordingState>(IDLE_RECORDING_STATE);
+  const activeRecordingIdRef = React.useRef(recordingState.recordingId);
+  activeRecordingIdRef.current = recordingState.active ? recordingState.recordingId : undefined;
+  const [livedocRequestedFor, setLivedocRequestedFor] = React.useState<number>();
   const isRecording = recordingState.active;
-  /** Bumped whenever recording state is chosen locally, so a slower status fetch cannot put Full Recording back. */
+  /** Bumped on recording changes so an older status fetch cannot overwrite them. */
   const recordingEpochRef = React.useRef(0);
-  const recordingModeRef = React.useRef(recordingState.mode);
   const recordingTransitionRef = React.useRef(false);
   const setIsRecording = React.useCallback(
     (on: boolean) =>
@@ -301,13 +305,13 @@ export function VideoConferenceComponent(props: {
   );
   /** True on the client that started the recording: leaving from here stops it, as before. */
   const startedRecordingHereRef = React.useRef(false);
+  const announcedLivedocRecordingRef = React.useRef<number | null>(null);
   const broadcastRecordingStateRef = React.useRef<(state: RecordingState) => void>(() => {});
   const applyRecordingState = React.useCallback(
     (state: RecordingState | undefined | null, broadcast: boolean) => {
       if (!state) return;
       recordingEpochRef.current += 1;
       const next = coerceRecordingState(state);
-      recordingModeRef.current = next.mode;
       setRecordingState(next);
       if (broadcast) broadcastRecordingStateRef.current(next);
     },
@@ -354,27 +358,18 @@ export function VideoConferenceComponent(props: {
     }
 
     if (recordingTransitionRef.current) return;
-    const chosen = mode ?? recordingModeRef.current;
     const previous = recordingState;
+    const chosen = mode ?? previous.mode;
     recordingTransitionRef.current = true;
     recordingEpochRef.current += 1;
     try {
       if (action === 'start') {
-        recordingModeRef.current = chosen;
         setRecordingState((s) => ({ ...s, active: true, paused: false, mode: chosen }));
       } else {
         setIsRecording(false);
       }
       const pageUrlStr = window.location.href;
       const roomSeg = window.location.pathname.split('/').filter(Boolean).pop();
-
-      // AI Notes Only 才会用这个登录去开 LiveDoc 录制；完整录制服务端会忽略它。
-      const livedocToken = await getLiveDocStageAccount(
-        props.userChoices.username,
-        props.connectionDetails.roomName,
-      )
-        .then((account) => account.token)
-        .catch(() => null);
 
       const res = await fetch(`/api/meetings/${roomSeg}/record`, {
         method: 'POST',
@@ -383,7 +378,6 @@ export function VideoConferenceComponent(props: {
           action,
           pageUrl: pageUrlStr,
           mode: chosen,
-          livedocToken,
         }),
       });
 
@@ -419,6 +413,8 @@ export function VideoConferenceComponent(props: {
         'position:fixed;bottom:100px;left:50%;transform:translateX(-50%);background:rgba(239,68,68,0.95);color:#fff;padding:10px 20px;border-radius:8px;font-size:14px;z-index:99999;pointer-events:none;';
       document.body.appendChild(toastEl);
       setTimeout(() => toastEl.remove(), 3000);
+    } finally {
+      recordingTransitionRef.current = false;
     }
   };
 
@@ -552,7 +548,7 @@ export function VideoConferenceComponent(props: {
 
   useLivedocRecordingBridge({
     state: recordingState,
-    startedHereRef: startedRecordingHereRef,
+    announceRecordingIdRef: announcedLivedocRecordingRef,
     screenShareOn: activeView === 'shareScreen',
     room,
   });
@@ -2868,6 +2864,9 @@ export function VideoConferenceComponent(props: {
           ) {
             sendMeetingMsg(buildCorrection(), [senderIdentity]);
           }
+        } else if (msg.type === 'RECORDING_LIVEDOC_REQUEST') {
+          if (participant && !isRecorderParticipant(participant) && typeof msg.recordingId === 'number'
+            && msg.recordingId === activeRecordingIdRef.current) setLivedocRequestedFor(msg.recordingId);
         } else if (msg.type === RECORDING_STATE_MSG && msg.state) {
           // Someone started / stopped / paused recording or changed its settings
           if (!recordingTransitionRef.current) {
@@ -3586,7 +3585,6 @@ export function VideoConferenceComponent(props: {
       .then((data) => {
         if (cancelled || recordingTransitionRef.current || recordingEpochRef.current !== epoch || !data?.state) return;
         const next = coerceRecordingState(data.state as RecordingState);
-        recordingModeRef.current = next.mode;
         setRecordingState(next);
       })
       .catch(() => undefined);
@@ -3628,6 +3626,77 @@ export function VideoConferenceComponent(props: {
     isPresenter: isCopresenter || isAutoPresenter,
     hostOnly: recordingState.hostOnly,
   });
+
+  const pendingLivedocRecordingId = recordingState.active && recordingState.mode === 'ai_notes'
+    && !recordingState.livedocRecordingId ? recordingState.recordingId : undefined;
+  const recordingUsername = props.userChoices.username;
+
+  React.useEffect(() => {
+    if (!pendingLivedocRecordingId || !showLiveDocStage || !livekitConnected || isRecorderBot) return;
+    if (canRecordHere) setLivedocRequestedFor(pendingLivedocRecordingId);
+    else sendMeetingMsg({ type: 'RECORDING_LIVEDOC_REQUEST', recordingId: pendingLivedocRecordingId });
+  }, [canRecordHere, isRecorderBot, livekitConnected, pendingLivedocRecordingId, sendMeetingMsg, showLiveDocStage]);
+
+  const shouldAttachLivedoc = showLiveDocStage || livedocRequestedFor === pendingLivedocRecordingId;
+  React.useEffect(() => {
+    if (!pendingLivedocRecordingId || !shouldAttachLivedoc || !livedocInstanceId || !livekitConnected
+      || !canRecordHere || isRecorderBot || meetingEndedByHost) return;
+
+    let cancelled = false;
+    let timer: number;
+    const attach = async () => {
+      const epoch = recordingEpochRef.current;
+      if (!recordingTransitionRef.current && getLiveDocIframe()?.dataset.livedocReady === 'true') {
+        try {
+          const { token } = await getLiveDocStageAccount(recordingUsername, meetingRoomName);
+          if (cancelled) return;
+          if (recordingEpochRef.current !== epoch || recordingTransitionRef.current) {
+            timer = window.setTimeout(attach, 3000);
+            return;
+          }
+          const res = await fetch(`/api/meetings/${encodeURIComponent(meetingRoomName)}/record`, {
+            method: 'POST',
+            headers: authHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({
+              action: 'attach-livedoc',
+              recordingId: pendingLivedocRecordingId,
+              livedocInstanceId,
+              livedocToken: token,
+            }),
+          });
+          if (res.ok) {
+            const result = await res.json() as { attached?: boolean; needsBinding?: boolean; state?: RecordingState };
+            const state = result.state;
+            if (result.attached && state?.livedocRecordingId) {
+              announcedLivedocRecordingRef.current = state.livedocRecordingId;
+            }
+            if (state && recordingEpochRef.current === epoch && !recordingTransitionRef.current) {
+              applyRecordingState(state, !!result.attached);
+              return;
+            }
+            if (result.needsBinding && !cancelled && isHost) {
+              await bindLivedocToMeeting({
+                roomName: meetingRoomName,
+                livedocInstanceId,
+                livekitToken: connectionDetailsRef.current.participantToken,
+              });
+            }
+          } else if (res.status === 401 || res.status === 403) {
+            return;
+          }
+        } catch {
+          // LiveDoc can become available later in the same recording.
+        }
+      }
+      if (!cancelled) timer = window.setTimeout(attach, 3000);
+    };
+    void attach();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [applyRecordingState, canRecordHere, connectionDetailsRef, isHost, isRecorderBot, livedocInstanceId, livekitConnected,
+    meetingEndedByHost, meetingRoomName, pendingLivedocRecordingId, recordingUsername, shouldAttachLivedoc]);
 
   const [showPipSuggest, setShowPipSuggest] = React.useState(false);
 
@@ -4575,16 +4644,8 @@ export function VideoConferenceComponent(props: {
           {/* Recording: unified consent dialog — no intermediate page — host/co-host only */}
           {showRecordPopup && canRecordHere && (
             <RecordConsentModal
-              mode={recordingState.mode}
-              notesLive={recordingState.notesLive === true}
-              onModeChange={(m) => {
-                recordingEpochRef.current += 1;
-                recordingModeRef.current = m;
-                setRecordingState((st) => ({ ...st, mode: m }));
-              }}
               onClose={() => setShowRecordPopup(false)}
-              onStart={() => {
-                const mode = recordingModeRef.current;
+              onStart={(mode) => {
                 setShowRecordPopup(false);
                 void handleToggleRecording('start', mode);
               }}

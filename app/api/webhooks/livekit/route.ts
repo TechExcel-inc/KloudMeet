@@ -15,7 +15,7 @@ import { parsePauseSpans, pausedSeconds } from '@/lib/recordingControls';
 import { startRecordingTranscription } from '@/lib/recordingTranscription';
 import { hasNoMedia } from '@/lib/liveNotes';
 import { finishLiveNotes } from '@/lib/liveNotesServer';
-import { finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
+import { closePendingLivedocAttachment, finishLivedocRecording } from '@/lib/livedoc/kloudRecording';
 import { onSectionEgressEnded, onTrackPublished } from '@/lib/livedoc/screenSections';
 import { appendPresence, isPresenceRecorder, type PresenceInput } from '@/lib/livedoc/presenceRecord';
 import { parseKloudMemberIdFromIdentity } from '@/lib/meetingOwner';
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
       const error = event.egressInfo.error;
 
       // Find the recording by egressId which we stored in storageKey temporarily
-      const recording = await prisma.recording.findFirst({
+      let recording = await prisma.recording.findFirst({
         where: { storageKey: egressId }
       });
 
@@ -87,6 +87,10 @@ export async function POST(request: NextRequest) {
       }
 
       if (recording) {
+        if (!recording.livedocRecordingId && (hasNoMedia(recording) || recording.mode === 'ai_notes')) {
+          await closePendingLivedocAttachment({ id: recording.id });
+          recording = await prisma.recording.findUnique({ where: { id: recording.id } }) ?? recording;
+        }
         // LiveDoc Full Recording: the media has ended, so Kloud stops saving actions too.
         if (recording.kind === 'livedoc_full') {
           const meeting = await prisma.meeting.findUnique({
@@ -249,6 +253,7 @@ export async function POST(request: NextRequest) {
       }
       if (meeting) {
         // LiveDoc Full Recording: everyone left, so end Kloud's recording (stop may never come).
+        await closePendingLivedocAttachment({ meetingId: meeting.id, mode: 'ai_notes' });
         const livedocRecordings = await prisma.recording.findMany({
           where: { meetingId: meeting.id, kind: 'livedoc_full', livedocToken: { not: null } },
         });
