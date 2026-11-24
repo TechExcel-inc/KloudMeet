@@ -1,16 +1,18 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { useI18n } from '@/lib/i18n';
 import {
   DEFAULT_WRITING_LANGUAGE, DEFAULT_WRITING_VOICE, WRITING_DESCRIPTION_LIMIT, WRITING_LENGTHS, WRITING_NAME_LIMIT,
-  WRITING_VOICES, availableWritingSuggestions, isWritingLength, isWritingVoice,
-  type ReplayWriting, type WritingBrief, type WritingLanguage, type WritingSuggestion, type WritingVoice, type WritingLength,
+  WRITING_TYPES, WRITING_VOICES, availableWritingSuggestions, isWritingLength, isWritingVoice,
+  type ReplayWriting, type WritingBrief, type WritingLanguage, type WritingSuggestion, type WritingType, type WritingVoice, type WritingLength,
 } from '@/lib/replayWriting';
 import { WritingLanguageSelect } from '@/lib/WritingLanguageSelect';
 import type { MeetingPresentation } from '@/lib/meetingPresentation';
+import type { ShareShot } from '@/lib/shareShot';
+import { printReplayWriting } from '@/lib/printReplayWriting';
 import s from '@/styles/Replay.module.css';
 
 const improvementOptions = ['speakers', 'terms', 'review'] as const;
@@ -24,14 +26,16 @@ type Draft = Omit<WritingBrief, 'minutes'> & {
   mode: 'new' | 'edit' | 'improve' | 'delete' | 'apply' | 'regenerate';
   sourceId?: string;
   checks: ImprovementOption[];
+  type?: WritingType;
 };
 
 export function ReplayWritingPanel({
-  recordingKey, canManage, hasTranscript, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, playbackHostRef, legacy, legacyFocus,
+  recordingKey, canManage, hasTranscript, shots, activeWriting, onSmartPlay, onReturn, onSelectionChange, scriptHostRef, playbackHostRef, legacy, legacyFocus,
 }: {
   recordingKey: string;
   canManage: boolean;
   hasTranscript: boolean;
+  shots: ShareShot[];
   activeWriting?: string;
   onSmartPlay: (id: string, presentation: MeetingPresentation) => void;
   onReturn: () => void;
@@ -48,6 +52,9 @@ export function ReplayWritingPanel({
   const [loadFailed, setLoadFailed] = useState(false);
   const [requestFailed, setRequestFailed] = useState(false);
   const [suggestions, setSuggestions] = useState<WritingSuggestion[]>();
+  const [suggestionFailed, setSuggestionFailed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFailed, setExportFailed] = useState(false);
   const [selected, setSelected] = useState(activeWriting ?? (legacy && (legacyFocus || !canManage) ? 'legacy' : ''));
   const [draft, setDraft] = useState<Draft>();
   const [chooser, setChooser] = useState(false);
@@ -114,12 +121,13 @@ export function ReplayWritingPanel({
 
   useEffect(() => {
     if (legacyFocus) {
+      setChooser(false);
       setDraft(undefined);
       setSelected('legacy');
     }
   }, [legacyFocus]);
 
-  const shouldSuggest = canCreate && !loading && !loadFailed && (chooser || !hasSavedWrite) && suggestions === undefined;
+  const shouldSuggest = canCreate && !loading && !loadFailed && (chooser || !hasSavedWrite) && suggestions === undefined && !suggestionFailed;
   const availableSuggestions = availableWritingSuggestions(suggestions ?? [], writings);
   useEffect(() => {
     if (!shouldSuggest) return;
@@ -127,10 +135,13 @@ export function ReplayWritingPanel({
     authFetch(endpoint, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ recommend: true }), signal: controller.signal,
-    }).then(response => response.ok ? response.json() : null).then(result => {
+    }).then(response => {
+      if (!response.ok) throw new Error('Could not analyze meeting');
+      return response.json();
+    }).then(result => {
       if (!controller.signal.aborted) setSuggestions(result?.suggestions ?? []);
     }).catch(() => {
-      if (!controller.signal.aborted) setSuggestions([]);
+      if (!controller.signal.aborted) setSuggestionFailed(true);
     });
     return () => controller.abort();
   }, [endpoint, shouldSuggest]);
@@ -150,8 +161,9 @@ export function ReplayWritingPanel({
   function selectWrite(id: string) {
     if (picker.current) picker.current.open = false;
     setSelected(id);
-    setDraft(undefined);
     setChooser(false);
+    setExportFailed(false);
+    setDraft(undefined);
     setRequestFailed(false);
   }
 
@@ -162,10 +174,11 @@ export function ReplayWritingPanel({
     }
   }
 
-  function openDraft(brief?: WritingBrief & { id?: string }, item?: ReplayWriting, mode: Draft['mode'] = item?.presentation ? 'edit' : 'new', checks: ImprovementOption[] = []) {
+  function openDraft(brief?: WritingBrief & { id?: string }, item?: ReplayWriting, mode: Draft['mode'] = item?.presentation ? 'edit' : 'new', checks: ImprovementOption[] = [], type?: WritingType) {
     closeActions();
     if (activeWriting) onReturn();
     setRequestFailed(false);
+    setChooser(false);
     setDraft({
       id: mode === 'improve' && item?.presentation ? crypto.randomUUID() : item?.id ?? brief?.id ?? crypto.randomUUID(),
       name: brief?.name ?? '',
@@ -177,6 +190,7 @@ export function ReplayWritingPanel({
       language: item?.language ?? DEFAULT_WRITING_LANGUAGE,
       mode,
       checks,
+      type,
       sourceId: mode === 'improve' ? (item?.presentation ? item.id : item?.sourceId) : undefined,
     });
   }
@@ -208,16 +222,64 @@ export function ReplayWritingPanel({
         body: JSON.stringify(applying ? { id: entry.id, applyRepair: true } : deleting ? { id: entry.id } : editing
           ? { id: entry.id, name: entry.name, description: entry.description, voice: entry.voice, language: entry.language }
           : { id: entry.id, name: entry.name, description: entry.description, prompt: entry.description, minutes: entry.minutes,
-              voice: entry.voice, language: entry.language, sourceId: entry.sourceId, regenerate: entry.mode === 'regenerate' }),
+              voice: entry.voice, language: entry.language, type: entry.type, sourceId: entry.sourceId, regenerate: entry.mode === 'regenerate' }),
       });
       if (!response.ok) throw new Error('Could not save AI Write');
       const { writings: saved, selectedId }: { writings: ReplayWriting[]; selectedId?: string } = await response.json();
       setWritings(saved);
-      selectWrite(deleting ? (saved.find(item => item.status === 'READY') ?? saved[0])?.id ?? (legacy ? 'legacy' : '') : selectedId ?? entry.id);
+      selectWrite(deleting ? (saved.find(item => item.status === 'READY') ?? saved[0])?.id ?? (legacy && !canCreate ? 'legacy' : '') : selectedId ?? entry.id);
     } catch {
       setRequestFailed(true);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  function suggestionList() {
+    return <>
+      {suggestionFailed ? <div role="alert">
+        <p>{t('replay.write.analysisFailed')}</p>
+        <button type="button" className={s.tab} onClick={() => setSuggestionFailed(false)}>{t('replay.write.retry')}</button>
+      </div> : suggestions === undefined ? (
+        <div className={s.writingAnalysis} role="status">
+          <span className={s.writingSpinner} aria-hidden="true" />
+          <div><strong>{t('replay.write.analyzing')}</strong><p>{t('replay.write.analysisDetail')}</p></div>
+        </div>
+      ) : availableSuggestions.length ? <>
+        <p className={s.muted}>{t('replay.write.chooseSuggestion')}</p>
+        {WRITING_TYPES.map(type => {
+          const group = availableSuggestions.filter(suggestion => (suggestion.type ?? 'recap') === type);
+          return group.length > 0 && <section key={type}>
+            <h3>{t(`replay.write.type.${type}`)}</h3>
+            <div className={s.writingSuggestions}>
+              {group.map(suggestion => (
+                <button key={suggestion.id} type="button"
+                  onClick={() => openDraft(suggestion, undefined, 'new', [], suggestion.type)}>
+                  <strong>{suggestion.name}</strong><span>{suggestion.description}</span>
+                </button>
+              ))}
+            </div>
+          </section>;
+        })}
+      </> : <p className={s.muted}>{t('replay.write.noSuggestions')}</p>}
+      {(suggestions !== undefined || suggestionFailed) &&
+        <button type="button" className={s.tab} onClick={() => openDraft()}>{t('replay.write.customPrompt')}</button>}
+    </>;
+  }
+
+  async function exportPdf(presentation: MeetingPresentation, title: string) {
+    setExportFailed(false);
+    setExporting(true);
+    try {
+      await printReplayWriting(presentation, title, shots, {
+        screenshot: t('replay.write.pdfScreenshot'),
+        unavailable: t('replay.write.pdfScreenshotUnavailable'),
+        review: t('replay.write.reviewTerms'),
+      });
+    } catch {
+      setExportFailed(true);
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -257,21 +319,9 @@ export function ReplayWritingPanel({
   const validDraft = draft && (draft.mode === 'delete' || draft.mode === 'apply' ||
     (draft.mode === 'edit' ? draft.name.trim() : draft.description.trim()));
   const editLanguageChanged = draft?.mode === 'edit' && draft.language !== (current?.language ?? DEFAULT_WRITING_LANGUAGE);
-  const suggestionList = suggestions === undefined ? (
-    <p className={s.muted} role="status">{t('replay.write.findingSuggestions')}</p>
-  ) : availableSuggestions.length ? (
-    <div className={s.writingSuggestions}>
-      {availableSuggestions.map(suggestion => (
-        <button key={suggestion.id} type="button" onClick={() => openDraft(suggestion)}>
-          <strong>{suggestion.name}</strong><span>{suggestion.description}</span>
-        </button>
-      ))}
-    </div>
-  ) : <p className={s.muted}>{t('replay.write.noSuggestions')}</p>;
-
   return (
     <div className={s.tabBody}>
-      <div className={s.writingToolbar}>
+      {hasSavedWrite && <div className={s.writingToolbar}>
         {writings.length || legacy ? (
           <details ref={picker} className={s.writingPicker + ' ' + s.writingSavedPicker} onKeyDown={event => {
             if (event.key === 'Escape' && event.currentTarget.open) {
@@ -304,7 +354,7 @@ export function ReplayWritingPanel({
             </div>
           </details>
         ) : <span className={s.muted}>{t('replay.write.noSaved')}</span>}
-        {(canManage || presenting) && <details ref={actions} className={s.writingPicker + ' ' + s.writingActionPicker}
+        {(canManage || presenting || current?.presentation) && <details ref={actions} className={s.writingPicker + ' ' + s.writingActionPicker}
           onKeyDown={event => {
             if (event.key === 'Escape' && event.currentTarget.open) {
               event.currentTarget.open = false;
@@ -322,6 +372,13 @@ export function ReplayWritingPanel({
               }
               onReturn();
             }}><Undo2 aria-hidden="true" /><span>{t('replay.write.originalPlayback')}</span></button>}
+            {current?.presentation && <button type="button" disabled={exporting} onClick={() => {
+              if (actions.current) {
+                actions.current.open = false;
+                actions.current.querySelector('summary')?.focus();
+              }
+              if (current.presentation) void exportPdf(current.presentation, writeName(current));
+            }}><FileDown aria-hidden="true" /><span>{t('replay.write.exportPdf')}</span></button>}
             {canManage && <>
               <button type="button" disabled={!current?.presentation}
                 onClick={() => current && openDraft(current, current, 'edit')}><Pencil aria-hidden="true" /><span>{t('replay.write.edit')}</span></button>
@@ -344,7 +401,8 @@ export function ReplayWritingPanel({
             </>}
           </div>
         </details>}
-      </div>
+      </div>}
+      {exportFailed && <p role="alert" className={s.writingNotice}>{t('replay.write.exportFailed')}</p>}
 
       {dialogOpen && <dialog ref={dialog} className={s.writingDialog} aria-labelledby="ai-write-dialog-title"
         onCancel={event => {
@@ -357,8 +415,8 @@ export function ReplayWritingPanel({
             <button type="button" className={s.tab} data-cancel aria-label={t('replay.write.close')}
               onClick={() => setChooser(false)}><X aria-hidden="true" /></button>
           </div>
-          <h3>{t('replay.write.suggestions')}</h3>
-          {suggestionList}
+          {suggestions !== undefined && <h3>{t('replay.write.suggestions')}</h3>}
+          {suggestionList()}
           {writings.length > 0 && <>
             <h3>{t('replay.write.savedWrites')}</h3>
             <div className={s.writingChooserSaved}>
@@ -374,11 +432,6 @@ export function ReplayWritingPanel({
               ))}
             </div>
           </>}
-          <div className={s.writingActions}>
-            <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => openDraft()}>
-              <Plus aria-hidden="true" />{t('replay.write.newButton')}
-            </button>
-          </div>
         </div> : draft && <form onSubmit={event => {
           event.preventDefault();
           if (validDraft) void save(draft);
@@ -504,7 +557,12 @@ export function ReplayWritingPanel({
         </form>}
       </dialog>}
 
-      {selected === 'legacy' ? legacy : current?.presentation ? (
+      {selected === 'legacy' ? <>
+        {!hasSavedWrite && canCreate && <button type="button" className={s.tab} onClick={() => selectWrite('')}>
+          {t('replay.write.suggestions')}
+        </button>}
+        {legacy}
+      </> : current?.presentation ? (
         <div className={s.scroll + ' ' + s.writingContent}>
           <div className={s.writingHeading}>
             <h2>{writeName(current)}</h2>
@@ -540,10 +598,13 @@ export function ReplayWritingPanel({
           </>}
           {canCreate && !hasSavedWrite ? (
             <>
-              <h2>{t('replay.write.suggestions')}</h2>
-              {suggestionList}
+              {suggestions !== undefined && <h2>{t('replay.write.suggestions')}</h2>}
+              {suggestionList()}
+              {legacy && <button type="button" className={s.tab} onClick={() => selectWrite('legacy')}>
+                {t('replay.write.meetingNotes')}
+              </button>}
             </>
-          ) : !current && <p>{t(hasTranscript ? 'replay.write.emptyViewer' : 'replay.write.noTranscript')}</p>}
+          ) : !current && (legacy ?? <p>{t(hasTranscript ? 'replay.write.emptyViewer' : 'replay.write.noTranscript')}</p>)}
         </div>
       )}
     </div>

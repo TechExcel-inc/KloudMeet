@@ -1740,5 +1740,18 @@
   "download.mobileNote": "デスクトップアプリは Mac と Windows のパソコン用です。このデバイスではブラウザから会議に参加してください。",
   "download.useBrowser": "ブラウザで参加",
   "download.noInstall": "インストールしたくない場合",
-  "download.backHome": "Kloud Meet ホームに戻る"
+  "download.backHome": "Kloud Meet ホームに戻る",
+  "replay.write.newButton": "AI Write を新規作成",
+  "replay.write.analyzing": "会議を分析中…",
+  "replay.write.analysisDetail": "AI が文字起こしとメモを確認し、会議の振り返りやコーディング作業を提案します。",
+  "replay.write.analysisFailed": "会議を分析できませんでした。再試行するか、プロンプトを入力してください。",
+  "replay.write.chooseSuggestion": "提案を選んで AI Write を作成してください。",
+  "replay.write.type.recap": "会議の振り返り",
+  "replay.write.type.coding": "AI コーディング作業仕様書",
+  "replay.write.customPrompt": "自分でプロンプトを書く",
+  "replay.write.exportPdf": "PDF にエクスポート",
+  "replay.write.exportFailed": "PDF 印刷ダイアログを開けませんでした。再試行してください。",
+  "replay.write.pdfScreenshot": "会議のスクリーンショット",
+  "replay.write.pdfScreenshotUnavailable": "スクリーンショットを読み込めませんでした",
+  "replay.write.noSuggestions": "この会議の提案が見つかりませんでした。"
 }

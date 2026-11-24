@@ -1740,5 +1740,18 @@
   "download.mobileNote": "데스크톱 앱은 Mac 및 Windows 컴퓨터용입니다. 이 기기에서는 브라우저로 회의에 참여하세요.",
   "download.useBrowser": "브라우저로 참여",
   "download.noInstall": "설치하고 싶지 않으신가요?",
-  "download.backHome": "Kloud Meet 홈으로 돌아가기"
+  "download.backHome": "Kloud Meet 홈으로 돌아가기",
+  "replay.write.newButton": "새 AI Write",
+  "replay.write.analyzing": "회의 분석 중…",
+  "replay.write.analysisDetail": "AI가 회의록과 메모를 검토하여 회의 요약과 코딩 작업을 제안합니다.",
+  "replay.write.analysisFailed": "회의를 분석할 수 없습니다. 다시 시도하거나 프롬프트를 직접 작성하세요.",
+  "replay.write.chooseSuggestion": "제안을 선택해 AI Write를 만드세요.",
+  "replay.write.type.recap": "회의 요약",
+  "replay.write.type.coding": "AI 코딩 작업 명세서",
+  "replay.write.customPrompt": "프롬프트 직접 작성",
+  "replay.write.exportPdf": "PDF로 내보내기",
+  "replay.write.exportFailed": "PDF 인쇄 창을 열 수 없습니다. 다시 시도하세요.",
+  "replay.write.pdfScreenshot": "회의 스크린샷",
+  "replay.write.pdfScreenshotUnavailable": "회의 스크린샷을 불러올 수 없음",
+  "replay.write.noSuggestions": "이 회의에 대한 제안이 없습니다."
 }

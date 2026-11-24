@@ -50,7 +50,9 @@ export interface WritingBrief {
   minutes: WritingLength;
 }
 
-export type WritingSuggestion = WritingBrief & { id: string };
+export const WRITING_TYPES = ['recap', 'coding'] as const;
+export type WritingType = (typeof WRITING_TYPES)[number];
+export type WritingSuggestion = WritingBrief & { id: string; type?: WritingType };
 
 export interface ReplayWriting extends WritingBrief {
   id: string;

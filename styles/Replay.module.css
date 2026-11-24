@@ -2684,3 +2684,33 @@
   opacity: 0.55;
   cursor: wait;
 }
+
+.writingAnalysis {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-block: 14px;
+}
+
+.writingAnalysis p {
+  margin: 4px 0 0;
+  color: var(--km-text-muted);
+}
+
+.writingSpinner {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--km-border);
+  border-top-color: #8178ff;
+  border-radius: 50%;
+  animation: writing-spin 850ms linear infinite;
+}
+
+@keyframes writing-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .writingSpinner { animation: none; }
+}

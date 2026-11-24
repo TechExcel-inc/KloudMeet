@@ -8,7 +8,6 @@
   "replay.write.regenerate": "重新生成",
   "replay.write.suggestions": "AI 写作建议",
   "replay.write.savedWrites": "已保存的 AI 写作",
-  "replay.write.newButton": "新建",
   "replay.write.newTitle": "新建 AI 写作",
   "replay.notesAudio.title": "AI 音频",
   "replay.notesAudio.enable": "启用 AI 音频",
@@ -1727,5 +1726,18 @@
   "download.mobileNote": "桌面版适用于 Mac 和 Windows 电脑。在这台设备上，请用浏览器加入会议。",
   "download.useBrowser": "用浏览器加入",
   "download.noInstall": "不想安装？",
-  "download.backHome": "返回 Kloud Meet 首页"
+  "download.backHome": "返回 Kloud Meet 首页",
+  "replay.write.newButton": "新建 AI 写作",
+  "replay.write.analyzing": "正在分析会议…",
+  "replay.write.analysisDetail": "AI 正在查看会议转写和笔记，为你推荐会议回顾和编码任务。",
+  "replay.write.analysisFailed": "无法分析此会议。请重试或自行编写提示词。",
+  "replay.write.chooseSuggestion": "选择一项建议来创建 AI 写作。",
+  "replay.write.type.recap": "会议回顾",
+  "replay.write.type.coding": "AI 编码任务说明",
+  "replay.write.customPrompt": "自行编写提示词",
+  "replay.write.exportPdf": "导出为 PDF",
+  "replay.write.exportFailed": "无法打开 PDF 打印对话框。请重试。",
+  "replay.write.pdfScreenshot": "会议截图",
+  "replay.write.pdfScreenshotUnavailable": "会议截图不可用",
+  "replay.write.noSuggestions": "没有找到适合此会议的建议。"
 }

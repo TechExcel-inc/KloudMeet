@@ -71,7 +71,13 @@ export async function POST(req: NextRequest, { params }: Params) {
       const lines = await loadWritingTranscript(recording);
       if (!lines.length) return apiJson({ error: 'A transcript is required for AI Write' }, { status: 409, headers });
       if (recommending) {
-        const briefs = await recommendWriting(lines, recording.durationSeconds, current);
+        const notes = await prisma.meetingSummaryItem.findMany({
+          where: { meetingId: recording.meetingId },
+          orderBy: { sortOrder: 'asc' },
+          take: 30,
+          select: { title: true, content: true },
+        });
+        const briefs = await recommendWriting(lines, recording.durationSeconds, JSON.stringify(notes).slice(0, 8000), current);
         return apiJson({ suggestions: await saveWritingSuggestions(recording.id, briefs) }, { headers });
       }
       if (!writing) {
@@ -84,7 +90,7 @@ export async function POST(req: NextRequest, { params }: Params) {
       }
       const language = isWritingLanguage(requestedLanguage) ? requestedLanguage : existing?.language ?? source?.language ?? DEFAULT_WRITING_LANGUAGE;
       const startedAt = await claimWriting(recording.id, writing, isWritingId(sourceId) ? sourceId : undefined, regenerating, language);
-      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), language, source: source?.presentation ? { id: source.id, revision: writingRevision(source), presentation: source.presentation } : undefined }));
+      if (startedAt) after(() => generateReplayWriting(recording, writing, startedAt, memberId, lines, { auto: minutes === 'auto', fromPrompt: Boolean(prompt), language, type: body?.type === 'recap' || body?.type === 'coding' ? body.type : undefined, source: source?.presentation ? { id: source.id, revision: writingRevision(source), presentation: source.presentation } : undefined }));
       return apiJson({ writings: await loadWritings(recording.id) }, { status: startedAt ? 202 : 200, headers });
     } catch {
       return apiJson({ error: 'Could not start AI Write' }, { status: 500, headers });
