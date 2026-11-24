@@ -2719,7 +2719,8 @@
   margin-bottom: 12px;
 }
 
-.writingPdfAttachment button {
+.writingPdfAttachment a {
+  text-decoration: none;
   max-width: 100%;
 }
 

@@ -158,6 +158,7 @@ export interface LiveDocAiUploadResultMessage extends LiveDocAiEnvelope {
   /** duplicate: the same file is already in the meeting */
   status: 'added' | 'duplicate' | 'failed';
   itemId: number;
+  attachmentId?: number;
   reason: LiveDocAiUploadFailReason | '';
 }
 

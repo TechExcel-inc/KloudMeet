@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown, Paperclip } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
+import { resolveLiveDocBaseUrl } from '@/lib/livedoc/client';
+import { saveWritingPdf } from '@/lib/livedoc/saveWritingPdf';
 import { useI18n } from '@/lib/i18n';
 import {
   DEFAULT_WRITING_LANGUAGE, DEFAULT_WRITING_VOICE, WRITING_DESCRIPTION_LIMIT, WRITING_LENGTHS, WRITING_NAME_LIMIT,
@@ -264,34 +266,29 @@ export function ReplayWritingPanel({
     </>;
   }
 
-  async function transferPdf(item: ReplayWriting, generate = false) {
+  async function generatePdf(item: ReplayWriting) {
     if (pdfBusy) return;
-    const preview = generate ? null : window.open('about:blank', '_blank');
-    if (!generate && !preview) {
-      setPdfError(true);
-      return;
-    }
-    if (preview) preview.opener = null;
     setPdfBusy(true);
     setPdfError(false);
     try {
       const query = new URLSearchParams({ write: item.id });
-      const response = await authFetch(`${endpoint}/pdf?${query}`, generate ? { method: 'POST' } : undefined);
-      if (!response.ok) throw new Error('PDF transfer failed');
-      if (generate) {
-        const { name } = await response.json();
-        setWritings(items => items.map(entry => entry.id === item.id ? { ...entry, pdfName: name } : entry));
-      } else if (preview && !preview.closed) {
-        const url = URL.createObjectURL(await response.blob());
-        preview.location.replace(url);
-        const cleanup = window.setInterval(() => {
-          if (!preview.closed) return;
-          window.clearInterval(cleanup);
-          URL.revokeObjectURL(url);
-        }, 5000);
+      let response = await authFetch(`${endpoint}/pdf?${query}`, { method: 'POST' });
+      if (!response.ok) throw new Error('Could not generate PDF');
+      if (response.headers.get('Content-Type')?.startsWith('application/pdf')) {
+        const revision = response.headers.get('X-Writing-Revision');
+        const meetingId = Number(response.headers.get('X-LiveDoc-Meeting'));
+        const name = decodeURIComponent(response.headers.get('X-Pdf-Name') ?? 'AI Write.pdf');
+        const attachmentId = await saveWritingPdf(meetingId, name, await response.arrayBuffer());
+        query.set('link', '1');
+        response = await authFetch(`${endpoint}/pdf?${query}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ attachmentId, revision }),
+        });
+        if (!response.ok) throw new Error('Could not link the LiveDoc attachment');
       }
+      const { pdf } = await response.json();
+      setWritings(items => items.map(entry => entry.id === item.id ? { ...entry, pdf } : entry));
     } catch {
-      preview?.close();
       setPdfError(true);
     } finally {
       setPdfBusy(false);
@@ -358,7 +355,7 @@ export function ReplayWritingPanel({
                 <button key={item.id} type="button" aria-current={selected === item.id ? 'true' : undefined}
                   onClick={() => { selectWrite(item.id); picker.current?.querySelector('summary')?.focus(); }}>
                   <span>{writeName(item)}</span>
-                  {item.pdfName && <Paperclip role="img" aria-label={t('replay.write.pdfAttachment')} />}
+                  {item.pdf && <Paperclip role="img" aria-label={t('replay.write.pdfAttachment')} />}
                   {selected === item.id && <Check aria-hidden="true" />}
                 </button>
               ))}
@@ -388,9 +385,9 @@ export function ReplayWritingPanel({
               }
               onReturn();
             }}><Undo2 aria-hidden="true" /><span>{t('replay.write.originalPlayback')}</span></button>}
-            {canManage && current?.presentation && !current.pdfName && <button type="button" disabled={pdfBusy} onClick={() => {
+            {canManage && current?.presentation && !current.pdf && <button type="button" disabled={pdfBusy} onClick={() => {
               closeActions();
-              void transferPdf(current, true);
+              void generatePdf(current);
             }}><FileDown aria-hidden="true" /><span>{t('replay.write.savePdfToLiveDoc')}</span></button>}
             {canManage && <>
               <button type="button" disabled={!current?.presentation}
@@ -583,12 +580,12 @@ export function ReplayWritingPanel({
           </div>
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
-          {current.pdfName && <div className={s.writingPdfAttachment}>
-            <button type="button" className={s.tab + ' ' + s.writingIconLabel} disabled={pdfBusy}
-              onClick={() => void transferPdf(current)}>
-              <Paperclip aria-hidden="true" /><span>{current.pdfName}</span>
-              <FileDown aria-hidden="true" />
-            </button>
+          {current.pdf && <div className={s.writingPdfAttachment}>
+            <a className={s.tab + ' ' + s.writingIconLabel}
+              href={`${resolveLiveDocBaseUrl()}/attachment/${current.pdf.attachmentId}`}
+              target="_blank" rel="noopener noreferrer">
+              <Paperclip aria-hidden="true" /><span>{current.pdf.name}</span>
+            </a>
           </div>}
           {presenting ? <div ref={playbackHostRef} /> : (
             <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {

@@ -1,4 +1,3 @@
-import type { LiveDocWritingPdf } from '@/lib/livedoc/writingAttachment.server';
 import { createHash, randomUUID } from 'node:crypto';
 import { replaySpeakerResolver } from '@/lib/replaySpeakerIdentity';
 import { Prisma, type Recording, type RecordingWriting } from '@prisma/client';
@@ -20,15 +19,13 @@ export function writingRevision(writing: ReplayWriting): string {
   ])).digest('hex');
 }
 
-export function readWritingPdf(content: Prisma.JsonValue): LiveDocWritingPdf | null {
+export function readWritingPdf(content: Prisma.JsonValue) {
   if (!content || typeof content !== 'object' || Array.isArray(content)) return null;
   const pdf = content.pdf;
   return pdf && typeof pdf === 'object' && !Array.isArray(pdf) &&
-    typeof pdf.key === 'string' && typeof pdf.name === 'string' &&
-    typeof pdf.attachmentId === 'number' && typeof pdf.userId === 'string' &&
-    typeof pdf.bucket === 'string' && typeof pdf.region === 'string'
-    ? { key: pdf.key, name: pdf.name, attachmentId: pdf.attachmentId, userId: pdf.userId, bucket: pdf.bucket, region: pdf.region }
-    : null;
+    typeof pdf.name === 'string' && typeof pdf.attachmentId === 'number' &&
+    Number.isSafeInteger(pdf.attachmentId) && pdf.attachmentId > 0
+    ? { name: pdf.name, attachmentId: pdf.attachmentId } : null;
 }
 
 export function writingState(row: RecordingWriting): ReplayWriting | null {
@@ -39,7 +36,7 @@ export function writingState(row: RecordingWriting): ReplayWriting | null {
   return {
     id: row.id,
     sourceId: isWritingId(sourceId) ? sourceId : undefined,
-    pdfName: presentation ? readWritingPdf(row.content)?.name : undefined,
+    pdf: presentation ? readWritingPdf(row.content) ?? undefined : undefined,
     canApplyRepair: Boolean(presentation && isWritingId(sourceId) && row.content &&
       typeof row.content === 'object' && 'sourceRevision' in row.content && typeof row.content.sourceRevision === 'string'),
     name: row.name ?? presentation?.title ?? '',
