@@ -1822,31 +1822,6 @@
   accent-color: #a9a4ff;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .page {
-    padding-top: 10px;
-  }
-
-  .header {
-    position: absolute;
-    inset: 0 0 auto;
-    transform: translateY(calc(-100% + 10px));
-    transition: transform 180ms ease;
-  }
-
-  .header:hover,
-  .header:has(:focus-visible),
-  .header[data-menu-open] {
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .header {
-    transition: none;
-  }
-}
-
 @media (max-width: 375px) {
   .replayControl {
     width: 30px;

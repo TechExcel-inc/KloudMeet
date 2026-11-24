@@ -1426,7 +1426,7 @@ export default function ReplayPage() {
     <AvatarContext.Provider value={{ photos: avatarPhotos, tones: avatarTones }}>
     <div className={s.page}>
       {/* ── Header ── */}
-      <header className={s.header} data-menu-open={langMenuOpen || avatarMenuOpen || undefined}>
+      <header className={s.header}>
         <Link href="/" className={s.backBtn} aria-label={t('replay.back')} title={t('replay.back')}>
           <Chevron dir="left" />
         </Link>
