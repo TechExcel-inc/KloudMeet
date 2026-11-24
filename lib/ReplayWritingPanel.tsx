@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown, Paperclip } from 'lucide-react';
+import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown, Paperclip, ExternalLink } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { resolveLiveDocBaseUrl } from '@/lib/livedoc/client';
 import { saveWritingPdf } from '@/lib/livedoc/saveWritingPdf';
@@ -52,6 +52,11 @@ export function ReplayWritingPanel({
   const [requestFailed, setRequestFailed] = useState(false);
   const [suggestions, setSuggestions] = useState<WritingSuggestion[]>();
   const [suggestionFailed, setSuggestionFailed] = useState(false);
+  const [pdfViewer, setPdfViewer] = useState<{ name: string; url: string }>();
+  const pdfViewerDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (pdfViewer && !pdfViewerDialog.current?.open) pdfViewerDialog.current?.showModal();
+  }, [pdfViewer]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState(false);
   const [selected, setSelected] = useState(activeWriting ?? (legacy && (legacyFocus || !canManage) ? 'legacy' : ''));
@@ -333,6 +338,23 @@ export function ReplayWritingPanel({
   const editLanguageChanged = draft?.mode === 'edit' && draft.language !== (current?.language ?? DEFAULT_WRITING_LANGUAGE);
   return (
     <div className={s.tabBody}>
+      {pdfViewer && <dialog ref={pdfViewerDialog} className={s.writingPdfViewer}
+        aria-labelledby="writing-pdf-title" onClose={() => setPdfViewer(undefined)}>
+        <header className={s.writingPdfToolbar}>
+          <Paperclip aria-hidden="true" />
+          <h2 id="writing-pdf-title">{pdfViewer.name}</h2>
+          <a className={s.writingPdfTool} href={pdfViewer.url} target="_blank" rel="noopener noreferrer"
+            aria-label={t('replay.write.openPdfTab')} title={t('replay.write.openPdfTab')}>
+            <ExternalLink aria-hidden="true" />
+          </a>
+          <button type="button" className={s.writingPdfTool} aria-label={t('replay.write.close')}
+            title={t('replay.write.close')} onClick={() => pdfViewerDialog.current?.close()}>
+            <X aria-hidden="true" />
+          </button>
+        </header>
+        <iframe className={s.writingPdfFrame} src={pdfViewer.url} title={pdfViewer.name} allowFullScreen />
+      </dialog>}
+
       {hasSavedWrite && <div className={s.writingToolbar}>
         {writings.length || legacy ? (
           <details ref={picker} className={s.writingPicker + ' ' + s.writingSavedPicker} onKeyDown={event => {
@@ -581,11 +603,14 @@ export function ReplayWritingPanel({
           {current.description && <p className={s.muted}>{current.description}</p>}
           <p className={s.muted}>{t('replay.write.voiceSelected', { voice: t(`replay.write.voice.${current.voice}`) })}</p>
           {current.pdf && <div className={s.writingPdfAttachment}>
-            <a className={s.tab + ' ' + s.writingIconLabel}
-              href={`${resolveLiveDocBaseUrl()}/attachment/${current.pdf.attachmentId}`}
-              target="_blank" rel="noopener noreferrer">
+            <button type="button" className={s.tab + ' ' + s.writingIconLabel} onClick={() => {
+              if (current.pdf) setPdfViewer({
+                name: current.pdf.name,
+                url: `${resolveLiveDocBaseUrl()}/attachment/${current.pdf.attachmentId}`,
+              });
+            }}>
               <Paperclip aria-hidden="true" /><span>{current.pdf.name}</span>
-            </a>
+            </button>
           </div>}
           {presenting ? <div ref={playbackHostRef} /> : (
             <button type="button" className={s.primaryBtn + ' ' + s.writingIconLabel} onClick={() => {

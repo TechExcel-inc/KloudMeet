@@ -1835,5 +1835,6 @@
   "download.mobileNote": "The desktop app is for Mac and Windows computers. On this device, join meetings from your browser.",
   "download.useBrowser": "Join in your browser",
   "download.noInstall": "Don't want to install anything?",
-  "download.backHome": "Back to Kloud Meet home"
+  "download.backHome": "Back to Kloud Meet home",
+  "replay.write.openPdfTab": "Open in new tab"
 }

@@ -1739,5 +1739,6 @@
   "replay.write.exportFailed": "无法打开 PDF 打印对话框。请重试。",
   "replay.write.pdfScreenshot": "会议截图",
   "replay.write.pdfScreenshotUnavailable": "会议截图不可用",
-  "replay.write.noSuggestions": "没有找到适合此会议的建议。"
+  "replay.write.noSuggestions": "没有找到适合此会议的建议。",
+  "replay.write.openPdfTab": "在新标签页中打开"
 }

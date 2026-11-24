@@ -2719,8 +2719,7 @@
   margin-bottom: 12px;
 }
 
-.writingPdfAttachment a {
-  text-decoration: none;
+.writingPdfAttachment button {
   max-width: 100%;
 }
 
@@ -2729,4 +2728,87 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.writingPdfViewer {
+  box-sizing: border-box;
+  width: min(1320px, calc(100vw - 40px));
+  height: calc(100dvh - 40px);
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--km-border);
+  border-radius: 14px;
+  background: var(--km-surface);
+  color: var(--km-text);
+  box-shadow: 0 24px 72px #0006;
+}
+
+.writingPdfViewer[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+.writingPdfViewer::backdrop {
+  background: #10131bb3;
+}
+
+.writingPdfToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--km-border);
+}
+
+.writingPdfToolbar h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writingPdfToolbar svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.writingPdfTool {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.writingPdfTool:hover,
+.writingPdfTool:focus-visible {
+  border-color: var(--km-border);
+  background: var(--km-bg-subtle);
+}
+
+.writingPdfFrame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: white;
+}
+
+@media (max-width: 640px) {
+  .writingPdfViewer {
+    width: calc(100vw - 12px);
+    height: calc(100dvh - 12px);
+  }
 }

@@ -1753,5 +1753,6 @@
   "replay.write.exportFailed": "PDF 인쇄 창을 열 수 없습니다. 다시 시도하세요.",
   "replay.write.pdfScreenshot": "회의 스크린샷",
   "replay.write.pdfScreenshotUnavailable": "회의 스크린샷을 불러올 수 없음",
-  "replay.write.noSuggestions": "이 회의에 대한 제안이 없습니다."
+  "replay.write.noSuggestions": "이 회의에 대한 제안이 없습니다.",
+  "replay.write.openPdfTab": "새 탭에서 열기"
 }

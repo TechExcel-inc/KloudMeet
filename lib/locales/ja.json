@@ -1753,5 +1753,6 @@
   "replay.write.exportFailed": "PDF 印刷ダイアログを開けませんでした。再試行してください。",
   "replay.write.pdfScreenshot": "会議のスクリーンショット",
   "replay.write.pdfScreenshotUnavailable": "スクリーンショットを読み込めませんでした",
-  "replay.write.noSuggestions": "この会議の提案が見つかりませんでした。"
+  "replay.write.noSuggestions": "この会議の提案が見つかりませんでした。",
+  "replay.write.openPdfTab": "新しいタブで開く"
 }
