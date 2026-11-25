@@ -768,7 +768,7 @@ export function VideoConferenceComponent(props: {
       if (view !== 'shareScreen') {
         setIsDrawingMode(false);
         setIsRemoteControlMode(false);
-        if (screenShareActive && view !== 'liveDoc') {
+        if (screenShareActive) {
           setScreenShareActive(false);
           // User chose a new mode — do not restore the pre-share mode on track end
           localShareViewSessionRef.current = null;

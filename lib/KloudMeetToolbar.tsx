@@ -1489,7 +1489,7 @@ export function KloudMeetToolbar({
 
   const handleLiveDocTabClick = () => {
     // 仅切换到协作文档视图；不再弹菜单、不向 iframe 发 ToggleDocPopup
-    if (activeView === 'liveDoc') {
+    if (activeView === 'liveDoc' && !screenShareActive) {
       return;
     }
     onViewChange('liveDoc');
