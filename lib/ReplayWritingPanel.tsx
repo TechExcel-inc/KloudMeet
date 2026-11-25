@@ -352,7 +352,7 @@ export function ReplayWritingPanel({
             <X aria-hidden="true" />
           </button>
         </header>
-        <iframe className={s.writingPdfFrame} src={pdfViewer.url} title={pdfViewer.name} allowFullScreen />
+        <iframe className={s.writingPdfFrame} src={pdfViewer.url} title={pdfViewer.name} allow="microphone" allowFullScreen />
       </dialog>}
 
       {hasSavedWrite && <div className={s.writingToolbar}>
@@ -606,7 +606,7 @@ export function ReplayWritingPanel({
             <button type="button" className={s.tab + ' ' + s.writingIconLabel} onClick={() => {
               if (current.pdf) setPdfViewer({
                 name: current.pdf.name,
-                url: `${resolveLiveDocBaseUrl()}/attachment/${current.pdf.attachmentId}`,
+                url: `${resolveLiveDocBaseUrl()}/attachment/${current.pdf.attachmentId}?syncOnlyAnnotations=1`,
               });
             }}>
               <Paperclip aria-hidden="true" /><span>{current.pdf.name}</span>
