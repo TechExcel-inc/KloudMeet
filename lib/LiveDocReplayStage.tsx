@@ -228,7 +228,7 @@ export function LiveDocReplayStage({
           src={src}
           title="LiveDoc replay"
           style={{ ...fillStyle, border: 0, visibility: !showDocument || screen || shownShot ? 'hidden' : 'visible' }}
-          allow="autoplay *; fullscreen *"
+          allow="autoplay *; fullscreen *; microphone 'none'"
           sandbox="allow-scripts allow-same-origin allow-popups"
         />
       )}

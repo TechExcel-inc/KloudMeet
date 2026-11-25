@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { ChevronDown, Pencil, Play, Undo2, Plus, X, Check, Menu, Sparkles, Trash2, RefreshCw, FileDown, Paperclip, ExternalLink } from 'lucide-react';
 import { authFetch } from '@/lib/kloudSession';
 import { resolveLiveDocBaseUrl } from '@/lib/livedoc/client';
@@ -53,9 +53,13 @@ export function ReplayWritingPanel({
   const [suggestions, setSuggestions] = useState<WritingSuggestion[]>();
   const [suggestionFailed, setSuggestionFailed] = useState(false);
   const [pdfViewer, setPdfViewer] = useState<{ name: string; url: string }>();
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
   const pdfViewerDialog = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    if (pdfViewer && !pdfViewerDialog.current?.open) pdfViewerDialog.current?.showModal();
+  useLayoutEffect(() => {
+    const element = pdfViewerDialog.current;
+    if (!pdfViewer || !element) return;
+    if (!element.open) element.showModal();
+    setPdfViewerOpen(true);
   }, [pdfViewer]);
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfError, setPdfError] = useState(false);
@@ -339,7 +343,10 @@ export function ReplayWritingPanel({
   return (
     <div className={s.tabBody}>
       {pdfViewer && <dialog ref={pdfViewerDialog} className={s.writingPdfViewer}
-        aria-labelledby="writing-pdf-title" onClose={() => setPdfViewer(undefined)}>
+        aria-labelledby="writing-pdf-title" onClose={() => {
+          setPdfViewerOpen(false);
+          setPdfViewer(undefined);
+        }}>
         <header className={s.writingPdfToolbar}>
           <Paperclip aria-hidden="true" />
           <h2 id="writing-pdf-title">{pdfViewer.name}</h2>
@@ -352,7 +359,9 @@ export function ReplayWritingPanel({
             <X aria-hidden="true" />
           </button>
         </header>
-        <iframe className={s.writingPdfFrame} src={pdfViewer.url} title={pdfViewer.name} allow="microphone" allowFullScreen />
+        {pdfViewerOpen && (
+          <iframe className={s.writingPdfFrame} src={pdfViewer.url} title={pdfViewer.name} allow="microphone" allowFullScreen />
+        )}
       </dialog>}
 
       {hasSavedWrite && <div className={s.writingToolbar}>
