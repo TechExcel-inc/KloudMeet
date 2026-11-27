@@ -13,6 +13,16 @@ const userDataDir = app.getPath('userData');
 app.setName('Kloud Meet');
 app.setPath('userData', userDataDir);
 
+// macOS 14.2+ captures shared computer sound with a Core Audio tap. That needs a
+// separate System Audio Recording grant, and this app's share picker never raises
+// the prompt, so the audio track is created already ended. Electron 41 still honors
+// this switch and uses ScreenCaptureKit instead, which rides the Screen Recording
+// permission required to share at all. NSAudioCaptureUsageDescription stays in
+// Info.plist for a later Electron that ignores the switch.
+if (process.platform === 'darwin') {
+  app.commandLine.appendSwitch('disable-features', 'MacCatapLoopbackAudioForScreenShare');
+}
+
 const APP_PORT = 3201;
 const APP_ORIGIN = `http://127.0.0.1:${APP_PORT}`;
 
@@ -1108,6 +1118,23 @@ function applyOverlayToShareTarget(target) {
   }
 }
 
+/**
+ * Pull a shared window's current rect. Strokes and clicks use it, so a drag must not
+ * wait. Returns false when nothing moved, or the window is minimized.
+ */
+function syncSharedWindow() {
+  const t = currentShareTarget;
+  if (!t || !t.windowHandle) return false;
+  const rect = sharedWindowRect(t.windowHandle);
+  if (!rect) return false;
+  if (rect.x === t.x && rect.y === t.y && rect.width === t.width && rect.height === t.height) return false;
+  const display = require('electron').screen.getDisplayMatching(rect);
+  Object.assign(t, rect, { displayId: display.id, scaleFactor: display.scaleFactor || 1 });
+  applyOverlayToShareTarget(t);
+  placeShareChrome();
+  return true;
+}
+
 /** A shared window can move or resize; keep control and the annotation overlay on it. */
 let sharedWindowWatch = null;
 function watchSharedWindow() {
@@ -1121,13 +1148,8 @@ function watchSharedWindow() {
       sharedWindowWatch = null;
       return;
     }
-    const rect = sharedWindowRect(t.windowHandle);
-    if (!rect) return; // minimized or hidden for a moment: keep the last place
-    if (rect.x === t.x && rect.y === t.y && rect.width === t.width && rect.height === t.height) return;
-    Object.assign(t, rect);
-    applyOverlayToShareTarget(t);
-    placeShareChrome();
-  }, 400);
+    syncSharedWindow();
+  }, 50);
 }
 
 function setCurrentShareTarget(source) {
@@ -1698,6 +1720,8 @@ let rcBarWindow = null;
 function rcTarget(data) {
   // Map content-normalized 0-1 coords onto the active share target bounds
   // (secondary monitor when sharing that screen; primary fallback otherwise), never outside it.
+  // Read the window again so a click during a drag does not use the last poll.
+  syncSharedWindow();
   const bounds = currentShareTarget || primaryDisplayBoundsFallback();
   return remoteInput.toScreenPoint(data, bounds, !rcSession.protocol);
 }

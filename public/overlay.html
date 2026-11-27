@@ -30,22 +30,29 @@
     // strokes are kept so a resize (share target moved to another display) redraws them.
     const strokes = new Map();
 
+    function pixelRatio() {
+      return window.devicePixelRatio || 1;
+    }
+
+    /** Stroke width arrives in CSS pixels; the bitmap is device pixels, so scale it. */
     function style(stroke) {
+      const width = (stroke.lineWidth || 4) * pixelRatio();
       ctx.strokeStyle = stroke.color;
       ctx.fillStyle = stroke.color;
-      ctx.lineWidth = stroke.lineWidth;
+      ctx.lineWidth = width;
       ctx.lineCap = 'round';
       ctx.lineJoin = 'round';
+      return width;
     }
 
     function drawFrom(stroke, from) {
       const n = stroke.pts.length / 2;
       const X = (i) => stroke.pts[i * 2] * canvas.width;
       const Y = (i) => stroke.pts[i * 2 + 1] * canvas.height;
-      style(stroke);
+      const width = style(stroke);
       if (n === 1 || (from === 0 && n > 0)) {
         ctx.beginPath();
-        ctx.arc(X(0), Y(0), stroke.lineWidth / 2, 0, Math.PI * 2);
+        ctx.arc(X(0), Y(0), width / 2, 0, Math.PI * 2);
         ctx.fill();
       }
       if (n < 2) return;
@@ -57,12 +64,26 @@
     }
 
     function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const ratio = pixelRatio();
+      canvas.width = Math.max(1, Math.round(window.innerWidth * ratio));
+      canvas.height = Math.max(1, Math.round(window.innerHeight * ratio));
       for (const stroke of strokes.values()) drawFrom(stroke, 0);
     }
+
+    /** Moving the overlay onto a display with a different scale does not always resize it. */
+    function watchRatio() {
+      const media = window.matchMedia('(resolution: ' + pixelRatio() + 'dppx)');
+      const onChange = () => {
+        media.removeEventListener('change', onChange);
+        resize();
+        watchRatio();
+      };
+      media.addEventListener('change', onChange);
+    }
+
     window.addEventListener('resize', resize);
     resize();
+    watchRatio();
 
     if (window.electronAPI) {
       window.electronAPI.onDrawMessage((data) => {

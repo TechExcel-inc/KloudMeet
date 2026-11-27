@@ -554,6 +554,7 @@
   "toolbar.recordingControls": "录制控制",
   "toolbar.leaveMeeting": "离开会议？",
   "toolbar.moreOptions": "更多选项",
+  "toolbar.signInSyncFailed": "已登录，但这场会议没有更新。",
   "toolbar.participants": "参会者",
   "toolbar.liveDocCanvas": "协作文档与画布",
   "toolbar.aiPresent": "AI演讲",

@@ -1,0 +1,99 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 14000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(8, 9, 14, 0.62);
+}
+
+.dialog {
+  width: min(400px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 20px 20px 22px;
+  border-radius: 16px;
+  background: var(--km-menu, #2b2c32);
+  color: var(--km-stage-text, #e8eaed);
+  border: 1px solid var(--km-stage-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  font-family: var(--km-font, 'Plus Jakarta Sans', system-ui, sans-serif);
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.close {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.close:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--km-stage-muted, #9aa0a6);
+}
+
+.field input {
+  height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: #16171f;
+  color: inherit;
+  font: inherit;
+  font-size: 15px;
+}
+
+.field input:focus-visible {
+  outline: 2px solid #8b89ff;
+  outline-offset: 1px;
+}
+
+.error {
+  margin: 0;
+  color: #f28b82;
+  font-size: 13px;
+}
+
+.submit {
+  height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6a5cf4, #4d6cf5);
+  color: #fff;
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

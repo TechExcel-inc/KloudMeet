@@ -66,4 +66,7 @@ xcrun stapler validate "dist/Kloud Meet-<version>-x64.dmg"
    marketing site's `download.html`.
 
 First launch on macOS asks for Camera, Microphone, Screen Recording (screen share and
-annotation) and Accessibility (remote control) permissions.
+annotation) and Accessibility (remote control). Share computer sound uses that same
+Screen Recording grant. `NSAudioCaptureUsageDescription` is still set: macOS 14.2+
+will not deliver system audio without it if a future Electron build stops honoring
+`MacCatapLoopbackAudioForScreenShare`.

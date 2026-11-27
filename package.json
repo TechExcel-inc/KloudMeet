@@ -109,6 +109,7 @@
       "extendInfo": {
         "NSCameraUsageDescription": "Kloud Meet uses your camera so others in the meeting can see you.",
         "NSMicrophoneUsageDescription": "Kloud Meet uses your microphone so others in the meeting can hear you.",
+        "NSAudioCaptureUsageDescription": "Kloud Meet shares your computer's sound with the meeting when you turn on Share computer sound.",
         "NSAppleEventsUsageDescription": "Kloud Meet needs this to let a meeting host control your screen when you approve a remote-control request."
       }
     },

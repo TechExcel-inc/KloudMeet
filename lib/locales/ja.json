@@ -553,6 +553,7 @@
   "toolbar.recordingControls": "録画コントロール",
   "toolbar.leaveMeeting": "退出しますか？",
   "toolbar.moreOptions": "その他のオプション",
+  "toolbar.signInSyncFailed": "サインインしましたが、この会議は更新されませんでした。",
   "toolbar.participants": "参加者",
   "toolbar.liveDocCanvas": "ライブドキュメント＆キャンバス",
   "toolbar.aiPresent": "AIプレゼン",

@@ -553,6 +553,7 @@
   "toolbar.recordingControls": "녹화 컨트롤",
   "toolbar.leaveMeeting": "회의에서 나가시겠습니까?",
   "toolbar.moreOptions": "더 많은 옵션",
+  "toolbar.signInSyncFailed": "로그인했지만 이 회의는 업데이트되지 않았습니다.",
   "toolbar.participants": "참가자",
   "toolbar.liveDocCanvas": "라이브 문서 & 캔버스",
   "toolbar.aiPresent": "AI 프레젠테이션",

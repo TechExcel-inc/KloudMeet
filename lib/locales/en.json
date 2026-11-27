@@ -558,6 +558,7 @@
   "toolbar.recordingControls": "Recording Controls",
   "toolbar.leaveMeeting": "Leave Meeting?",
   "toolbar.moreOptions": "More Options",
+  "toolbar.signInSyncFailed": "Signed in, but this meeting did not update.",
   "toolbar.participants": "Participants",
 
   "toolbar.liveDocCanvas": "Live Doc & Collaborative Canvas",

@@ -20,6 +20,8 @@ import { LiveDocAiPanel, type LiveDocDesignItem } from './LiveDocAiPanel';
 import { useLiveDocAiBridge } from './useLiveDocAiBridge';
 import { useLiveDocUploadQueue } from './useLiveDocUploadQueue';
 import { MeetingCornerStatus } from './MeetingCornerStatus';
+import { MeetingSignInDialog } from './MeetingSignInDialog';
+import { KLOUD_AUTH_CHANGED, readStoredKloudUser } from './kloudSession';
 
 export type ViewMode = 'liveDoc' | 'webcam' | 'shareScreen' | 'design';
 export type WebcamLayoutMode = 'tile' | 'spotlight';
@@ -411,6 +413,8 @@ export function KloudMeetToolbar({
   chatBadgeCount = 0,
 }: KloudMeetToolbarProps) {
   const [visible, setVisible] = useState(true);
+  const [accountName, setAccountName] = useState<string | null>(null);
+  const [signInOpen, setSignInOpen] = useState(false);
   const { t } = useI18n();
   /** 新增文案在 locale 文件补齐前回退到英文，避免直接显示 key */
   const tr = React.useCallback(
@@ -423,6 +427,16 @@ export function KloudMeetToolbar({
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maybeRoom = useMaybeRoomContext();
+
+  useEffect(() => {
+    const syncAccount = () => {
+      const user = readStoredKloudUser();
+      setAccountName(user ? user.displayName || user.username : null);
+    };
+    syncAccount();
+    window.addEventListener(KLOUD_AUTH_CHANGED, syncAccount);
+    return () => window.removeEventListener(KLOUD_AUTH_CHANGED, syncAccount);
+  }, []);
   const videoBackground = useRoomVideoBackground(maybeRoom);
   const [backgroundDialogOpen, setBackgroundDialogOpen] = useState(false);
   const [inviteMenuOpen, setInviteMenuOpen] = useState(false);
@@ -2796,6 +2810,9 @@ export function KloudMeetToolbar({
                 ✕
               </button>
             </div>
+            {activeSheet === 'more' && (
+              <MoreAccountRow name={accountName} onSignIn={() => setSignInOpen(true)} />
+            )}
             <div className={styles.actionSheetList} data-recording-scroll={activeSheet === 'recording' ? '' : undefined}>
               <ActiveSheetContent
                 activeSheet={activeSheet}
@@ -3007,6 +3024,10 @@ export function KloudMeetToolbar({
                   ) : desktopAnchorBubbleKind === 'attendee' && attendeePanelSlot ? (
                     <div className={styles.toolbarBubblePanelBody}>{attendeePanelSlot}</div>
                   ) : (
+                    <>
+                    {desktopAnchorBubbleKind === 'more' && (
+                      <MoreAccountRow name={accountName} onSignIn={() => setSignInOpen(true)} />
+                    )}
                     <div className={styles.toolbarBubbleList} data-recording-scroll={activeSheet === 'recording' ? '' : undefined}>
                       <ActiveSheetContent
                         activeSheet={activeSheet}
@@ -3051,6 +3072,7 @@ export function KloudMeetToolbar({
                         recordingMenuArmed={recordingMenuArmed}
                       />
                     </div>
+                    </>
                   )}
                   {desktopAnchorBubbleKind === 'chat' && (
                     <button
@@ -3206,6 +3228,17 @@ export function KloudMeetToolbar({
         />
       )}
 
+      <MeetingSignInDialog
+        open={signInOpen}
+        onClose={() => setSignInOpen(false)}
+        onSignedIn={({ synced }) => {
+          if (synced) return;
+          setToastMsg(t('toolbar.signInSyncFailed'));
+          if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+          toastTimerRef.current = setTimeout(() => setToastMsg(null), 2600);
+        }}
+      />
+
       <CaptionSettingsDialog
         isOpen={showSTTSettings}
         onClose={() => setShowSTTSettings(false)}
@@ -3219,6 +3252,34 @@ export function KloudMeetToolbar({
 }
 
 /* Helper Component so we don't duplicate the 100 lines of buttons */
+function MoreAccountRow({
+  name,
+  onSignIn,
+}: {
+  name: string | null;
+  onSignIn: () => void;
+}) {
+  const { t } = useI18n();
+  if (name) {
+    return (
+      <div className={styles.moreAccount}>
+        <span className={styles.moreAccountMark} aria-hidden>
+          {name.slice(0, 1).toUpperCase()}
+        </span>
+        <span className={styles.moreAccountName}>{name}</span>
+      </div>
+    );
+  }
+  return (
+    <button type="button" className={`${styles.actionSheetItem} ${styles.moreAccountBtn}`} onClick={onSignIn}>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM6 21v-1a6 6 0 0112 0v1" />
+      </svg>
+      {t('nav.signIn')}
+    </button>
+  );
+}
+
 function ActiveSheetContent({
   activeSheet,
   activeView,

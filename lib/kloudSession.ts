@@ -1,5 +1,49 @@
 /** Client-side Kloud session token helpers (browser only). */
 
+/** Fired after a meeting sign-in writes `kloudUser`, so open UI can update without a reload. */
+export const KLOUD_AUTH_CHANGED = 'kloud-auth-changed';
+
+export interface StoredKloudUser {
+  id: string;
+  username: string;
+  displayName: string;
+  email?: string;
+  avatarUrl?: string;
+  token: string;
+}
+
+/**
+ * readStoredKloudUser — 读本地已登录账号。没有 token 或姓名时视为未登录。
+ */
+export function readStoredKloudUser(): StoredKloudUser | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('kloudUser');
+    if (!raw) return null;
+    const user = JSON.parse(raw) as Partial<StoredKloudUser>;
+    if (!user || typeof user.token !== 'string' || !user.token) return null;
+    const displayName = typeof user.displayName === 'string' ? user.displayName.trim() : '';
+    const username = typeof user.username === 'string' ? user.username.trim() : '';
+    if (!displayName && !username) return null;
+    return {
+      id: String(user.id ?? ''),
+      username,
+      displayName: displayName || username,
+      email: typeof user.email === 'string' ? user.email : undefined,
+      avatarUrl: typeof user.avatarUrl === 'string' ? user.avatarUrl : undefined,
+      token: user.token,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** publishKloudAuthChanged — 通知会议页登录状态变了，不要整页刷新。 */
+export function publishKloudAuthChanged(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(KLOUD_AUTH_CHANGED));
+}
+
 export function getKloudSessionBearer(): string | null {
   if (typeof window === 'undefined') return null;
   try {

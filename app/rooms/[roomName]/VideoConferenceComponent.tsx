@@ -1249,11 +1249,13 @@ export function VideoConferenceComponent(props: {
     room.on(RoomEvent.Connected, recompute);
     room.on(RoomEvent.ParticipantConnected, recompute);
     room.on(RoomEvent.ParticipantDisconnected, recompute);
+    room.on(RoomEvent.ParticipantMetadataChanged, recompute);
     return () => {
       clearTimeout(timer);
       room.off(RoomEvent.Connected, recompute);
       room.off(RoomEvent.ParticipantConnected, recompute);
       room.off(RoomEvent.ParticipantDisconnected, recompute);
+      room.off(RoomEvent.ParticipantMetadataChanged, recompute);
     };
   }, [room, props.meetingOwnerMemberId]);
 
